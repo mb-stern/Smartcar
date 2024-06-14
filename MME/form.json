@@ -1,0 +1,8 @@
+{
+    "elements": [
+        { "type": "ValidationTextBox", "name": "Email", "caption": "E-Mail" },
+        { "type": "PasswordTextBox", "name": "Password", "caption": "Passwort" },
+        { "type": "Button", "name": "RequestCode", "caption": "Code anfordern", "onClick": "RequestCode();" },
+        { "type": "ValidationTextBox", "name": "AuthCode", "caption": "Authentifizierungscode" }
+    ]
+}
