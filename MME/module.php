@@ -1,12 +1,13 @@
 <?php
 
 class MercedesMe extends IPSModule {
-    
+
     public function Create() {
         parent::Create();
         $this->RegisterPropertyString('Email', '');
         $this->RegisterPropertyString('Password', '');
         $this->RegisterPropertyString('AuthCode', '');
+        $this->RegisterPropertyString('AccessToken', '');
     }
 
     public function ApplyChanges() {
@@ -20,7 +21,7 @@ class MercedesMe extends IPSModule {
     public function RequestCode() {
         $email = $this->ReadPropertyString('Email');
         $password = $this->ReadPropertyString('Password');
-        
+
         if ($email && $password) {
             $response = $this->SendAuthCodeRequest($email, $password);
             if ($response) {
@@ -34,42 +35,72 @@ class MercedesMe extends IPSModule {
     }
 
     private function SendAuthCodeRequest($email, $password) {
-        // Beispielcode für die Authentifizierungsanforderung
-        $auth = base64_encode("$email:$password");
+        $url = "https://id.mercedes-benz.com/as/token.oauth2";
+        $data = [
+            "grant_type" => "password",
+            "username" => $email,
+            "password" => $password,
+            "client_id" => "your_client_id",
+            "client_secret" => "your_client_secret"
+        ];
         $options = [
             "http" => [
                 "method" => "POST",
-                "header" => "Authorization: Basic $auth\r\nContent-Type: application/json",
-                "content" => json_encode(["email" => $email])
+                "header" => "Content-Type: application/x-www-form-urlencoded",
+                "content" => http_build_query($data)
             ]
         ];
         $context = stream_context_create($options);
-        $result = file_get_contents("https://api.mercedes-benz.com/request_code", false, $context);
-        return $result !== false;
+        $result = file_get_contents($url, false, $context);
+        return json_decode($result, true);
     }
 
     public function RequestData() {
         $email = $this->ReadPropertyString('Email');
         $password = $this->ReadPropertyString('Password');
         $authCode = $this->ReadPropertyString('AuthCode');
-        
+
         if ($email && $password && $authCode) {
-            $data = $this->GetMercedesMeData($email, $password, $authCode);
+            $token = $this->GetAccessToken($authCode);
+            $this->WritePropertyString('AccessToken', $token);
+
+            $data = $this->GetMercedesMeData($token);
             $this->ProcessData($data);
         } else {
             echo "Bitte geben Sie Ihre E-Mail, Ihr Passwort und den Authentifizierungscode ein.";
         }
     }
 
-    private function GetMercedesMeData($email, $password, $authCode) {
-        $auth = base64_encode("$email:$password:$authCode");
+    private function GetAccessToken($authCode) {
+        $url = "https://id.mercedes-benz.com/as/token.oauth2";
+        $data = [
+            "grant_type" => "authorization_code",
+            "code" => $authCode,
+            "client_id" => "your_client_id",
+            "client_secret" => "your_client_secret"
+        ];
         $options = [
             "http" => [
-                "header" => "Authorization: Basic $auth"
+                "method" => "POST",
+                "header" => "Content-Type: application/x-www-form-urlencoded",
+                "content" => http_build_query($data)
             ]
         ];
         $context = stream_context_create($options);
-        $result = file_get_contents("https://api.mercedes-benz.com/data", false, $context);
+        $result = file_get_contents($url, false, $context);
+        $response = json_decode($result, true);
+        return $response['access_token'];
+    }
+
+    private function GetMercedesMeData($token) {
+        $url = "https://api.mercedes-benz.com/vehicledata/v2/vehicles";
+        $options = [
+            "http" => [
+                "header" => "Authorization: Bearer $token"
+            ]
+        ];
+        $context = stream_context_create($options);
+        $result = file_get_contents($url, false, $context);
         return json_decode($result, true);
     }
 
