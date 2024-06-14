@@ -62,25 +62,33 @@ class MercedesMe extends IPSModule {
             "username" => $email,
             "password" => $password
         ];
-        $options = [
-            "http" => [
-                "method" => "POST",
-                "header" => [
-                    "Content-Type: application/x-www-form-urlencoded",
-                    "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36"
-                ],
-                "content" => http_build_query($data)
-            ]
-        ];
-        $context = stream_context_create($options);
-        $result = @file_get_contents($url, false, $context);
-        if ($result === FALSE) {
-            $error = error_get_last();
-            IPS_LogMessage("MercedesMe", "HTTP request failed: " . $error['message']);
-            echo "Fehler beim Anfordern des Authentifizierungscodes: " . $error['message'];
+        
+        $curl = curl_init();
+
+        curl_setopt_array($curl, [
+            CURLOPT_URL => $url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => http_build_query($data),
+            CURLOPT_HTTPHEADER => [
+                "Content-Type: application/x-www-form-urlencoded",
+                "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36"
+            ],
+        ]);
+
+        $result = curl_exec($curl);
+        $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+        
+        if ($result === FALSE || $httpCode != 200) {
+            $error = curl_error($curl);
+            IPS_LogMessage("MercedesMe", "HTTP request failed: " . $error);
+            echo "Fehler beim Anfordern des Authentifizierungscodes: HTTP Status Code " . $httpCode . " - " . $error;
+            curl_close($curl);
             return null;
         }
-        IPS_LogMessage("MercedesMe", "Result: $result");
+
+        curl_close($curl);
+        IPS_LogMessage("MercedesMe", "Result: " . $result);
         return json_decode($result, true);
     }
 
