@@ -51,20 +51,23 @@ class MercedesMe extends IPSModule {
         $url = "https://api.mercedes-benz.com/oidc10/auth/oauth/v2/authorize";
         $data = [
             "response_type" => "code",
-            "client_id" => "client_id_from_github_project",
+            "client_id" => "b21c1221-a3d7-4d79-b3f8-053d648c13e1",
             "redirect_uri" => "https://localhost/callback",
             "scope" => "openid",
             "email" => $email
         ];
+        $query = http_build_query($data);
+        $fullUrl = "$url?$query";
+        IPS_LogMessage("MercedesMe", "Full URL: $fullUrl");
+
         $options = [
             "http" => [
                 "method" => "GET",
-                "header" => "Content-Type: application/x-www-form-urlencoded",
-                "content" => http_build_query($data)
+                "header" => "Content-Type: application/x-www-form-urlencoded"
             ]
         ];
         $context = stream_context_create($options);
-        $result = @file_get_contents($url, false, $context);
+        $result = @file_get_contents($fullUrl, false, $context);
         if ($result === FALSE) {
             $error = error_get_last();
             IPS_LogMessage("MercedesMe", "HTTP request failed: " . $error['message']);
@@ -95,8 +98,8 @@ class MercedesMe extends IPSModule {
         $data = [
             "grant_type" => "authorization_code",
             "code" => $authCode,
-            "client_id" => "client_id_from_github_project",
-            "client_secret" => "client_secret_from_github_project",
+            "client_id" => "b21c1221-a3d7-4d79-b3f8-053d648c13e1",
+            "client_secret" => "b21c1221-a3d7-4d79-b3f8-053d648c13e1",
             "redirect_uri" => "https://localhost/callback"
         ];
         $options = [
