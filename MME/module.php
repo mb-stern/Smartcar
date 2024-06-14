@@ -7,11 +7,11 @@ class MercedesMe extends IPSModule {
         $this->RegisterPropertyString('Email', '');
         $this->RegisterPropertyString('Password', '');
         $this->RegisterPropertyString('AuthCode', '');
+        $this->RegisterAttributeString('AccessToken', '');
     }
 
     public function ApplyChanges() {
         parent::ApplyChanges();
-        // Hier keine Registrierung von Scripts erforderlich, nur Methodenaufruf
     }
 
     public function GetConfigurationForm() {
