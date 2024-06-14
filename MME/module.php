@@ -2,12 +2,15 @@
 
 class MercedesMe extends IPSModule {
 
+    private $clientID = 'b21c1221-a3d7-4d79-b3f8-053d648c13e1';
+    private $clientSecret = 'b21c1221-a3d7-4d79-b3f8-053d648c13e1';
+
     public function Create() {
         parent::Create();
         $this->RegisterPropertyString('Email', '');
         $this->RegisterPropertyString('Password', '');
-        $this->RegisterPropertyString('ClientID', 'b21c1221-a3d7-4d79-b3f8-053d648c13e1');
-        $this->RegisterPropertyString('ClientSecret', 'b21c1221-a3d7-4d79-b3f8-053d648c13e1');
+        $this->RegisterPropertyString('ClientID', $this->clientID);
+        $this->RegisterPropertyString('ClientSecret', $this->clientSecret);
         $this->RegisterAttributeString('AuthCode', '');
         $this->RegisterAttributeString('AccessToken', '');
     }
