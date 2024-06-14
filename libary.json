@@ -1,0 +1,12 @@
+{
+    "id": "{12345678-1234-5678-1234-567812345678}",
+    "name": "MME",
+    "author": "Stefan Künzli",
+    "url": "https://github.com/mb-stern/MercedesMe",
+    "compatibility": {
+        "version": "7.0"
+    },
+    "version": "0.1",
+    "build": 1,
+    "date": "2024-06-14"
+}
