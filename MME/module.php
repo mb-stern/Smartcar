@@ -7,11 +7,11 @@ class MercedesMe extends IPSModule {
         $this->RegisterPropertyString('Email', '');
         $this->RegisterPropertyString('Password', '');
         $this->RegisterPropertyString('AuthCode', '');
-        $this->RegisterAttributeString('AccessToken', '');
     }
 
     public function ApplyChanges() {
         parent::ApplyChanges();
+        // Hier keine Registrierung von Scripts erforderlich, nur Methodenaufruf
     }
 
     public function GetConfigurationForm() {
@@ -24,7 +24,7 @@ class MercedesMe extends IPSModule {
 
         if ($email && $password) {
             $response = $this->SendAuthCodeRequest($email, $password);
-            if ($response) {
+            if (isset($response['auth_code'])) {
                 echo "Der Authentifizierungscode wurde an Ihre E-Mail-Adresse gesendet.";
             } else {
                 echo "Fehler beim Anfordern des Authentifizierungscodes.";
