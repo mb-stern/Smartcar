@@ -18,13 +18,23 @@ class MercedesMe extends IPSModule {
         return file_get_contents(__DIR__ . '/form.json');
     }
 
+    public function RequestAction($Ident, $Value) {
+        switch ($Ident) {
+            case 'RequestCode':
+                $this->RequestCode();
+                break;
+            default:
+                throw new Exception("Invalid action");
+        }
+    }
+
     public function RequestCode() {
         $email = $this->ReadPropertyString('Email');
         $password = $this->ReadPropertyString('Password');
 
         if ($email && $password) {
             $response = $this->SendAuthCodeRequest($email, $password);
-            if ($response) {
+            if (isset($response['auth_code'])) {
                 echo "Der Authentifizierungscode wurde an Ihre E-Mail-Adresse gesendet.";
             } else {
                 echo "Fehler beim Anfordern des Authentifizierungscodes.";
@@ -107,13 +117,5 @@ class MercedesMe extends IPSModule {
             $this->MaintainVariable($key, $key, VARIABLETYPE_STRING, '', 0, true);
             $this->SetValue($key, $value);
         }
-    }
-}
-
-// Funktion, die als Aktion registriert wird
-if (!function_exists('MercedesMe_RequestCode')) {
-    function MercedesMe_RequestCode($instanceID) {
-        $module = new MercedesMe($instanceID);
-        $module->RequestCode();
     }
 }
