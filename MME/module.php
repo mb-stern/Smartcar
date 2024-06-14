@@ -40,8 +40,8 @@ class MercedesMe extends IPSModule {
             "grant_type" => "password",
             "username" => $email,
             "password" => $password,
-            "client_id" => "your_client_id",
-            "client_secret" => "your_client_secret"
+            "client_id" => "client_id_from_github_project",
+            "client_secret" => "client_secret_from_github_project"
         ];
         $options = [
             "http" => [
@@ -74,8 +74,8 @@ class MercedesMe extends IPSModule {
         $data = [
             "grant_type" => "authorization_code",
             "code" => $authCode,
-            "client_id" => "your_client_id",
-            "client_secret" => "your_client_secret"
+            "client_id" => "client_id_from_github_project",
+            "client_secret" => "client_secret_from_github_project"
         ];
         $options = [
             "http" => [
