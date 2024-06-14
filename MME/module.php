@@ -2,13 +2,12 @@
 
 class MercedesMe extends IPSModule {
 
-    private $clientID = 'b21c1221-a3d7-4d79-b3f8-053d648c13e1';
-    private $clientSecret = 'b21c1221-a3d7-4d79-b3f8-053d648c13e1';
-
     public function Create() {
         parent::Create();
         $this->RegisterPropertyString('Email', '');
         $this->RegisterPropertyString('Password', '');
+        $this->RegisterPropertyString('ClientID', 'b21c1221-a3d7-4d79-b3f8-053d648c13e1');
+        $this->RegisterPropertyString('ClientSecret', 'b21c1221-a3d7-4d79-b3f8-053d648c13e1');
         $this->RegisterAttributeString('AuthCode', '');
         $this->RegisterAttributeString('AccessToken', '');
     }
@@ -35,11 +34,13 @@ class MercedesMe extends IPSModule {
         IPS_LogMessage("MercedesMe", "RequestCode aufgerufen");
         $email = $this->ReadPropertyString('Email');
         $password = $this->ReadPropertyString('Password');
+        $clientID = $this->ReadPropertyString('ClientID');
+        $clientSecret = $this->ReadPropertyString('ClientSecret');
 
-        IPS_LogMessage("MercedesMe", "Email: $email, Password: $password");
+        IPS_LogMessage("MercedesMe", "Email: $email, Password: $password, ClientID: $clientID, ClientSecret: $clientSecret");
 
-        if ($email && $password) {
-            $response = $this->SendAuthCodeRequest($email, $password);
+        if ($email && $password && $clientID && $clientSecret) {
+            $response = $this->SendAuthCodeRequest($email, $password, $clientID, $clientSecret);
             IPS_LogMessage("MercedesMe", "Response: " . print_r($response, true));
             if (isset($response['access_token'])) {
                 $this->WriteAttributeString('AccessToken', $response['access_token']);
@@ -48,16 +49,16 @@ class MercedesMe extends IPSModule {
                 echo "Fehler beim Anfordern des Authentifizierungscodes.";
             }
         } else {
-            echo "Bitte geben Sie Ihre E-Mail und Ihr Passwort ein.";
+            echo "Bitte geben Sie Ihre E-Mail, Ihr Passwort, die Client ID und das Client Secret ein.";
         }
     }
 
-    private function SendAuthCodeRequest($email, $password) {
+    private function SendAuthCodeRequest($email, $password, $clientID, $clientSecret) {
         IPS_LogMessage("MercedesMe", "SendAuthCodeRequest aufgerufen");
         $url = "https://id.mercedes-benz.com/as/token.oauth2";
         $data = [
-            "client_id" => $this->clientID,
-            "client_secret" => $this->clientSecret,
+            "client_id" => $clientID,
+            "client_secret" => $clientSecret,
             "grant_type" => "password",
             "username" => $email,
             "password" => $password
