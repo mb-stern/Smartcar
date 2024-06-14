@@ -7,6 +7,7 @@ class MercedesMe extends IPSModule {
         $this->RegisterPropertyString('Email', '');
         $this->RegisterPropertyString('Password', '');
         $this->RegisterPropertyString('AuthCode', '');
+        $this->RegisterAttributeString('AccessToken', '');
     }
 
     public function ApplyChanges() {
@@ -59,7 +60,7 @@ class MercedesMe extends IPSModule {
 
         if ($authCode) {
             $token = $this->GetAccessToken($authCode);
-            $this->WritePropertyString('AccessToken', $token);
+            $this->WriteAttributeString('AccessToken', $token);
 
             $data = $this->GetMercedesMeData($token);
             $this->ProcessData($data);
@@ -107,5 +108,11 @@ class MercedesMe extends IPSModule {
             $this->SetValue($key, $value);
         }
     }
+}
+
+function MercedesMe_RequestCode($instanceID) {
+    $module = IPS_GetInstance($instanceID)['ModuleInfo']['ModuleID'];
+    $script = "IPSModule::InstanceObject($instanceID)->RequestCode();";
+    IPS_RunScriptText($script);
 }
 ?>
