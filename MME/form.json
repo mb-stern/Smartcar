@@ -2,7 +2,8 @@
     "elements": [
         { "type": "ValidationTextBox", "name": "Email", "caption": "E-Mail" },
         { "type": "PasswordTextBox", "name": "Password", "caption": "Passwort" },
-        { "type": "Button", "caption": "Code anfordern", "onClick": "IPS_RequestAction($id, 'RequestCode', '');" },
-        { "type": "ValidationTextBox", "name": "WebhookURL", "caption": "Webhook URL" }
+        { "type": "ValidationTextBox", "name": "ClientID", "caption": "Client ID" },
+        { "type": "ValidationTextBox", "name": "ClientSecret", "caption": "Client Secret" },
+        { "type": "Button", "caption": "Code anfordern", "onClick": "IPS_RequestAction($id, 'RequestCode', '');" }
     ]
 }
