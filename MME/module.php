@@ -1,6 +1,6 @@
 <?php
 
-class MercedesMe extends IPSModule {
+class MME extends IPSModule {
     
     public function Create() {
         parent::Create();
