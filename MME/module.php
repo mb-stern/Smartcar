@@ -66,10 +66,8 @@ class MercedesMe extends IPSModule {
             "username" => $email,
             "password" => $password
         ];
-        
-        $curl = curl_init();
 
-        curl_setopt_array($curl, [
+        $options = [
             CURLOPT_URL => $url,
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_POST => true,
@@ -78,11 +76,13 @@ class MercedesMe extends IPSModule {
                 "Content-Type: application/x-www-form-urlencoded",
                 "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36"
             ],
-        ]);
+        ];
 
+        $curl = curl_init();
+        curl_setopt_array($curl, $options);
         $result = curl_exec($curl);
         $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
-        
+
         if ($result === FALSE || $httpCode != 200) {
             $error = curl_error($curl);
             IPS_LogMessage("MercedesMe", "HTTP request failed: " . $error);
