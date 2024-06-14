@@ -7,11 +7,11 @@ class MercedesMe extends IPSModule {
         $this->RegisterPropertyString('Email', '');
         $this->RegisterPropertyString('Password', '');
         $this->RegisterPropertyString('AuthCode', '');
-        $this->RegisterPropertyString('AccessToken', '');
     }
 
     public function ApplyChanges() {
         parent::ApplyChanges();
+        $this->RegisterScript('RequestCode', 'Request Code', '<?php MercedesMe_RequestCode($_IPS[\'TARGET\']); ?>', 0);
     }
 
     public function GetConfigurationForm() {
@@ -109,6 +109,13 @@ class MercedesMe extends IPSModule {
             $this->MaintainVariable($key, $key, VARIABLETYPE_STRING, '', 0, true);
             $this->SetValue($key, $value);
         }
+    }
+}
+
+function MercedesMe_RequestCode($instanceID) {
+    $instance = IPS_GetInstance($instanceID);
+    if ($instance) {
+        IPS_RunScriptText("IPSModule::InstanceObject($instanceID)->RequestCode();");
     }
 }
 ?>
