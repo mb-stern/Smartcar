@@ -2,7 +2,7 @@
     "elements": [
         { "type": "ValidationTextBox", "name": "Email", "caption": "E-Mail" },
         { "type": "PasswordTextBox", "name": "Password", "caption": "Passwort" },
-        { "type": "Button", "caption": "Code anfordern", "onClick": "MercedesMe_RequestCode($id);" },
+        { "type": "Button", "caption": "Code anfordern", "onClick": "IPS_RequestAction($id, 'RequestCode', '');" },
         { "type": "ValidationTextBox", "name": "AuthCode", "caption": "Authentifizierungscode" }
     ]
 }

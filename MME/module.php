@@ -29,12 +29,16 @@ class MercedesMe extends IPSModule {
     }
 
     public function RequestCode() {
+        IPS_LogMessage("MercedesMe", "RequestCode aufgerufen");
         $email = $this->ReadPropertyString('Email');
         $password = $this->ReadPropertyString('Password');
 
+        IPS_LogMessage("MercedesMe", "Email: $email, Password: $password");
+
         if ($email && $password) {
             $response = $this->SendAuthCodeRequest($email, $password);
-            if (isset($response['auth_code'])) {
+            IPS_LogMessage("MercedesMe", "Response: " . print_r($response, true));
+            if ($response) {
                 echo "Der Authentifizierungscode wurde an Ihre E-Mail-Adresse gesendet.";
             } else {
                 echo "Fehler beim Anfordern des Authentifizierungscodes.";
@@ -45,6 +49,7 @@ class MercedesMe extends IPSModule {
     }
 
     private function SendAuthCodeRequest($email, $password) {
+        IPS_LogMessage("MercedesMe", "SendAuthCodeRequest aufgerufen");
         $url = "https://id.mercedes-benz.com/as/token.oauth2";
         $data = [
             "grant_type" => "password",
@@ -62,10 +67,12 @@ class MercedesMe extends IPSModule {
         ];
         $context = stream_context_create($options);
         $result = file_get_contents($url, false, $context);
+        IPS_LogMessage("MercedesMe", "Result: $result");
         return json_decode($result, true);
     }
 
     public function RequestData() {
+        IPS_LogMessage("MercedesMe", "RequestData aufgerufen");
         $authCode = $this->ReadPropertyString('AuthCode');
 
         if ($authCode) {
@@ -80,6 +87,7 @@ class MercedesMe extends IPSModule {
     }
 
     private function GetAccessToken($authCode) {
+        IPS_LogMessage("MercedesMe", "GetAccessToken aufgerufen");
         $url = "https://id.mercedes-benz.com/as/token.oauth2";
         $data = [
             "grant_type" => "authorization_code",
@@ -96,11 +104,13 @@ class MercedesMe extends IPSModule {
         ];
         $context = stream_context_create($options);
         $result = file_get_contents($url, false, $context);
+        IPS_LogMessage("MercedesMe", "Result: $result");
         $response = json_decode($result, true);
         return $response['access_token'];
     }
 
     private function GetMercedesMeData($token) {
+        IPS_LogMessage("MercedesMe", "GetMercedesMeData aufgerufen");
         $url = "https://api.mercedes-benz.com/vehicledata/v2/vehicles";
         $options = [
             "http" => [
@@ -109,13 +119,17 @@ class MercedesMe extends IPSModule {
         ];
         $context = stream_context_create($options);
         $result = file_get_contents($url, false, $context);
+        IPS_LogMessage("MercedesMe", "Result: $result");
         return json_decode($result, true);
     }
 
     private function ProcessData($data) {
+        IPS_LogMessage("MercedesMe", "ProcessData aufgerufen");
         foreach ($data as $key => $value) {
             $this->MaintainVariable($key, $key, VARIABLETYPE_STRING, '', 0, true);
             $this->SetValue($key, $value);
         }
     }
 }
+
+?>
