@@ -1,7 +1,6 @@
 {
     "elements": [
         { "type": "ValidationTextBox", "name": "Email", "caption": "E-Mail" },
-        { "type": "Button", "caption": "Passwort anfordern", "onClick": "IPS_RequestAction($id, 'RequestPassword', '');" },
         { "type": "PasswordTextBox", "name": "Password", "caption": "Passwort" },
         { "type": "Button", "caption": "Code anfordern", "onClick": "IPS_RequestAction($id, 'RequestCode', '');" }
     ]
