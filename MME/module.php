@@ -67,6 +67,7 @@ class MercedesMe extends IPSModule {
         if ($result === FALSE) {
             $error = error_get_last();
             IPS_LogMessage("MercedesMe", "HTTP request failed: " . $error['message']);
+            echo "Fehler beim Anfordern des Authentifizierungscodes: " . $error['message'];
             return null;
         }
         IPS_LogMessage("MercedesMe", "Result: $result");
