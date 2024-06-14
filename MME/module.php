@@ -53,7 +53,8 @@ class MercedesMe extends IPSModule {
             "client_id" => "b21c1221-a3d7-4d79-b3f8-053d648c13e1",
             "client_secret" => "b21c1221-a3d7-4d79-b3f8-053d648c13e1",
             "grant_type" => "password",
-            "username" => $email
+            "username" => $email,
+            "password" => "DeinPasswort"  // Passwortfeld hinzufügen, falls erforderlich
         ];
         $options = [
             "http" => [
