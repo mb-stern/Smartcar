@@ -40,8 +40,8 @@ class MercedesMe extends IPSModule {
             "grant_type" => "password",
             "username" => $email,
             "password" => $password,
-            "client_id" => "client_id_from_github_project",
-            "client_secret" => "client_secret_from_github_project"
+            "client_id" => "b21c1221-a3d7-4d79-b3f8-053d648c13e1",
+            "client_secret" => "b21c1221-a3d7-4d79-b3f8-053d648c13e1"
         ];
         $options = [
             "http" => [
@@ -74,8 +74,8 @@ class MercedesMe extends IPSModule {
         $data = [
             "grant_type" => "authorization_code",
             "code" => $authCode,
-            "client_id" => "client_id_from_github_project",
-            "client_secret" => "client_secret_from_github_project"
+            "client_id" => "b21c1221-a3d7-4d79-b3f8-053d648c13e1",
+            "client_secret" => "b21c1221-a3d7-4d79-b3f8-053d648c13e1"
         ];
         $options = [
             "http" => [
@@ -110,9 +110,9 @@ class MercedesMe extends IPSModule {
     }
 }
 
+// Funktion, die als Aktion registriert wird
 function MercedesMe_RequestCode($instanceID) {
-    $module = IPS_GetInstance($instanceID)['ModuleInfo']['ModuleID'];
-    $script = "IPSModule::InstanceObject($instanceID)->RequestCode();";
-    IPS_RunScriptText($script);
+    $module = new MercedesMe($instanceID);
+    $module->RequestCode();
 }
 ?>
