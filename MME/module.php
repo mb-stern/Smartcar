@@ -50,11 +50,11 @@ class MercedesMe extends IPSModule {
         IPS_LogMessage("MercedesMe", "SendAuthCodeRequest aufgerufen");
         $url = "https://id.mercedes-benz.com/as/token.oauth2";
         $data = [
-            "client_id" => "b21c1221-a3d7-4d79-b3f8-053d648c13e1",
-            "client_secret" => "b21c1221-a3d7-4d79-b3f8-053d648c13e1",
+            "client_id" => "client_id",  // Werte aus dem Home Assistant Projekt übernehmen
+            "client_secret" => "client_secret",  // Werte aus dem Home Assistant Projekt übernehmen
             "grant_type" => "password",
             "username" => $email,
-            "password" => "DeinPasswort"  // Passwortfeld hinzufügen, falls erforderlich
+            "password" => "password"  // Falls erforderlich, Passwortfeld hinzufügen
         ];
         $options = [
             "http" => [
@@ -75,5 +75,3 @@ class MercedesMe extends IPSModule {
         return json_decode($result, true);
     }
 }
-
-?>
