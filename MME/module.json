@@ -1,0 +1,13 @@
+{
+    "id": "{12345678-1234-5678-1234-567812345678}",
+    "name": "MME",
+    "type": 3,
+    "vendor": "",
+    "aliases": [
+        "MercedesMe"
+    ],
+    "parentRequirements": [],
+    "childRequirements": [],
+    "implemented": [],
+    "prefix": "MME"
+}
