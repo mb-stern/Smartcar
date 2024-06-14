@@ -24,7 +24,7 @@ class MercedesMe extends IPSModule {
 
         if ($email && $password) {
             $response = $this->SendAuthCodeRequest($email, $password);
-            if (isset($response['auth_code'])) {
+            if ($response) {
                 echo "Der Authentifizierungscode wurde an Ihre E-Mail-Adresse gesendet.";
             } else {
                 echo "Fehler beim Anfordern des Authentifizierungscodes.";
@@ -110,8 +110,10 @@ class MercedesMe extends IPSModule {
     }
 }
 
-function MercedesMe_RequestCode($instanceID) {
-    $module = new MercedesMe($instanceID);
-    $module->RequestCode();
+// Funktion, die als Aktion registriert wird
+if (!function_exists('MercedesMe_RequestCode')) {
+    function MercedesMe_RequestCode($instanceID) {
+        $module = new MercedesMe($instanceID);
+        $module->RequestCode();
+    }
 }
-?>
