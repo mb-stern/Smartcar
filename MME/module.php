@@ -5,8 +5,7 @@ class MercedesMe extends IPSModule {
     public function Create() {
         parent::Create();
         $this->RegisterPropertyString('Email', '');
-        $this->RegisterPropertyString('Password', '');
-        $this->RegisterPropertyString('AuthCode', '');
+        $this->RegisterAttributeString('AuthCode', '');
         $this->RegisterAttributeString('AccessToken', '');
     }
 
@@ -31,12 +30,11 @@ class MercedesMe extends IPSModule {
     public function RequestCode() {
         IPS_LogMessage("MercedesMe", "RequestCode aufgerufen");
         $email = $this->ReadPropertyString('Email');
-        $password = $this->ReadPropertyString('Password');
 
-        IPS_LogMessage("MercedesMe", "Email: $email, Password: $password");
+        IPS_LogMessage("MercedesMe", "Email: $email");
 
-        if ($email && $password) {
-            $response = $this->SendAuthCodeRequest($email, $password);
+        if ($email) {
+            $response = $this->SendAuthCodeRequest($email);
             IPS_LogMessage("MercedesMe", "Response: " . print_r($response, true));
             if ($response) {
                 echo "Der Authentifizierungscode wurde an Ihre E-Mail-Adresse gesendet.";
@@ -44,36 +42,41 @@ class MercedesMe extends IPSModule {
                 echo "Fehler beim Anfordern des Authentifizierungscodes.";
             }
         } else {
-            echo "Bitte geben Sie Ihre E-Mail und Ihr Passwort ein.";
+            echo "Bitte geben Sie Ihre E-Mail ein.";
         }
     }
 
-    private function SendAuthCodeRequest($email, $password) {
+    private function SendAuthCodeRequest($email) {
         IPS_LogMessage("MercedesMe", "SendAuthCodeRequest aufgerufen");
-        $url = "https://id.mercedes-benz.com/as/token.oauth2";
+        $url = "https://api.mercedes-benz.com/oidc10/auth/oauth/v2/authorize";
         $data = [
-            "grant_type" => "password",
-            "username" => $email,
-            "password" => $password,
-            "client_id" => "b21c1221-a3d7-4d79-b3f8-053d648c13e1",
-            "client_secret" => "b21c1221-a3d7-4d79-b3f8-053d648c13e1"
+            "response_type" => "code",
+            "client_id" => "client_id_from_github_project",
+            "redirect_uri" => "https://localhost/callback",
+            "scope" => "openid",
+            "email" => $email
         ];
         $options = [
             "http" => [
-                "method" => "POST",
+                "method" => "GET",
                 "header" => "Content-Type: application/x-www-form-urlencoded",
                 "content" => http_build_query($data)
             ]
         ];
         $context = stream_context_create($options);
-        $result = file_get_contents($url, false, $context);
+        $result = @file_get_contents($url, false, $context);
+        if ($result === FALSE) {
+            $error = error_get_last();
+            IPS_LogMessage("MercedesMe", "HTTP request failed: " . $error['message']);
+            return null;
+        }
         IPS_LogMessage("MercedesMe", "Result: $result");
         return json_decode($result, true);
     }
 
     public function RequestData() {
         IPS_LogMessage("MercedesMe", "RequestData aufgerufen");
-        $authCode = $this->ReadPropertyString('AuthCode');
+        $authCode = $this->ReadAttributeString('AuthCode');
 
         if ($authCode) {
             $token = $this->GetAccessToken($authCode);
@@ -88,12 +91,13 @@ class MercedesMe extends IPSModule {
 
     private function GetAccessToken($authCode) {
         IPS_LogMessage("MercedesMe", "GetAccessToken aufgerufen");
-        $url = "https://id.mercedes-benz.com/as/token.oauth2";
+        $url = "https://api.mercedes-benz.com/oidc10/auth/oauth/v2/token";
         $data = [
             "grant_type" => "authorization_code",
             "code" => $authCode,
-            "client_id" => "b21c1221-a3d7-4d79-b3f8-053d648c13e1",
-            "client_secret" => "b21c1221-a3d7-4d79-b3f8-053d648c13e1"
+            "client_id" => "client_id_from_github_project",
+            "client_secret" => "client_secret_from_github_project",
+            "redirect_uri" => "https://localhost/callback"
         ];
         $options = [
             "http" => [
@@ -103,7 +107,12 @@ class MercedesMe extends IPSModule {
             ]
         ];
         $context = stream_context_create($options);
-        $result = file_get_contents($url, false, $context);
+        $result = @file_get_contents($url, false, $context);
+        if ($result === FALSE) {
+            $error = error_get_last();
+            IPS_LogMessage("MercedesMe", "HTTP request failed: " . $error['message']);
+            return null;
+        }
         IPS_LogMessage("MercedesMe", "Result: $result");
         $response = json_decode($result, true);
         return $response['access_token'];
@@ -118,7 +127,12 @@ class MercedesMe extends IPSModule {
             ]
         ];
         $context = stream_context_create($options);
-        $result = file_get_contents($url, false, $context);
+        $result = @file_get_contents($url, false, $context);
+        if ($result === FALSE) {
+            $error = error_get_last();
+            IPS_LogMessage("MercedesMe", "HTTP request failed: " . $error['message']);
+            return null;
+        }
         IPS_LogMessage("MercedesMe", "Result: $result");
         return json_decode($result, true);
     }
