@@ -12,6 +12,7 @@ class MercedesMe extends IPSModule {
 
     public function ApplyChanges() {
         parent::ApplyChanges();
+        $this->RegisterScript('RequestCode', 'Request Code', '<?php MercedesMe_RequestCode($_IPS[\'TARGET\']); ?>', 0);
     }
 
     public function GetConfigurationForm() {
@@ -112,7 +113,7 @@ class MercedesMe extends IPSModule {
 
 // Funktion, die als Aktion registriert wird
 function MercedesMe_RequestCode($instanceID) {
-    $module = new MercedesMe($instanceID);
-    $module->RequestCode();
+    $module = IPS_GetInstance($instanceID)['ModuleInfo']['ModuleID'];
+    IPS_RunScriptText("IPSModule::InstanceObject($instanceID)->RequestCode();");
 }
 ?>
