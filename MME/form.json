@@ -7,21 +7,6 @@
         },
         {
             "type": "ValidationTextBox",
-            "name": "Password",
-            "caption": "Password"
-        },
-        {
-            "type": "ValidationTextBox",
-            "name": "ClientID",
-            "caption": "Client ID"
-        },
-        {
-            "type": "ValidationTextBox",
-            "name": "ClientSecret",
-            "caption": "Client Secret"
-        },
-        {
-            "type": "ValidationTextBox",
             "name": "ConnectURL",
             "caption": "Connect URL"
         },
