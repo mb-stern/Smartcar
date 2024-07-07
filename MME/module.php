@@ -128,4 +128,21 @@ class MercedesMe extends IPSModule {
         return $fixedHeader . $remainingLength . $topicEncoded . $message;
     }
 
-    private function enco
+    private function encodeString($string) {
+        return chr(strlen($string) >> 8) . chr(strlen($string) & 0xFF) . $string;
+    }
+
+    private function encodeRemainingLength($length) {
+        $string = "";
+        do {
+            $digit = $length % 128;
+            $length = $length >> 7;
+            if ($length > 0) {
+                $digit = $digit | 0x80;
+            }
+            $string .= chr($digit);
+        } while ($length > 0);
+        return $string;
+    }
+}
+?>
