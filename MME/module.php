@@ -57,6 +57,7 @@ class MercedesMe extends IPSModule {
 
         $query = http_build_query($data);
         $authURL = $url . "?" . $query;
+        IPS_LogMessage("MercedesMe", "Auth URL: $authURL");
         echo "Bitte öffnen Sie diesen Link: $authURL";
     }
 
@@ -85,9 +86,13 @@ class MercedesMe extends IPSModule {
         curl_setopt_array($curl, $options);
         $result = curl_exec($curl);
         $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+        IPS_LogMessage("MercedesMe", "HTTP Code: $httpCode");
+        IPS_LogMessage("MercedesMe", "Result: $result");
 
         if ($result === FALSE || $httpCode != 200) {
-            echo "Fehler beim Austausch des Authentifizierungscodes: HTTP Status Code $httpCode - " . curl_error($curl);
+            $error = curl_error($curl);
+            IPS_LogMessage("MercedesMe", "Fehler: $error");
+            echo "Fehler beim Austausch des Authentifizierungscodes: HTTP Status Code $httpCode - $error";
             curl_close($curl);
             return null;
         }
@@ -128,9 +133,13 @@ class MercedesMe extends IPSModule {
         curl_setopt_array($curl, $options);
         $result = curl_exec($curl);
         $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+        IPS_LogMessage("MercedesMe", "HTTP Code: $httpCode");
+        IPS_LogMessage("MercedesMe", "Result: $result");
 
         if ($result === FALSE || $httpCode != 200) {
-            echo "Fehler beim Aktualisieren des Tokens: HTTP Status Code $httpCode - " . curl_error($curl);
+            $error = curl_error($curl);
+            IPS_LogMessage("MercedesMe", "Fehler: $error");
+            echo "Fehler beim Aktualisieren des Tokens: HTTP Status Code $httpCode - $error";
             curl_close($curl);
             return null;
         }
@@ -183,6 +192,22 @@ class MercedesMe extends IPSModule {
 
             IPS_SetProperty($id, "Hooks", json_encode($data));
             IPS_ApplyChanges($id);
+        }
+    }
+
+    protected function ProcessHookData() {
+        $hook = explode('/', $_SERVER['REQUEST_URI']);
+        $hook = end($hook);
+        if ($hook == "MercedesMeWebHook") {
+            IPS_LogMessage("MercedesMe", "WebHook empfangen");
+            $code = $_GET['code'] ?? '';
+            if ($code) {
+                $this->WriteAttributeString('AuthCode', $code);
+                IPS_ApplyChanges($this->InstanceID);
+                echo "Authentifizierungscode erhalten.";
+            } else {
+                echo "Kein Authentifizierungscode erhalten.";
+            }
         }
     }
 }
