@@ -59,4 +59,5 @@ class MercedesMe extends IPSModule {
             echo "Fehler beim Erhalten des Access Tokens.";
         }
     }
+}
     
