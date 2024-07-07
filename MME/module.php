@@ -4,7 +4,7 @@ class MercedesMe extends IPSModule {
 
     private $clientID = 'b21c1221-a3d7-4d79-b3f8-053d648c13e1';
     private $clientSecret = 'b21c1221-a3d7-4d79-b3f8-053d648c13e1';
-    private $hookName = "MercedesMeWebHook";
+    private $hookName = "/hook/MercedesMeWebHook";
 
     public function Create() {
         // Diese Zeile nicht löschen
@@ -51,7 +51,7 @@ class MercedesMe extends IPSModule {
         IPS_LogMessage("MercedesMe", "RequestCode aufgerufen");
         $clientID = $this->ReadPropertyString('ClientID');
         $clientSecret = $this->ReadPropertyString('ClientSecret');
-        $redirectURI = 'http://' . $_SERVER['SERVER_ADDR'] . ':' . $_SERVER['SERVER_PORT'] . '/hook/' . $this->hookName;
+        $redirectURI = $this->GetRedirectURI();
 
         IPS_LogMessage("MercedesMe", "ClientID: $clientID, ClientSecret: $clientSecret");
 
@@ -61,6 +61,13 @@ class MercedesMe extends IPSModule {
         } else {
             echo "Bitte geben Sie die Client ID, das Client Secret und die Redirect URI ein.";
         }
+    }
+
+    private function GetRedirectURI() {
+        // Manuelle Eingabe der IP-Adresse und des Ports des IP-Symcon Servers
+        $ip = '192.168.1.100'; // Ersetze dies durch die IP-Adresse deines IP-Symcon Servers
+        $port = '3777'; // Ersetze dies durch den Port deines IP-Symcon Servers
+        return 'http://' . $ip . ':' . $port . $this->hookName;
     }
 
     private function GenerateAuthURL($clientID, $redirectURI) {
@@ -80,7 +87,7 @@ class MercedesMe extends IPSModule {
         IPS_LogMessage("MercedesMe", "ExchangeAuthCodeForAccessToken aufgerufen");
         $clientID = $this->ReadPropertyString('ClientID');
         $clientSecret = $this->ReadPropertyString('ClientSecret');
-        $redirectURI = 'http://' . $_SERVER['SERVER_ADDR'] . ':' . $_SERVER['SERVER_PORT'] . '/hook/' . $this->hookName;
+        $redirectURI = $this->GetRedirectURI();
 
         $url = "https://id.mercedes-benz.com/as/token.oauth2";
         $data = [
@@ -174,43 +181,46 @@ class MercedesMe extends IPSModule {
     }
 
     private function RegisterHook($hook) {
-        if (IPS_GetKernelRunlevel() != KR_READY) {
-            $this->RegisterMessage(0, IPS_KERNELMESSAGE);
-            return;
-        }
-
-        $ids = IPS_GetInstanceListByModuleID("{D83C90B3-7BB0-4ED0-8545-09975C42E94A}");
+        $ids = IPS_GetInstanceListByModuleID("{3565B1F2-8F7B-4311-A4B6-1BF1D868F39E}");
         if (count($ids) > 0) {
             $id = $ids[0];
-            $data = IPS_GetProperty($id, "Hooks");
-            $data = json_decode($data, true);
-
-            if (!is_array($data)) {
-                $data = [];
-            }
-
+            $hooks = json_decode(IPS_GetProperty($id, "Hooks"), true);
             $found = false;
-            foreach ($data as $index => $entry) {
+            foreach ($hooks as $index => $entry) {
                 if ($entry['Hook'] == $hook) {
                     if ($entry['TargetID'] == $this->InstanceID) {
-                        return;
-                    } else {
-                        $data[$index]['TargetID'] = $this->InstanceID;
                         $found = true;
+                        break;
+                    } else {
+                        $hooks[$index]['TargetID'] = $this->InstanceID;
+                        $found = true;
+                        break;
                     }
                 }
             }
-
             if (!$found) {
-                $data[] = [
-                    "Hook" => $hook,
-                    "TargetID" => $this->InstanceID
-                ];
+                $hooks[] = ["Hook" => $hook, "TargetID" => $this->InstanceID];
             }
-
-            IPS_SetProperty($id, "Hooks", json_encode($data));
+            IPS_SetProperty($id, "Hooks", json_encode($hooks));
             IPS_ApplyChanges($id);
         }
     }
+
+    protected function ProcessHookData() {
+        $hook = explode('/', $_SERVER['REQUEST_URI']);
+        $hook = end($hook);
+        if ($hook == "MercedesMeWebHook") {
+            IPS_LogMessage("MercedesMe", "WebHook empfangen");
+            $code = $_GET['code'] ?? '';
+            if ($code) {
+                $this->WriteAttributeString('AuthCode', $code);
+                IPS_ApplyChanges($this->InstanceID);
+                echo "Authentifizierungscode erhalten.";
+            } else {
+                echo "Kein Authentifizierungscode erhalten.";
+            }
+        }
+    }
 }
+
 ?>
