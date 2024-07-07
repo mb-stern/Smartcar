@@ -30,7 +30,7 @@
         {
             "type": "Button",
             "label": "Request Code",
-            "onClick": "MME_RequestAction($id, 'RequestCode', '');"
+            "onClick": "IPS_RequestAction($id, 'RequestCode', '');"
         }
     ]
 }
