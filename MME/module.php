@@ -174,31 +174,43 @@ class MercedesMe extends IPSModule {
     }
 
     private function RegisterHook($hook) {
-        $id = @IPS_GetObjectIDByIdent($hook, 0);
-        if ($id === false) {
-            $id = IPS_CreateScript(0);
-            IPS_SetParent($id, 0);
-            IPS_SetIdent($id, $hook);
-            IPS_SetName($id, "Hook $hook");
-            IPS_SetScriptContent($id, $this->GetHookScriptContent());
-            IPS_SetHidden($id, true);
+        if (IPS_GetKernelRunlevel() != KR_READY) {
+            $this->RegisterMessage(0, IPS_KERNELMESSAGE);
+            return;
         }
-        IPS_SetProperty($id, "TargetID", $this->InstanceID);
-        IPS_ApplyChanges($id);
-    }
 
-    private function GetHookScriptContent() {
-        return '<?php
-$webhookID = $_IPS[\'TARGET\'];
-if (!isset($_GET[\'code\'])) {
-    echo "No code received";
-    return;
-}
-$code = $_GET[\'code\'];
-IPS_LogMessage("MercedesMeWebHook", "Received code: " . $code);
-IPS_SetProperty($webhookID, \'AuthCode\', $code);
-IPS_ApplyChanges($webhookID);
-?>';
+        $ids = IPS_GetInstanceListByModuleID("{D83C90B3-7BB0-4ED0-8545-09975C42E94A}");
+        if (count($ids) > 0) {
+            $id = $ids[0];
+            $data = IPS_GetProperty($id, "Hooks");
+            $data = json_decode($data, true);
+
+            if (!is_array($data)) {
+                $data = [];
+            }
+
+            $found = false;
+            foreach ($data as $index => $entry) {
+                if ($entry['Hook'] == $hook) {
+                    if ($entry['TargetID'] == $this->InstanceID) {
+                        return;
+                    } else {
+                        $data[$index]['TargetID'] = $this->InstanceID;
+                        $found = true;
+                    }
+                }
+            }
+
+            if (!$found) {
+                $data[] = [
+                    "Hook" => $hook,
+                    "TargetID" => $this->InstanceID
+                ];
+            }
+
+            IPS_SetProperty($id, "Hooks", json_encode($data));
+            IPS_ApplyChanges($id);
+        }
     }
 }
 ?>
