@@ -6,7 +6,6 @@ class MercedesMe extends IPSModule {
         parent::Create();
         $this->RegisterPropertyInteger('MQTTServer', 0);
         $this->RegisterPropertyString('DataPoints', '[]');
-        //$this->ConnectParent('{12345678-ABCD-1234-EFAB-567890ABCDEF}'); // Ersetzen Sie diese GUID durch die korrekte GUID des MQTT-Server-Moduls
     }
 
     public function ApplyChanges() {
@@ -50,11 +49,11 @@ class MercedesMe extends IPSModule {
 
         $data = [
             "DataID" => "{018EF6B5-AB94-40C6-AA53-46943E824ACF}",
-            "PacketType" => 12,
-            "QualityOfService" => 0,
-            "Retain" => false,
+            "PacketType" => 3,
             "Topic" => "test/topic",
-            "Payload" => "Test"
+            "Payload" => "Test",
+            "QualityOfService" => 0,
+            "Retain" => false
         ];
 
         $this->SendDataToParent(json_encode($data));
