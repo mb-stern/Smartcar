@@ -46,8 +46,6 @@ class MercedesMe extends IPSModule {
         IPS_LogMessage("MercedesMe", "Email: $email, RedirectURI: $redirectURI");
 
         if ($email && $redirectURI) {
-            // Hier sollte der Code hinzugefügt werden, um den Authentifizierungscode anzufordern
-            // Angenommen, dies ist eine Anfrage an die Mercedes-Benz API
             $authURL = $this->GenerateAuthURL($email, $redirectURI);
             IPS_LogMessage("MercedesMe", "Auth URL: $authURL");
             echo "Bitte öffnen Sie folgenden Link in Ihrem Browser, um den Authentifizierungscode zu erhalten: $authURL";
@@ -60,9 +58,10 @@ class MercedesMe extends IPSModule {
         $url = "https://id.mercedes-benz.com/as/authorization.oauth2";
         $data = [
             "response_type" => "code",
-            "email" => $email,
-            "redirect_uri" => urlencode($redirectURI),
-            "scope" => "openid"
+            "client_id" => "e4a5de35-6fa0-4093-a1fa-01a3e3dced4e",
+            "redirect_uri" => $redirectURI,
+            "scope" => "openid",
+            "email" => $email
         ];
 
         $query = http_build_query($data);
@@ -78,6 +77,8 @@ class MercedesMe extends IPSModule {
         $data = [
             "grant_type" => "authorization_code",
             "code" => $authCode,
+            "client_id" => "e4a5de35-6fa0-4093-a1fa-01a3e3dced4e",
+            "client_secret" => "7d0c7a22-d293-4902-a7db-04ad1d36474b",
             "redirect_uri" => $redirectURI
         ];
 
