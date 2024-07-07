@@ -4,6 +4,7 @@ class MercedesMe extends IPSModule {
 
     private $clientID = 'b21c1221-a3d7-4d79-b3f8-053d648c13e1';
     private $clientSecret = 'b21c1221-a3d7-4d79-b3f8-053d648c13e1';
+    private $hookName = "/hook/MercedesMeWebHook";
 
     public function Create() {
         // Diese Zeile nicht löschen
@@ -16,11 +17,20 @@ class MercedesMe extends IPSModule {
         // Registriere Attribute
         $this->RegisterAttributeString('AuthCode', '');
         $this->RegisterAttributeString('AccessToken', '');
+
+        // WebHook registrieren
+        $this->RegisterHook($this->hookName);
     }
 
     public function ApplyChanges() {
         // Diese Zeile nicht löschen
         parent::ApplyChanges();
+
+        // Überprüfe, ob ein AuthCode vorhanden ist und tausche ihn gegen ein Access Token ein
+        $authCode = $this->ReadAttributeString('AuthCode');
+        if ($authCode) {
+            $this->ExchangeAuthCodeForAccessToken($authCode);
+        }
     }
 
     public function GetConfigurationForm() {
@@ -39,83 +49,46 @@ class MercedesMe extends IPSModule {
 
     public function RequestCode() {
         IPS_LogMessage("MercedesMe", "RequestCode aufgerufen");
-        $email = $this->ReadPropertyString('Email');
-        $password = $this->ReadPropertyString('Password');
         $clientID = $this->ReadPropertyString('ClientID');
         $clientSecret = $this->ReadPropertyString('ClientSecret');
+        $redirectURI = 'http://' . $_SERVER['SERVER_ADDR'] . ':' . $_SERVER['SERVER_PORT'] . $this->hookName;
 
-        IPS_LogMessage("MercedesMe", "Email: $email, Password: $password, ClientID: $clientID, ClientSecret: $clientSecret");
+        IPS_LogMessage("MercedesMe", "ClientID: $clientID, ClientSecret: $clientSecret");
 
-        if ($email && $password && $clientID && $clientSecret) {
-            $authCode = $this->GenerateAuthCode($email, $password, $clientID, $clientSecret);
-            if ($authCode) {
-                $accessToken = $this->ExchangeAuthCodeForAccessToken($authCode, $clientID, $clientSecret);
-                if ($accessToken) {
-                    $this->WriteAttributeString('AccessToken', $accessToken);
-                    echo "Der Authentifizierungscode wurde erfolgreich gegen ein Access Token ausgetauscht.";
-                } else {
-                    echo "Fehler beim Austausch des Authentifizierungscodes gegen ein Access Token.";
-                }
-            } else {
-                echo "Fehler beim Generieren des Authentifizierungscodes.";
-            }
+        if ($clientID && $clientSecret && $redirectURI) {
+            $authURL = $this->GenerateAuthURL($clientID, $redirectURI);
+            echo "Bitte öffnen Sie folgenden Link in Ihrem Browser, um den Authentifizierungscode zu erhalten: $authURL";
         } else {
-            echo "Bitte geben Sie Ihre E-Mail, Ihr Passwort, die Client ID und das Client Secret ein.";
+            echo "Bitte geben Sie die Client ID, das Client Secret und die Redirect URI ein.";
         }
     }
 
-    private function GenerateAuthCode($email, $password, $clientID, $clientSecret) {
-        // Logik zum Generieren des Authentifizierungscodes
-        IPS_LogMessage("MercedesMe", "GenerateAuthCode aufgerufen");
-        // Diese URL und die Parameter müssen eventuell angepasst werden
+    private function GenerateAuthURL($clientID, $redirectURI) {
         $url = "https://id.mercedes-benz.com/as/authorization.oauth2";
         $data = [
             "response_type" => "code",
             "client_id" => $clientID,
-            "redirect_uri" => "https://your-redirect-uri",
-            "scope" => "your-required-scopes"
+            "redirect_uri" => $redirectURI,
+            "scope" => "openid" // Hier kannst du die erforderlichen Scopes hinzufügen
         ];
 
-        $options = [
-            CURLOPT_URL => $url,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_POST => true,
-            CURLOPT_POSTFIELDS => http_build_query($data),
-            CURLOPT_HTTPHEADER => [
-                "Content-Type: application/x-www-form-urlencoded",
-                "User-Agent: Mozilla/5.0"
-            ],
-        ];
-
-        $curl = curl_init();
-        curl_setopt_array($curl, $options);
-        $result = curl_exec($curl);
-        $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
-
-        if ($result === FALSE || $httpCode != 200) {
-            $error = curl_error($curl);
-            IPS_LogMessage("MercedesMe", "HTTP request failed: " . $error);
-            echo "Fehler beim Generieren des Authentifizierungscodes: HTTP Status Code " . $httpCode . " - " . $error;
-            curl_close($curl);
-            return null;
-        }
-
-        curl_close($curl);
-        IPS_LogMessage("MercedesMe", "Result: " . $result);
-        // Extrahiere den Authentifizierungscode aus der Antwort
-        $response = json_decode($result, true);
-        return $response['code'] ?? null;
+        $query = http_build_query($data);
+        return $url . "?" . $query;
     }
 
-    private function ExchangeAuthCodeForAccessToken($authCode, $clientID, $clientSecret) {
+    private function ExchangeAuthCodeForAccessToken($authCode) {
         IPS_LogMessage("MercedesMe", "ExchangeAuthCodeForAccessToken aufgerufen");
+        $clientID = $this->ReadPropertyString('ClientID');
+        $clientSecret = $this->ReadPropertyString('ClientSecret');
+        $redirectURI = 'http://' . $_SERVER['SERVER_ADDR'] . ':' . $_SERVER['SERVER_PORT'] . $this->hookName;
+
         $url = "https://id.mercedes-benz.com/as/token.oauth2";
         $data = [
             "grant_type" => "authorization_code",
             "code" => $authCode,
             "client_id" => $clientID,
             "client_secret" => $clientSecret,
-            "redirect_uri" => "https://your-redirect-uri"
+            "redirect_uri" => $redirectURI
         ];
 
         $options = [
@@ -133,6 +106,9 @@ class MercedesMe extends IPSModule {
         curl_setopt_array($curl, $options);
         $result = curl_exec($curl);
         $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+
+        IPS_LogMessage("MercedesMe", "HTTP Code: " . $httpCode);
+        IPS_LogMessage("MercedesMe", "Result: " . $result);
 
         if ($result === FALSE || $httpCode != 200) {
             $error = curl_error($curl);
@@ -146,7 +122,13 @@ class MercedesMe extends IPSModule {
         IPS_LogMessage("MercedesMe", "Result: " . $result);
         // Extrahiere den Access Token aus der Antwort
         $response = json_decode($result, true);
-        return $response['access_token'] ?? null;
+        $accessToken = $response['access_token'] ?? null;
+        if ($accessToken) {
+            $this->WriteAttributeString('AccessToken', $accessToken);
+            echo "Access Token erfolgreich empfangen und gespeichert.";
+        } else {
+            echo "Fehler beim Erhalten des Access Tokens.";
+        }
     }
 
     public function RequestData() {
@@ -190,6 +172,33 @@ class MercedesMe extends IPSModule {
             $this->SetValue($key, $value);
         }
     }
-}
 
+    private function RegisterHook($hook) {
+        $id = @IPS_GetObjectIDByIdent($hook, 0);
+        if ($id === false) {
+            $id = IPS_CreateScript(0);
+            IPS_SetParent($id, 0);
+            IPS_SetIdent($id, $hook);
+            IPS_SetName($id, "Hook $hook");
+            IPS_SetScriptContent($id, $this->GetHookScriptContent());
+            IPS_SetHidden($id, true);
+        }
+        IPS_SetProperty($id, "TargetID", $this->InstanceID);
+        IPS_ApplyChanges($id);
+    }
+
+    private function GetHookScriptContent() {
+        return '<?php
+$webhookID = $_IPS[\'TARGET\'];
+if (!isset($_GET[\'code\'])) {
+    echo "No code received";
+    return;
+}
+$code = $_GET[\'code\'];
+IPS_LogMessage("MercedesMeWebHook", "Received code: " . $code);
+IPS_SetProperty($webhookID, \'AuthCode\', $code);
+IPS_ApplyChanges($webhookID);
+?>';
+    }
+}
 ?>
