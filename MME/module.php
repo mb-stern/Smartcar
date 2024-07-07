@@ -59,7 +59,7 @@ class MercedesMe extends IPSModule {
         $data = [
             "response_type" => "code",
             "client_id" => "e4a5de35-6fa0-4093-a1fa-01a3e3dced4e",
-            "redirect_uri" => $redirectURI,
+            "redirect_uri" => urlencode($redirectURI),
             "scope" => "openid",
             "email" => $email
         ];
