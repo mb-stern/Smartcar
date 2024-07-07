@@ -175,7 +175,7 @@ class MercedesMe extends IPSModule {
         $connectInstanceIDs = IPS_GetInstanceListByModuleID("{C8792760-65CF-4C53-B5C7-A30FCC84FEFE}"); // Connect Control
         if (count($connectInstanceIDs) > 0) {
             $connectInstanceID = $connectInstanceIDs[0];
-            $connectURL = IPS_GetProperty($connectInstanceID, 'ConnectURL');
+            $connectURL = IPS_GetProperty($connectInstanceID, 'URL');
             return $connectURL . '/hook/' . $this->hookName;
         } else {
             throw new Exception("Connect Control Instanz nicht gefunden");
