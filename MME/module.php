@@ -46,13 +46,15 @@ class MercedesMe extends IPSModule {
 
     private function RequestAuthCode() {
         $email = $this->ReadPropertyString('Email');
+        $nonce = bin2hex(random_bytes(16));
         $url = "https://id.mercedes-benz.com/as/authorization.oauth2";
         $data = [
             "response_type" => "code",
             "client_id" => $this->clientID,
             "redirect_uri" => $this->redirectURI,
-            "scope" => "openid email",
-            "email" => $email
+            "scope" => "openid email profile",
+            "email" => $email,
+            "nonce" => $nonce
         ];
 
         $query = http_build_query($data);
@@ -63,12 +65,14 @@ class MercedesMe extends IPSModule {
 
     private function ExchangeAuthCodeForToken($authCode) {
         $url = "https://id.mercedes-benz.com/as/token.oauth2";
+        $nonce = bin2hex(random_bytes(16));
         $data = [
             "grant_type" => "authorization_code",
             "code" => $authCode,
             "client_id" => $this->clientID,
             "client_secret" => $this->clientSecret,
-            "redirect_uri" => $this->redirectURI
+            "redirect_uri" => $this->redirectURI,
+            "nonce" => $nonce
         ];
 
         $options = [
