@@ -24,6 +24,11 @@
             "type": "ValidationTextBox",
             "name": "ConnectURL",
             "caption": "Connect URL"
+        },
+        {
+            "type": "ValidationTextBox",
+            "name": "AuthCode",
+            "caption": "Auth Code"
         }
     ],
     "actions": [
@@ -31,6 +36,11 @@
             "type": "Button",
             "label": "Request Code",
             "onClick": "IPS_RequestAction($id, 'RequestCode', '');"
+        },
+        {
+            "type": "Button",
+            "label": "Exchange Auth Code",
+            "onClick": "IPS_RequestAction($id, 'ExchangeAuthCode', '');"
         }
     ]
 }

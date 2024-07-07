@@ -15,8 +15,8 @@ class MercedesMe extends IPSModule {
         $this->RegisterPropertyString('ClientID', $this->clientID);
         $this->RegisterPropertyString('ClientSecret', $this->clientSecret);
         $this->RegisterPropertyString('ConnectURL', ''); // Connect URL hinzufügen
+        $this->RegisterPropertyString('AuthCode', '');  // AuthCode hinzufügen
         // Registriere Attribute
-        $this->RegisterAttributeString('AuthCode', '');
         $this->RegisterAttributeString('AccessToken', '');
     }
 
@@ -25,7 +25,7 @@ class MercedesMe extends IPSModule {
         parent::ApplyChanges();
 
         // Überprüfe, ob ein AuthCode vorhanden ist und tausche ihn gegen ein Access Token ein
-        $authCode = $this->ReadAttributeString('AuthCode');
+        $authCode = $this->ReadPropertyString('AuthCode');
         if ($authCode) {
             $this->ExchangeAuthCodeForAccessToken($authCode);
         }
@@ -40,6 +40,9 @@ class MercedesMe extends IPSModule {
             case 'RequestCode':
                 $this->RequestCode();
                 break;
+            case 'ExchangeAuthCode':
+                $this->ExchangeAuthCodeForAccessToken($Value);
+                break;
             default:
                 throw new Exception("Invalid action");
         }
@@ -50,7 +53,7 @@ class MercedesMe extends IPSModule {
         $clientID = $this->ReadPropertyString('ClientID');
         $clientSecret = $this->ReadPropertyString('ClientSecret');
         $connectURL = rtrim($this->ReadPropertyString('ConnectURL'), '/');
-        $redirectURI = urlencode($connectURL . '/hook/' . $this->hookName);
+        $redirectURI = $connectURL . '/hook/' . $this->hookName;
 
         IPS_LogMessage("MercedesMe", "ClientID: $clientID, ClientSecret: $clientSecret, RedirectURI: $redirectURI");
 
@@ -68,7 +71,7 @@ class MercedesMe extends IPSModule {
         $data = [
             "response_type" => "code",
             "client_id" => $clientID,
-            "redirect_uri" => $redirectURI,
+            "redirect_uri" => urlencode($redirectURI),
             "scope" => "openid" // Hier kannst du die erforderlichen Scopes hinzufügen
         ];
 
@@ -81,7 +84,7 @@ class MercedesMe extends IPSModule {
         $clientID = $this->ReadPropertyString('ClientID');
         $clientSecret = $this->ReadPropertyString('ClientSecret');
         $connectURL = rtrim($this->ReadPropertyString('ConnectURL'), '/');
-        $redirectURI = urlencode($connectURL . '/hook/' . $this->hookName);
+        $redirectURI = $connectURL . '/hook/' . $this->hookName;
 
         $url = "https://id.mercedes-benz.com/as/token.oauth2";
         $data = [
@@ -89,7 +92,7 @@ class MercedesMe extends IPSModule {
             "code" => $authCode,
             "client_id" => $clientID,
             "client_secret" => $clientSecret,
-            "redirect_uri" => $redirectURI
+            "redirect_uri" => urlencode($redirectURI)
         ];
 
         $options = [
