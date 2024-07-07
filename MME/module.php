@@ -13,24 +13,6 @@ class MercedesMe extends IPSModule {
 
     public function ApplyChanges() {
         parent::ApplyChanges();
-
-        $dataPoints = json_decode($this->ReadPropertyString('DataPoints'), true);
-        foreach ($dataPoints as $dataPoint) {
-            $this->MaintainVariable($dataPoint['VariableName'], $dataPoint['VariableName'], $dataPoint['VariableType'], '', 0, true);
-        }
-
-        $this->SetReceiveDataFilter('.*');
-    }
-
-    public function ReceiveData($JSONString) {
-        $data = json_decode($JSONString);
-        $dataPoints = json_decode($this->ReadPropertyString('DataPoints'), true);
-
-        foreach ($dataPoints as $dataPoint) {
-            if (fnmatch($dataPoint['Topic'], $data->Topic)) {
-                $this->SetValue($dataPoint['VariableName'], $data->Payload);
-            }
-        }
     }
 
     public function RequestAction($Ident, $Value) {
@@ -54,29 +36,75 @@ class MercedesMe extends IPSModule {
             return;
         }
 
-        $connectionParams = [
-            "ClientID" => "SymconMercedesMeTest",
-            "CleanSession" => true,
-            "ProtocolVersion" => 4,
-            "Host" => $serverIP,
-            "Port" => intval($serverPort),
-            "KeepAlive" => 60,
-            "Username" => $username,
-            "Password" => $password
-        ];
+        $clientID = "SymconMercedesMeTest";
+        $topic = "test/topic";
+        $message = "Test";
 
-        $data = [
-            "DataID" => "{018EF6B5-AB94-40C6-AA53-46943E824ACF}",
-            "PacketType" => 12,
-            "QualityOfService" => 0,
-            "Retain" => false,
-            "Topic" => "test/topic",
-            "Payload" => "Test",
-            "Buffer" => json_encode($connectionParams)
-        ];
+        $socket = fsockopen($serverIP, intval($serverPort), $errno, $errstr, 60);
+        if (!$socket) {
+            echo "Fehler beim Verbinden mit dem MQTT-Server: $errstr ($errno)";
+            return;
+        }
 
-        $this->SendDataToParent(json_encode($data));
+        $connect = $this->createMQTTConnectPacket($clientID, $username, $password);
+        fwrite($socket, $connect);
+
+        $connack = fread($socket, 4);
+        if (ord($connack[0]) >> 4 != 2 || ord($connack[3]) != 0) {
+            fclose($socket);
+            echo "Verbindung zum MQTT-Server fehlgeschlagen.";
+            return;
+        }
+
+        $publish = $this->createMQTTPublishPacket($topic, $message);
+        fwrite($socket, $publish);
+
+        fclose($socket);
         echo "Testnachricht gesendet.";
+    }
+
+    private function createMQTTConnectPacket($clientID, $username, $password) {
+        $protocolName = "MQTT";
+        $protocolLevel = chr(4);  // MQTT v3.1.1
+        $connectFlags = chr(0xC2); // Clean session und User/Pass
+        $keepAlive = chr(0) . chr(60); // Keep alive 60 seconds
+
+        $payload = $this->encodeString($clientID);
+        if ($username) {
+            $payload .= $this->encodeString($username);
+            $payload .= $this->encodeString($password);
+        }
+
+        $variableHeader = $this->encodeString($protocolName) . $protocolLevel . $connectFlags . $keepAlive;
+        $remainingLength = $this->encodeRemainingLength(strlen($variableHeader) + strlen($payload));
+
+        return chr(0x10) . $remainingLength . $variableHeader . $payload;
+    }
+
+    private function createMQTTPublishPacket($topic, $message) {
+        $fixedHeader = chr(0x30);
+        $topicEncoded = $this->encodeString($topic);
+        $messageLength = strlen($message);
+        $remainingLength = $this->encodeRemainingLength(strlen($topicEncoded) + $messageLength);
+
+        return $fixedHeader . $remainingLength . $topicEncoded . $message;
+    }
+
+    private function encodeString($string) {
+        return chr(strlen($string) >> 8) . chr(strlen($string) & 0xFF) . $string;
+    }
+
+    private function encodeRemainingLength($length) {
+        $string = "";
+        do {
+            $digit = $length % 128;
+            $length = $length >> 7;
+            if ($length > 0) {
+                $digit = $digit | 0x80;
+            }
+            $string .= chr($digit);
+        } while ($length > 0);
+        return $string;
     }
 }
 ?>
