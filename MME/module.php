@@ -7,24 +7,18 @@ class MercedesMe extends IPSModule {
     private $hookName = "MercedesMeWebHook";
 
     public function Create() {
-        // Diese Zeile nicht löschen
         parent::Create();
-        // Registriere Eigenschaften
         $this->RegisterPropertyString('Email', '');
         $this->RegisterPropertyString('Password', '');
         $this->RegisterPropertyString('ClientID', $this->clientID);
         $this->RegisterPropertyString('ClientSecret', $this->clientSecret);
-        $this->RegisterPropertyString('ConnectURL', ''); // Connect URL hinzufügen
-        $this->RegisterPropertyString('AuthCode', '');  // AuthCode hinzufügen
-        // Registriere Attribute
+        $this->RegisterPropertyString('ConnectURL', '');
+        $this->RegisterPropertyString('AuthCode', '');
         $this->RegisterAttributeString('AccessToken', '');
     }
 
     public function ApplyChanges() {
-        // Diese Zeile nicht löschen
         parent::ApplyChanges();
-
-        // Überprüfe, ob ein AuthCode vorhanden ist und tausche ihn gegen ein Access Token ein
         $authCode = $this->ReadPropertyString('AuthCode');
         if ($authCode) {
             $this->ExchangeAuthCodeForAccessToken($authCode);
@@ -71,8 +65,8 @@ class MercedesMe extends IPSModule {
         $data = [
             "response_type" => "code",
             "client_id" => $clientID,
-            "redirect_uri" => $redirectURI,
-            "scope" => "openid" // Hier kannst du die erforderlichen Scopes hinzufügen
+            "redirect_uri" => urlencode($redirectURI),
+            "scope" => "openid"
         ];
 
         $query = http_build_query($data);
@@ -124,7 +118,6 @@ class MercedesMe extends IPSModule {
 
         curl_close($curl);
         IPS_LogMessage("MercedesMe", "Result: " . $result);
-        // Extrahiere den Access Token aus der Antwort
         $response = json_decode($result, true);
         $accessToken = $response['access_token'] ?? null;
         if ($accessToken) {
