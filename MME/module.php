@@ -2,8 +2,8 @@
 
 class MercedesMe extends IPSModule {
 
-    private $clientID = 'b21c1221-a3d7-4d79-b3f8-053d648c13e1';
-    private $clientSecret = 'b21c1221-a3d7-4d79-b3f8-053d648c13e1';
+    private $clientID = 'e4a5de35-6fa0-4093-a1fa-01a3e3dced4e';
+    private $clientSecret = '7d0c7a22-d293-4902-a7db-04ad1d36474b';
     private $hookName = "MercedesMeWebHook";
 
     public function Create() {
