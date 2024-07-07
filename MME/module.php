@@ -172,9 +172,14 @@ class MercedesMe extends IPSModule {
 
     private function GetConnectRedirectURI(): string
     {
-        $instanceID = IPS_GetInstanceListByModuleID("{5146D171-0D4C-4F7A-A81A-7E5077B23455}")[0]; // Connect Control
-        $connectURL = IPS_GetProperty($instanceID, 'ConnectURL');
-        return $connectURL . '/hook/' . $this->hookName;
+        $connectInstanceIDs = IPS_GetInstanceListByModuleID("{C8792760-65CF-4C53-B5C7-A30FCC84FEFE}"); // Connect Control
+        if (count($connectInstanceIDs) > 0) {
+            $connectInstanceID = $connectInstanceIDs[0];
+            $connectURL = IPS_GetProperty($connectInstanceID, 'ConnectURL');
+            return $connectURL . '/hook/' . $this->hookName;
+        } else {
+            throw new Exception("Connect Control Instanz nicht gefunden");
+        }
     }
 }
 ?>
