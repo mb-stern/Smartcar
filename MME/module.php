@@ -17,9 +17,6 @@ class MercedesMe extends IPSModule {
         // Registriere Attribute
         $this->RegisterAttributeString('AuthCode', '');
         $this->RegisterAttributeString('AccessToken', '');
-
-        // WebHook registrieren
-        $this->RegisterHook($this->hookName);
     }
 
     public function ApplyChanges() {
@@ -76,7 +73,7 @@ class MercedesMe extends IPSModule {
         return $url . "?" . $query;
     }
 
-    private function ExchangeAuthCodeForAccessToken($authCode) {
+    private function ExchangeAuthCodeForAccessToken(string $authCode) {
         IPS_LogMessage("MercedesMe", "ExchangeAuthCodeForAccessToken aufgerufen");
         $clientID = $this->ReadPropertyString('ClientID');
         $clientSecret = $this->ReadPropertyString('ClientSecret');
@@ -170,46 +167,6 @@ class MercedesMe extends IPSModule {
             }
             $this->MaintainVariable($key, $key, VARIABLETYPE_STRING, '', 0, true);
             $this->SetValue($key, $value);
-        }
-    }
-
-    private function RegisterHook($hook) {
-        if (IPS_GetKernelRunlevel() != KR_READY) {
-            $this->RegisterMessage(0, IPS_KERNELMESSAGE);
-            return;
-        }
-
-        $ids = IPS_GetInstanceListByModuleID("{D83C90B3-7BB0-4ED0-8545-09975C42E94A}");
-        if (count($ids) > 0) {
-            $id = $ids[0];
-            $data = IPS_GetProperty($id, "Hooks");
-            $data = json_decode($data, true);
-
-            if (!is_array($data)) {
-                $data = [];
-            }
-
-            $found = false;
-            foreach ($data as $index => $entry) {
-                if ($entry['Hook'] == $hook) {
-                    if ($entry['TargetID'] == $this->InstanceID) {
-                        return;
-                    } else {
-                        $data[$index]['TargetID'] = $this->InstanceID;
-                        $found = true;
-                    }
-                }
-            }
-
-            if (!$found) {
-                $data[] = [
-                    "Hook" => $hook,
-                    "TargetID" => $this->InstanceID
-                ];
-            }
-
-            IPS_SetProperty($id, "Hooks", json_encode($data));
-            IPS_ApplyChanges($id);
         }
     }
 }
