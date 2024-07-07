@@ -48,9 +48,9 @@ class MercedesMe extends IPSModule {
         IPS_LogMessage("MercedesMe", "RequestCode aufgerufen");
         $clientID = $this->ReadPropertyString('ClientID');
         $clientSecret = $this->ReadPropertyString('ClientSecret');
-        $redirectURI = 'http://' . $_SERVER['SERVER_ADDR'] . ':' . $_SERVER['SERVER_PORT'] . '/hook/' . $this->hookName;
+        $redirectURI = $this->GetConnectRedirectURI();
 
-        IPS_LogMessage("MercedesMe", "ClientID: $clientID, ClientSecret: $clientSecret");
+        IPS_LogMessage("MercedesMe", "ClientID: $clientID, ClientSecret: $clientSecret, RedirectURI: $redirectURI");
 
         if ($clientID && $clientSecret && $redirectURI) {
             $authURL = $this->GenerateAuthURL($clientID, $redirectURI);
@@ -77,7 +77,7 @@ class MercedesMe extends IPSModule {
         IPS_LogMessage("MercedesMe", "ExchangeAuthCodeForAccessToken aufgerufen");
         $clientID = $this->ReadPropertyString('ClientID');
         $clientSecret = $this->ReadPropertyString('ClientSecret');
-        $redirectURI = 'http://' . $_SERVER['SERVER_ADDR'] . ':' . $_SERVER['SERVER_PORT'] . '/hook/' . $this->hookName;
+        $redirectURI = $this->GetConnectRedirectURI();
 
         $url = "https://id.mercedes-benz.com/as/token.oauth2";
         $data = [
@@ -168,6 +168,13 @@ class MercedesMe extends IPSModule {
             $this->MaintainVariable($key, $key, VARIABLETYPE_STRING, '', 0, true);
             $this->SetValue($key, $value);
         }
+    }
+
+    private function GetConnectRedirectURI(): string
+    {
+        $instanceID = IPS_GetInstance(0)['InstanceID'];
+        $connectURL = IPS_GetProperty($instanceID, 'ConnectURL');
+        return $connectURL . '/hook/' . $this->hookName;
     }
 }
 ?>
