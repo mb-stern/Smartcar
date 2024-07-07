@@ -1,31 +1,56 @@
 {
     "elements": [
         {
-            "type": "ValidationTextBox",
-            "name": "Email",
-            "caption": "Email"
+            "type": "SelectInstance",
+            "name": "MQTTServer",
+            "caption": "MQTT Server"
         },
         {
-            "type": "ValidationTextBox",
-            "name": "AuthCode",
-            "caption": "Auth Code"
+            "type": "List",
+            "name": "DataPoints",
+            "caption": "Datenpunkte",
+            "rowCount": 5,
+            "add": true,
+            "delete": true,
+            "columns": [
+                {
+                    "caption": "Topic",
+                    "name": "Topic",
+                    "width": "300px",
+                    "edit": {
+                        "type": "ValidationTextBox"
+                    }
+                },
+                {
+                    "caption": "Variable Name",
+                    "name": "VariableName",
+                    "width": "200px",
+                    "edit": {
+                        "type": "ValidationTextBox"
+                    }
+                },
+                {
+                    "caption": "Variable Type",
+                    "name": "VariableType",
+                    "width": "100px",
+                    "edit": {
+                        "type": "Select",
+                        "options": [
+                            { "caption": "String", "value": 3 },
+                            { "caption": "Integer", "value": 1 },
+                            { "caption": "Float", "value": 2 },
+                            { "caption": "Boolean", "value": 0 }
+                        ]
+                    }
+                }
+            ]
         }
     ],
     "actions": [
         {
             "type": "Button",
-            "label": "Request Code",
-            "onClick": "IPS_RequestAction($id, 'RequestCode', '');"
-        },
-        {
-            "type": "Button",
-            "label": "Exchange Auth Code",
-            "onClick": "IPS_RequestAction($id, 'ExchangeAuthCode', $AuthCode);"
-        },
-        {
-            "type": "Button",
-            "label": "Refresh Token",
-            "onClick": "IPS_RequestAction($id, 'RefreshToken', '');"
+            "label": "Test Connection",
+            "onClick": "IPS_RequestAction($id, 'TestConnection', '');"
         }
     ]
 }
