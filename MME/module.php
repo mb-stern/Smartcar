@@ -56,6 +56,7 @@ class MercedesMe extends IPSModule {
 
         if ($clientID && $clientSecret && $redirectURI) {
             $authURL = $this->GenerateAuthURL($clientID, $redirectURI);
+            IPS_LogMessage("MercedesMe", "Auth URL: $authURL");
             echo "Bitte öffnen Sie folgenden Link in Ihrem Browser, um den Authentifizierungscode zu erhalten: $authURL";
         } else {
             echo "Bitte geben Sie die Client ID, das Client Secret und die Redirect URI ein.";
@@ -67,7 +68,7 @@ class MercedesMe extends IPSModule {
         $data = [
             "response_type" => "code",
             "client_id" => $clientID,
-            "redirect_uri" => $redirectURI,
+            "redirect_uri" => urlencode($redirectURI),
             "scope" => "openid" // Hier kannst du die erforderlichen Scopes hinzufügen
         ];
 
@@ -88,7 +89,7 @@ class MercedesMe extends IPSModule {
             "code" => $authCode,
             "client_id" => $clientID,
             "client_secret" => $clientSecret,
-            "redirect_uri" => $redirectURI
+            "redirect_uri" => urlencode($redirectURI)
         ];
 
         $options = [
