@@ -19,7 +19,7 @@
         {
             "type": "Button",
             "caption": "Request Auth Code",
-            "onClick": "MercedesMe_RequestCode($id);"
+            "onClick": "IPS_RequestAction($id, 'RequestCode', '');"
         }
     ]
 }
