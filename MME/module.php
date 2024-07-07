@@ -90,4 +90,57 @@ class MercedesMe extends IPSModule {
         if ($result === FALSE || $httpCode != 200) {
             $error = curl_error($curl);
             IPS_LogMessage("MercedesMe", "HTTP request failed: " . $error);
-            echo "Fehler beim Anfordern des Auth
+            echo "Fehler beim Anfordern des Authentifizierungscodes: HTTP Status Code " . $httpCode . " - " . $error;
+            curl_close($curl);
+            return null;
+        }
+
+        curl_close($curl);
+        IPS_LogMessage("MercedesMe", "Result: " . $result);
+        return json_decode($result, true);
+    }
+
+    public function RequestData() {
+        IPS_LogMessage("MercedesMe", "RequestData aufgerufen");
+        $token = $this->ReadAttributeString('AccessToken');
+
+        if ($token) {
+            $data = $this->GetMercedesMeData($token);
+            $this->ProcessData($data);
+        } else {
+            echo "Bitte geben Sie den Access Token ein.";
+        }
+    }
+
+    private function GetMercedesMeData($token) {
+        IPS_LogMessage("MercedesMe", "GetMercedesMeData aufgerufen");
+        $url = "https://api.mercedes-benz.com/vehicledata/v2/vehicles";
+        $options = [
+            "http" => [
+                "header" => "Authorization: Bearer $token"
+            ]
+        ];
+        $context = stream_context_create($options);
+        $result = @file_get_contents($url, false, $context);
+        if ($result === FALSE) {
+            $error = error_get_last();
+            IPS_LogMessage("MercedesMe", "HTTP request failed: " . $error['message']);
+            return null;
+        }
+        IPS_LogMessage("MercedesMe", "Result: $result");
+        return json_decode($result, true);
+    }
+
+    private function ProcessData($data) {
+        IPS_LogMessage("MercedesMe", "ProcessData aufgerufen");
+        foreach ($data as $key => $value) {
+            if (is_array($value)) {
+                $value = json_encode($value);
+            }
+            $this->MaintainVariable($key, $key, VARIABLETYPE_STRING, '', 0, true);
+            $this->SetValue($key, $value);
+        }
+    }
+}
+
+?>
