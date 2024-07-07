@@ -55,40 +55,40 @@ class MercedesMe extends IPSModule
 
     private function RegisterHook($hook)
     {
-        $webHookID = @IPS_GetObjectIDByIdent("WebHook", 0);
-        if ($webHookID === false) {
-            $webHookID = IPS_CreateInstance("{3565B1F2-8F7B-4311-A4B6-1BF1D868F39E}");
-            IPS_SetIdent($webHookID, "WebHook");
-            IPS_SetName($webHookID, "WebHook");
-            IPS_SetParent($webHookID, 0);
-        }
+        IPS_LogMessage("MercedesMe", "RegisterHook aufgerufen");
+        $ids = IPS_GetInstanceListByModuleID('{3565B1F2-8F7B-4311-A4B6-1BF1D868F39E}');
+        if (count($ids) > 0) {
+            $id = $ids[0];
+            $hooks = IPS_GetProperty($id, 'Hooks');
+            if (!$hooks) {
+                $hooks = [];
+            } else {
+                $hooks = json_decode($hooks, true);
+            }
 
-        $hooks = IPS_GetProperty($webHookID, 'Hooks');
-        if (!$hooks) {
-            $hooks = [];
-        } else {
-            $hooks = json_decode($hooks, true);
-        }
-
-        $found = false;
-        foreach ($hooks as $index => $entry) {
-            if ($entry['Hook'] == $hook) {
-                if ($entry['TargetID'] == $this->InstanceID) {
-                    $found = true;
-                    break;
-                } else {
-                    $hooks[$index]['TargetID'] = $this->InstanceID;
-                    $found = true;
-                    break;
+            IPS_LogMessage("MercedesMe", "Vorhandene Hooks: " . print_r($hooks, true));
+            $found = false;
+            foreach ($hooks as $index => $hookEntry) {
+                if ($hookEntry['Hook'] == $hook) {
+                    if ($hookEntry['TargetID'] == $this->InstanceID) {
+                        $found = true;
+                        break;
+                    } else {
+                        $hooks[$index]['TargetID'] = $this->InstanceID;
+                        $found = true;
+                        break;
+                    }
                 }
             }
+            if (!$found) {
+                $hooks[] = ["Hook" => $hook, "TargetID" => $this->InstanceID];
+            }
+            IPS_SetProperty($id, 'Hooks', json_encode($hooks));
+            IPS_ApplyChanges($id);
+            IPS_LogMessage("MercedesMe", "WebHook registriert: " . print_r($hook, true));
+        } else {
+            IPS_LogMessage("MercedesMe", "WebHook Instanz nicht gefunden");
         }
-        if (!$found) {
-            $hooks[] = ['Hook' => $hook, 'TargetID' => $this->InstanceID];
-        }
-
-        IPS_SetProperty($webHookID, 'Hooks', json_encode($hooks));
-        IPS_ApplyChanges($webHookID);
     }
 
     public function RequestAction($Ident, $Value)
@@ -240,9 +240,7 @@ class MercedesMe extends IPSModule
 
     protected function ProcessHookData()
     {
-        $hook = explode('/', $_SERVER['REQUEST_URI']);
-        $hook = end($hook);
-        if ($hook == "MercedesMeWebHook") {
+        if ($_SERVER['REQUEST_URI'] == $this->hookName) {
             IPS_LogMessage("MercedesMe", "WebHook empfangen");
             $code = $_GET['code'] ?? '';
             if ($code) {
@@ -256,3 +254,4 @@ class MercedesMe extends IPSModule
     }
 }
 ?>
+
