@@ -40,7 +40,7 @@
         {
             "type": "Button",
             "label": "Exchange Auth Code",
-            "onClick": "IPS_RequestAction($id, 'ExchangeAuthCode', '');"
+            "onClick": "IPS_RequestAction($id, 'ExchangeAuthCode', $AuthCode);"
         }
     ]
 }
