@@ -6,21 +6,34 @@ class MercedesMe extends IPSModule {
     private $clientSecret = 'b21c1221-a3d7-4d79-b3f8-053d648c13e1';
 
     public function Create() {
+        // Diese Zeile nicht löschen
         parent::Create();
+        // Registriere Eigenschaften
         $this->RegisterPropertyString('Email', '');
         $this->RegisterPropertyString('Password', '');
         $this->RegisterPropertyString('ClientID', $this->clientID);
         $this->RegisterPropertyString('ClientSecret', $this->clientSecret);
+        // Registriere Attribute
         $this->RegisterAttributeString('AuthCode', '');
         $this->RegisterAttributeString('AccessToken', '');
     }
 
     public function ApplyChanges() {
+        // Diese Zeile nicht löschen
         parent::ApplyChanges();
     }
 
     public function GetConfigurationForm() {
-        return file_get_contents(__DIR__ . '/form.json');
+        return json_encode([
+            "elements" => [
+                ["type" => "ValidationTextBox", "name" => "Email", "caption" => "Email"],
+                ["type" => "ValidationTextBox", "name" => "Password", "caption" => "Password"],
+                ["type" => "Label", "caption" => "Client ID und Client Secret werden automatisch gesetzt."]
+            ],
+            "actions" => [
+                ["type" => "Button", "caption" => "Request Auth Code", "onClick" => "MercedesMe_RequestCode(\$id);"]
+            ]
+        ]);
     }
 
     public function RequestAction($Ident, $Value) {
@@ -130,9 +143,13 @@ class MercedesMe extends IPSModule {
     private function ProcessData($data) {
         IPS_LogMessage("MercedesMe", "ProcessData aufgerufen");
         foreach ($data as $key => $value) {
+            if (is_array($value)) {
+                $value = json_encode($value);
+            }
             $this->MaintainVariable($key, $key, VARIABLETYPE_STRING, '', 0, true);
             $this->SetValue($key, $value);
         }
     }
 }
+
 ?>
