@@ -64,6 +64,8 @@ class MercedesMe extends IPSModule {
     }
 
     private function ExchangeAuthCodeForToken($authCode) {
+        IPS_LogMessage("MercedesMe", "ExchangeAuthCodeForToken aufgerufen mit AuthCode: $authCode");
+
         $url = "https://id.mercedes-benz.com/as/token.oauth2";
         $data = [
             "grant_type" => "authorization_code",
@@ -113,6 +115,8 @@ class MercedesMe extends IPSModule {
     }
 
     private function RefreshToken() {
+        IPS_LogMessage("MercedesMe", "RefreshToken aufgerufen");
+
         $refreshToken = $this->ReadAttributeString('RefreshToken');
         $url = "https://id.mercedes-benz.com/as/token.oauth2";
         $data = [
@@ -162,6 +166,8 @@ class MercedesMe extends IPSModule {
     }
 
     private function RegisterHook($hook) {
+        IPS_LogMessage("MercedesMe", "RegisterHook aufgerufen mit Hook: $hook");
+
         if (IPS_GetKernelRunlevel() != KR_READY) {
             $this->RegisterMessage(0, IPS_KERNELMESSAGE);
             return;
@@ -198,6 +204,9 @@ class MercedesMe extends IPSModule {
 
             IPS_SetProperty($id, "Hooks", json_encode($data));
             IPS_ApplyChanges($id);
+            IPS_LogMessage("MercedesMe", "Hook erfolgreich registriert: $hook");
+        } else {
+            IPS_LogMessage("MercedesMe", "Keine passenden Instanzen gefunden für die Registrierung des Hooks: $hook");
         }
     }
 
@@ -220,4 +229,3 @@ class MercedesMe extends IPSModule {
     }
 }
 ?>
-
