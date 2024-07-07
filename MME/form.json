@@ -21,6 +21,11 @@
             "type": "Button",
             "label": "Exchange Auth Code",
             "onClick": "IPS_RequestAction($id, 'ExchangeAuthCode', $AuthCode);"
+        },
+        {
+            "type": "Button",
+            "label": "Refresh Token",
+            "onClick": "IPS_RequestAction($id, 'RefreshToken', '');"
         }
     ]
 }

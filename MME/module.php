@@ -11,6 +11,7 @@ class MercedesMe extends IPSModule {
         $this->RegisterPropertyString('Email', '');
         $this->RegisterPropertyString('AuthCode', '');
         $this->RegisterAttributeString('AccessToken', '');
+        $this->RegisterAttributeString('RefreshToken', '');
         $this->RegisterHook($this->hookName);
     }
 
@@ -33,6 +34,9 @@ class MercedesMe extends IPSModule {
                 break;
             case 'ExchangeAuthCode':
                 $this->ExchangeAuthCodeForToken($Value);
+                break;
+            case 'RefreshToken':
+                $this->RefreshToken();
                 break;
             default:
                 throw new Exception("Invalid action");
@@ -91,9 +95,53 @@ class MercedesMe extends IPSModule {
         $response = json_decode($result, true);
         if (isset($response['access_token'])) {
             $this->WriteAttributeString('AccessToken', $response['access_token']);
+            $this->WriteAttributeString('RefreshToken', $response['refresh_token']);
             echo "Access Token erfolgreich empfangen und gespeichert.";
         } else {
             echo "Fehler beim Erhalten des Access Tokens.";
+        }
+    }
+
+    private function RefreshToken() {
+        $refreshToken = $this->ReadAttributeString('RefreshToken');
+        $url = "https://id.mercedes-benz.com/as/token.oauth2";
+        $data = [
+            "grant_type" => "refresh_token",
+            "refresh_token" => $refreshToken,
+            "client_id" => $this->clientID,
+            "client_secret" => $this->clientSecret
+        ];
+
+        $options = [
+            CURLOPT_URL => $url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => http_build_query($data),
+            CURLOPT_HTTPHEADER => [
+                "Content-Type: application/x-www-form-urlencoded",
+                "User-Agent: Mozilla/5.0"
+            ],
+        ];
+
+        $curl = curl_init();
+        curl_setopt_array($curl, $options);
+        $result = curl_exec($curl);
+        $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+
+        if ($result === FALSE || $httpCode != 200) {
+            echo "Fehler beim Aktualisieren des Tokens: HTTP Status Code $httpCode - " . curl_error($curl);
+            curl_close($curl);
+            return null;
+        }
+
+        curl_close($curl);
+        $response = json_decode($result, true);
+        if (isset($response['access_token'])) {
+            $this->WriteAttributeString('AccessToken', $response['access_token']);
+            $this->WriteAttributeString('RefreshToken', $response['refresh_token']);
+            echo "Token erfolgreich aktualisiert.";
+        } else {
+            echo "Fehler beim Aktualisieren des Tokens.";
         }
     }
 
@@ -137,4 +185,5 @@ class MercedesMe extends IPSModule {
         }
     }
 }
+
 ?>
