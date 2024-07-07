@@ -65,4 +65,131 @@ class MercedesMe extends IPSModule {
     }
 
     private function GenerateAuthCode($email, $password, $clientID, $clientSecret) {
-        // Logik zum
+        // Logik zum Generieren des Authentifizierungscodes
+        IPS_LogMessage("MercedesMe", "GenerateAuthCode aufgerufen");
+        // Diese URL und die Parameter müssen eventuell angepasst werden
+        $url = "https://id.mercedes-benz.com/as/authorization.oauth2";
+        $data = [
+            "response_type" => "code",
+            "client_id" => $clientID,
+            "redirect_uri" => "https://your-redirect-uri",
+            "scope" => "your-required-scopes"
+        ];
+
+        $options = [
+            CURLOPT_URL => $url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => http_build_query($data),
+            CURLOPT_HTTPHEADER => [
+                "Content-Type: application/x-www-form-urlencoded",
+                "User-Agent: Mozilla/5.0"
+            ],
+        ];
+
+        $curl = curl_init();
+        curl_setopt_array($curl, $options);
+        $result = curl_exec($curl);
+        $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+
+        if ($result === FALSE || $httpCode != 200) {
+            $error = curl_error($curl);
+            IPS_LogMessage("MercedesMe", "HTTP request failed: " . $error);
+            echo "Fehler beim Generieren des Authentifizierungscodes: HTTP Status Code " . $httpCode . " - " . $error;
+            curl_close($curl);
+            return null;
+        }
+
+        curl_close($curl);
+        IPS_LogMessage("MercedesMe", "Result: " . $result);
+        // Extrahiere den Authentifizierungscode aus der Antwort
+        $response = json_decode($result, true);
+        return $response['code'] ?? null;
+    }
+
+    private function ExchangeAuthCodeForAccessToken($authCode, $clientID, $clientSecret) {
+        IPS_LogMessage("MercedesMe", "ExchangeAuthCodeForAccessToken aufgerufen");
+        $url = "https://id.mercedes-benz.com/as/token.oauth2";
+        $data = [
+            "grant_type" => "authorization_code",
+            "code" => $authCode,
+            "client_id" => $clientID,
+            "client_secret" => $clientSecret,
+            "redirect_uri" => "https://your-redirect-uri"
+        ];
+
+        $options = [
+            CURLOPT_URL => $url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => http_build_query($data),
+            CURLOPT_HTTPHEADER => [
+                "Content-Type: application/x-www-form-urlencoded",
+                "User-Agent: Mozilla/5.0"
+            ],
+        ];
+
+        $curl = curl_init();
+        curl_setopt_array($curl, $options);
+        $result = curl_exec($curl);
+        $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+
+        if ($result === FALSE || $httpCode != 200) {
+            $error = curl_error($curl);
+            IPS_LogMessage("MercedesMe", "HTTP request failed: " . $error);
+            echo "Fehler beim Austausch des Authentifizierungscodes: HTTP Status Code " . $httpCode . " - " . $error;
+            curl_close($curl);
+            return null;
+        }
+
+        curl_close($curl);
+        IPS_LogMessage("MercedesMe", "Result: " . $result);
+        // Extrahiere den Access Token aus der Antwort
+        $response = json_decode($result, true);
+        return $response['access_token'] ?? null;
+    }
+
+    public function RequestData() {
+        IPS_LogMessage("MercedesMe", "RequestData aufgerufen");
+        $token = $this->ReadAttributeString('AccessToken');
+
+        if ($token) {
+            $data = $this->GetMercedesMeData($token);
+            $this->ProcessData($data);
+        } else {
+            echo "Bitte geben Sie den Access Token ein.";
+        }
+    }
+
+    private function GetMercedesMeData($token) {
+        IPS_LogMessage("MercedesMe", "GetMercedesMeData aufgerufen");
+        $url = "https://api.mercedes-benz.com/vehicledata/v2/vehicles";
+        $options = [
+            "http" => [
+                "header" => "Authorization: Bearer $token"
+            ]
+        ];
+        $context = stream_context_create($options);
+        $result = @file_get_contents($url, false, $context);
+        if ($result === FALSE) {
+            $error = error_get_last();
+            IPS_LogMessage("MercedesMe", "HTTP request failed: " . $error['message']);
+            return null;
+        }
+        IPS_LogMessage("MercedesMe", "Result: $result");
+        return json_decode($result, true);
+    }
+
+    private function ProcessData($data) {
+        IPS_LogMessage("MercedesMe", "ProcessData aufgerufen");
+        foreach ($data as $key => $value) {
+            if (is_array($value)) {
+                $value = json_encode($value);
+            }
+            $this->MaintainVariable($key, $key, VARIABLETYPE_STRING, '', 0, true);
+            $this->SetValue($key, $value);
+        }
+    }
+}
+
+?>
