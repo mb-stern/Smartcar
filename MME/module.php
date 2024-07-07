@@ -2,8 +2,9 @@
 
 class MercedesMe extends IPSModule {
 
-    private $clientID = 'your_client_id';
-    private $clientSecret = 'your_client_secret';
+    private $clientID = 'e4a5de35-6fa0-4093-a1fa-01a3e3dced4e'; 
+    private $clientSecret = '7d0c7a22-d293-4902-a7db-04ad1d36474b'; 
+    private $redirectURI = 'https://b66f003aec754cc62ffe1660b37d1c05.ipmagic.de/hook/MercedesMeWebHook';
     private $hookName = "/hook/MercedesMeWebHook";
 
     public function Create() {
@@ -49,7 +50,7 @@ class MercedesMe extends IPSModule {
         $data = [
             "response_type" => "code",
             "client_id" => $this->clientID,
-            "redirect_uri" => "https://your_redirect_uri",
+            "redirect_uri" => $this->redirectURI,
             "scope" => "openid email",
             "email" => $email
         ];
@@ -66,7 +67,7 @@ class MercedesMe extends IPSModule {
             "code" => $authCode,
             "client_id" => $this->clientID,
             "client_secret" => $this->clientSecret,
-            "redirect_uri" => "https://your_redirect_uri"
+            "redirect_uri" => $this->redirectURI
         ];
 
         $options = [
