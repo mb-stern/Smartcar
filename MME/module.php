@@ -181,37 +181,47 @@ class MercedesMe extends IPSModule {
     }
 
     private function RegisterHook($hook) {
-        $ids = IPS_GetInstanceListByModuleID("{3565B1F2-8F7B-4311-A4B6-1BF1D868F39E}"); // ID der WebHook Control Instanz
-        if (count($ids) > 0) {
-            $id = $ids[0];
-            $data = IPS_GetProperty($id, "Hooks");
-            $data = json_decode($data, true);
+        if (IPS_GetKernelRunlevel() == KR_READY) {
+            $ids = IPS_GetInstanceListByModuleID("{3565B1F2-8F7B-4311-A4B6-1BF1D868F39E}"); // ID der WebHook Control Instanz
+            if (count($ids) > 0) {
+                $id = $ids[0];
+                $data = IPS_GetProperty($id, "Hooks");
+                $data = json_decode($data, true);
 
-            if (!is_array($data)) {
-                $data = [];
-            }
+                if (!is_array($data)) {
+                    $data = [];
+                }
 
-            $found = false;
-            foreach ($data as $index => $entry) {
-                if ($entry['Hook'] == $hook) {
-                    if ($entry['TargetID'] == $this->InstanceID) {
-                        return;
-                    } else {
-                        $data[$index]['TargetID'] = $this->InstanceID;
-                        $found = true;
+                $found = false;
+                foreach ($data as $index => $entry) {
+                    if ($entry['Hook'] == $hook) {
+                        if ($entry['TargetID'] == $this->InstanceID) {
+                            return;
+                        } else {
+                            $data[$index]['TargetID'] = $this->InstanceID;
+                            $found = true;
+                        }
                     }
                 }
-            }
 
-            if (!$found) {
-                $data[] = [
-                    "Hook" => $hook,
-                    "TargetID" => $this->InstanceID
-                ];
-            }
+                if (!$found) {
+                    $data[] = [
+                        "Hook" => $hook,
+                        "TargetID" => $this->InstanceID
+                    ];
+                }
 
-            IPS_SetProperty($id, "Hooks", json_encode($data));
-            IPS_ApplyChanges($id);
+                IPS_SetProperty($id, "Hooks", json_encode($data));
+                IPS_ApplyChanges($id);
+            }
+        } else {
+            $this->RegisterMessage(0, IPS_KERNELMESSAGE);
+        }
+    }
+
+    public function MessageSink($TimeStamp, $SenderID, $Message, $Data) {
+        if ($Message == IPS_KERNELMESSAGE && $Data[0] == KR_READY) {
+            $this->RegisterHook($this->hookName);
         }
     }
 }
