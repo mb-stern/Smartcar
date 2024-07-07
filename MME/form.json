@@ -11,15 +11,26 @@
             "caption": "Password"
         },
         {
-            "type": "Label",
-            "caption": "Client ID und Client Secret werden automatisch gesetzt."
+            "type": "ValidationTextBox",
+            "name": "ClientID",
+            "caption": "Client ID"
+        },
+        {
+            "type": "ValidationTextBox",
+            "name": "ClientSecret",
+            "caption": "Client Secret"
+        },
+        {
+            "type": "ValidationTextBox",
+            "name": "ConnectURL",
+            "caption": "Connect URL"
         }
     ],
     "actions": [
         {
             "type": "Button",
-            "caption": "Request Auth Code",
-            "onClick": "IPS_RequestAction($id, 'RequestCode', '');"
+            "label": "Request Code",
+            "onClick": "MME_RequestAction($id, 'RequestCode', '');"
         }
     ]
 }

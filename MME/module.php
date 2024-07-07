@@ -14,6 +14,7 @@ class MercedesMe extends IPSModule {
         $this->RegisterPropertyString('Password', '');
         $this->RegisterPropertyString('ClientID', $this->clientID);
         $this->RegisterPropertyString('ClientSecret', $this->clientSecret);
+        $this->RegisterPropertyString('ConnectURL', ''); // Connect URL hinzufügen
         // Registriere Attribute
         $this->RegisterAttributeString('AuthCode', '');
         $this->RegisterAttributeString('AccessToken', '');
@@ -48,7 +49,7 @@ class MercedesMe extends IPSModule {
         IPS_LogMessage("MercedesMe", "RequestCode aufgerufen");
         $clientID = $this->ReadPropertyString('ClientID');
         $clientSecret = $this->ReadPropertyString('ClientSecret');
-        $redirectURI = $this->GetConnectRedirectURI();
+        $redirectURI = $this->ReadPropertyString('ConnectURL') . '/hook/' . $this->hookName;
 
         IPS_LogMessage("MercedesMe", "ClientID: $clientID, ClientSecret: $clientSecret, RedirectURI: $redirectURI");
 
@@ -77,7 +78,7 @@ class MercedesMe extends IPSModule {
         IPS_LogMessage("MercedesMe", "ExchangeAuthCodeForAccessToken aufgerufen");
         $clientID = $this->ReadPropertyString('ClientID');
         $clientSecret = $this->ReadPropertyString('ClientSecret');
-        $redirectURI = $this->GetConnectRedirectURI();
+        $redirectURI = $this->ReadPropertyString('ConnectURL') . '/hook/' . $this->hookName;
 
         $url = "https://id.mercedes-benz.com/as/token.oauth2";
         $data = [
@@ -167,18 +168,6 @@ class MercedesMe extends IPSModule {
             }
             $this->MaintainVariable($key, $key, VARIABLETYPE_STRING, '', 0, true);
             $this->SetValue($key, $value);
-        }
-    }
-
-    private function GetConnectRedirectURI(): string
-    {
-        $connectInstanceIDs = IPS_GetInstanceListByModuleID("{C8792760-65CF-4C53-B5C7-A30FCC84FEFE}"); // Connect Control
-        if (count($connectInstanceIDs) > 0) {
-            $connectInstanceID = $connectInstanceIDs[0];
-            $connectURL = IPS_GetProperty($connectInstanceID, 'URL');
-            return $connectURL . '/hook/' . $this->hookName;
-        } else {
-            throw new Exception("Connect Control Instanz nicht gefunden");
         }
     }
 }
