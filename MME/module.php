@@ -14,23 +14,18 @@ class MercedesMe extends IPSModule
         // Diese Zeile nicht löschen
         parent::Create();
         // Registriere Eigenschaften
-        $this->RegisterPropertyString('Email', '');
-        $this->RegisterPropertyString('Password', '');
         $this->RegisterPropertyString('ClientID', $this->clientID);
         $this->RegisterPropertyString('ClientSecret', $this->clientSecret);
         $this->RegisterAttributeString('AccessToken', '');
+
+        // OAuth Konfiguration
+        $this->RegisterOAuth($this->ReadPropertyString('ClientID'));
     }
 
     public function ApplyChanges()
     {
         // Diese Zeile nicht löschen
         parent::ApplyChanges();
-
-        // Überprüfe, ob ein AccessToken vorhanden ist
-        $accessToken = $this->ReadAttributeString('AccessToken');
-        if ($accessToken) {
-            // Abruf von Daten initialisieren
-        }
     }
 
     public function RequestAction($Ident, $Value)
