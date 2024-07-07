@@ -4,17 +4,15 @@ class MercedesMe extends IPSModule {
 
     public function Create() {
         parent::Create();
-        $this->RegisterPropertyInteger('MQTTServer', 0);
+        $this->RegisterPropertyString('MQTTServerIP', '');
+        $this->RegisterPropertyString('MQTTServerPort', '');
+        $this->RegisterPropertyString('MQTTUsername', '');
+        $this->RegisterPropertyString('MQTTPassword', '');
         $this->RegisterPropertyString('DataPoints', '[]');
     }
 
     public function ApplyChanges() {
         parent::ApplyChanges();
-
-        $mqttServerID = $this->ReadPropertyInteger('MQTTServer');
-        if ($mqttServerID > 0) {
-            $this->ConnectParent($mqttServerID);
-        }
 
         $dataPoints = json_decode($this->ReadPropertyString('DataPoints'), true);
         foreach ($dataPoints as $dataPoint) {
@@ -46,21 +44,35 @@ class MercedesMe extends IPSModule {
     }
 
     private function TestConnection() {
-        $mqttServerID = $this->ReadPropertyInteger('MQTTServer');
-        if ($mqttServerID == 0) {
-            echo "MQTT Server nicht ausgewählt.";
+        $serverIP = $this->ReadPropertyString('MQTTServerIP');
+        $serverPort = $this->ReadPropertyString('MQTTServerPort');
+        $username = $this->ReadPropertyString('MQTTUsername');
+        $password = $this->ReadPropertyString('MQTTPassword');
+
+        if (empty($serverIP) || empty($serverPort)) {
+            echo "MQTT Server IP und Port müssen angegeben werden.";
             return;
         }
 
+        $connectionParams = [
+            "ClientID" => "SymconMercedesMeTest",
+            "CleanSession" => true,
+            "ProtocolVersion" => 4,
+            "Host" => $serverIP,
+            "Port" => intval($serverPort),
+            "KeepAlive" => 60,
+            "Username" => $username,
+            "Password" => $password
+        ];
+
         $data = [
             "DataID" => "{018EF6B5-AB94-40C6-AA53-46943E824ACF}",
-            "PacketType" => 3,
-            "Buffer" => json_encode([
-                "Topic" => "test/topic",
-                "Payload" => "Test",
-                "QualityOfService" => 0,
-                "Retain" => false
-            ])
+            "PacketType" => 12,
+            "QualityOfService" => 0,
+            "Retain" => false,
+            "Topic" => "test/topic",
+            "Payload" => "Test",
+            "Buffer" => json_encode($connectionParams)
         ];
 
         $this->SendDataToParent(json_encode($data));
