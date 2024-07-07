@@ -50,7 +50,7 @@ class MercedesMe extends IPSModule {
         $clientID = $this->ReadPropertyString('ClientID');
         $clientSecret = $this->ReadPropertyString('ClientSecret');
         $connectURL = rtrim($this->ReadPropertyString('ConnectURL'), '/');
-        $redirectURI = $connectURL . '/hook/' . $this->hookName;
+        $redirectURI = urlencode($connectURL . '/hook/' . $this->hookName);
 
         IPS_LogMessage("MercedesMe", "ClientID: $clientID, ClientSecret: $clientSecret, RedirectURI: $redirectURI");
 
@@ -81,7 +81,7 @@ class MercedesMe extends IPSModule {
         $clientID = $this->ReadPropertyString('ClientID');
         $clientSecret = $this->ReadPropertyString('ClientSecret');
         $connectURL = rtrim($this->ReadPropertyString('ConnectURL'), '/');
-        $redirectURI = $connectURL . '/hook/' . $this->hookName;
+        $redirectURI = urlencode($connectURL . '/hook/' . $this->hookName);
 
         $url = "https://id.mercedes-benz.com/as/token.oauth2";
         $data = [
