@@ -1,6 +1,6 @@
 <?php
 
-class MercedesMeMQTT extends IPSModule {
+class MercedesMe extends IPSModule {
 
     public function Create() {
         parent::Create();
