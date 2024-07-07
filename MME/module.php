@@ -51,7 +51,7 @@ class MercedesMe extends IPSModule {
         IPS_LogMessage("MercedesMe", "RequestCode aufgerufen");
         $clientID = $this->ReadPropertyString('ClientID');
         $clientSecret = $this->ReadPropertyString('ClientSecret');
-        $redirectURI = 'http://' . $_SERVER['SERVER_ADDR'] . ':' . $_SERVER['SERVER_PORT'] . $this->hookName;
+        $redirectURI = $this->GetRedirectURI();
 
         IPS_LogMessage("MercedesMe", "ClientID: $clientID, ClientSecret: $clientSecret");
 
@@ -61,6 +61,13 @@ class MercedesMe extends IPSModule {
         } else {
             echo "Bitte geben Sie die Client ID, das Client Secret und die Redirect URI ein.";
         }
+    }
+
+    private function GetRedirectURI() {
+        // Manuelle Eingabe der IP-Adresse und des Ports des IP-Symcon Servers
+        $ip = '192.168.1.100'; // Ersetze dies durch die IP-Adresse deines IP-Symcon Servers
+        $port = '3777'; // Ersetze dies durch den Port deines IP-Symcon Servers
+        return 'http://' . $ip . ':' . $port . $this->hookName;
     }
 
     private function GenerateAuthURL($clientID, $redirectURI) {
@@ -80,7 +87,7 @@ class MercedesMe extends IPSModule {
         IPS_LogMessage("MercedesMe", "ExchangeAuthCodeForAccessToken aufgerufen");
         $clientID = $this->ReadPropertyString('ClientID');
         $clientSecret = $this->ReadPropertyString('ClientSecret');
-        $redirectURI = 'http://' . $_SERVER['SERVER_ADDR'] . ':' . $_SERVER['SERVER_PORT'] . $this->hookName;
+        $redirectURI = $this->GetRedirectURI();
 
         $url = "https://id.mercedes-benz.com/as/token.oauth2";
         $data = [
