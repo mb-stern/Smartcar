@@ -1,9 +1,25 @@
 {
     "elements": [
-        { "type": "ValidationTextBox", "name": "Email", "caption": "E-Mail" },
-        { "type": "PasswordTextBox", "name": "Password", "caption": "Passwort" },
-        { "type": "ValidationTextBox", "name": "ClientID", "caption": "Client ID", "value": "b21c1221-a3d7-4d79-b3f8-053d648c13e1" },
-        { "type": "ValidationTextBox", "name": "ClientSecret", "caption": "Client Secret", "value": "b21c1221-a3d7-4d79-b3f8-053d648c13e1" },
-        { "type": "Button", "caption": "Code anfordern", "onClick": "IPS_RequestAction($id, 'RequestCode', '');" }
+        {
+            "type": "ValidationTextBox",
+            "name": "Email",
+            "caption": "Email"
+        },
+        {
+            "type": "ValidationTextBox",
+            "name": "Password",
+            "caption": "Password"
+        },
+        {
+            "type": "Label",
+            "caption": "Client ID und Client Secret werden automatisch gesetzt."
+        }
+    ],
+    "actions": [
+        {
+            "type": "Button",
+            "caption": "Request Auth Code",
+            "onClick": "MercedesMe_RequestCode($id);"
+        }
     ]
 }
