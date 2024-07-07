@@ -4,7 +4,7 @@ class MercedesMe extends IPSModule {
 
     private $clientID = 'b21c1221-a3d7-4d79-b3f8-053d648c13e1';
     private $clientSecret = 'b21c1221-a3d7-4d79-b3f8-053d648c13e1';
-    private $hookName = "/hook/MercedesMeWebHook";
+    private $hookName = "MercedesMeWebHook";
 
     public function Create() {
         // Diese Zeile nicht löschen
@@ -51,7 +51,7 @@ class MercedesMe extends IPSModule {
         IPS_LogMessage("MercedesMe", "RequestCode aufgerufen");
         $clientID = $this->ReadPropertyString('ClientID');
         $clientSecret = $this->ReadPropertyString('ClientSecret');
-        $redirectURI = 'http://' . $_SERVER['SERVER_ADDR'] . ':' . $_SERVER['SERVER_PORT'] . $this->hookName;
+        $redirectURI = 'http://' . $_SERVER['SERVER_ADDR'] . ':' . $_SERVER['SERVER_PORT'] . '/hook/' . $this->hookName;
 
         IPS_LogMessage("MercedesMe", "ClientID: $clientID, ClientSecret: $clientSecret");
 
@@ -80,7 +80,7 @@ class MercedesMe extends IPSModule {
         IPS_LogMessage("MercedesMe", "ExchangeAuthCodeForAccessToken aufgerufen");
         $clientID = $this->ReadPropertyString('ClientID');
         $clientSecret = $this->ReadPropertyString('ClientSecret');
-        $redirectURI = 'http://' . $_SERVER['SERVER_ADDR'] . ':' . $_SERVER['SERVER_PORT'] . $this->hookName;
+        $redirectURI = 'http://' . $_SERVER['SERVER_ADDR'] . ':' . $_SERVER['SERVER_PORT'] . '/hook/' . $this->hookName;
 
         $url = "https://id.mercedes-benz.com/as/token.oauth2";
         $data = [
