@@ -8,6 +8,7 @@ class MercedesMe extends IPSModule
     private $clientSecret = 'b21c1221-a3d7-4d79-b3f8-053d648c13e1';
     private $authorizeURL = 'https://id.mercedes-benz.com/as/authorization.oauth2';
     private $tokenURL = 'https://id.mercedes-benz.com/as/token.oauth2';
+    private $hookName = "/hook/MercedesMeOAuth";
 
     public function Create()
     {
@@ -18,14 +19,65 @@ class MercedesMe extends IPSModule
         $this->RegisterPropertyString('ClientSecret', $this->clientSecret);
         $this->RegisterAttributeString('AccessToken', '');
 
-        // OAuth Konfiguration
-        $this->RegisterOAuth($this->ReadPropertyString('ClientID'));
+        // WebHook registrieren
+        $this->RegisterMessage(0, IPS_KERNELMESSAGE);
     }
 
     public function ApplyChanges()
     {
         // Diese Zeile nicht löschen
         parent::ApplyChanges();
+
+        // WebHook registrieren, falls Kernel bereits bereit ist
+        if (IPS_GetKernelRunlevel() == KR_READY) {
+            $this->RegisterHook($this->hookName);
+        }
+    }
+
+    public function MessageSink($TimeStamp, $SenderID, $Message, $Data)
+    {
+        // Diese Zeile nicht löschen
+        parent::MessageSink($TimeStamp, $SenderID, $Message, $Data);
+
+        // Wenn der Kernel bereit ist, registriere den WebHook
+        if ($Message == IPS_KERNELMESSAGE && $Data[0] == KR_READY) {
+            $this->RegisterHook($this->hookName);
+        }
+    }
+
+    private function RegisterHook($hook)
+    {
+        IPS_LogMessage("MercedesMe", "RegisterHook aufgerufen");
+        $ids = IPS_GetInstanceListByModuleID('{3565B1F2-8F7B-4311-A4B6-1BF1D868F39E}');
+        if (count($ids) > 0) {
+            $id = $ids[0];
+            $hooks = json_decode(IPS_GetProperty($id, 'Hooks'), true);
+            if (!$hooks) {
+                $hooks = [];
+            }
+
+            $found = false;
+            foreach ($hooks as $index => $hookEntry) {
+                if ($hookEntry['Hook'] == $hook) {
+                    if ($hookEntry['TargetID'] == $this->InstanceID) {
+                        $found = true;
+                        break;
+                    } else {
+                        $hooks[$index]['TargetID'] = $this->InstanceID;
+                        $found = true;
+                        break;
+                    }
+                }
+            }
+            if (!$found) {
+                $hooks[] = ["Hook" => $hook, "TargetID" => $this->InstanceID];
+            }
+
+            IPS_SetProperty($id, 'Hooks', json_encode($hooks));
+            IPS_ApplyChanges($id);
+        } else {
+            IPS_LogMessage("MercedesMe", "WebHook Instanz nicht gefunden");
+        }
     }
 
     public function RequestAction($Ident, $Value)
@@ -170,7 +222,8 @@ class MercedesMe extends IPSModule
 
     protected function ProcessOAuthData()
     {
-        if ($_SERVER['REQUEST_URI'] == '/hook/MercedesMeOAuth') {
+        $this->SendDebug("MercedesMe", "ProcessOAuthData aufgerufen", 0);
+        if ($_SERVER['REQUEST_URI'] == $this->hookName) {
             IPS_LogMessage("MercedesMe", "OAuth-Daten empfangen");
             $code = $_GET['code'] ?? '';
             if ($code) {
