@@ -11,8 +11,10 @@ class MercedesMe extends IPSModule {
     public function ApplyChanges() {
         parent::ApplyChanges();
 
-        // Übergeordnete Instanz verbinden
-        $this->ConnectParent('{6A9E16B3-D36E-4D43-AC49-A6F8A256B10B}'); // Ersetzen Sie diese GUID durch die korrekte GUID des MQTT-Server-Moduls
+        $mqttServerID = $this->ReadPropertyInteger('MQTTServer');
+        if ($mqttServerID > 0) {
+            $this->ConnectParent($mqttServerID);
+        }
 
         $dataPoints = json_decode($this->ReadPropertyString('DataPoints'), true);
         foreach ($dataPoints as $dataPoint) {
