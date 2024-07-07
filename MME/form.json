@@ -21,6 +21,12 @@
             "caption": "MQTT Password"
         },
         {
+            "type": "Select",
+            "name": "AvailableTopics",
+            "caption": "Verfügbare Themen",
+            "options": []
+        },
+        {
             "type": "List",
             "name": "DataPoints",
             "caption": "Datenpunkte",
@@ -66,6 +72,11 @@
             "type": "Button",
             "label": "Test Connection",
             "onClick": "IPS_RequestAction($id, 'TestConnection', '');"
+        },
+        {
+            "type": "Button",
+            "label": "Load Topics",
+            "onClick": "IPS_RequestAction($id, 'LoadTopics', '');"
         }
     ]
 }
