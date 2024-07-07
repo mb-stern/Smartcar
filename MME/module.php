@@ -19,9 +19,6 @@ class MercedesMe extends IPSModule
         $this->RegisterPropertyString('ClientID', $this->clientID);
         $this->RegisterPropertyString('ClientSecret', $this->clientSecret);
         $this->RegisterAttributeString('AccessToken', '');
-
-        // WebOAuth Konfiguration
-        $this->RegisterOAuth($this->clientID);
     }
 
     public function ApplyChanges()
@@ -178,8 +175,8 @@ class MercedesMe extends IPSModule
 
     protected function ProcessOAuthData()
     {
-        if ($_SERVER['REQUEST_URI'] == $this->hookName) {
-            IPS_LogMessage("MercedesMe", "WebHook empfangen");
+        if ($_SERVER['REQUEST_URI'] == '/hook/MercedesMeOAuth') {
+            IPS_LogMessage("MercedesMe", "OAuth-Daten empfangen");
             $code = $_GET['code'] ?? '';
             if ($code) {
                 $this->ExchangeAuthCodeForAccessToken($code);
