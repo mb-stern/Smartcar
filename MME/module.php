@@ -61,8 +61,6 @@ class MercedesMe extends IPSModule {
         $authURL = $url . "?" . $query;
         IPS_LogMessage("MercedesMe", "Auth URL: $authURL");
         echo "Bitte öffnen Sie diesen Link: $authURL";
-        header("Location: $authURL");
-        exit;
     }
 
     private function ExchangeAuthCodeForToken($authCode) {
