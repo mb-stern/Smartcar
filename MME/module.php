@@ -63,7 +63,13 @@ class MercedesMe extends IPSModule
             IPS_SetParent($webHookID, 0);
         }
 
-        $hooks = json_decode(IPS_GetProperty($webHookID, 'Hooks'), true);
+        $hooks = IPS_GetProperty($webHookID, 'Hooks');
+        if (!$hooks) {
+            $hooks = [];
+        } else {
+            $hooks = json_decode($hooks, true);
+        }
+
         $found = false;
         foreach ($hooks as $index => $entry) {
             if ($entry['Hook'] == $hook) {
