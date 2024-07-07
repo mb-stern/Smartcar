@@ -51,7 +51,7 @@ class MercedesMe extends IPSModule {
         IPS_LogMessage("MercedesMe", "RequestCode aufgerufen");
         $clientID = $this->ReadPropertyString('ClientID');
         $clientSecret = $this->ReadPropertyString('ClientSecret');
-        $redirectURI = 'http://' . $_SERVER['SERVER_ADDR'] . ':' . $_SERVER['SERVER_PORT'] . $this->hookName;
+        $redirectURI = $this->GetRedirectURI();
 
         IPS_LogMessage("MercedesMe", "ClientID: $clientID, ClientSecret: $clientSecret");
 
@@ -61,6 +61,13 @@ class MercedesMe extends IPSModule {
         } else {
             echo "Bitte geben Sie die Client ID, das Client Secret und die Redirect URI ein.";
         }
+    }
+
+    private function GetRedirectURI() {
+        // Manuelle Eingabe der IP-Adresse und des Ports des IP-Symcon Servers
+        $ip = '192.168.1.100'; // Ersetze dies durch die IP-Adresse deines IP-Symcon Servers
+        $port = '3777'; // Ersetze dies durch den Port deines IP-Symcon Servers
+        return 'http://' . $ip . ':' . $port . $this->hookName;
     }
 
     private function GenerateAuthURL($clientID, $redirectURI) {
@@ -80,7 +87,7 @@ class MercedesMe extends IPSModule {
         IPS_LogMessage("MercedesMe", "ExchangeAuthCodeForAccessToken aufgerufen");
         $clientID = $this->ReadPropertyString('ClientID');
         $clientSecret = $this->ReadPropertyString('ClientSecret');
-        $redirectURI = 'http://' . $_SERVER['SERVER_ADDR'] . ':' . $_SERVER['SERVER_PORT'] . $this->hookName;
+        $redirectURI = $this->GetRedirectURI();
 
         $url = "https://id.mercedes-benz.com/as/token.oauth2";
         $data = [
@@ -174,31 +181,46 @@ class MercedesMe extends IPSModule {
     }
 
     private function RegisterHook($hook) {
-        $id = @IPS_GetObjectIDByIdent($hook, 0);
-        if ($id === false) {
-            $id = IPS_CreateScript(0);
-            IPS_SetParent($id, 0);
-            IPS_SetIdent($id, $hook);
-            IPS_SetName($id, "Hook $hook");
-            IPS_SetScriptContent($id, $this->GetHookScriptContent());
-            IPS_SetHidden($id, true);
+        $ids = IPS_GetInstanceListByModuleID("{3565B1F2-8F7B-4311-A4B6-1BF1D868F39E}");
+        if (count($ids) > 0) {
+            $id = $ids[0];
+            $hooks = json_decode(IPS_GetProperty($id, "Hooks"), true);
+            $found = false;
+            foreach ($hooks as $index => $entry) {
+                if ($entry['Hook'] == $hook) {
+                    if ($entry['TargetID'] == $this->InstanceID) {
+                        $found = true;
+                        break;
+                    } else {
+                        $hooks[$index]['TargetID'] = $this->InstanceID;
+                        $found = true;
+                        break;
+                    }
+                }
+            }
+            if (!$found) {
+                $hooks[] = ["Hook" => $hook, "TargetID" => $this->InstanceID];
+            }
+            IPS_SetProperty($id, "Hooks", json_encode($hooks));
+            IPS_ApplyChanges($id);
         }
-        IPS_SetProperty($id, "TargetID", $this->InstanceID);
-        IPS_ApplyChanges($id);
     }
 
-    private function GetHookScriptContent() {
-        return '<?php
-$webhookID = $_IPS[\'TARGET\'];
-if (!isset($_GET[\'code\'])) {
-    echo "No code received";
-    return;
-}
-$code = $_GET[\'code\'];
-IPS_LogMessage("MercedesMeWebHook", "Received code: " . $code);
-IPS_SetProperty($webhookID, \'AuthCode\', $code);
-IPS_ApplyChanges($webhookID);
-?>';
+    protected function ProcessHookData() {
+        $hook = explode('/', $_SERVER['REQUEST_URI']);
+        $hook = end($hook);
+        if ($hook == "MercedesMeWebHook") {
+            IPS_LogMessage("MercedesMe", "WebHook empfangen");
+            $code = $_GET['code'] ?? '';
+            if ($code) {
+                $this->WriteAttributeString('AuthCode', $code);
+                IPS_ApplyChanges($this->InstanceID);
+                echo "Authentifizierungscode erhalten.";
+            } else {
+                echo "Kein Authentifizierungscode erhalten.";
+            }
+        }
     }
 }
+
 ?>
