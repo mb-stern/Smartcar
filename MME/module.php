@@ -45,35 +45,36 @@ class MercedesMe extends IPSModule
         }
     }
 
-    private function RegisterHook($hook)
+    private function RegisterHook(string $hook)
     {
         IPS_LogMessage("MercedesMe", "RegisterHook aufgerufen");
         $ids = IPS_GetInstanceListByModuleID('{3565B1F2-8F7B-4311-A4B6-1BF1D868F39E}');
         if (count($ids) > 0) {
             $id = $ids[0];
-            $hooks = json_decode(IPS_GetProperty($id, 'Hooks'), true);
+            $hooks = IPS_GetProperty($id, 'Hooks');
             if (!$hooks) {
-                $hooks = [];
+                $hooks = '[]'; // Initialisiere als leeres Array
             }
+            $hooksArray = json_decode($hooks, true);
 
             $found = false;
-            foreach ($hooks as $index => $hookEntry) {
+            foreach ($hooksArray as $index => $hookEntry) {
                 if ($hookEntry['Hook'] == $hook) {
                     if ($hookEntry['TargetID'] == $this->InstanceID) {
                         $found = true;
                         break;
                     } else {
-                        $hooks[$index]['TargetID'] = $this->InstanceID;
+                        $hooksArray[$index]['TargetID'] = $this->InstanceID;
                         $found = true;
                         break;
                     }
                 }
             }
             if (!$found) {
-                $hooks[] = ["Hook" => $hook, "TargetID" => $this->InstanceID];
+                $hooksArray[] = ["Hook" => $hook, "TargetID" => $this->InstanceID];
             }
 
-            IPS_SetProperty($id, 'Hooks', json_encode($hooks));
+            IPS_SetProperty($id, 'Hooks', json_encode($hooksArray));
             IPS_ApplyChanges($id);
         } else {
             IPS_LogMessage("MercedesMe", "WebHook Instanz nicht gefunden");
@@ -115,12 +116,12 @@ class MercedesMe extends IPSModule
         echo "Bitte öffnen Sie folgenden Link in Ihrem Browser, um den Authentifizierungscode zu erhalten: $authURL";
     }
 
-    private function GetRedirectURI()
+    private function GetRedirectURI(): string
     {
         return 'https://oauth.ipmagic.de/authorize/' . $this->InstanceID;
     }
 
-    private function GenerateAuthURL($clientID, $redirectURI)
+    private function GenerateAuthURL(string $clientID, string $redirectURI): string
     {
         $url = $this->authorizeURL;
         $data = [
@@ -133,7 +134,7 @@ class MercedesMe extends IPSModule
         return $url . "?" . http_build_query($data);
     }
 
-    public function ExchangeAuthCodeForAccessToken($authCode)
+    public function ExchangeAuthCodeForAccessToken(string $authCode)
     {
         IPS_LogMessage("MercedesMe", "ExchangeAuthCodeForAccessToken aufgerufen");
         $clientID = $this->ReadPropertyString('ClientID');
@@ -188,7 +189,7 @@ class MercedesMe extends IPSModule
         }
     }
 
-    private function GetMercedesMeData($token)
+    private function GetMercedesMeData(string $token)
     {
         IPS_LogMessage("MercedesMe", "GetMercedesMeData aufgerufen");
         $url = "https://api.mercedes-benz.com/vehicledata/v2/vehicles";
@@ -208,7 +209,7 @@ class MercedesMe extends IPSModule
         return json_decode($result, true);
     }
 
-    private function ProcessData($data)
+    private function ProcessData(array $data)
     {
         IPS_LogMessage("MercedesMe", "ProcessData aufgerufen");
         foreach ($data as $key => $value) {
@@ -235,4 +236,3 @@ class MercedesMe extends IPSModule
         }
     }
 }
-?>
