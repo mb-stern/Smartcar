@@ -2,12 +2,9 @@
 
 class MercedesMe extends IPSModule {
 
-    private $hookName = "MercedesMeWebHook";
-
     public function Create() {
         parent::Create();
         $this->RegisterPropertyString('Email', '');
-        $this->RegisterPropertyString('ConnectURL', '');
         $this->RegisterPropertyString('AuthCode', '');
         $this->RegisterAttributeString('AccessToken', '');
     }
@@ -40,26 +37,23 @@ class MercedesMe extends IPSModule {
     public function RequestCode() {
         IPS_LogMessage("MercedesMe", "RequestCode aufgerufen");
         $email = $this->ReadPropertyString('Email');
-        $connectURL = rtrim($this->ReadPropertyString('ConnectURL'), '/');
-        $redirectURI = $connectURL . '/hook/' . $this->hookName;
 
-        IPS_LogMessage("MercedesMe", "Email: $email, RedirectURI: $redirectURI");
+        IPS_LogMessage("MercedesMe", "Email: $email");
 
-        if ($email && $redirectURI) {
-            $authURL = $this->GenerateAuthURL($email, $redirectURI);
+        if ($email) {
+            $authURL = $this->GenerateAuthURL($email);
             IPS_LogMessage("MercedesMe", "Auth URL: $authURL");
             echo "Bitte öffnen Sie folgenden Link in Ihrem Browser, um den Authentifizierungscode zu erhalten: $authURL";
         } else {
-            echo "Bitte geben Sie die E-Mail-Adresse und die Redirect URI ein.";
+            echo "Bitte geben Sie die E-Mail-Adresse ein.";
         }
     }
 
-    private function GenerateAuthURL($email, $redirectURI) {
+    private function GenerateAuthURL($email) {
         $url = "https://id.mercedes-benz.com/as/authorization.oauth2";
         $data = [
             "response_type" => "code",
             "client_id" => "e4a5de35-6fa0-4093-a1fa-01a3e3dced4e", // Beispiel-Client-ID
-            "redirect_uri" => $redirectURI,
             "scope" => "openid",
             "email" => $email
         ];
@@ -70,16 +64,13 @@ class MercedesMe extends IPSModule {
 
     private function ExchangeAuthCodeForAccessToken(string $authCode) {
         IPS_LogMessage("MercedesMe", "ExchangeAuthCodeForAccessToken aufgerufen");
-        $connectURL = rtrim($this->ReadPropertyString('ConnectURL'), '/');
-        $redirectURI = $connectURL . '/hook/' . $this->hookName;
 
         $url = "https://id.mercedes-benz.com/as/token.oauth2";
         $data = [
             "grant_type" => "authorization_code",
             "code" => $authCode,
             "client_id" => "e4a5de35-6fa0-4093-a1fa-01a3e3dced4e", // Beispiel-Client-ID
-            "client_secret" => "7d0c7a22-d293-4902-a7db-04ad1d36474b", // Beispiel-Client-Secret
-            "redirect_uri" => $redirectURI
+            "client_secret" => "7d0c7a22-d293-4902-a7db-04ad1d36474b" // Beispiel-Client-Secret
         ];
 
         $options = [

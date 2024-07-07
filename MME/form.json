@@ -7,11 +7,6 @@
         },
         {
             "type": "ValidationTextBox",
-            "name": "ConnectURL",
-            "caption": "Connect URL"
-        },
-        {
-            "type": "ValidationTextBox",
             "name": "AuthCode",
             "caption": "Auth Code"
         }
