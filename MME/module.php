@@ -104,8 +104,10 @@ class MercedesMe extends IPSModule {
         if (isset($response['access_token'])) {
             $this->WriteAttributeString('AccessToken', $response['access_token']);
             $this->WriteAttributeString('RefreshToken', $response['refresh_token']);
+            IPS_LogMessage("MercedesMe", "Access Token erfolgreich empfangen und gespeichert.");
             echo "Access Token erfolgreich empfangen und gespeichert.";
         } else {
+            IPS_LogMessage("MercedesMe", "Fehler beim Erhalten des Access Tokens: " . json_encode($response));
             echo "Fehler beim Erhalten des Access Tokens.";
         }
     }
@@ -151,8 +153,10 @@ class MercedesMe extends IPSModule {
         if (isset($response['access_token'])) {
             $this->WriteAttributeString('AccessToken', $response['access_token']);
             $this->WriteAttributeString('RefreshToken', $response['refresh_token']);
+            IPS_LogMessage("MercedesMe", "Token erfolgreich aktualisiert.");
             echo "Token erfolgreich aktualisiert.";
         } else {
+            IPS_LogMessage("MercedesMe", "Fehler beim Aktualisieren des Tokens: " . json_encode($response));
             echo "Fehler beim Aktualisieren des Tokens.";
         }
     }
@@ -206,12 +210,14 @@ class MercedesMe extends IPSModule {
             if ($code) {
                 $this->WriteAttributeString('AuthCode', $code);
                 IPS_ApplyChanges($this->InstanceID);
+                IPS_LogMessage("MercedesMe", "Authentifizierungscode erhalten: $code");
                 echo "Authentifizierungscode erhalten.";
             } else {
+                IPS_LogMessage("MercedesMe", "Kein Authentifizierungscode erhalten");
                 echo "Kein Authentifizierungscode erhalten.";
             }
         }
     }
 }
-
 ?>
+
