@@ -51,7 +51,8 @@ class MercedesMe extends IPSModule {
         $url = "https://id.mercedes-benz.com/as/authorization.oauth2";
         $data = [
             "response_type" => "code",
-            "client_id" => "e4a5de35-6fa0-4093-a1fa-01a3e3dced4e", // Beispiel-Client-ID
+            "client_id" => "your_client_id", // Ersetzen Sie dies mit Ihrer tatsächlichen Client-ID
+            "redirect_uri" => "your_redirect_uri", // Ersetzen Sie dies mit Ihrer tatsächlichen Redirect-URI
             "scope" => "openid",
             "email" => $email
         ];
@@ -67,8 +68,9 @@ class MercedesMe extends IPSModule {
         $data = [
             "grant_type" => "authorization_code",
             "code" => $authCode,
-            "client_id" => "e4a5de35-6fa0-4093-a1fa-01a3e3dced4e", // Beispiel-Client-ID
-            "client_secret" => "7d0c7a22-d293-4902-a7db-04ad1d36474b" // Beispiel-Client-Secret
+            "client_id" => "your_client_id", // Ersetzen Sie dies mit Ihrer tatsächlichen Client-ID
+            "client_secret" => "your_client_secret", // Ersetzen Sie dies mit Ihrem tatsächlichen Client-Secret
+            "redirect_uri" => "your_redirect_uri" // Ersetzen Sie dies mit Ihrer tatsächlichen Redirect-URI
         ];
 
         IPS_LogMessage("MercedesMe", "Data: " . json_encode($data));
