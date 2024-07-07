@@ -38,8 +38,6 @@ class MercedesMe extends IPSModule {
         IPS_LogMessage("MercedesMe", "RequestCode aufgerufen");
         $email = $this->ReadPropertyString('Email');
 
-        IPS_LogMessage("MercedesMe", "Email: $email");
-
         if ($email) {
             $authURL = $this->GenerateAuthURL($email);
             IPS_LogMessage("MercedesMe", "Auth URL: $authURL");
@@ -64,7 +62,7 @@ class MercedesMe extends IPSModule {
 
     private function ExchangeAuthCodeForAccessToken(string $authCode) {
         IPS_LogMessage("MercedesMe", "ExchangeAuthCodeForAccessToken aufgerufen");
-    
+
         $url = "https://id.mercedes-benz.com/as/token.oauth2";
         $data = [
             "grant_type" => "authorization_code",
@@ -72,9 +70,9 @@ class MercedesMe extends IPSModule {
             "client_id" => "e4a5de35-6fa0-4093-a1fa-01a3e3dced4e", // Beispiel-Client-ID
             "client_secret" => "7d0c7a22-d293-4902-a7db-04ad1d36474b" // Beispiel-Client-Secret
         ];
-    
+
         IPS_LogMessage("MercedesMe", "Data: " . json_encode($data));
-    
+
         $options = [
             CURLOPT_URL => $url,
             CURLOPT_RETURNTRANSFER => true,
@@ -85,15 +83,15 @@ class MercedesMe extends IPSModule {
                 "User-Agent: Mozilla/5.0"
             ],
         ];
-    
+
         $curl = curl_init();
         curl_setopt_array($curl, $options);
         $result = curl_exec($curl);
         $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
-    
+
         IPS_LogMessage("MercedesMe", "HTTP Code: " . $httpCode);
         IPS_LogMessage("MercedesMe", "Result: " . $result);
-    
+
         if ($result === FALSE || $httpCode != 200) {
             $error = curl_error($curl);
             IPS_LogMessage("MercedesMe", "HTTP request failed: " . $error);
@@ -101,7 +99,7 @@ class MercedesMe extends IPSModule {
             curl_close($curl);
             return null;
         }
-    
+
         curl_close($curl);
         IPS_LogMessage("MercedesMe", "Result: " . $result);
         $response = json_decode($result, true);
@@ -113,7 +111,6 @@ class MercedesMe extends IPSModule {
             echo "Fehler beim Erhalten des Access Tokens.";
         }
     }
-    
 
     public function RequestData() {
         IPS_LogMessage("MercedesMe", "RequestData aufgerufen");
