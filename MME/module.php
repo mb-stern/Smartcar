@@ -2,6 +2,8 @@
 
 class MercedesMe extends IPSModule {
 
+    private $MQTTTopics = [];
+
     public function Create() {
         parent::Create();
         $this->RegisterPropertyString('MQTTServerIP', '');
@@ -13,6 +15,11 @@ class MercedesMe extends IPSModule {
 
     public function ApplyChanges() {
         parent::ApplyChanges();
+
+        // Topics laden
+        $this->LoadMQTTTopics();
+        // Überprüfe die MQTT-Einstellungen
+        $this->ValidateProperties();
     }
 
     public function RequestAction($Ident, $Value) {
@@ -23,6 +30,48 @@ class MercedesMe extends IPSModule {
             default:
                 throw new Exception("Invalid action");
         }
+    }
+
+    private function LoadMQTTTopics() {
+        // Hier wird die Verbindung zum MQTT-Server hergestellt und die Topics abgerufen
+        // Dies ist ein Beispiel; die Implementierung muss an deinen MQTT-Server angepasst werden
+
+        $serverIP = $this->ReadPropertyString('MQTTServerIP');
+        $serverPort = $this->ReadPropertyString('MQTTServerPort');
+        $username = $this->ReadPropertyString('MQTTUsername');
+        $password = $this->ReadPropertyString('MQTTPassword');
+
+        // Verbindung zum MQTT-Server herstellen und Topics abfragen
+        // Die abgerufenen Topics in der Klasse speichern
+        // Beispiel-Topics
+        $this->MQTTTopics = [
+            ['Topic' => 'home/temperature', 'Selected' => false],
+            ['Topic' => 'home/humidity', 'Selected' => false],
+            ['Topic' => 'home/door', 'Selected' => false]
+        ];
+    }
+
+    public function GetConfigurationForm() {
+        $form = json_decode(file_get_contents(__DIR__ . '/form.json'), true);
+
+        // Dynamisch Topics hinzufügen
+        $topics = [];
+        foreach ($this->MQTTTopics as $topic) {
+            $topics[] = [
+                'caption' => $topic['Topic'],
+                'name' => $topic['Topic'],
+                'value' => $topic['Selected']
+            ];
+        }
+
+        $form['elements'][] = [
+            'type' => 'CheckBoxList',
+            'name' => 'MQTTTopics',
+            'caption' => 'Verfügbare MQTT Topics',
+            'values' => $topics
+        ];
+
+        return json_encode($form);
     }
 
     private function TestConnection() {
@@ -105,6 +154,17 @@ class MercedesMe extends IPSModule {
             $string .= chr($digit);
         } while ($length > 0);
         return $string;
+    }
+
+    private function ValidateProperties() {
+        $serverIP = $this->ReadPropertyString('MQTTServerIP');
+        $serverPort = $this->ReadPropertyString('MQTTServerPort');
+
+        if (empty($serverIP) || empty($serverPort)) {
+            $this->SetStatus(104); // 104 = Configuration invalid
+        } else {
+            $this->SetStatus(102); // 102 = Configuration valid
+        }
     }
 }
 ?>
