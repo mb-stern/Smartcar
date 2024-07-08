@@ -31,6 +31,9 @@ class MercedesMe extends IPSModule {
             case 'TestConnection':
                 $this->TestConnection();
                 break;
+            case 'ApplyFilter':
+                $this->ApplyFilter($Value);
+                break;
             default:
                 throw new Exception("Invalid action");
         }
@@ -253,7 +256,7 @@ class MercedesMe extends IPSModule {
         return $string;
     }
 
-    private function ValidateProperties() {
+    protected function ValidateProperties() {
         $serverIP = $this->ReadPropertyString('MQTTServerIP');
         $serverPort = $this->ReadPropertyString('MQTTServerPort');
 
@@ -264,7 +267,7 @@ class MercedesMe extends IPSModule {
         }
     }
 
-    private function InitializeDataPoints() {
+    protected function InitializeDataPoints() {
         $dataPoints = json_decode($this->ReadPropertyString('DataPoints'), true);
         $existingVariables = array_map(function($variableID) {
             return IPS_GetObject($variableID)['ObjectIdent'];
@@ -284,7 +287,7 @@ class MercedesMe extends IPSModule {
         $this->SetBuffer('DataPoints', json_encode($dataPoints));
     }
 
-    private function RegisterVariable($name, $type) {
+    protected function RegisterVariable($name, $type) {
         $id = @$this->GetIDForIdent($name);
         if ($id === false) {
             switch ($type) {
@@ -304,7 +307,7 @@ class MercedesMe extends IPSModule {
         }
     }
 
-    private function UnregisterVariable($name) {
+    protected function UnregisterVariable($name) {
         $id = @$this->GetIDForIdent($name);
         if ($id !== false) {
             IPS_DeleteVariable($id);
@@ -324,7 +327,7 @@ class MercedesMe extends IPSModule {
         }
     }
 
-    private function UpdateVariable($name, $type, $value) {
+    protected function UpdateVariable($name, $type, $value) {
         $id = $this->GetIDForIdent($name);
         if ($id !== false) {
             switch ($type) {
