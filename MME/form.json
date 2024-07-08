@@ -34,7 +34,7 @@
                     "width": "300px",
                     "edit": {
                         "type": "Select",
-                        "options": []
+                        "options": []  // Die Optionen werden dynamisch durch PHP hinzugefügt
                     }
                 },
                 {
