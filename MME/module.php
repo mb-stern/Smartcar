@@ -11,13 +11,12 @@ class MercedesMe extends IPSModule {
         $this->RegisterPropertyString('MQTTUsername', '');
         $this->RegisterPropertyString('MQTTPassword', '');
         $this->RegisterPropertyString('DataPoints', '[]');
+        $this->RegisterPropertyString('SelectedTopics', '[]');
     }
 
     public function ApplyChanges() {
         parent::ApplyChanges();
 
-        // Topics laden
-        $this->LoadMQTTTopics();
         // Überprüfe die MQTT-Einstellungen
         $this->ValidateProperties();
     }
@@ -45,29 +44,53 @@ class MercedesMe extends IPSModule {
         // Die abgerufenen Topics in der Klasse speichern
         // Beispiel-Topics
         $this->MQTTTopics = [
-            ['Topic' => 'home/temperature', 'Selected' => false],
-            ['Topic' => 'home/humidity', 'Selected' => false],
-            ['Topic' => 'home/door', 'Selected' => false]
+            ['Topic' => 'home/temperature'],
+            ['Topic' => 'home/humidity'],
+            ['Topic' => 'home/door']
         ];
     }
 
     public function GetConfigurationForm() {
+        $this->LoadMQTTTopics();
+
         $form = json_decode(file_get_contents(__DIR__ . '/form.json'), true);
 
         // Dynamisch Topics hinzufügen
         $topics = [];
+        $selectedTopics = json_decode($this->ReadPropertyString('SelectedTopics'), true);
         foreach ($this->MQTTTopics as $topic) {
+            $isSelected = in_array($topic['Topic'], $selectedTopics);
             $topics[] = [
-                'caption' => $topic['Topic'],
-                'name' => $topic['Topic'],
-                'value' => $topic['Selected']
+                'Topic' => $topic['Topic'],
+                'Selected' => $isSelected
             ];
         }
 
         $form['elements'][] = [
-            'type' => 'CheckBoxList',
+            'type' => 'List',
             'name' => 'MQTTTopics',
             'caption' => 'Verfügbare MQTT Topics',
+            'rowCount' => 10,
+            'add' => false,
+            'delete' => false,
+            'columns' => [
+                [
+                    'caption' => 'Topic',
+                    'name' => 'Topic',
+                    'width' => '300px',
+                    'edit' => [
+                        'type' => 'ValidationTextBox'
+                    ]
+                ],
+                [
+                    'caption' => 'Selected',
+                    'name' => 'Selected',
+                    'width' => '75px',
+                    'edit' => [
+                        'type' => 'CheckBox'
+                    ]
+                ]
+            ],
             'values' => $topics
         ];
 
