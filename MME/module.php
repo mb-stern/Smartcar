@@ -205,7 +205,7 @@ class MercedesMe extends IPSModule {
         $payload = $this->encodeString($clientID);
         if ($username) {
             $payload .= $this->encodeString($username);
-            $payload .= $this->encodeString($password);
+            $payload += $this->encodeString($password);
         }
 
         $variableHeader = $this->encodeString($protocolName) . $protocolLevel . $connectFlags . $keepAlive;
@@ -220,21 +220,21 @@ class MercedesMe extends IPSModule {
         $messageLength = strlen($message);
         $remainingLength = $this->encodeRemainingLength(strlen($topicEncoded) + $messageLength);
 
-        return $fixedHeader + $remainingLength + $topicEncoded + $message;
+        return $fixedHeader . $remainingLength . $topicEncoded . $message;
     }
 
     private function createMQTTSubscribePacket($topic) {
         $fixedHeader = chr(0x82); // Subscribe packet type
-        $messageID = chr(0) + chr(1); // Message ID 1
+        $messageID = chr(0) . chr(1); // Message ID 1
         $topicEncoded = $this->encodeString($topic);
         $qos = chr(0); // QoS 0
         $remainingLength = $this->encodeRemainingLength(strlen($messageID) + strlen($topicEncoded) + strlen($qos));
 
-        return $fixedHeader + $remainingLength + $messageID + $topicEncoded + $qos;
+        return $fixedHeader . $remainingLength . $messageID . $topicEncoded . $qos;
     }
 
     private function encodeString($string) {
-        return chr(strlen($string) >> 8) + chr(strlen($string) & 0xFF) + $string;
+        return chr(strlen($string) >> 8) . chr(strlen($string) & 0xFF) . $string;
     }
 
     private function encodeRemainingLength($length) {
@@ -245,7 +245,7 @@ class MercedesMe extends IPSModule {
             if ($length > 0) {
                 $digit = $digit | 0x80;
             }
-            $string += chr($digit);
+            $string .= chr($digit);
         } while ($length > 0);
         return $string;
     }
