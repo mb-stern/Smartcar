@@ -63,19 +63,6 @@
                     }
                 }
             ]
-        },
-        {
-            "type": "ValidationTextBox",
-            "name": "TopicFilter",
-            "caption": "Topic Filter",
-            "onChange": "IPS_RequestAction($id, 'ApplyFilter', $value);"
-        },
-        {
-            "type": "NumberSpinner",
-            "name": "UpdateInterval",
-            "caption": "Update Interval (seconds)",
-            "minimum": 10,
-            "suffix": "seconds"
         }
     ],
     "actions": [
