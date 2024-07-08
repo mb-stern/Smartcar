@@ -10,6 +10,7 @@ class MercedesMe extends IPSModule {
         $this->RegisterPropertyString('MQTTPassword', '');
         $this->RegisterPropertyString('DataPoints', '[]');
         $this->RegisterPropertyString('TopicFilter', ''); // Suchfilter für Topics
+        $this->RegisterPropertyInteger('UpdateInterval', 60); // Timer-Intervall
         $this->RegisterTimer('UpdateMQTTData', 0, 'MME_UpdateData($_IPS[\'TARGET\']);');
     }
 
@@ -22,8 +23,9 @@ class MercedesMe extends IPSModule {
         // Initialisieren der Variablen für die Datenpunkte
         $this->InitializeDataPoints();
 
-        // Setze den Timer auf 60 Sekunden
-        $this->SetTimerInterval('UpdateMQTTData', 60 * 1000);
+        // Setze den Timer basierend auf dem eingestellten Intervall
+        $interval = $this->ReadPropertyInteger('UpdateInterval');
+        $this->SetTimerInterval('UpdateMQTTData', $interval * 1000);
     }
 
     public function RequestAction($Ident, $Value) {
@@ -148,23 +150,15 @@ class MercedesMe extends IPSModule {
             }
         }
 
-        // Suchfeld für Topics hinzufügen
-        $form['elements'][] = [
-            'type' => 'ValidationTextBox',
-            'name' => 'TopicFilter',
-            'caption' => 'Topic Filter',
-            'onChange' => 'IPS_RequestAction($id, "ApplyFilter", $value);'
-        ];
-
         return json_encode($form);
     }
 
     public function ApplyFilter($value) {
-        $this->UpdateFormField('TopicFilter', 'value', $value);
-        $this->LoadMQTTTopics();
+        IPS_SetProperty($this->InstanceID, 'TopicFilter', $value);
+        IPS_ApplyChanges($this->InstanceID);
     }
 
-    private function TestConnection() {
+    protected function TestConnection() {
         $serverIP = $this->ReadPropertyString('MQTTServerIP');
         $serverPort = $this->ReadPropertyString('MQTTServerPort');
         $username = $this->ReadPropertyString('MQTTUsername');
@@ -226,21 +220,21 @@ class MercedesMe extends IPSModule {
         $messageLength = strlen($message);
         $remainingLength = $this->encodeRemainingLength(strlen($topicEncoded) + $messageLength);
 
-        return $fixedHeader . $remainingLength . $topicEncoded . $message;
+        return $fixedHeader + $remainingLength + $topicEncoded + $message;
     }
 
     private function createMQTTSubscribePacket($topic) {
         $fixedHeader = chr(0x82); // Subscribe packet type
-        $messageID = chr(0) . chr(1); // Message ID 1
+        $messageID = chr(0) + chr(1); // Message ID 1
         $topicEncoded = $this->encodeString($topic);
         $qos = chr(0); // QoS 0
         $remainingLength = $this->encodeRemainingLength(strlen($messageID) + strlen($topicEncoded) + strlen($qos));
 
-        return $fixedHeader . $remainingLength . $messageID . $topicEncoded . $qos;
+        return $fixedHeader + $remainingLength + $messageID + $topicEncoded + $qos;
     }
 
     private function encodeString($string) {
-        return chr(strlen($string) >> 8) . chr(strlen($string) & 0xFF) . $string;
+        return chr(strlen($string) >> 8) + chr(strlen($string) & 0xFF) + $string;
     }
 
     private function encodeRemainingLength($length) {
@@ -251,7 +245,7 @@ class MercedesMe extends IPSModule {
             if ($length > 0) {
                 $digit = $digit | 0x80;
             }
-            $string .= chr($digit);
+            $string += chr($digit);
         } while ($length > 0);
         return $string;
     }
