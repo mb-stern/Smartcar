@@ -193,33 +193,6 @@ class MercedesMe extends IPSModule {
         return $fixedHeader . $remainingLength . $topicEncoded . $message;
     }
 
-    private function createMQTTSubscribePacket($topic) {
-        $fixedHeader = chr(0x82); // Subscribe packet type
-        $messageID = chr(0) . chr(1); // Message ID 1
-        $topicEncoded = $this->encodeString($topic);
-        $qos = chr(0); // QoS 0
-        $remainingLength = $this->encodeRemainingLength(strlen($messageID) + strlen($topicEncoded) + strlen($qos));
-
-        return $fixedHeader . $remainingLength . $messageID . $topicEncoded . $qos;
-    }
-
-    private function encodeString($string) {
-        return chr(strlen($string) >> 8) . chr(strlen($string) & 0xFF) . $string;
-    }
-
-    private function encodeRemainingLength($length) {
-        $string = "";
-        do {
-            $digit = $length % 128;
-            $length = $length >> 7;
-            if ($length > 0) {
-                $digit = $digit | 0x80;
-            }
-            $string .= chr($digit);
-        } while ($length > 0);
-        return $string;
-    }
-
     private function ValidateProperties() {
         $serverIP = $this->ReadPropertyString('MQTTServerIP');
         $serverPort = $this->ReadPropertyString('MQTTServerPort');
@@ -320,4 +293,3 @@ class MercedesMe extends IPSModule {
     }
 }
 ?>
-
