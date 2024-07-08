@@ -220,17 +220,6 @@ class MercedesMe extends IPSModule {
         return $string;
     }
 
-    private function ValidateProperties() {
-        $serverIP = $this->ReadPropertyString('MQTTServerIP');
-        $serverPort = $this->ReadPropertyString('MQTTServerPort');
-
-        if (empty($serverIP) || empty($serverPort)) {
-            $this->SetStatus(104); // 104 = Configuration invalid
-        } else {
-            $this->SetStatus(102); // 102 = Configuration valid
-        }
-    }
-
     private function InitializeDataPoints() {
         $dataPoints = json_decode($this->ReadPropertyString('DataPoints'), true);
         foreach ($dataPoints as $dataPoint) {
@@ -290,33 +279,6 @@ class MercedesMe extends IPSModule {
                     break;
             }
         }
-    }
-
-    private function createMQTTSubscribePacket($topic) {
-        $fixedHeader = chr(0x82); // Subscribe packet type
-        $messageID = chr(0) . chr(1); // Message ID 1
-        $topicEncoded = $this->encodeString($topic);
-        $qos = chr(0); // QoS 0
-        $remainingLength = $this->encodeRemainingLength(strlen($messageID) + strlen($topicEncoded) + strlen($qos));
-
-        return $fixedHeader . $remainingLength . $messageID . $topicEncoded . $qos;
-    }
-
-    private function encodeString($string) {
-        return chr(strlen($string) >> 8) . chr(strlen($string) & 0xFF) . $string;
-    }
-
-    private function encodeRemainingLength($length) {
-        $string = "";
-        do {
-            $digit = $length % 128;
-            $length = $length >> 7;
-            if ($length > 0) {
-                $digit = $digit | 0x80;
-            }
-            $string .= chr($digit);
-        } while ($length > 0);
-        return $string;
     }
 }
 ?>
