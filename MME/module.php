@@ -29,16 +29,71 @@ class MercedesMe extends IPSModule {
     }
 
     private function LoadMQTTTopics() {
-        // Hier wird die Verbindung zum MQTT-Server hergestellt und die Topics abgerufen.
-        // Dies ist ein Beispiel mit Dummy-Topics.
-        $topics = [
-            'home/temperature',
-            'home/humidity',
-            'home/door'
-        ];
+        $serverIP = $this->ReadPropertyString('MQTTServerIP');
+        $serverPort = $this->ReadPropertyString('MQTTServerPort');
+        $username = $this->ReadPropertyString('MQTTUsername');
+        $password = $this->ReadPropertyString('MQTTPassword');
 
-        // In einer echten Implementierung sollte hier der Code zum Abrufen der Topics vom MQTT-Server stehen.
-        // Die Topics können z.B. durch ein Abonnement eines Wildcard-Topics ("#") abgerufen werden.
+        if (empty($serverIP) || empty($serverPort)) {
+            IPS_LogMessage("MercedesMe", "MQTT Server IP und Port müssen angegeben werden.");
+            return [];
+        }
+
+        $clientID = "SymconMercedesMeLoadTopics";
+        $socket = @fsockopen($serverIP, intval($serverPort), $errno, $errstr, 60);
+        if (!$socket) {
+            IPS_LogMessage("MercedesMe", "Fehler beim Verbinden mit dem MQTT-Server: $errstr ($errno)");
+            return [];
+        }
+
+        $connect = $this->createMQTTConnectPacket($clientID, $username, $password);
+        fwrite($socket, $connect);
+
+        $connack = fread($socket, 4);
+        if (ord($connack[0]) >> 4 != 2 || ord($connack[3]) != 0) {
+            fclose($socket);
+            IPS_LogMessage("MercedesMe", "Verbindung zum MQTT-Server fehlgeschlagen.");
+            return [];
+        }
+
+        // Abonnieren eines Wildcard-Topics, um alle Topics zu erhalten
+        $subscribe = $this->createMQTTSubscribePacket('#');
+        fwrite($socket, $subscribe);
+
+        // Lese die abonnierten Topics
+        $topics = [];
+        stream_set_timeout($socket, 5);
+        while (!feof($socket)) {
+            $data = fread($socket, 8192);
+            if ($data === false) {
+                break;
+            }
+            // Extrahiere die Topics aus den empfangenen Daten
+            $topics = array_merge($topics, $this->extractTopicsFromData($data));
+        }
+
+        fclose($socket);
+        $topics = array_unique($topics); // Doppelte Topics entfernen
+        return $topics;
+    }
+
+    private function extractTopicsFromData($data) {
+        $topics = [];
+
+        // MQTT PUBLISH Packet Identifier is 0x30
+        while (strlen($data) > 0) {
+            if ((ord($data[0]) >> 4) == 0x03) {
+                $data = substr($data, 1);
+                $length = ord($data[0]);
+                $data = substr($data, 1);
+                $topicLength = ord($data[0]) << 8 | ord($data[1]);
+                $topic = substr($data, 2, $topicLength);
+                $topics[] = $topic;
+                $data = substr($data, 2 + $topicLength + $length - $topicLength - 2);
+            } else {
+                break;
+            }
+        }
 
         return $topics;
     }
@@ -133,6 +188,16 @@ class MercedesMe extends IPSModule {
         $remainingLength = $this->encodeRemainingLength(strlen($topicEncoded) + $messageLength);
 
         return $fixedHeader . $remainingLength . $topicEncoded . $message;
+    }
+
+    private function createMQTTSubscribePacket($topic) {
+        $fixedHeader = chr(0x82); // Subscribe packet type
+        $messageID = chr(0) . chr(1); // Message ID 1
+        $topicEncoded = $this->encodeString($topic);
+        $qos = chr(0); // QoS 0
+        $remainingLength = $this->encodeRemainingLength(strlen($messageID) + strlen($topicEncoded) + strlen($qos));
+
+        return $fixedHeader . $remainingLength . $messageID . $topicEncoded . $qos;
     }
 
     private function encodeString($string) {
