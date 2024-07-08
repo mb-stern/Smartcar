@@ -29,13 +29,18 @@ class MercedesMe extends IPSModule {
     }
 
     private function LoadMQTTTopics() {
-        // Diese Methode sollte die Topics vom MQTT-Server laden und zurückgeben.
+        // Hier wird die Verbindung zum MQTT-Server hergestellt und die Topics abgerufen.
         // Dies ist ein Beispiel mit Dummy-Topics.
-        return [
+        $topics = [
             'home/temperature',
             'home/humidity',
             'home/door'
         ];
+
+        // In einer echten Implementierung sollte hier der Code zum Abrufen der Topics vom MQTT-Server stehen.
+        // Die Topics können z.B. durch ein Abonnement eines Wildcard-Topics ("#") abgerufen werden.
+
+        return $topics;
     }
 
     public function GetConfigurationForm() {
