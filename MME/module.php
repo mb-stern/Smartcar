@@ -9,6 +9,8 @@ class MercedesMe extends IPSModule {
         $this->RegisterPropertyString('MQTTUsername', '');
         $this->RegisterPropertyString('MQTTPassword', '');
         $this->RegisterPropertyString('DataPoints', '[]');
+        $this->RegisterPropertyString('TopicFilter', ''); // Suchfilter für Topics
+        $this->RegisterTimer('UpdateMQTTData', 0, 'MME_UpdateData($_IPS[\'TARGET\']);');
     }
 
     public function ApplyChanges() {
@@ -16,9 +18,12 @@ class MercedesMe extends IPSModule {
 
         // Überprüfe die MQTT-Einstellungen
         $this->ValidateProperties();
-        
+
         // Initialisieren der Variablen für die Datenpunkte
         $this->InitializeDataPoints();
+
+        // Setze den Timer auf 60 Sekunden
+        $this->SetTimerInterval('UpdateMQTTData', 60 * 1000);
     }
 
     public function RequestAction($Ident, $Value) {
@@ -31,11 +36,16 @@ class MercedesMe extends IPSModule {
         }
     }
 
+    public function UpdateData() {
+        $this->LoadMQTTTopics();
+    }
+
     private function LoadMQTTTopics() {
         $serverIP = $this->ReadPropertyString('MQTTServerIP');
         $serverPort = $this->ReadPropertyString('MQTTServerPort');
         $username = $this->ReadPropertyString('MQTTUsername');
         $password = $this->ReadPropertyString('MQTTPassword');
+        $topicFilter = $this->ReadPropertyString('TopicFilter');
 
         if (empty($serverIP) || empty($serverPort)) {
             IPS_LogMessage("MercedesMe", "MQTT Server IP und Port müssen angegeben werden.");
@@ -77,6 +87,16 @@ class MercedesMe extends IPSModule {
 
         fclose($socket);
         $topics = array_unique($topics); // Doppelte Topics entfernen
+
+        // Filtere und sortiere die Topics
+        if (!empty($topicFilter)) {
+            $topics = array_filter($topics, function($topic) use ($topicFilter) {
+                return stripos($topic, $topicFilter) !== false;
+            });
+        }
+
+        sort($topics); // Alphabetisch sortieren
+
         return $topics;
     }
 
@@ -125,7 +145,20 @@ class MercedesMe extends IPSModule {
             }
         }
 
+        // Suchfeld für Topics hinzufügen
+        $form['elements'][] = [
+            'type' => 'ValidationTextBox',
+            'name' => 'TopicFilter',
+            'caption' => 'Topic Filter',
+            'onChange' => 'IPS_RequestAction($id, "ApplyFilter", $value);'
+        ];
+
         return json_encode($form);
+    }
+
+    public function ApplyFilter($value) {
+        $this->UpdateFormField('TopicFilter', 'value', $value);
+        $this->LoadMQTTTopics();
     }
 
     private function TestConnection() {
@@ -193,6 +226,33 @@ class MercedesMe extends IPSModule {
         return $fixedHeader . $remainingLength . $topicEncoded . $message;
     }
 
+    private function createMQTTSubscribePacket($topic) {
+        $fixedHeader = chr(0x82); // Subscribe packet type
+        $messageID = chr(0) . chr(1); // Message ID 1
+        $topicEncoded = $this->encodeString($topic);
+        $qos = chr(0); // QoS 0
+        $remainingLength = $this->encodeRemainingLength(strlen($messageID) + strlen($topicEncoded) + strlen($qos));
+
+        return $fixedHeader . $remainingLength . $messageID . $topicEncoded . $qos;
+    }
+
+    private function encodeString($string) {
+        return chr(strlen($string) >> 8) . chr(strlen($string) & 0xFF) . $string;
+    }
+
+    private function encodeRemainingLength($length) {
+        $string = "";
+        do {
+            $digit = $length % 128;
+            $length = $length >> 7;
+            if ($length > 0) {
+                $digit = $digit | 0x80;
+            }
+            $string .= chr($digit);
+        } while ($length > 0);
+        return $string;
+    }
+
     private function ValidateProperties() {
         $serverIP = $this->ReadPropertyString('MQTTServerIP');
         $serverPort = $this->ReadPropertyString('MQTTServerPort');
@@ -206,9 +266,21 @@ class MercedesMe extends IPSModule {
 
     private function InitializeDataPoints() {
         $dataPoints = json_decode($this->ReadPropertyString('DataPoints'), true);
+        $existingVariables = array_map(function($variableID) {
+            return IPS_GetObject($variableID)['ObjectIdent'];
+        }, IPS_GetChildrenIDs($this->InstanceID));
+
         foreach ($dataPoints as $dataPoint) {
             $this->RegisterVariable($dataPoint['VariableName'], $dataPoint['VariableType']);
         }
+
+        // Variablen löschen, die nicht mehr in den Datenpunkten vorhanden sind
+        $dataPointNames = array_column($dataPoints, 'VariableName');
+        $variablesToDelete = array_diff($existingVariables, $dataPointNames);
+        foreach ($variablesToDelete as $variableName) {
+            $this->UnregisterVariable($variableName);
+        }
+
         $this->SetBuffer('DataPoints', json_encode($dataPoints));
     }
 
@@ -229,6 +301,13 @@ class MercedesMe extends IPSModule {
                     $this->RegisterVariableString($name, $name);
                     break;
             }
+        }
+    }
+
+    private function UnregisterVariable($name) {
+        $id = @$this->GetIDForIdent($name);
+        if ($id !== false) {
+            IPS_DeleteVariable($id);
         }
     }
 
@@ -264,32 +343,6 @@ class MercedesMe extends IPSModule {
             }
         }
     }
-
-    private function createMQTTSubscribePacket($topic) {
-        $fixedHeader = chr(0x82); // Subscribe packet type
-        $messageID = chr(0) . chr(1); // Message ID 1
-        $topicEncoded = $this->encodeString($topic);
-        $qos = chr(0); // QoS 0
-        $remainingLength = $this->encodeRemainingLength(strlen($messageID) + strlen($topicEncoded) + strlen($qos));
-
-        return $fixedHeader . $remainingLength . $messageID . $topicEncoded . $qos;
-    }
-
-    private function encodeString($string) {
-        return chr(strlen($string) >> 8) . chr(strlen($string) & 0xFF) . $string;
-    }
-
-    private function encodeRemainingLength($length) {
-        $string = "";
-        do {
-            $digit = $length % 128;
-            $length = $length >> 7;
-            if ($length > 0) {
-                $digit = $digit | 0x80;
-            }
-            $string .= chr($digit);
-        } while ($length > 0);
-        return $string;
-    }
 }
 ?>
+
