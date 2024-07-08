@@ -63,13 +63,7 @@
                     }
                 }
             ]
-        }
-    ],
-    "actions": [
+        },
         {
-            "type": "Button",
-            "label": "Test Connection",
-            "onClick": "IPS_RequestAction($id, 'TestConnection', '');"
-        }
-    ]
-}
+            "type": "ValidationTextBox",
+           
