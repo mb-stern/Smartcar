@@ -32,14 +32,17 @@
                     "caption": "Topic",
                     "name": "Topic",
                     "width": "300px",
+                    "add": true,
                     "edit": {
-                        "type": "ValidationTextBox"
+                        "type": "Select",
+                        "options": []
                     }
                 },
                 {
                     "caption": "Variable Name",
                     "name": "VariableName",
                     "width": "200px",
+                    "add": true,
                     "edit": {
                         "type": "ValidationTextBox"
                     }
@@ -48,6 +51,7 @@
                     "caption": "Variable Type",
                     "name": "VariableType",
                     "width": "100px",
+                    "add": true,
                     "edit": {
                         "type": "Select",
                         "options": [

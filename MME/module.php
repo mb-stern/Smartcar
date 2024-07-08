@@ -2,8 +2,6 @@
 
 class MercedesMe extends IPSModule {
 
-    private $MQTTTopics = [];
-
     public function Create() {
         parent::Create();
         $this->RegisterPropertyString('MQTTServerIP', '');
@@ -11,7 +9,6 @@ class MercedesMe extends IPSModule {
         $this->RegisterPropertyString('MQTTUsername', '');
         $this->RegisterPropertyString('MQTTPassword', '');
         $this->RegisterPropertyString('DataPoints', '[]');
-        $this->RegisterPropertyString('SelectedTopics', '[]');
     }
 
     public function ApplyChanges() {
@@ -32,67 +29,38 @@ class MercedesMe extends IPSModule {
     }
 
     private function LoadMQTTTopics() {
-        // Hier wird die Verbindung zum MQTT-Server hergestellt und die Topics abgerufen
-        // Dies ist ein Beispiel; die Implementierung muss an deinen MQTT-Server angepasst werden
-
-        $serverIP = $this->ReadPropertyString('MQTTServerIP');
-        $serverPort = $this->ReadPropertyString('MQTTServerPort');
-        $username = $this->ReadPropertyString('MQTTUsername');
-        $password = $this->ReadPropertyString('MQTTPassword');
-
-        // Verbindung zum MQTT-Server herstellen und Topics abfragen
-        // Die abgerufenen Topics in der Klasse speichern
-        // Beispiel-Topics
-        $this->MQTTTopics = [
-            ['Topic' => 'home/temperature'],
-            ['Topic' => 'home/humidity'],
-            ['Topic' => 'home/door']
+        // Diese Methode sollte die Topics vom MQTT-Server laden und zurückgeben.
+        // Dies ist ein Beispiel mit Dummy-Topics.
+        return [
+            'home/temperature',
+            'home/humidity',
+            'home/door'
         ];
     }
 
     public function GetConfigurationForm() {
-        $this->LoadMQTTTopics();
-
         $form = json_decode(file_get_contents(__DIR__ . '/form.json'), true);
 
         // Dynamisch Topics hinzufügen
-        $topics = [];
-        $selectedTopics = json_decode($this->ReadPropertyString('SelectedTopics'), true);
-        foreach ($this->MQTTTopics as $topic) {
-            $isSelected = in_array($topic['Topic'], $selectedTopics);
-            $topics[] = [
-                'Topic' => $topic['Topic'],
-                'Selected' => $isSelected
-            ];
+        $topics = $this->LoadMQTTTopics();
+        $options = [];
+        foreach ($topics as $topic) {
+            $options[] = ['caption' => $topic, 'value' => $topic];
         }
 
-        $form['elements'][] = [
-            'type' => 'List',
-            'name' => 'MQTTTopics',
-            'caption' => 'Verfügbare MQTT Topics',
-            'rowCount' => 10,
-            'add' => false,
-            'delete' => false,
-            'columns' => [
-                [
-                    'caption' => 'Topic',
-                    'name' => 'Topic',
-                    'width' => '300px',
-                    'edit' => [
-                        'type' => 'ValidationTextBox'
-                    ]
-                ],
-                [
-                    'caption' => 'Selected',
-                    'name' => 'Selected',
-                    'width' => '75px',
-                    'edit' => [
-                        'type' => 'CheckBox'
-                    ]
-                ]
-            ],
-            'values' => $topics
-        ];
+        // Füge die Options zu einem Select-Feld im DataPoints-Element hinzu
+        foreach ($form['elements'] as &$element) {
+            if ($element['name'] == 'DataPoints') {
+                foreach ($element['columns'] as &$column) {
+                    if ($column['name'] == 'Topic') {
+                        $column['edit'] = [
+                            'type' => 'Select',
+                            'options' => $options
+                        ];
+                    }
+                }
+            }
+        }
 
         return json_encode($form);
     }
