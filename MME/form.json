@@ -2,74 +2,24 @@
     "elements": [
         {
             "type": "ValidationTextBox",
-            "name": "MQTTServerIP",
-            "caption": "MQTT Server IP"
+            "name": "VehicleID",
+            "caption": "Vehicle ID"
         },
         {
-            "type": "ValidationTextBox",
-            "name": "MQTTServerPort",
-            "caption": "MQTT Server Port"
+            "type": "Label",
+            "caption": "Update Interval (in seconds)"
         },
         {
-            "type": "ValidationTextBox",
-            "name": "MQTTUsername",
-            "caption": "MQTT Username"
-        },
-        {
-            "type": "PasswordTextBox",
-            "name": "MQTTPassword",
-            "caption": "MQTT Password"
-        },
-        {
-            "type": "List",
-            "name": "DataPoints",
-            "caption": "Datenpunkte",
-            "rowCount": 5,
-            "add": true,
-            "delete": true,
-            "columns": [
-                {
-                    "caption": "Topic",
-                    "name": "Topic",
-                    "width": "300px",
-                    "add": true,
-                    "edit": {
-                        "type": "Select",
-                        "options": []
-                    }
-                },
-                {
-                    "caption": "Variable Name",
-                    "name": "VariableName",
-                    "width": "200px",
-                    "add": true,
-                    "edit": {
-                        "type": "ValidationTextBox"
-                    }
-                },
-                {
-                    "caption": "Variable Type",
-                    "name": "VariableType",
-                    "width": "100px",
-                    "add": true,
-                    "edit": {
-                        "type": "Select",
-                        "options": [
-                            { "caption": "String", "value": 3 },
-                            { "caption": "Integer", "value": 1 },
-                            { "caption": "Float", "value": 2 },
-                            { "caption": "Boolean", "value": 0 }
-                        ]
-                    }
-                }
-            ]
+            "type": "NumberSpinner",
+            "name": "UpdateInterval",
+            "caption": "Interval"
         }
     ],
     "actions": [
         {
             "type": "Button",
-            "label": "Test Connection",
-            "onClick": "IPS_RequestAction($id, 'TestConnection', '');"
+            "caption": "Update Now",
+            "onClick": "MercedesMe_UpdateData($id);"
         }
     ]
 }
