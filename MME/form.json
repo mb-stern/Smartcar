@@ -1,16 +1,24 @@
 {
     "elements": [
-        { "type": "ValidationTextBox", "name": "Email", "caption": "E-Mail-Adresse" },
-        { "type": "ValidationTextBox", "name": "LoginCode", "caption": "Login-Code" },
-        { "type": "Select", "name": "CountryCode", "caption": "Ländercode", "options": [
-            { "caption": "Deutschland", "value": "DE" },
-            { "caption": "Schweiz", "value": "CH" },
-            { "caption": "Österreich", "value": "AT" }
-        ]},
-        { "type": "ValidationTextBox", "name": "AcceptLanguage", "caption": "Sprache", "default": "de-DE" }
-    ],
-    "actions": [
-        { "type": "Button", "label": "Authentifizierung starten", "onClick": "MercedesMe_RequestAuthToken($id);" },
-        { "type": "Button", "label": "Daten aktualisieren", "onClick": "MercedesMe_UpdateData($id);" }
+        {
+            "type": "ValidationTextBox",
+            "name": "Email",
+            "caption": "Email"
+        },
+        {
+            "type": "PasswordTextBox",
+            "name": "Password",
+            "caption": "Password"
+        },
+        {
+            "type": "Button",
+            "label": "Authentifizierung starten",
+            "onClick": "IPS_RequestAction($id, 'RequestAuthToken', '');"
+        },
+        {
+            "type": "Button",
+            "label": "Daten aktualisieren",
+            "onClick": "IPS_RequestAction($id, 'UpdateData', '');"
+        }
     ]
 }
