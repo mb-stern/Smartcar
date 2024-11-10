@@ -16,7 +16,7 @@
         {
             "type": "Button",
             "caption": "Update Now",
-            "onClick": "IPS_RequestAction($id, 'UpdateData', '');"
+            "onClick": "IPS_RequestAction($id, 'UpdateData', 0);"
         }
     ]
 }

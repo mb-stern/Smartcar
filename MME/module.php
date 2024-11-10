@@ -11,7 +11,7 @@ class MercedesMe extends IPSModule
         $this->RegisterPropertyString("VehicleID", "");
 
         // Timer for regular updates
-        $this->RegisterTimer("UpdateData", 0, 'MercedesMe_UpdateData($_IPS["TARGET"]);');
+        $this->RegisterTimer("UpdateData", 0, 'IPS_RequestAction(' . $this->InstanceID . ', "UpdateData", 0);');
     }
 
     public function ApplyChanges()
