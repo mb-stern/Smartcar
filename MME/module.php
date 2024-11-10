@@ -17,11 +17,11 @@ class MercedesMe extends IPSModule
 
         // Initialize header for API requests
         $this->baseHeader = [
-            "Content-Type" => "application/x-www-form-urlencoded",
-            "User-Agent" => "MyCar/2168 CFNetwork/1494.0.7 Darwin/23.4.0",
-            "X-ApplicationName" => "mycar-store-ece",
-            "RIS-OS-Name" => "ios",
-            "RIS-SDK-Version" => "9.114.0"
+            "Content-Type: application/x-www-form-urlencoded",
+            "User-Agent: MyCar/2168 CFNetwork/1494.0.7 Darwin/23.4.0",
+            "X-ApplicationName: mycar-store-ece",
+            "RIS-OS-Name: ios",
+            "RIS-SDK-Version: 9.114.0"
         ];
         
         $this->RegisterTimer("UpdateData", 0, 'MercedesMe_UpdateData($_IPS["TARGET"]);');
@@ -106,7 +106,7 @@ class MercedesMe extends IPSModule
 
         $url = "https://bff.emea-prod.mobilesdk.mercedes-benz.com//v2/vehicles";
         $headers = $this->baseHeader;
-        $headers["Authorization"] = "Bearer " . $this->atoken;
+        $headers[] = "Authorization: Bearer " . $this->atoken;
 
         // API request to get vehicle data
         $curl = curl_init();
