@@ -2,69 +2,67 @@
 
 class MercedesMe extends IPSModule
 {
-    // Erstellen der Instanz
     public function Create()
     {
-        // Diese Zeile nicht löschen
         parent::Create();
 
-        // Eigenschaften registrieren
+        // Register properties for configuration
         $this->RegisterPropertyString('Email', '');
         $this->RegisterPropertyString('Password', '');
         $this->RegisterPropertyInteger('UpdateInterval', 60);
 
-        // Timer für regelmäßige Updates
-        $this->RegisterTimer('UpdateData', 0, 'MercedesMe_UpdateData($_IPS[\'TARGET\']);');
+        // Timer for regular updates
+        $this->RegisterTimer('UpdateData', 0, 'IPS_RequestAction(' . $this->InstanceID . ', "UpdateData", 0);');
     }
 
-    // Anwenden von Änderungen
     public function ApplyChanges()
     {
-        // Diese Zeile nicht löschen
         parent::ApplyChanges();
 
-        // Variablen für Fahrzeugdaten registrieren
+        // Register variables for vehicle data
         $this->MaintainVariable('FuelLevel', 'Kraftstoffstand', VARIABLETYPE_INTEGER, '~Battery.100', 0, true);
         $this->MaintainVariable('Mileage', 'Kilometerstand', VARIABLETYPE_FLOAT, '', 1, true);
 
-        // Timer-Intervall basierend auf dem Update-Intervall setzen
+        // Set timer interval based on user-defined update frequency
         $interval = $this->ReadPropertyInteger('UpdateInterval') * 1000;
         $this->SetTimerInterval('UpdateData', $interval);
 
-        // Authentifizierung durchführen
+        // Authenticate on startup
         $this->Authenticate();
     }
 
-    // Authentifizierungsmethode
     private function Authenticate()
     {
         $email = $this->ReadPropertyString('Email');
         $password = $this->ReadPropertyString('Password');
 
         if (empty($email) || empty($password)) {
-            $this->LogMessage('E-Mail oder Passwort nicht gesetzt.', KL_WARNING);
+            $this->SendDebug("Authenticate", "E-Mail oder Passwort nicht gesetzt.", 0);
             return;
         }
 
-        // Authentifizierungslogik hier implementieren
-        // Beispiel: Token abrufen und speichern
+        $this->SendDebug("Authenticate", "Starte Authentifizierung für $email.", 0);
+
+        // Retrieve the authentication token
         $token = $this->GetAuthToken($email, $password);
         if ($token) {
             $this->SetBuffer('AuthToken', $token);
+            $this->SendDebug("Authenticate", "Token erfolgreich empfangen.", 0);
         } else {
-            $this->LogMessage('Authentifizierung fehlgeschlagen.', KL_ERROR);
+            $this->SendDebug("Authenticate", "Authentifizierung fehlgeschlagen.", 0);
         }
     }
 
-    // Methode zum Abrufen des Authentifizierungstokens
     private function GetAuthToken($email, $password)
     {
-        // HTTP-Anfrage an den Authentifizierungsendpunkt von Mercedes me
         $url = 'https://api.mercedes-benz.com/v1/auth/token';
         $postData = [
             'email' => $email,
             'password' => $password
         ];
+
+        $this->SendDebug("GetAuthToken", "URL: $url", 0);
+        $this->SendDebug("GetAuthToken", "Post-Daten: " . json_encode($postData), 0);
 
         $options = [
             'http' => [
@@ -79,37 +77,40 @@ class MercedesMe extends IPSModule
         $result = @file_get_contents($url, false, $context);
 
         if ($result === FALSE) {
-            $this->LogMessage('Fehler beim Abrufen des Authentifizierungstokens.', KL_ERROR);
+            $this->SendDebug("GetAuthToken", "Fehler beim Abrufen des Authentifizierungstokens.", 0);
             return false;
         }
 
         $response = json_decode($result, true);
+        $this->SendDebug("GetAuthToken", "Antwort: " . json_encode($response), 0);
+
         return $response['access_token'] ?? false;
     }
 
-    // Methode zum Aktualisieren der Fahrzeugdaten
     public function UpdateData()
     {
         $token = $this->GetBuffer('AuthToken');
         if (!$token) {
-            $this->LogMessage('Kein Authentifizierungstoken vorhanden.', KL_WARNING);
+            $this->SendDebug("UpdateData", "Kein Authentifizierungstoken vorhanden.", 0);
             return;
         }
 
-        // Fahrzeugdaten abrufen
+        // Fetch vehicle data
         $vehicleData = $this->FetchVehicleData($token);
         if ($vehicleData) {
             $this->SetValue('FuelLevel', $vehicleData['fuelLevel']);
             $this->SetValue('Mileage', $vehicleData['mileage']);
+            $this->SendDebug("UpdateData", "Fahrzeugdaten erfolgreich aktualisiert.", 0);
         } else {
-            $this->LogMessage('Fehler beim Abrufen der Fahrzeugdaten.', KL_ERROR);
+            $this->SendDebug("UpdateData", "Fehler beim Abrufen der Fahrzeugdaten.", 0);
         }
     }
 
-    // Methode zum Abrufen der Fahrzeugdaten von der API
     private function FetchVehicleData($token)
     {
         $url = 'https://api.mercedes-benz.com/v1/vehicles';
+        $this->SendDebug("FetchVehicleData", "Abruf-URL: $url", 0);
+
         $options = [
             'http' => [
                 'header'  => "Authorization: Bearer $token\r\n",
@@ -122,12 +123,13 @@ class MercedesMe extends IPSModule
         $result = @file_get_contents($url, false, $context);
 
         if ($result === FALSE) {
-            $this->LogMessage('Fehler beim Abrufen der Fahrzeugdaten.', KL_ERROR);
+            $this->SendDebug("FetchVehicleData", "Fehler beim Abrufen der Fahrzeugdaten.", 0);
             return false;
         }
 
         $response = json_decode($result, true);
-        // Beispielhafte Datenextraktion
+        $this->SendDebug("FetchVehicleData", "Antwort: " . json_encode($response), 0);
+
         return [
             'fuelLevel' => $response['fuelLevel'] ?? 0,
             'mileage' => $response['mileage'] ?? 0.0
