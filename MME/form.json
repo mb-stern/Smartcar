@@ -6,11 +6,6 @@
             "caption": "E-Mail-Adresse"
         },
         {
-            "type": "ValidationTextBox",
-            "name": "AccessCode",
-            "caption": "Authentifizierungscode"
-        },
-        {
             "type": "Label",
             "caption": "Geben Sie Ihre Mercedes Me E-Mail-Adresse ein und klicken Sie auf 'Code anfordern'. Sie erhalten dann einen Authentifizierungscode per E-Mail."
         },
@@ -20,19 +15,24 @@
             "onClick": "IPS_RequestAction($id, 'RequestAuthCode', '');"
         },
         {
-            "type": "PasswordTextBox",
-            "name": "AccessToken",
-            "caption": "Zugriffstoken",
-            "enabled": false
+            "type": "ValidationTextBox",
+            "name": "AccessCode",
+            "caption": "Authentifizierungscode"
         },
         {
             "type": "Label",
-            "caption": "Nach Eingabe des Authentifizierungscodes klicken Sie auf 'Token abrufen', um das Zugriffstoken zu erhalten und zu speichern."
+            "caption": "Nach Erhalt des Codes geben Sie ihn hier ein und klicken auf 'Token abrufen', um die Verbindung herzustellen."
         },
         {
             "type": "Button",
             "caption": "Token abrufen",
             "onClick": "IPS_RequestAction($id, 'Authenticate', '');"
+        },
+        {
+            "type": "PasswordTextBox",
+            "name": "AccessToken",
+            "caption": "Zugriffstoken",
+            "enabled": false
         },
         {
             "type": "NumberSpinner",

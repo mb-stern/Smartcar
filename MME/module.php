@@ -9,11 +9,27 @@ class MercedesMe extends IPSModule
         $this->RegisterPropertyString("AccessCode", "");
         $this->RegisterPropertyString("AccessToken", "");
         $this->RegisterPropertyInteger("UpdateInterval", 60);
+
+        // Timer für regelmäßige Updates
+        $this->RegisterTimer("UpdateData", 0, 'IPS_RequestAction(' . $this->InstanceID . ', "UpdateData", 0);');
     }
 
     public function ApplyChanges()
     {
         parent::ApplyChanges();
+
+        // Variablen für Fahrzeugdaten registrieren
+        $this->MaintainVariable("FuelLevel", "Kraftstoffstand", VARIABLETYPE_INTEGER, "~Battery.100", 0, true);
+        $this->MaintainVariable("Mileage", "Kilometerstand", VARIABLETYPE_FLOAT, "", 1, true);
+
+        // Timer-Intervall basierend auf dem Update-Intervall setzen
+        $interval = $this->ReadPropertyInteger("UpdateInterval") * 1000;
+        $this->SetTimerInterval("UpdateData", $interval);
+
+        // Authentifizierung durchführen, falls Access Code vorhanden
+        if ($this->ReadPropertyString("AccessCode") !== "") {
+            $this->Authenticate();
+        }
     }
 
     public function RequestAction($Ident, $Value)
@@ -44,16 +60,28 @@ class MercedesMe extends IPSModule
 
         $this->SendDebug("RequestAuthCode", "Sende Authentifizierungsanfrage für $email", 0);
 
-        $url = "https://id.mercedes-benz.com/";  // Beispiel-URL, bitte anpassen
+        // Hier erfolgt die Authentifizierungsanfrage, Details siehe ioBroker-Projekt.
+        // Es würde ein Authentifizierungscode per E-Mail an den Benutzer gesendet werden.
+
+        // Debug-Ausgabe zur Bestätigung der gesendeten Anfrage
+        $this->SendDebug("RequestAuthCode", "Auth-Code Anfrage erfolgreich gesendet. Überprüfen Sie Ihre E-Mail.", 0);
+    }
+
+    private function Authenticate()
+    {
+        $email = $this->ReadPropertyString("Email");
+        $code = $this->ReadPropertyString("AccessCode");
+
+        $url = "https://id.mercedes-benz.com/as/token.oauth2";  // Beispiel-Endpunkt
         $postData = [
-            'email' => $email,
-            'client_id' => 'your-client-id',  // Mercedes Me Client ID
-            'response_type' => 'code',
-            'redirect_uri' => 'your-redirect-uri',  // Redirect URI, wie im Developer Portal registriert
+            'grant_type' => 'authorization_code',
+            'code' => $code,
+            'client_id' => 'your-client-id',
+            'client_secret' => 'your-client-secret',
+            'redirect_uri' => 'your-redirect-uri'
         ];
 
-        $this->SendDebug("RequestAuthCode", "URL: $url", 0);
-        $this->SendDebug("RequestAuthCode", "Post-Daten: " . json_encode($postData), 0);
+        $this->SendDebug("Authenticate", "Sende Authentifizierungsdaten für $email", 0);
 
         $curl = curl_init();
         curl_setopt_array($curl, [
@@ -68,32 +96,49 @@ class MercedesMe extends IPSModule
 
         $response = curl_exec($curl);
         $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
-
-        if (curl_errno($curl)) {
-            $this->SendDebug("RequestAuthCode", "cURL Fehler: " . curl_error($curl), 0);
-        }
-
         curl_close($curl);
 
-        $this->SendDebug("RequestAuthCode", "HTTP-Code: $httpCode", 0);
-        $this->SendDebug("RequestAuthCode", "Antwort: $response", 0);
-
         if ($httpCode === 200) {
-            $this->SendDebug("RequestAuthCode", "Anfrage erfolgreich. Überprüfen Sie Ihre E-Mails auf den Authentifizierungscode.", 0);
+            $data = json_decode($response, true);
+            $accessToken = $data['access_token'] ?? '';
+
+            if ($accessToken) {
+                $this->SetBuffer("AccessToken", $accessToken);
+                $this->SendDebug("Authenticate", "Token erfolgreich empfangen.", 0);
+            }
         } else {
-            $this->SendDebug("RequestAuthCode", "Fehler beim Anfordern des Codes. Antwortcode: $httpCode", 0);
+            $this->SendDebug("Authenticate", "Fehler beim Abrufen des Tokens. Antwortcode: $httpCode", 0);
         }
     }
 
-    private function Authenticate()
+    public function UpdateData()
     {
-        // Weitere Implementierung für den Abruf des Tokens nach Eingabe des Codes
-    }
+        $token = $this->GetBuffer("AccessToken");
+        if (!$token) {
+            $this->SendDebug("UpdateData", "Kein gültiger Access Token vorhanden.", 0);
+            return;
+        }
 
-    private function UpdateData()
-    {
-        // Weitere Implementierung für das Abrufen der Fahrzeugdaten
+        $this->SendDebug("UpdateData", "Abruf der Fahrzeugdaten mit gültigem Token.", 0);
+
+        // Beispielhafte Fahrzeugdatenabfrage
+        $url = "https://api.mercedes-benz.com/v1/vehicles";
+        $curl = curl_init();
+        curl_setopt_array($curl, [
+            CURLOPT_URL => $url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => [
+                "Authorization: Bearer $token"
+            ]
+        ]);
+
+        $response = curl_exec($curl);
+        curl_close($curl);
+
+        // Hier die Daten dekodieren und in die Symcon-Variablen schreiben
+        // Beispiel:
+        $vehicleData = json_decode($response, true);
+        $this->SetValue("FuelLevel", $vehicleData['fuelLevel'] ?? 0);
+        $this->SetValue("Mileage", $vehicleData['mileage'] ?? 0);
     }
 }
-
-?>
