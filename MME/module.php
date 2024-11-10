@@ -2,7 +2,6 @@
 
 class MercedesMe extends IPSModule
 {
-    private $baseHeader;
     private $atoken;
     private $rtoken;
 
@@ -15,15 +14,6 @@ class MercedesMe extends IPSModule
         $this->RegisterPropertyString("LoginCode", "");
         $this->RegisterPropertyInteger("UpdateInterval", 60);
 
-        // Initialize header for API requests
-        $this->baseHeader = [
-            "Content-Type: application/x-www-form-urlencoded",
-            "User-Agent: MyCar/2168 CFNetwork/1494.0.7 Darwin/23.4.0",
-            "X-ApplicationName: mycar-store-ece",
-            "RIS-OS-Name: ios",
-            "RIS-SDK-Version: 9.114.0"
-        ];
-        
         $this->RegisterTimer("UpdateData", 0, 'MercedesMe_UpdateData($_IPS["TARGET"]);');
     }
 
@@ -68,6 +58,15 @@ class MercedesMe extends IPSModule
         $this->SendDebug("RequestAuthCode", "URL: $url", 0);
         $this->SendDebug("RequestAuthCode", "Post-Daten: " . json_encode($postData), 0);
 
+        // HTTP headers
+        $headers = [
+            "Content-Type: application/x-www-form-urlencoded",
+            "User-Agent: MyCar/2168 CFNetwork/1494.0.7 Darwin/23.4.0",
+            "X-ApplicationName: mycar-store-ece",
+            "RIS-OS-Name: ios",
+            "RIS-SDK-Version: 9.114.0"
+        ];
+
         // HTTP request for access token
         $curl = curl_init();
         curl_setopt_array($curl, [
@@ -75,7 +74,7 @@ class MercedesMe extends IPSModule
             CURLOPT_POST => true,
             CURLOPT_POSTFIELDS => http_build_query($postData),
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HTTPHEADER => $this->baseHeader
+            CURLOPT_HTTPHEADER => $headers
         ]);
 
         $response = curl_exec($curl);
@@ -105,8 +104,14 @@ class MercedesMe extends IPSModule
         }
 
         $url = "https://bff.emea-prod.mobilesdk.mercedes-benz.com//v2/vehicles";
-        $headers = $this->baseHeader;
-        $headers[] = "Authorization: Bearer " . $this->atoken;
+        $headers = [
+            "Authorization: Bearer " . $this->atoken,
+            "Content-Type: application/json",
+            "User-Agent: MyCar/2168 CFNetwork/1494.0.7 Darwin/23.4.0",
+            "X-ApplicationName: mycar-store-ece",
+            "RIS-OS-Name: ios",
+            "RIS-SDK-Version: 9.114.0"
+        ];
 
         // API request to get vehicle data
         $curl = curl_init();
