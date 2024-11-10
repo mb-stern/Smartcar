@@ -3,31 +3,24 @@
         {
             "type": "ValidationTextBox",
             "name": "Email",
-            "caption": "Email"
+            "caption": "E-Mail-Adresse"
         },
         {
-            "type": "ValidationTextBox",
-            "name": "AccessCode",
-            "caption": "Access Code"
+            "type": "PasswordTextBox",
+            "name": "Password",
+            "caption": "Passwort"
         },
         {
             "type": "NumberSpinner",
             "name": "UpdateInterval",
-            "caption": "Update Interval (in seconds)",
-            "suffix": "s",
-            "minimum": 10
+            "caption": "Aktualisierungsintervall (Sekunden)"
         }
     ],
     "actions": [
         {
             "type": "Button",
-            "caption": "Authenticate",
-            "onClick": "IPS_RequestAction($id, 'Authenticate', 0);"
-        },
-        {
-            "type": "Button",
-            "caption": "Update Now",
-            "onClick": "IPS_RequestAction($id, 'UpdateData', 0);"
+            "caption": "Jetzt aktualisieren",
+            "onClick": "MercedesMe_UpdateData($id);"
         }
     ]
 }

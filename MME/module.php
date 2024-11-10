@@ -2,123 +2,135 @@
 
 class MercedesMe extends IPSModule
 {
+    // Erstellen der Instanz
     public function Create()
     {
+        // Diese Zeile nicht löschen
         parent::Create();
 
-        // Register properties for configuration
-        $this->RegisterPropertyString("Email", "");
-        $this->RegisterPropertyString("AccessCode", "");
-        $this->RegisterPropertyInteger("UpdateInterval", 60);
+        // Eigenschaften registrieren
+        $this->RegisterPropertyString('Email', '');
+        $this->RegisterPropertyString('Password', '');
+        $this->RegisterPropertyInteger('UpdateInterval', 60);
 
-        // Timer for regular updates
-        $this->RegisterTimer("UpdateData", 0, 'IPS_RequestAction(' . $this->InstanceID . ', "UpdateData", 0);');
+        // Timer für regelmäßige Updates
+        $this->RegisterTimer('UpdateData', 0, 'MercedesMe_UpdateData($_IPS[\'TARGET\']);');
     }
 
+    // Anwenden von Änderungen
     public function ApplyChanges()
     {
+        // Diese Zeile nicht löschen
         parent::ApplyChanges();
 
-        // Register variables for data we want to store
-        $this->MaintainVariable("FuelLevel", "Fuel Level", VARIABLETYPE_INTEGER, "~Battery.100", 0, true);
-        $this->MaintainVariable("Mileage", "Mileage", VARIABLETYPE_FLOAT, "", 1, true);
+        // Variablen für Fahrzeugdaten registrieren
+        $this->MaintainVariable('FuelLevel', 'Kraftstoffstand', VARIABLETYPE_INTEGER, '~Battery.100', 0, true);
+        $this->MaintainVariable('Mileage', 'Kilometerstand', VARIABLETYPE_FLOAT, '', 1, true);
 
-        // Set timer interval based on user-defined update frequency
-        $interval = $this->ReadPropertyInteger("UpdateInterval") * 1000;
-        $this->SetTimerInterval("UpdateData", $interval);
+        // Timer-Intervall basierend auf dem Update-Intervall setzen
+        $interval = $this->ReadPropertyInteger('UpdateInterval') * 1000;
+        $this->SetTimerInterval('UpdateData', $interval);
 
-        // Authenticate if email and code are set
-        if ($this->ReadPropertyString("Email") && $this->ReadPropertyString("AccessCode")) {
-            $this->Authenticate();
-        }
+        // Authentifizierung durchführen
+        $this->Authenticate();
     }
 
-    public function RequestAction($Ident, $Value)
-    {
-        switch ($Ident) {
-            case "Authenticate":
-                $this->Authenticate();
-                break;
-            case "UpdateData":
-                $this->UpdateData();
-                break;
-            default:
-                throw new Exception("Invalid Ident");
-        }
-    }
-
-    public function UpdateData()
-    {
-        $data = $this->FetchVehicleData();
-        if ($data) {
-            $this->SetValue("FuelLevel", $data['fuelLevel']);
-            $this->SetValue("Mileage", $data['mileage']);
-        }
-    }
-
+    // Authentifizierungsmethode
     private function Authenticate()
     {
-        $email = $this->ReadPropertyString("Email");
-        $accessCode = $this->ReadPropertyString("AccessCode");
+        $email = $this->ReadPropertyString('Email');
+        $password = $this->ReadPropertyString('Password');
 
-        if (empty($email)) {
-            $this->SendDebug("Authenticate", "E-Mail-Adresse fehlt.", 0);
+        if (empty($email) || empty($password)) {
+            $this->LogMessage('E-Mail oder Passwort nicht gesetzt.', KL_WARNING);
             return;
         }
 
-        $this->SendDebug("Authenticate", "Starte Authentifizierung für $email.", 0);
-
-        // Example URL, adjust it to the actual Mercedes Me endpoint
-        $url = "https://api.mercedes-benz.com/authentication/v1/authenticate";
-        $postData = [
-            'email' => $email,
-            'code' => $accessCode
-        ];
-
-        $this->SendDebug("Authenticate", "URL: $url", 0);
-        $this->SendDebug("Authenticate", "Post-Daten: " . json_encode($postData), 0);
-
-        $curl = curl_init();
-        curl_setopt_array($curl, [
-            CURLOPT_URL => $url,
-            CURLOPT_POST => true,
-            CURLOPT_POSTFIELDS => json_encode($postData),
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HTTPHEADER => [
-                "Content-Type: application/json",
-                // Add more headers as required, such as Authorization
-            ]
-        ]);
-
-        $response = curl_exec($curl);
-        $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
-
-        if (curl_errno($curl)) {
-            $this->SendDebug("Authenticate", "cURL Fehler: " . curl_error($curl), 0);
-        }
-
-        curl_close($curl);
-
-        $this->SendDebug("Authenticate", "HTTP-Code: $httpCode", 0);
-        $this->SendDebug("Authenticate", "Antwort: $response", 0);
-
-        if ($httpCode === 200) {
-            $this->SendDebug("Authenticate", "Authentifizierung erfolgreich. Zugangscode wird geprüft.", 0);
-            // Process access token if authentication succeeds
+        // Authentifizierungslogik hier implementieren
+        // Beispiel: Token abrufen und speichern
+        $token = $this->GetAuthToken($email, $password);
+        if ($token) {
+            $this->SetBuffer('AuthToken', $token);
         } else {
-            $this->SendDebug("Authenticate", "Authentifizierung fehlgeschlagen. Antwortcode: $httpCode", 0);
+            $this->LogMessage('Authentifizierung fehlgeschlagen.', KL_ERROR);
         }
     }
 
-    private function FetchVehicleData()
+    // Methode zum Abrufen des Authentifizierungstokens
+    private function GetAuthToken($email, $password)
     {
-        // Placeholder data to simulate vehicle data response from Mercedes Me API
-        // Replace this with the actual API call logic
-        $this->SendDebug("FetchVehicleData", "Daten werden abgerufen...", 0);
+        // HTTP-Anfrage an den Authentifizierungsendpunkt von Mercedes me
+        $url = 'https://api.mercedes-benz.com/v1/auth/token';
+        $postData = [
+            'email' => $email,
+            'password' => $password
+        ];
 
+        $options = [
+            'http' => [
+                'header'  => "Content-Type: application/json\r\n",
+                'method'  => 'POST',
+                'content' => json_encode($postData),
+                'timeout' => 10
+            ]
+        ];
+
+        $context  = stream_context_create($options);
+        $result = @file_get_contents($url, false, $context);
+
+        if ($result === FALSE) {
+            $this->LogMessage('Fehler beim Abrufen des Authentifizierungstokens.', KL_ERROR);
+            return false;
+        }
+
+        $response = json_decode($result, true);
+        return $response['access_token'] ?? false;
+    }
+
+    // Methode zum Aktualisieren der Fahrzeugdaten
+    public function UpdateData()
+    {
+        $token = $this->GetBuffer('AuthToken');
+        if (!$token) {
+            $this->LogMessage('Kein Authentifizierungstoken vorhanden.', KL_WARNING);
+            return;
+        }
+
+        // Fahrzeugdaten abrufen
+        $vehicleData = $this->FetchVehicleData($token);
+        if ($vehicleData) {
+            $this->SetValue('FuelLevel', $vehicleData['fuelLevel']);
+            $this->SetValue('Mileage', $vehicleData['mileage']);
+        } else {
+            $this->LogMessage('Fehler beim Abrufen der Fahrzeugdaten.', KL_ERROR);
+        }
+    }
+
+    // Methode zum Abrufen der Fahrzeugdaten von der API
+    private function FetchVehicleData($token)
+    {
+        $url = 'https://api.mercedes-benz.com/v1/vehicles';
+        $options = [
+            'http' => [
+                'header'  => "Authorization: Bearer $token\r\n",
+                'method'  => 'GET',
+                'timeout' => 10
+            ]
+        ];
+
+        $context  = stream_context_create($options);
+        $result = @file_get_contents($url, false, $context);
+
+        if ($result === FALSE) {
+            $this->LogMessage('Fehler beim Abrufen der Fahrzeugdaten.', KL_ERROR);
+            return false;
+        }
+
+        $response = json_decode($result, true);
+        // Beispielhafte Datenextraktion
         return [
-            'fuelLevel' => 75,  // Example fuel level percentage
-            'mileage' => 15000.0 // Example mileage in kilometers
+            'fuelLevel' => $response['fuelLevel'] ?? 0,
+            'mileage' => $response['mileage'] ?? 0.0
         ];
     }
 }
