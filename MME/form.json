@@ -1,51 +1,18 @@
 {
     "elements": [
-        {
-            "type": "ValidationTextBox",
-            "name": "Email",
-            "caption": "E-Mail-Adresse"
-        },
-        {
-            "type": "Label",
-            "caption": "Geben Sie Ihre Mercedes Me E-Mail-Adresse ein und klicken Sie auf 'Code anfordern'. Sie erhalten dann einen Authentifizierungscode per E-Mail."
-        },
-        {
-            "type": "Button",
-            "caption": "Code anfordern",
-            "onClick": "IPS_RequestAction($id, 'RequestAuthCode', '');"
-        },
-        {
-            "type": "ValidationTextBox",
-            "name": "AccessCode",
-            "caption": "Authentifizierungscode"
-        },
-        {
-            "type": "Label",
-            "caption": "Nach Erhalt des Codes geben Sie ihn hier ein und klicken auf 'Token abrufen', um die Verbindung herzustellen."
-        },
-        {
-            "type": "Button",
-            "caption": "Token abrufen",
-            "onClick": "IPS_RequestAction($id, 'Authenticate', '');"
-        },
-        {
-            "type": "PasswordTextBox",
-            "name": "AccessToken",
-            "caption": "Zugriffstoken",
-            "enabled": false
-        },
+        { "type": "ValidationTextBox", "name": "Email", "caption": "E-Mail-Adresse" },
+        { "type": "ValidationTextBox", "name": "LoginCode", "caption": "Authentifizierungscode" },
         {
             "type": "NumberSpinner",
             "name": "UpdateInterval",
-            "caption": "Aktualisierungsintervall (Sekunden)",
-            "suffix": "Sek."
+            "caption": "Update-Intervall (Minuten)"
         }
     ],
     "actions": [
         {
             "type": "Button",
-            "caption": "Jetzt aktualisieren",
-            "onClick": "IPS_RequestAction($id, 'UpdateData', '');"
+            "label": "Daten jetzt aktualisieren",
+            "onClick": "MercedesMe_UpdateData($id);"
         }
     ]
 }
