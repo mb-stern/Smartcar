@@ -1,24 +1,42 @@
 {
     "elements": [
-        {
-            "type": "ValidationTextBox",
-            "name": "Email",
-            "caption": "Email"
-        },
-        {
-            "type": "PasswordTextBox",
-            "name": "Password",
-            "caption": "Password"
-        },
-        {
-            "type": "Button",
-            "label": "Authentifizierung starten",
-            "onClick": "IPS_RequestAction($id, 'RequestAuthToken', '');"
-        },
-        {
-            "type": "Button",
-            "label": "Daten aktualisieren",
-            "onClick": "IPS_RequestAction($id, 'UpdateData', '');"
-        }
+      {
+        "type": "ValidationTextBox",
+        "name": "Email",
+        "caption": "Mercedes Me E-Mail"
+      },
+      {
+        "type": "ValidationTextBox",
+        "name": "ClientID",
+        "caption": "Client-ID",
+        "default": "01398c1c-dc45-4b42-882b-9f5ba9f175f1"
+      },
+      {
+        "type": "ValidationTextBox",
+        "name": "RedirectURI",
+        "caption": "Redirect URI"
+      },
+      {
+        "type": "Button",
+        "caption": "Authentifizierungscode anfordern",
+        "onClick": "MercedesMe_RequestAuthCode($id);"
+      },
+      {
+        "type": "ValidationTextBox",
+        "name": "AuthCode",
+        "caption": "Authentifizierungscode"
+      },
+      {
+        "type": "Button",
+        "caption": "Token anfordern",
+        "onClick": "MercedesMe_RequestAuthToken($id);"
+      }
+    ],
+    "actions": [
+      {
+        "type": "Label",
+        "caption": "Hinweis: Der Authentifizierungscode wird per E-Mail an die angegebene Adresse gesendet."
+      }
     ]
-}
+  }
+  
