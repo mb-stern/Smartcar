@@ -4,28 +4,43 @@ class MercedesMe extends IPSModule
 {
     public function Create()
     {
+        // Never delete this line!
         parent::Create();
+
         $this->RegisterPropertyString("Email", "");
-        $this->RegisterPropertyString("ClientID", "01398c1c-dc45-4b42-882b-9f5ba9f175f1"); // Beispiel-Client-ID
-        $this->RegisterPropertyString("RedirectURI", "https://your-redirect-uri"); // Anpassbare Redirect URI
-        $this->RegisterPropertyString("AuthCode", "");
-        $this->RegisterPropertyString("AccessToken", "");
-        $this->RegisterPropertyString("RefreshToken", "");
+        $this->RegisterPropertyString("Password", "");
+        $this->RegisterPropertyString("ClientID", "");
+        $this->RegisterPropertyString("RedirectURI", "");
     }
 
     public function ApplyChanges()
     {
+        // Never delete this line!
         parent::ApplyChanges();
     }
 
-    public function RequestAuthCode()
+    public function RequestAction($Ident, $Value)
+    {
+        switch ($Ident) {
+            case 'RequestAuthCode':
+                $this->RequestAuthCode();
+                break;
+            case 'RequestAuthToken':
+                $this->RequestAuthToken();
+                break;
+            default:
+                throw new Exception("Invalid Ident");
+        }
+    }
+
+    private function RequestAuthCode()
     {
         $email = $this->ReadPropertyString("Email");
         $clientID = $this->ReadPropertyString("ClientID");
         $redirectURI = $this->ReadPropertyString("RedirectURI");
 
-        if (empty($email)) {
-            $this->SendDebug("RequestAuthCode", "E-Mail-Adresse ist nicht gesetzt.", 0);
+        if (empty($email) || empty($clientID) || empty($redirectURI)) {
+            $this->SendDebug("RequestAuthCode", "Fehlende Parameter", 0);
             return;
         }
 
@@ -35,6 +50,7 @@ class MercedesMe extends IPSModule
             'response_type' => 'code',
             'redirect_uri' => $redirectURI,
             'scope' => 'openid vehicleStatus',
+            'email' => $email
         ];
 
         $this->SendDebug("RequestAuthCode", "URL: $url", 0);
@@ -59,29 +75,30 @@ class MercedesMe extends IPSModule
         $this->SendDebug("RequestAuthCode", "Antwort: $response", 0);
 
         if ($httpCode === 200) {
-            $this->SendDebug("RequestAuthCode", "Anfrage erfolgreich. Authentifizierungscode gesendet.", 0);
+            $this->SendDebug("RequestAuthCode", "Anfrage erfolgreich. Bitte prüfen Sie Ihre E-Mails.", 0);
         } else {
             $this->SendDebug("RequestAuthCode", "Fehler beim Anfordern des Codes. Antwortcode: $httpCode", 0);
         }
     }
 
-    public function RequestAuthToken()
+    private function RequestAuthToken()
     {
+        $email = $this->ReadPropertyString("Email");
+        $password = $this->ReadPropertyString("Password");
         $clientID = $this->ReadPropertyString("ClientID");
-        $redirectURI = $this->ReadPropertyString("RedirectURI");
-        $authCode = $this->ReadPropertyString("AuthCode");
 
-        if (empty($authCode)) {
-            $this->SendDebug("RequestAuthToken", "Kein Authentifizierungscode vorhanden.", 0);
+        if (empty($email) || empty($password) || empty($clientID)) {
+            $this->SendDebug("RequestAuthToken", "Fehlende Parameter", 0);
             return;
         }
 
         $url = "https://id.mercedes-benz.com/as/token.oauth2";
         $postData = [
-            'grant_type' => 'authorization_code',
+            'grant_type' => 'password',
             'client_id' => $clientID,
-            'redirect_uri' => $redirectURI,
-            'code' => $authCode
+            'scope' => 'openid email phone profile offline_access',
+            'username' => $email,
+            'password' => $password
         ];
 
         $this->SendDebug("RequestAuthToken", "URL: $url", 0);
@@ -106,9 +123,6 @@ class MercedesMe extends IPSModule
         $this->SendDebug("RequestAuthToken", "Antwort: $response", 0);
 
         if ($httpCode === 200) {
-            $tokenData = json_decode($response, true);
-            $this->WriteAttributeString("AccessToken", $tokenData['access_token']);
-            $this->WriteAttributeString("RefreshToken", $tokenData['refresh_token']);
             $this->SendDebug("RequestAuthToken", "Token erfolgreich abgerufen.", 0);
         } else {
             $this->SendDebug("RequestAuthToken", "Fehler beim Abrufen des Tokens. Antwortcode: $httpCode", 0);
