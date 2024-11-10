@@ -4,57 +4,62 @@ class MercedesMe extends IPSModule
 {
     public function Create()
     {
-        // Never delete this line!
         parent::Create();
 
-        // Property for vehicle ID
-        $this->RegisterPropertyString("VehicleID", "");
+        $this->RegisterPropertyString("Email", "");
+        $this->RegisterPropertyString("AccessCode", "");
+        $this->RegisterPropertyInteger("UpdateInterval", 60);
 
         // Timer for regular updates
-        $this->RegisterTimer("UpdateData", 0, 'IPS_RequestAction(' . $this->InstanceID . ', "UpdateData", 0);');
+        $this->RegisterTimer("UpdateData", 0, 'MercedesMe_UpdateData($_IPS["TARGET"]);');
     }
 
     public function ApplyChanges()
     {
-        // Never delete this line!
         parent::ApplyChanges();
 
-        // Register variables for data we want to store
-        $this->MaintainVariable("BatteryLevel", "Battery Level", 1 /* Integer */, "~Battery.100", 0, true);
-        $this->MaintainVariable("Odometer", "Odometer", 2 /* Float */, "", 1, true);
-        $this->MaintainVariable("Range", "Range", 2 /* Float */, "", 2, true);
+        $this->MaintainVariable("FuelLevel", "Fuel Level", VARIABLETYPE_INTEGER, "~Battery.100", 0, true);
+        $this->MaintainVariable("Mileage", "Mileage", VARIABLETYPE_FLOAT, "", 1, true);
 
-        // Set timer interval if vehicle ID is set
-        $interval = ($this->ReadPropertyString("VehicleID") != "") ? 60 * 1000 : 0; // 1 Minute
+        // Set update interval
+        $interval = $this->ReadPropertyInteger("UpdateInterval") * 1000;
         $this->SetTimerInterval("UpdateData", $interval);
-    }
 
-    public function RequestAction($Ident, $Value)
-    {
-        if ($Ident == "UpdateData") {
-            $this->UpdateData();
+        // Initial authentication if email and code are set
+        if ($this->ReadPropertyString("Email") && $this->ReadPropertyString("AccessCode")) {
+            $this->Authenticate();
         }
     }
 
     public function UpdateData()
     {
-        $vehicleID = $this->ReadPropertyString("VehicleID");
-
-        if (empty($vehicleID)) {
-            IPS_LogMessage("MercedesMe", "Vehicle ID is not set.");
-            return;
+        $data = $this->FetchVehicleData();
+        if ($data) {
+            $this->SetValue("FuelLevel", $data['fuelLevel']);
+            $this->SetValue("Mileage", $data['mileage']);
         }
+    }
 
-        // Here you would implement the data fetching logic, e.g., using cURL
-        // For demonstration, we use some example data
-        $batteryLevel = 85; // Example value
-        $odometer = 12345.67; // Example value in km
-        $range = 400.0; // Example value in km
+    private function Authenticate()
+    {
+        // Code to handle sending an email and receiving a verification code
+        $email = $this->ReadPropertyString("Email");
+        $accessCode = $this->ReadPropertyString("AccessCode");
+        
+        if ($email && $accessCode) {
+            // Code to authenticate with the API using the email and access code
+            // Store the access token if successful
+        }
+    }
 
-        // Update variables
-        $this->SetValue("BatteryLevel", $batteryLevel);
-        $this->SetValue("Odometer", $odometer);
-        $this->SetValue("Range", $range);
+    private function FetchVehicleData()
+    {
+        // Placeholder function for fetching vehicle data from Mercedes Me API
+        // Example response structure
+        return [
+            'fuelLevel' => 75, // Example fuel level
+            'mileage' => 15000.0 // Example mileage
+        ];
     }
 }
 

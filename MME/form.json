@@ -2,17 +2,28 @@
     "elements": [
         {
             "type": "ValidationTextBox",
-            "name": "VehicleID",
-            "caption": "Vehicle ID"
+            "name": "Email",
+            "caption": "Email"
+        },
+        {
+            "type": "ValidationTextBox",
+            "name": "AccessCode",
+            "caption": "Access Code"
         },
         {
             "type": "NumberSpinner",
             "name": "UpdateInterval",
             "caption": "Update Interval (in seconds)",
-            "suffix": "s"
+            "suffix": "s",
+            "minimum": 10
         }
     ],
     "actions": [
+        {
+            "type": "Button",
+            "caption": "Authenticate",
+            "onClick": "MercedesMe_Authenticate($id);"
+        },
         {
             "type": "Button",
             "caption": "Update Now",
