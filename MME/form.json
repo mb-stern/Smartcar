@@ -20,7 +20,7 @@
         {
             "type": "Button",
             "caption": "Jetzt aktualisieren",
-            "onClick": "MercedesMe_UpdateData($id);"
+            "onClick": "IPS_RequestAction($id, 'UpdateData', 0);"
         }
     ]
 }
