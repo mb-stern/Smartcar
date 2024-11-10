@@ -50,22 +50,50 @@ class MercedesMe extends IPSModule
     }
 
     private function RequestAuthCode()
-    {
-        $email = $this->ReadPropertyString("Email");
+{
+    $email = $this->ReadPropertyString("Email");
 
-        if (empty($email)) {
-            $this->SendDebug("RequestAuthCode", "E-Mail-Adresse ist nicht gesetzt.", 0);
-            return;
-        }
-
-        $this->SendDebug("RequestAuthCode", "Sende Authentifizierungsanfrage für $email", 0);
-
-        // Hier erfolgt die Authentifizierungsanfrage, Details siehe ioBroker-Projekt.
-        // Es würde ein Authentifizierungscode per E-Mail an den Benutzer gesendet werden.
-
-        // Debug-Ausgabe zur Bestätigung der gesendeten Anfrage
-        $this->SendDebug("RequestAuthCode", "Auth-Code Anfrage erfolgreich gesendet. Überprüfen Sie Ihre E-Mail.", 0);
+    if (empty($email)) {
+        $this->SendDebug("RequestAuthCode", "E-Mail-Adresse ist nicht gesetzt.", 0);
+        return;
     }
+
+    $url = "https://id.mercedes-benz.com/as/authorization.oauth2";
+    $postData = [
+        'client_id' => 'your-client-id',  // Ersetzen Sie dies mit Ihrer Client-ID
+        'response_type' => 'code',
+        'redirect_uri' => 'your-redirect-uri',  // Ersetzen Sie dies mit Ihrer Redirect URI
+        'scope' => 'openid vehicleStatus',
+    ];
+
+    $this->SendDebug("RequestAuthCode", "URL: $url", 0);
+    $this->SendDebug("RequestAuthCode", "Post-Daten: " . json_encode($postData), 0);
+
+    $curl = curl_init();
+    curl_setopt_array($curl, [
+        CURLOPT_URL => $url,
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => http_build_query($postData),
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => [
+            "Content-Type: application/x-www-form-urlencoded"
+        ]
+    ]);
+
+    $response = curl_exec($curl);
+    $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+    curl_close($curl);
+
+    $this->SendDebug("RequestAuthCode", "HTTP-Code: $httpCode", 0);
+    $this->SendDebug("RequestAuthCode", "Antwort: $response", 0);
+
+    if ($httpCode === 200) {
+        $this->SendDebug("RequestAuthCode", "Anfrage erfolgreich. Überprüfen Sie Ihre E-Mails auf den Authentifizierungscode.", 0);
+    } else {
+        $this->SendDebug("RequestAuthCode", "Fehler beim Anfordern des Codes. Antwortcode: $httpCode", 0);
+    }
+}
+
 
     private function Authenticate()
     {
