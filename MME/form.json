@@ -22,7 +22,7 @@
         {
             "type": "Button",
             "caption": "Authenticate",
-            "onClick": "MercedesMe_Authenticate($id);"
+            "onClick": "IPS_RequestAction($id, 'Authenticate', 0);"
         },
         {
             "type": "Button",

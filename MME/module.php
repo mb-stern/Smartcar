@@ -11,7 +11,7 @@ class MercedesMe extends IPSModule
         $this->RegisterPropertyInteger("UpdateInterval", 60);
 
         // Timer for regular updates
-        $this->RegisterTimer("UpdateData", 0, 'MercedesMe_UpdateData($_IPS["TARGET"]);');
+        $this->RegisterTimer("UpdateData", 0, 'IPS_RequestAction(' . $this->InstanceID . ', "UpdateData", 0);');
     }
 
     public function ApplyChanges()
@@ -21,13 +21,25 @@ class MercedesMe extends IPSModule
         $this->MaintainVariable("FuelLevel", "Fuel Level", VARIABLETYPE_INTEGER, "~Battery.100", 0, true);
         $this->MaintainVariable("Mileage", "Mileage", VARIABLETYPE_FLOAT, "", 1, true);
 
-        // Set update interval
         $interval = $this->ReadPropertyInteger("UpdateInterval") * 1000;
         $this->SetTimerInterval("UpdateData", $interval);
 
-        // Initial authentication if email and code are set
         if ($this->ReadPropertyString("Email") && $this->ReadPropertyString("AccessCode")) {
             $this->Authenticate();
+        }
+    }
+
+    public function RequestAction($Ident, $Value)
+    {
+        switch ($Ident) {
+            case "Authenticate":
+                $this->Authenticate();
+                break;
+            case "UpdateData":
+                $this->UpdateData();
+                break;
+            default:
+                throw new Exception("Invalid Ident");
         }
     }
 
@@ -42,23 +54,22 @@ class MercedesMe extends IPSModule
 
     private function Authenticate()
     {
-        // Code to handle sending an email and receiving a verification code
         $email = $this->ReadPropertyString("Email");
         $accessCode = $this->ReadPropertyString("AccessCode");
-        
+
         if ($email && $accessCode) {
-            // Code to authenticate with the API using the email and access code
-            // Store the access token if successful
+            // Hier kommt die eigentliche Authentifizierung mit der Mercedes Me API.
+            IPS_LogMessage("MercedesMe", "Authentifizierung für $email gestartet.");
+        } else {
+            IPS_LogMessage("MercedesMe", "E-Mail oder Zugangscode fehlt.");
         }
     }
 
     private function FetchVehicleData()
     {
-        // Placeholder function for fetching vehicle data from Mercedes Me API
-        // Example response structure
         return [
-            'fuelLevel' => 75, // Example fuel level
-            'mileage' => 15000.0 // Example mileage
+            'fuelLevel' => 75, 
+            'mileage' => 15000.0 
         ];
     }
 }
