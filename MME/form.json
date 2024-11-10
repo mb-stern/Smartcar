@@ -1,24 +1,16 @@
 {
     "elements": [
-        {
-            "type": "ValidationTextBox",
-            "name": "Email",
-            "caption": "E-Mail-Adresse"
-        },
-        {
-            "type": "Button",
-            "caption": "Authentifizierungscode anfordern",
-            "onClick": "IPS_RequestAction($id, 'RequestAuthCode', '');"
-        },
-        {
-            "type": "ValidationTextBox",
-            "name": "LoginCode",
-            "caption": "Authentifizierungscode"
-        },
-        {
-            "type": "NumberSpinner",
-            "name": "UpdateInterval",
-            "caption": "Aktualisierungsintervall (Minuten)"
-        }
+        { "type": "ValidationTextBox", "name": "Email", "caption": "E-Mail-Adresse" },
+        { "type": "ValidationTextBox", "name": "LoginCode", "caption": "Login-Code" },
+        { "type": "Select", "name": "CountryCode", "caption": "Ländercode", "options": [
+            { "caption": "Deutschland", "value": "DE" },
+            { "caption": "Schweiz", "value": "CH" },
+            { "caption": "Österreich", "value": "AT" }
+        ]},
+        { "type": "ValidationTextBox", "name": "AcceptLanguage", "caption": "Sprache", "default": "de-DE" }
+    ],
+    "actions": [
+        { "type": "Button", "label": "Authentifizierung starten", "onClick": "MercedesMe_RequestAuthToken($id);" },
+        { "type": "Button", "label": "Daten aktualisieren", "onClick": "MercedesMe_UpdateData($id);" }
     ]
 }

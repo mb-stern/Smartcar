@@ -2,136 +2,118 @@
 
 class MercedesMe extends IPSModule
 {
-    private $atoken;
-    private $rtoken;
+    private $clientId = '01398c1c-dc45-4b42-882b-9f5ba9f175f1';
 
     public function Create()
     {
         parent::Create();
-        
-        // Register properties
         $this->RegisterPropertyString("Email", "");
         $this->RegisterPropertyString("LoginCode", "");
-        $this->RegisterPropertyInteger("UpdateInterval", 60);
-
-        // Timer for regular updates
-        $this->RegisterTimer("UpdateData", 0, 'IPS_RequestAction(' . $this->InstanceID . ', "UpdateData", 0);');
+        $this->RegisterPropertyString("CountryCode", "DE");
+        $this->RegisterPropertyString("AcceptLanguage", "de-DE");
+        $this->RegisterTimer("UpdateData", 0, 'MercedesMe_RequestAuthToken($_IPS["TARGET"]);');
     }
 
     public function ApplyChanges()
     {
         parent::ApplyChanges();
-
-        // Set timer interval based on user-defined update frequency
-        $interval = $this->ReadPropertyInteger("UpdateInterval") * 1000 * 60;
-        $this->SetTimerInterval("UpdateData", $interval);
-
-        $this->atoken = $this->GetBuffer("AccessToken");
-        $this->rtoken = $this->GetBuffer("RefreshToken");
-
-        // Request auth code if no access token is set
-        if (!$this->atoken) {
-            $this->RequestAuthCode();
-        } else {
-            $this->UpdateData();
+        if ($this->ReadPropertyString("Email") && $this->ReadPropertyString("LoginCode")) {
+            $this->RequestAuthToken();
         }
     }
 
-    public function RequestAction($Ident, $Value)
-    {
-        switch ($Ident) {
-            case "RequestAuthCode":
-                $this->RequestAuthCode();
-                break;
-            case "UpdateData":
-                $this->UpdateData();
-                break;
-            default:
-                throw new Exception("Invalid Ident");
-        }
-    }
-
-    public function RequestAuthCode()
+    private function RequestAuthToken()
     {
         $email = $this->ReadPropertyString("Email");
+        $loginCode = $this->ReadPropertyString("LoginCode");
 
-        if (empty($email)) {
-            $this->SendDebug("RequestAuthCode", "E-Mail-Adresse fehlt.", 0);
+        if (empty($email) || empty($loginCode)) {
+            $this->SendDebug("RequestAuthToken", "E-Mail-Adresse oder Login-Code nicht gesetzt.", 0);
             return;
         }
 
-        $url = "https://id.mercedes-benz.com/as/authorization.oauth2";
-        $postData = [
-            'client_id' => 'your-client-id',  
-            'response_type' => 'code',
-            'redirect_uri' => 'your-redirect-uri',
-            'scope' => 'openid vehicleStatus',
-            'email' => $email
-        ];
-
+        $nonce = uniqid();
         $headers = [
-            "Content-Type: application/x-www-form-urlencoded"
+            "Content-Type: application/x-www-form-urlencoded",
+            "Accept-Language: " . $this->ReadPropertyString("AcceptLanguage"),
+            "X-Authmode: KEYCLOAK",
+            "X-SessionId: " . uniqid()
         ];
 
-        $curl = curl_init();
-        curl_setopt_array($curl, [
-            CURLOPT_URL => $url,
+        $postData = http_build_query([
+            'client_id' => $this->clientId,
+            'grant_type' => 'password',
+            'username' => $email,
+            'password' => $nonce . ':' . $loginCode,
+            'scope' => 'openid email phone profile offline_access ciam-uid'
+        ]);
+
+        $this->SendDebug("RequestAuthToken", "URL: https://id.mercedes-benz.com/as/token.oauth2", 0);
+        $this->SendDebug("RequestAuthToken", "Post-Daten: " . $postData, 0);
+
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL => "https://id.mercedes-benz.com/as/token.oauth2",
             CURLOPT_POST => true,
-            CURLOPT_POSTFIELDS => http_build_query($postData),
+            CURLOPT_POSTFIELDS => $postData,
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_HTTPHEADER => $headers
         ]);
 
-        $response = curl_exec($curl);
-        $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
-        curl_close($curl);
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
 
-        $this->SendDebug("RequestAuthCode", "HTTP-Code: $httpCode", 0);
-        $this->SendDebug("RequestAuthCode", "Antwort: $response", 0);
+        $this->SendDebug("RequestAuthToken", "HTTP-Code: $httpCode", 0);
+        $this->SendDebug("RequestAuthToken", "Antwort: $response", 0);
 
         if ($httpCode === 200) {
-            $this->SendDebug("RequestAuthCode", "Überprüfen Sie Ihre E-Mails auf den Authentifizierungscode.", 0);
+            $data = json_decode($response, true);
+            if (isset($data['access_token'])) {
+                $this->SetBuffer("AccessToken", $data['access_token']);
+                $this->SetBuffer("RefreshToken", $data['refresh_token']);
+                $this->SendDebug("RequestAuthToken", "Token erhalten und gespeichert.", 0);
+            } else {
+                $this->SendDebug("RequestAuthToken", "Kein Token erhalten.", 0);
+            }
         } else {
-            $this->SendDebug("RequestAuthCode", "Fehler beim Anfordern des Codes. Antwortcode: $httpCode", 0);
+            $this->SendDebug("RequestAuthToken", "Fehler beim Anfordern des Tokens. Antwortcode: $httpCode", 0);
         }
     }
 
     public function UpdateData()
     {
-        if (!$this->atoken) {
+        $accessToken = $this->GetBuffer("AccessToken");
+
+        if (!$accessToken) {
             $this->SendDebug("UpdateData", "Kein gültiger Access Token vorhanden.", 0);
             return;
         }
 
-        $url = "https://bff.emea-prod.mobilesdk.mercedes-benz.com//v2/vehicles";
         $headers = [
-            "Authorization: Bearer " . $this->atoken,
-            "Content-Type: application/json"
+            "Authorization: Bearer " . $accessToken,
+            "Accept: application/json",
+            "Accept-Language: " . $this->ReadPropertyString("AcceptLanguage")
         ];
 
-        $curl = curl_init();
-        curl_setopt_array($curl, [
-            CURLOPT_URL => $url,
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL => "https://bff.emea-prod.mobilesdk.mercedes-benz.com/v2/vehicles?locale=" . $this->ReadPropertyString("AcceptLanguage"),
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_HTTPHEADER => $headers
         ]);
 
-        $response = curl_exec($curl);
-        $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
-        curl_close($curl);
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
 
         $this->SendDebug("UpdateData", "HTTP-Code: $httpCode", 0);
         $this->SendDebug("UpdateData", "Antwort: $response", 0);
 
         if ($httpCode === 200) {
-            $data = json_decode($response, true);
-            if (isset($data['assignedVehicles'])) {
-                foreach ($data['assignedVehicles'] as $vehicle) {
-                    $this->SetValue("VehicleData", json_encode($vehicle));
-                }
-            }
+            $this->SendDebug("UpdateData", "Daten erfolgreich abgerufen.", 0);
         } else {
-            $this->SendDebug("UpdateData", "Fehler beim Abrufen der Fahrzeugdaten.", 0);
+            $this->SendDebug("UpdateData", "Fehler beim Abrufen der Daten. Antwortcode: $httpCode", 0);
         }
     }
 }
