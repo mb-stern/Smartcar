@@ -8,56 +8,92 @@ class MercedesMe extends IPSModule
         $this->RegisterPropertyString("Email", "");
         $this->RegisterPropertyString("AccessCode", "");
         $this->RegisterPropertyString("AccessToken", "");
+        $this->RegisterPropertyInteger("UpdateInterval", 60);
     }
 
     public function ApplyChanges()
     {
         parent::ApplyChanges();
-        if ($this->ReadPropertyString("Email") && $this->ReadPropertyString("AccessCode")) {
-            $this->Authenticate();
+    }
+
+    public function RequestAction($Ident, $Value)
+    {
+        switch ($Ident) {
+            case "RequestAuthCode":
+                $this->RequestAuthCode();
+                break;
+            case "Authenticate":
+                $this->Authenticate();
+                break;
+            case "UpdateData":
+                $this->UpdateData();
+                break;
+            default:
+                throw new Exception("Invalid Ident");
+        }
+    }
+
+    private function RequestAuthCode()
+    {
+        $email = $this->ReadPropertyString("Email");
+
+        if (empty($email)) {
+            $this->SendDebug("RequestAuthCode", "E-Mail-Adresse ist nicht gesetzt.", 0);
+            return;
+        }
+
+        $this->SendDebug("RequestAuthCode", "Sende Authentifizierungsanfrage für $email", 0);
+
+        $url = "https://id.mercedes-benz.com/";  // Beispiel-URL, bitte anpassen
+        $postData = [
+            'email' => $email,
+            'client_id' => 'your-client-id',  // Mercedes Me Client ID
+            'response_type' => 'code',
+            'redirect_uri' => 'your-redirect-uri',  // Redirect URI, wie im Developer Portal registriert
+        ];
+
+        $this->SendDebug("RequestAuthCode", "URL: $url", 0);
+        $this->SendDebug("RequestAuthCode", "Post-Daten: " . json_encode($postData), 0);
+
+        $curl = curl_init();
+        curl_setopt_array($curl, [
+            CURLOPT_URL => $url,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => http_build_query($postData),
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => [
+                "Content-Type: application/x-www-form-urlencoded"
+            ]
+        ]);
+
+        $response = curl_exec($curl);
+        $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+
+        if (curl_errno($curl)) {
+            $this->SendDebug("RequestAuthCode", "cURL Fehler: " . curl_error($curl), 0);
+        }
+
+        curl_close($curl);
+
+        $this->SendDebug("RequestAuthCode", "HTTP-Code: $httpCode", 0);
+        $this->SendDebug("RequestAuthCode", "Antwort: $response", 0);
+
+        if ($httpCode === 200) {
+            $this->SendDebug("RequestAuthCode", "Anfrage erfolgreich. Überprüfen Sie Ihre E-Mails auf den Authentifizierungscode.", 0);
+        } else {
+            $this->SendDebug("RequestAuthCode", "Fehler beim Anfordern des Codes. Antwortcode: $httpCode", 0);
         }
     }
 
     private function Authenticate()
     {
-        $email = $this->ReadPropertyString("Email");
-        $code = $this->ReadPropertyString("AccessCode");
-
-        // Anfrage an den Token-Endpunkt
-        $url = "https://id.mercedes-benz.com/as/token.oauth2";
-        $postData = [
-            'grant_type' => 'authorization_code',
-            'code' => $code,
-            'redirect_uri' => 'https://your-redirect-uri.com',
-            'client_id' => 'your-client-id',
-            'client_secret' => 'your-client-secret'
-        ];
-
-        $options = [
-            'http' => [
-                'header'  => "Content-Type: application/x-www-form-urlencoded\r\n",
-                'method'  => 'POST',
-                'content' => http_build_query($postData),
-            ],
-        ];
-
-        $context  = stream_context_create($options);
-        $result = file_get_contents($url, false, $context);
-
-        if ($result === FALSE) {
-            // Fehlerbehandlung
-            return;
-        }
-
-        $response = json_decode($result, true);
-        if (isset($response['access_token'])) {
-            $this->UpdateAccessToken($response['access_token']);
-        }
+        // Weitere Implementierung für den Abruf des Tokens nach Eingabe des Codes
     }
 
-    private function UpdateAccessToken($token)
+    private function UpdateData()
     {
-        IPS_SetProperty($this->InstanceID, 'AccessToken', $token);
-        IPS_ApplyChanges($this->InstanceID);
+        // Weitere Implementierung für das Abrufen der Fahrzeugdaten
     }
 }
+
+?>
