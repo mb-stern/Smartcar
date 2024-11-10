@@ -19,7 +19,7 @@ class MercedesMe extends IPSModule
         // Never delete this line!
         parent::ApplyChanges();
 
-        // Create variables for data we want to store
+        // Register variables for data we want to store
         $this->MaintainVariable("BatteryLevel", "Battery Level", 1 /* Integer */, "~Battery.100", 0, true);
         $this->MaintainVariable("Odometer", "Odometer", 2 /* Float */, "", 1, true);
         $this->MaintainVariable("Range", "Range", 2 /* Float */, "", 2, true);
@@ -27,6 +27,13 @@ class MercedesMe extends IPSModule
         // Set timer interval if vehicle ID is set
         $interval = ($this->ReadPropertyString("VehicleID") != "") ? 60 * 1000 : 0; // 1 Minute
         $this->SetTimerInterval("UpdateData", $interval);
+    }
+
+    public function RequestAction($Ident, $Value)
+    {
+        if ($Ident == "UpdateData") {
+            $this->UpdateData();
+        }
     }
 
     public function UpdateData()

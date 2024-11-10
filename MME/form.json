@@ -6,20 +6,17 @@
             "caption": "Vehicle ID"
         },
         {
-            "type": "Label",
-            "caption": "Update Interval (in seconds)"
-        },
-        {
             "type": "NumberSpinner",
             "name": "UpdateInterval",
-            "caption": "Interval"
+            "caption": "Update Interval (in seconds)",
+            "suffix": "s"
         }
     ],
     "actions": [
         {
             "type": "Button",
             "caption": "Update Now",
-            "onClick": "MercedesMe_UpdateData($id);"
+            "onClick": "IPS_RequestAction($id, 'UpdateData', '');"
         }
     ]
 }
