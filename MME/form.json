@@ -7,11 +7,6 @@
       },
       {
         "type": "ValidationTextBox",
-        "name": "Password",
-        "caption": "Passwort"
-      },
-      {
-        "type": "ValidationTextBox",
         "name": "ClientID",
         "caption": "Client ID"
       },
@@ -19,6 +14,11 @@
         "type": "ValidationTextBox",
         "name": "RedirectURI",
         "caption": "Redirect URI"
+      },
+      {
+        "type": "ValidationTextBox",
+        "name": "AuthCode",
+        "caption": "Auth Code"
       },
       {
         "type": "Button",

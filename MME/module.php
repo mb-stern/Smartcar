@@ -8,9 +8,9 @@ class MercedesMe extends IPSModule
         parent::Create();
 
         $this->RegisterPropertyString("Email", "");
-        $this->RegisterPropertyString("Password", "");
         $this->RegisterPropertyString("ClientID", "");
         $this->RegisterPropertyString("RedirectURI", "");
+        $this->RegisterPropertyString("AuthCode", ""); // Für den Eingabecode
     }
 
     public function ApplyChanges()
@@ -84,21 +84,20 @@ class MercedesMe extends IPSModule
     private function RequestAuthToken()
     {
         $email = $this->ReadPropertyString("Email");
-        $password = $this->ReadPropertyString("Password");
+        $authCode = $this->ReadPropertyString("AuthCode");
         $clientID = $this->ReadPropertyString("ClientID");
 
-        if (empty($email) || empty($password) || empty($clientID)) {
+        if (empty($email) || empty($authCode) || empty($clientID)) {
             $this->SendDebug("RequestAuthToken", "Fehlende Parameter", 0);
             return;
         }
 
         $url = "https://id.mercedes-benz.com/as/token.oauth2";
         $postData = [
-            'grant_type' => 'password',
+            'grant_type' => 'authorization_code',
             'client_id' => $clientID,
-            'scope' => 'openid email phone profile offline_access',
-            'username' => $email,
-            'password' => $password
+            'code' => $authCode,
+            'redirect_uri' => $this->ReadPropertyString("RedirectURI")
         ];
 
         $this->SendDebug("RequestAuthToken", "URL: $url", 0);
