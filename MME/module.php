@@ -14,23 +14,40 @@ class MercedesMe extends IPSModule
         $this->RegisterPropertyString("LoginCode", "");
         $this->RegisterPropertyInteger("UpdateInterval", 60);
 
-        $this->RegisterTimer("UpdateData", 0, 'MercedesMe_UpdateData($_IPS["TARGET"]);');
+        // Timer for regular updates
+        $this->RegisterTimer("UpdateData", 0, 'IPS_RequestAction(' . $this->InstanceID . ', "UpdateData", 0);');
     }
 
     public function ApplyChanges()
     {
         parent::ApplyChanges();
 
+        // Set timer interval based on user-defined update frequency
         $interval = $this->ReadPropertyInteger("UpdateInterval") * 1000 * 60;
         $this->SetTimerInterval("UpdateData", $interval);
 
         $this->atoken = $this->GetBuffer("AccessToken");
         $this->rtoken = $this->GetBuffer("RefreshToken");
 
+        // Request auth code if no access token is set
         if (!$this->atoken) {
             $this->RequestAuthCode();
         } else {
             $this->UpdateData();
+        }
+    }
+
+    public function RequestAction($Ident, $Value)
+    {
+        switch ($Ident) {
+            case "RequestAuthCode":
+                $this->RequestAuthCode();
+                break;
+            case "UpdateData":
+                $this->UpdateData();
+                break;
+            default:
+                throw new Exception("Invalid Ident");
         }
     }
 

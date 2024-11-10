@@ -8,7 +8,7 @@
         {
             "type": "Button",
             "caption": "Authentifizierungscode anfordern",
-            "onClick": "MercedesMe_RequestAuthCode($id);"
+            "onClick": "IPS_RequestAction($id, 'RequestAuthCode', '');"
         },
         {
             "type": "ValidationTextBox",
