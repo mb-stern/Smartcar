@@ -1,18 +1,24 @@
 {
     "elements": [
-        { "type": "ValidationTextBox", "name": "Email", "caption": "E-Mail-Adresse" },
-        { "type": "ValidationTextBox", "name": "LoginCode", "caption": "Authentifizierungscode" },
+        {
+            "type": "ValidationTextBox",
+            "name": "Email",
+            "caption": "E-Mail-Adresse"
+        },
+        {
+            "type": "Button",
+            "caption": "Authentifizierungscode anfordern",
+            "onClick": "MercedesMe_RequestAuthCode($id);"
+        },
+        {
+            "type": "ValidationTextBox",
+            "name": "LoginCode",
+            "caption": "Authentifizierungscode"
+        },
         {
             "type": "NumberSpinner",
             "name": "UpdateInterval",
-            "caption": "Update-Intervall (Minuten)"
-        }
-    ],
-    "actions": [
-        {
-            "type": "Button",
-            "label": "Daten jetzt aktualisieren",
-            "onClick": "MercedesMe_UpdateData($id);"
+            "caption": "Aktualisierungsintervall (Minuten)"
         }
     ]
 }

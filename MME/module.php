@@ -21,11 +21,9 @@ class MercedesMe extends IPSModule
     {
         parent::ApplyChanges();
 
-        // Set the timer interval
-        $interval = $this->ReadPropertyInteger("UpdateInterval") * 1000 * 60; // in minutes
+        $interval = $this->ReadPropertyInteger("UpdateInterval") * 1000 * 60;
         $this->SetTimerInterval("UpdateData", $interval);
 
-        // Check if tokens are stored
         $this->atoken = $this->GetBuffer("AccessToken");
         $this->rtoken = $this->GetBuffer("RefreshToken");
 
@@ -36,38 +34,28 @@ class MercedesMe extends IPSModule
         }
     }
 
-    private function RequestAuthCode()
+    public function RequestAuthCode()
     {
         $email = $this->ReadPropertyString("Email");
-        $loginCode = $this->ReadPropertyString("LoginCode");
 
         if (empty($email)) {
             $this->SendDebug("RequestAuthCode", "E-Mail-Adresse fehlt.", 0);
             return;
         }
 
-        // Mercedes API Login URL and data
-        $url = "https://id.mercedes-benz.com/as/token.oauth2";
+        $url = "https://id.mercedes-benz.com/as/authorization.oauth2";
         $postData = [
-            "client_id" => "01398c1c-dc45-4b42-882b-9f5ba9f175f1",
-            "grant_type" => "password",
-            "username" => urlencode($email),
-            "password" => $loginCode
+            'client_id' => 'your-client-id',  
+            'response_type' => 'code',
+            'redirect_uri' => 'your-redirect-uri',
+            'scope' => 'openid vehicleStatus',
+            'email' => $email
         ];
 
-        $this->SendDebug("RequestAuthCode", "URL: $url", 0);
-        $this->SendDebug("RequestAuthCode", "Post-Daten: " . json_encode($postData), 0);
-
-        // HTTP headers
         $headers = [
-            "Content-Type: application/x-www-form-urlencoded",
-            "User-Agent: MyCar/2168 CFNetwork/1494.0.7 Darwin/23.4.0",
-            "X-ApplicationName: mycar-store-ece",
-            "RIS-OS-Name: ios",
-            "RIS-SDK-Version: 9.114.0"
+            "Content-Type: application/x-www-form-urlencoded"
         ];
 
-        // HTTP request for access token
         $curl = curl_init();
         curl_setopt_array($curl, [
             CURLOPT_URL => $url,
@@ -85,14 +73,9 @@ class MercedesMe extends IPSModule
         $this->SendDebug("RequestAuthCode", "Antwort: $response", 0);
 
         if ($httpCode === 200) {
-            $data = json_decode($response, true);
-            $this->atoken = $data['access_token'];
-            $this->rtoken = $data['refresh_token'];
-            $this->SetBuffer("AccessToken", $this->atoken);
-            $this->SetBuffer("RefreshToken", $this->rtoken);
-            $this->UpdateData();
+            $this->SendDebug("RequestAuthCode", "Überprüfen Sie Ihre E-Mails auf den Authentifizierungscode.", 0);
         } else {
-            $this->SendDebug("RequestAuthCode", "Authentifizierung fehlgeschlagen.", 0);
+            $this->SendDebug("RequestAuthCode", "Fehler beim Anfordern des Codes. Antwortcode: $httpCode", 0);
         }
     }
 
@@ -106,14 +89,9 @@ class MercedesMe extends IPSModule
         $url = "https://bff.emea-prod.mobilesdk.mercedes-benz.com//v2/vehicles";
         $headers = [
             "Authorization: Bearer " . $this->atoken,
-            "Content-Type: application/json",
-            "User-Agent: MyCar/2168 CFNetwork/1494.0.7 Darwin/23.4.0",
-            "X-ApplicationName: mycar-store-ece",
-            "RIS-OS-Name: ios",
-            "RIS-SDK-Version: 9.114.0"
+            "Content-Type: application/json"
         ];
 
-        // API request to get vehicle data
         $curl = curl_init();
         curl_setopt_array($curl, [
             CURLOPT_URL => $url,
