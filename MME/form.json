@@ -6,21 +6,46 @@
             "caption": "E-Mail-Adresse"
         },
         {
+            "type": "ValidationTextBox",
+            "name": "AccessCode",
+            "caption": "Authentifizierungscode"
+        },
+        {
+            "type": "Label",
+            "caption": "Geben Sie Ihre Mercedes Me E-Mail-Adresse ein und klicken Sie auf 'Code anfordern'. Sie erhalten dann einen Authentifizierungscode per E-Mail."
+        },
+        {
+            "type": "Button",
+            "caption": "Code anfordern",
+            "onClick": "IPS_RequestAction($id, 'RequestAuthCode', '');"
+        },
+        {
             "type": "PasswordTextBox",
-            "name": "Password",
-            "caption": "Passwort"
+            "name": "AccessToken",
+            "caption": "Zugriffstoken",
+            "enabled": false
+        },
+        {
+            "type": "Label",
+            "caption": "Nach Eingabe des Authentifizierungscodes klicken Sie auf 'Token abrufen', um das Zugriffstoken zu erhalten und zu speichern."
+        },
+        {
+            "type": "Button",
+            "caption": "Token abrufen",
+            "onClick": "IPS_RequestAction($id, 'Authenticate', '');"
         },
         {
             "type": "NumberSpinner",
             "name": "UpdateInterval",
-            "caption": "Aktualisierungsintervall (Sekunden)"
+            "caption": "Aktualisierungsintervall (Sekunden)",
+            "suffix": "Sek."
         }
     ],
     "actions": [
         {
             "type": "Button",
             "caption": "Jetzt aktualisieren",
-            "onClick": "IPS_RequestAction($id, 'UpdateData', 0);"
+            "onClick": "IPS_RequestAction($id, 'UpdateData', '');"
         }
     ]
 }
