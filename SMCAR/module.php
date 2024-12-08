@@ -113,9 +113,7 @@ class SMCAR extends IPSModule
             return;
         }
     
-        // Redirect URI korrekt zusammensetzen
         $redirectURI = rtrim($connectAddress, '/') . $this->ReadAttributeString("CurrentHook");
-    
         $scopes = urlencode('read_vehicle_info read_location');
         $state = bin2hex(random_bytes(8));
     
@@ -125,7 +123,7 @@ class SMCAR extends IPSModule
             "&redirect_uri=" . urlencode($redirectURI) .
             "&scope=$scopes" .
             "&state=$state" .
-            "&mode=test";
+            "&mode=simulated"; 
     
         $this->SendDebug('GenerateAuthURL', "Erstellte URL: $authURL", 0);
         echo "Bitte besuchen Sie die folgende URL, um Ihr Fahrzeug zu verbinden:\n" . $authURL;
@@ -134,23 +132,65 @@ class SMCAR extends IPSModule
     
     public function ProcessHookData()
     {
-        if (!isset($_GET['code']) || !isset($_GET['state'])) {
-            $this->SendDebug('ProcessHookData', 'Autorisierungscode oder Status fehlt!', 0);
+        if (!isset($_GET['code'])) {
+            $this->SendDebug('ProcessHookData', 'Kein Autorisierungscode erhalten.', 0);
             http_response_code(400);
-            echo "Fehler: Autorisierungscode fehlt!";
+            echo "Fehler: Kein Code erhalten.";
             return;
         }
     
         $authCode = $_GET['code'];
-        $state = $_GET['state'];
-    
         $this->SendDebug('ProcessHookData', "Autorisierungscode erhalten: $authCode", 0);
     
         // Tausche den Code gegen Access Token
-        $this->ExchangeAuthorizationCode($authCode);
+        $this->RequestAccessToken($authCode);
         echo "Fahrzeug erfolgreich verbunden!";
     }
     
+
+    private function RequestAccessToken(string $authCode)
+{
+    $clientID = $this->ReadPropertyString('ClientID');
+    $clientSecret = $this->ReadPropertyString('ClientSecret');
+    $redirectURI = $this->ReadPropertyString('ConnectAddress') . $this->ReadAttributeString("CurrentHook");
+
+    $url = "https://auth.smartcar.com/oauth/token";
+
+    $data = [
+        'grant_type' => 'authorization_code',
+        'code' => $authCode,
+        'redirect_uri' => $redirectURI,
+        'client_id' => $clientID,
+        'client_secret' => $clientSecret
+    ];
+
+    $options = [
+        'http' => [
+            'header' => "Content-Type: application/json\r\n",
+            'method' => 'POST',
+            'content' => json_encode($data)
+        ]
+    ];
+
+    $context = stream_context_create($options);
+    $response = file_get_contents($url, false, $context);
+
+    if ($response === false) {
+        $this->SendDebug('RequestAccessToken', 'Fehler beim Abruf des Access Tokens!', 0);
+        $this->LogMessage('Token-Abruf fehlgeschlagen.', KL_ERROR);
+        return;
+    }
+
+    $responseData = json_decode($response, true);
+
+    if (isset($responseData['access_token'])) {
+        $this->WritePropertyString('AccessToken', $responseData['access_token']);
+        $this->SendDebug('RequestAccessToken', 'Access Token erhalten!', 0);
+    } else {
+        $this->SendDebug('RequestAccessToken', 'Token-Austausch fehlgeschlagen!', 0);
+        $this->LogMessage('Fehler beim Token-Austausch.', KL_ERROR);
+    }
+}
 
 private function ExchangeAuthorizationCode(string $authCode)
 {
