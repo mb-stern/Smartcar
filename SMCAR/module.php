@@ -172,12 +172,18 @@ class SMCAR extends IPSModule
             'http' => [
                 'header'  => "Content-Type: application/json\r\n",
                 'method'  => 'POST',
-                'content' => json_encode($data)
+                'content' => json_encode($data),
+                'ignore_errors' => true // Zeigt auch Fehlerantworten
             ]
         ];
     
         $context = stream_context_create($options);
-        $response = file_get_contents($url, false, $context);
+        $response = @file_get_contents($url, false, $context);
+    
+        // HTTP-Statuscode prüfen
+        $httpResponseHeader = $http_response_header ?? [];
+        $httpStatus = isset($httpResponseHeader[0]) ? $httpResponseHeader[0] : "Unbekannt";
+        $this->SendDebug('RequestAccessToken', "HTTP-Status: $httpStatus", 0);
     
         if ($response === false) {
             $this->SendDebug('RequestAccessToken', 'Fehler: Keine Antwort von Smartcar API.', 0);
@@ -198,6 +204,7 @@ class SMCAR extends IPSModule
             $this->LogMessage('Token-Austausch fehlgeschlagen.', KL_ERROR);
         }
     }
+    
     
 private function ExchangeAuthorizationCode(string $authCode)
 {
