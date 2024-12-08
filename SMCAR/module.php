@@ -253,7 +253,7 @@ private function ExchangeAuthorizationCode(string $authCode)
     }
 }
 
-private function FetchVIN(string $vehicleID)
+private function FetchVIN(string $id)
 {
     $accessToken = $this->ReadAttributeString('AccessToken');
 
