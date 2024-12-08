@@ -158,29 +158,29 @@ class SMCAR extends IPSModule
     
         $url = "https://auth.smartcar.com/oauth/token";
     
-        $data = [
+        $postData = http_build_query([
             'grant_type'    => 'authorization_code',
             'code'          => $authCode,
             'redirect_uri'  => $redirectURI,
             'client_id'     => $clientID,
             'client_secret' => $clientSecret
-        ];
+        ]);
     
-        $this->SendDebug('RequestAccessToken', 'POST-Daten: ' . json_encode($data), 0);
+        $this->SendDebug('RequestAccessToken', 'POST-Daten: ' . $postData, 0);
     
         $options = [
             'http' => [
-                'header'  => "Content-Type: application/json\r\n",
+                'header'  => "Content-Type: application/x-www-form-urlencoded\r\n",
                 'method'  => 'POST',
-                'content' => json_encode($data),
-                'ignore_errors' => true // Zeigt auch Fehlerantworten
+                'content' => $postData,
+                'ignore_errors' => true // Fehler ebenfalls erfassen
             ]
         ];
     
         $context = stream_context_create($options);
-        $response = @file_get_contents($url, false, $context);
+        $response = file_get_contents($url, false, $context);
     
-        // HTTP-Statuscode prüfen
+        // HTTP-Status prüfen
         $httpResponseHeader = $http_response_header ?? [];
         $httpStatus = isset($httpResponseHeader[0]) ? $httpResponseHeader[0] : "Unbekannt";
         $this->SendDebug('RequestAccessToken', "HTTP-Status: $httpStatus", 0);
