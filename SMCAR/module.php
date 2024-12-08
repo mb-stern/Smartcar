@@ -15,6 +15,7 @@ class SMCAR extends IPSModule
         $this->RegisterAttributeString("CurrentHook", "");
         $this->RegisterAttributeString('AccessToken', '');
         $this->RegisterAttributeString('VIN', '');
+        $this->RegisterAttributeString('VehicleID', '');
 
     }
 
@@ -350,7 +351,8 @@ public function FetchVehicleData()
 
     if (isset($data['vehicles'][0])) {
         $vehicleID = $data['vehicles'][0];
-        $this->SendDebug('FetchVehicleData', "Fahrzeug-ID erhalten: $vehicleID", 0);
+        $this->WriteAttributeString('VehicleID', $vehicleID);  // Fahrzeug-ID speichern
+        $this->SendDebug('FetchVehicleData', "Fahrzeug-ID erhalten und gespeichert: $vehicleID", 0);
 
         // Fahrzeugdetails abrufen
         $this->FetchVehicleDetails($vehicleID);
