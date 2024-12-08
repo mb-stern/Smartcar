@@ -312,15 +312,15 @@ public function FetchVIN()
 public function FetchVehicleData()
 {
     $accessToken = $this->ReadAttributeString('AccessToken');
-    $vin = $this->ReadPropertyString('VIN');
 
-    if (empty($accessToken) || empty($vin)) {
-        $this->SendDebug('FetchVehicleData', 'Access Token oder VIN nicht vorhanden.', 0);
-        $this->LogMessage('Fahrzeugdaten können nicht abgerufen werden.', KL_ERROR);
+    if (empty($accessToken)) {
+        $this->SendDebug('FetchVehicleData', 'Kein Access Token vorhanden.', 0);
+        $this->LogMessage('Fahrzeugdaten konnten nicht abgerufen werden.', KL_ERROR);
         return;
     }
 
-    $url = "https://api.smartcar.com/v2.0/vehicles/$vin";
+    // Korrekte API-Abfrage
+    $url = "https://api.smartcar.com/v2.0/vehicles";
 
     $options = [
         'http' => [
@@ -341,17 +341,21 @@ public function FetchVehicleData()
     $this->SendDebug('FetchVehicleData', "HTTP-Status: $httpStatus", 0);
 
     if ($response === false) {
-        $this->SendDebug('FetchVehicleData', 'HTTP-Fehler: Keine Antwort erhalten!', 0);
+        $this->SendDebug('FetchVehicleData', 'Fehler: Keine Antwort von der API!', 0);
         $this->LogMessage('Fahrzeugdaten konnten nicht abgerufen werden.', KL_ERROR);
         return;
     }
 
     $data = json_decode($response, true);
-
     $this->SendDebug('FetchVehicleData', 'Antwort: ' . json_encode($data), 0);
 
-    if (isset($data['make'], $data['model'], $data['year'])) {
-        $this->LogMessage("Fahrzeugdaten: {$data['make']} {$data['model']} ({$data['year']})", KL_NOTIFY);
+    // Fahrzeugdaten prüfen
+    if (isset($data['vehicles'][0])) {
+        $vehicleID = $data['vehicles'][0];
+        $this->SendDebug('FetchVehicleData', "Fahrzeug-ID erhalten: $vehicleID", 0);
+
+        // Rufe Fahrzeugdetails ab
+        $this->FetchVehicleDetails($vehicleID);
     } else {
         $this->SendDebug('FetchVehicleData', 'Keine Fahrzeugdetails gefunden!', 0);
     }
