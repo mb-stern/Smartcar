@@ -250,18 +250,17 @@ public function FetchVehicleData()
     }
 }
 
-private function FetchVehicleDetails()
+private function FetchVehicleDetails(string $vehicleID)
 {
     $accessToken = $this->ReadAttributeString('AccessToken');
-    $vin = $this->ReadPropertyString('VIN');
 
-    if (empty($accessToken) || empty($vin)) {
-        $this->SendDebug('FetchVehicleDetails', 'Access Token oder VIN fehlt!', 0);
+    if (empty($accessToken) || empty($vehicleID)) {
+        $this->SendDebug('FetchVehicleDetails', 'Access Token oder Fahrzeug-ID fehlt!', 0);
         $this->LogMessage('Fahrzeugdetails konnten nicht abgerufen werden.', KL_ERROR);
         return;
     }
 
-    $url = "https://api.smartcar.com/v2.0/vehicles/$vin";
+    $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID";
 
     $options = [
         'http' => [
@@ -297,9 +296,10 @@ private function FetchVehicleDetails()
     }
 }
 
+
 private function CreateVehicleVariables(array $data)
 {
-    // Fahrzeugdetails als Variablen erstellen
+    // Fahrzeugdetails verarbeiten und Variablen erstellen
     $this->MaintainVariable('VehicleID', 'Fahrzeug-ID', VARIABLETYPE_STRING, '', 1, true);
     $this->SetValue('VehicleID', $data['id']);
 
@@ -311,11 +311,6 @@ private function CreateVehicleVariables(array $data)
 
     $this->MaintainVariable('Year', 'Baujahr', VARIABLETYPE_INTEGER, '', 4, true);
     $this->SetValue('Year', intval($data['year']));
-
-    // VIN aus Konfiguration abrufen und als Variable speichern
-    $vin = $this->ReadPropertyString('VIN');
-    $this->MaintainVariable('VIN', 'Fahrgestellnummer (VIN)', VARIABLETYPE_STRING, '', 5, true);
-    $this->SetValue('VIN', $vin);
 
     $this->SendDebug('CreateVehicleVariables', 'Fahrzeugdetails als Variablen erstellt.', 0);
 }
