@@ -260,6 +260,7 @@ private function FetchVehicleDetails(string $vehicleID)
         return;
     }
 
+    // Fahrzeugdetails abrufen
     $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID";
 
     $options = [
@@ -290,29 +291,82 @@ private function FetchVehicleDetails(string $vehicleID)
     $this->SendDebug('FetchVehicleDetails', 'Fahrzeugdetails: ' . json_encode($data), 0);
 
     if (isset($data['make'], $data['model'], $data['year'], $data['id'])) {
-        $this->CreateVehicleVariables($data);
+        // Fahrzeugdetails-Variablen erstellen
+        $this->MaintainVariable('VehicleID', 'Fahrzeug-ID', VARIABLETYPE_STRING, '', 1, true);
+        $this->SetValue('VehicleID', $data['id']);
+
+        $this->MaintainVariable('Make', 'Hersteller', VARIABLETYPE_STRING, '', 2, true);
+        $this->SetValue('Make', $data['make']);
+
+        $this->MaintainVariable('Model', 'Modell', VARIABLETYPE_STRING, '', 3, true);
+        $this->SetValue('Model', $data['model']);
+
+        $this->MaintainVariable('Year', 'Baujahr', VARIABLETYPE_INTEGER, '', 4, true);
+        $this->SetValue('Year', intval($data['year']));
     } else {
         $this->SendDebug('FetchVehicleDetails', 'Fahrzeugdetails nicht gefunden!', 0);
     }
+
+    // Reifendruck abrufen
+    $this->FetchTirePressure($vehicleID);
 }
 
-
-private function CreateVehicleVariables(array $data)
+private function FetchTirePressure(string $vehicleID)
 {
-    // Fahrzeugdetails verarbeiten und Variablen erstellen
-    $this->MaintainVariable('VehicleID', 'Fahrzeug-ID', VARIABLETYPE_STRING, '', 1, true);
-    $this->SetValue('VehicleID', $data['id']);
+    $accessToken = $this->ReadAttributeString('AccessToken');
 
-    $this->MaintainVariable('Make', 'Hersteller', VARIABLETYPE_STRING, '', 2, true);
-    $this->SetValue('Make', $data['make']);
+    if (empty($accessToken) || empty($vehicleID)) {
+        $this->SendDebug('FetchTirePressure', 'Access Token oder Fahrzeug-ID fehlt!', 0);
+        $this->LogMessage('Reifendruck konnte nicht abgerufen werden.', KL_ERROR);
+        return;
+    }
 
-    $this->MaintainVariable('Model', 'Modell', VARIABLETYPE_STRING, '', 3, true);
-    $this->SetValue('Model', $data['model']);
+    $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID/tires/pressure";
 
-    $this->MaintainVariable('Year', 'Baujahr', VARIABLETYPE_INTEGER, '', 4, true);
-    $this->SetValue('Year', intval($data['year']));
+    $options = [
+        'http' => [
+            'header' => [
+                "Authorization: Bearer $accessToken",
+                "Content-Type: application/json"
+            ],
+            'method' => 'GET',
+            'ignore_errors' => true
+        ]
+    ];
 
-    $this->SendDebug('CreateVehicleVariables', 'Fahrzeugdetails als Variablen erstellt.', 0);
+    $context = stream_context_create($options);
+    $response = @file_get_contents($url, false, $context);
+
+    $httpResponseHeader = $http_response_header ?? [];
+    $httpStatus = isset($httpResponseHeader[0]) ? $httpResponseHeader[0] : "Unbekannt";
+    $this->SendDebug('FetchTirePressure', "HTTP-Status: $httpStatus", 0);
+
+    if ($response === false) {
+        $this->SendDebug('FetchTirePressure', 'Fehler: Keine Antwort von der API!', 0);
+        $this->LogMessage('Reifendruck konnte nicht abgerufen werden.', KL_ERROR);
+        return;
+    }
+
+    $data = json_decode($response, true);
+    $this->SendDebug('FetchTirePressure', 'Reifendruck: ' . json_encode($data), 0);
+
+    if (isset($data['frontLeft'], $data['frontRight'], $data['backLeft'], $data['backRight'])) {
+        // Reifendruck-Variablen erstellen
+        $this->MaintainVariable('TireFrontLeft', 'Reifendruck vorne links', VARIABLETYPE_FLOAT, '~Pressure', 5, true);
+        $this->SetValue('TireFrontLeft', $data['frontLeft']);
+
+        $this->MaintainVariable('TireFrontRight', 'Reifendruck vorne rechts', VARIABLETYPE_FLOAT, '~Pressure', 6, true);
+        $this->SetValue('TireFrontRight', $data['frontRight']);
+
+        $this->MaintainVariable('TireBackLeft', 'Reifendruck hinten links', VARIABLETYPE_FLOAT, '~Pressure', 7, true);
+        $this->SetValue('TireBackLeft', $data['backLeft']);
+
+        $this->MaintainVariable('TireBackRight', 'Reifendruck hinten rechts', VARIABLETYPE_FLOAT, '~Pressure', 8, true);
+        $this->SetValue('TireBackRight', $data['backRight']);
+    } else {
+        $this->SendDebug('FetchTirePressure', 'Reifendruckdaten nicht gefunden!', 0);
+    }
 }
+
 
 }
