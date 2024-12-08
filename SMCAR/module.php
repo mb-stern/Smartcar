@@ -110,8 +110,15 @@ class SMCAR extends IPSModule
             return;
         }
     
-        // Korrekte Redirect URI generieren
-        $redirectURI = IPS_GetProperty(IPS_GetInstanceListByModuleID("{015A6EB8-D6E5-4B93-B496-0D3F77AE9FE1}")[0], 'BaseURL') . $this->ReadAttributeString("CurrentHook");
+        // Symcon Connect-Adresse ermitteln
+        $connectURL = IPS_GetProperty(IPS_GetInstanceListByModuleID("{7A1272A4-CBDB-46EF-BFC6-DCF4A53D2FC7}")[0], 'ServerAddress');
+        if (empty($connectURL)) {
+            echo "Fehler: Symcon Connect-Adresse nicht gefunden!";
+            return;
+        }
+    
+        // Redirect URI zusammensetzen
+        $redirectURI = $connectURL . $this->ReadAttributeString("CurrentHook");
     
         $scopes = urlencode('read_vehicle_info read_location');
         $state = bin2hex(random_bytes(8));
@@ -122,11 +129,12 @@ class SMCAR extends IPSModule
             "&redirect_uri=" . urlencode($redirectURI) .
             "&scope=$scopes" .
             "&state=$state" .
-            "&mode=test"; 
+            "&mode=test";
     
         $this->SendDebug('GenerateAuthURL', "Erstellte URL: $authURL", 0);
         echo "Bitte besuchen Sie die folgende URL, um Ihr Fahrzeug zu verbinden:\n" . $authURL;
-    }    
+    }
+    
     
     public function ProcessHookData()
     {
