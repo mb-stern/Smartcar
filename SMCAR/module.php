@@ -13,11 +13,14 @@ class SMCAR extends IPSModule
         $this->RegisterPropertyString('ClientSecret', '');
         $this->RegisterPropertyString('RedirectURI', '');
         $this->RegisterPropertyString('AccessToken', '');
-        $this->RegisterPropertyString('VIN', ''); // Fahrgestellnummer
+        $this->RegisterPropertyString('VIN', '');
+
+        // Webhook registrieren
+        $this->RegisterAttributeString("CurrentHook", "");
     }
 
     public function ApplyChanges()
-    
+
         // Sicherstellen, dass der Hook existiert
         $hookPath = $this->ReadAttributeString("CurrentHook");
         
