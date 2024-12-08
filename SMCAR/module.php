@@ -6,15 +6,15 @@ class SMCAR extends IPSModule
     {
         parent::Create();
 
-        // Eigenschaften definieren
         $this->RegisterPropertyString('ClientID', '');
         $this->RegisterPropertyString('ClientSecret', '');
         $this->RegisterPropertyString('AccessToken', '');
         $this->RegisterPropertyString('VIN', '');
         $this->RegisterPropertyString('ConnectAddress', '');
 
-        // Webhook registrieren
         $this->RegisterAttributeString("CurrentHook", "");
+        $this->RegisterAttributeString('AccessToken', '');
+
     }
 
     public function ApplyChanges()
@@ -173,7 +173,7 @@ class SMCAR extends IPSModule
                 'header'  => "Content-Type: application/x-www-form-urlencoded\r\n",
                 'method'  => 'POST',
                 'content' => $postData,
-                'ignore_errors' => true // Fehler ebenfalls erfassen
+                'ignore_errors' => true
             ]
         ];
     
@@ -196,7 +196,8 @@ class SMCAR extends IPSModule
         $this->SendDebug('RequestAccessToken', 'Antwort: ' . json_encode($responseData), 0);
     
         if (isset($responseData['access_token'])) {
-            $this->WritePropertyString('AccessToken', $responseData['access_token']);
+            // Verwenden Sie WriteAttributeString anstelle von WritePropertyString
+            $this->WriteAttributeString('AccessToken', $responseData['access_token']);
             $this->SendDebug('RequestAccessToken', 'Access Token erfolgreich gespeichert!', 0);
             $this->LogMessage('Access Token erfolgreich gespeichert.', KL_NOTIFY);
         } else {
