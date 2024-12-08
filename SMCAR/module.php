@@ -349,16 +349,16 @@ private function FetchTirePressure(string $vehicleID)
     if (isset($data['frontLeft'], $data['frontRight'], $data['backLeft'], $data['backRight'])) {
         // Reifendruck-Variablen erstellen
         $this->MaintainVariable('TireFrontLeft', 'Reifendruck Vorderreifen Links', VARIABLETYPE_FLOAT, 'Pressure', 10, true);
-        $this->SetValue('TireFrontLeft', $data['frontLeft']);
-        
+        $this->SetValue('TireFrontLeft', round($data['frontLeft'] / 100, 2));
+    
         $this->MaintainVariable('TireFrontRight', 'Reifendruck Vorderreifen Rechts', VARIABLETYPE_FLOAT, 'Pressure', 11, true);
-        $this->SetValue('TireFrontRight', $data['frontRight']);
-        
+        $this->SetValue('TireFrontRight', round($data['frontRight'] / 100, 2));
+    
         $this->MaintainVariable('TireBackLeft', 'Reifendruck Hinterreifen Links', VARIABLETYPE_FLOAT, 'Pressure', 12, true);
-        $this->SetValue('TireBackLeft', $data['backLeft']);
-        
+        $this->SetValue('TireBackLeft', round($data['backLeft'] / 100, 2));
+    
         $this->MaintainVariable('TireBackRight', 'Reifendruck Hinterreifen Rechts', VARIABLETYPE_FLOAT, 'Pressure', 13, true);
-        $this->SetValue('TireBackRight', $data['backRight']);        
+        $this->SetValue('TireBackRight', round($data['backRight'] / 100, 2));       
     } else {
         $this->SendDebug('FetchTirePressure', 'Reifendruckdaten nicht gefunden!', 0);
     }
@@ -372,7 +372,7 @@ private function CreatePressureProfile()
     if (!IPS_VariableProfileExists($profileName)) {
         IPS_CreateVariableProfile($profileName, VARIABLETYPE_FLOAT);
         IPS_SetVariableProfileText($profileName, '', ' bar');
-        IPS_SetVariableProfileValues($profileName, 0, 100, 0.1);
+        IPS_SetVariableProfileValues($profileName, 0, 10, 0.1);
         $this->SendDebug('CreatePressureProfile', 'Profil erstellt: ' . $profileName, 0);
     } else {
         $this->SendDebug('CreatePressureProfile', 'Profil existiert bereits: ' . $profileName, 0);
