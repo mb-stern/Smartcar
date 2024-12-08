@@ -1,7 +1,5 @@
 <?php
 
-declare(strict_types=1);
-
 class SMCAR extends IPSModule
 {
     public function Create()
@@ -34,11 +32,6 @@ class SMCAR extends IPSModule
         // Webhook-Pfad in der Form anzeigen
         $this->UpdateFormField("WebhookPath", "caption", "Webhook: " . $hookPath);
 
-    public function ConnectVehicle()
-    {
-        $this->LogMessage('Fahrzeug wird verbunden...', KL_NOTIFY);
-        // Logik für die Fahrzeugverbindung
-    }
 
     private function RegisterHook()
     {
@@ -80,4 +73,11 @@ class SMCAR extends IPSModule
         $this->SendDebug('RegisterHook', "Hook '$hookPath' wurde registriert.", 0);
         return $hookPath;
     }
+
+    public function ConnectVehicle()
+    {
+        $this->LogMessage('Fahrzeug wird verbunden...', KL_NOTIFY);
+        // Logik für die Fahrzeugverbindung
+    }
+
 }
