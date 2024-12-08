@@ -24,8 +24,13 @@
   "actions": [
     {
       "type": "Button",
-      "caption": "Verbindung starten",
-      "onClick": "SMCAR_GenerateAuthURL($id);"
+      "caption": "Fahrzeugdaten abrufen",
+      "onClick": "SMCAR_FetchVehicleID($id);"
+    },
+    {
+      "type": "Button",
+      "caption": "Fahrgestellnummer abrufen",
+      "onClick": "SMCAR_FetchVIN($id);"
     }
   ]
 }

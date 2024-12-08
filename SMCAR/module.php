@@ -14,6 +14,7 @@ class SMCAR extends IPSModule
 
         $this->RegisterAttributeString("CurrentHook", "");
         $this->RegisterAttributeString('AccessToken', '');
+        $this->RegisterAttributeString('VIN', '');
 
     }
 
@@ -254,7 +255,12 @@ private function ExchangeAuthorizationCode(string $authCode)
 
 private function FetchVIN(string $vehicleID)
 {
-    $accessToken = $this->ReadPropertyString('AccessToken');
+    $accessToken = $this->ReadAttributeString('AccessToken');
+
+    if (empty($accessToken) || empty($vehicleID)) {
+        $this->SendDebug('FetchVIN', 'Access Token oder Fahrzeug-ID fehlt!', 0);
+        return;
+    }
 
     $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID";
 
@@ -264,7 +270,8 @@ private function FetchVIN(string $vehicleID)
                 "Authorization: Bearer $accessToken",
                 "Content-Type: application/json"
             ],
-            'method' => 'GET'
+            'method' => 'GET',
+            'ignore_errors' => true
         ]
     ];
 
@@ -273,19 +280,23 @@ private function FetchVIN(string $vehicleID)
 
     if ($response === false) {
         $this->SendDebug('FetchVIN', 'Fehler beim Abrufen der Fahrzeugdetails!', 0);
+        $this->LogMessage('Fahrzeugdaten konnten nicht abgerufen werden.', KL_ERROR);
         return;
     }
 
     $data = json_decode($response, true);
 
+    $this->SendDebug('FetchVIN', 'Antwort: ' . json_encode($data), 0);
+
     if (isset($data['vin'])) {
-        $this->WritePropertyString('VIN', $data['vin']);
+        $this->WriteAttributeString('VIN', $data['vin']);
         $this->SendDebug('FetchVIN', 'Fahrgestellnummer gespeichert: ' . $data['vin'], 0);
         $this->LogMessage('Fahrgestellnummer erfolgreich gespeichert.', KL_NOTIFY);
     } else {
         $this->SendDebug('FetchVIN', 'VIN nicht gefunden!', 0);
     }
 }
+
 
 public function FetchVehicleData()
 {
