@@ -18,10 +18,11 @@ class SMCAR extends IPSModule
     }
 
     public function ApplyChanges()
-
+    {
+        parent::ApplyChanges();
+    
         // Sicherstellen, dass der Hook existiert
         $hookPath = $this->ReadAttributeString("CurrentHook");
-        
     
         // Wenn der Hook-Pfad leer ist, initialisiere ihn
         if ($hookPath === "") {
@@ -31,7 +32,8 @@ class SMCAR extends IPSModule
     
         // Webhook-Pfad in der Form anzeigen
         $this->UpdateFormField("WebhookPath", "caption", "Webhook: " . $hookPath);
-
+    }
+    
 
     private function RegisterHook()
     {
