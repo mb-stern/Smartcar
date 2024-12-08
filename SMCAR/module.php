@@ -398,11 +398,31 @@ private function FetchVehicleDetails(string $vehicleID)
     $data = json_decode($response, true);
     $this->SendDebug('FetchVehicleDetails', 'Fahrzeugdetails: ' . json_encode($data), 0);
 
-    if (isset($data['make'], $data['model'], $data['year'])) {
-        $this->LogMessage("Fahrzeug: {$data['make']} {$data['model']} ({$data['year']})", KL_NOTIFY);
+    if (isset($data['make'], $data['model'], $data['year'], $data['id'])) {
+        $this->CreateVehicleVariables($data);
     } else {
         $this->SendDebug('FetchVehicleDetails', 'Fahrzeugdetails nicht gefunden!', 0);
     }
 }
+
+
+private function CreateVehicleVariables(array $data)
+{
+    // Fahrzeugdetails verarbeiten und Variablen erstellen
+    $this->MaintainVariable('VehicleID', 'Fahrzeug-ID', VARIABLETYPE_STRING, '', 1, true);
+    $this->SetValue('VehicleID', $data['id']);
+
+    $this->MaintainVariable('Make', 'Hersteller', VARIABLETYPE_STRING, '', 2, true);
+    $this->SetValue('Make', $data['make']);
+
+    $this->MaintainVariable('Model', 'Modell', VARIABLETYPE_STRING, '', 3, true);
+    $this->SetValue('Model', $data['model']);
+
+    $this->MaintainVariable('Year', 'Baujahr', VARIABLETYPE_INTEGER, '', 4, true);
+    $this->SetValue('Year', intval($data['year']));
+
+    $this->SendDebug('CreateVehicleVariables', 'Fahrzeugdetails als Variablen erstellt.', 0);
+}
+
 
 }
