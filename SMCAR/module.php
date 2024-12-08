@@ -253,12 +253,21 @@ private function ExchangeAuthorizationCode(string $authCode)
     }
 }
 
-private function FetchVIN(string $id)
+public function FetchVIN()
 {
+    $vehicleID = $this->ReadAttributeString('VehicleID');
+
+    if (empty($vehicleID)) {
+        $this->LogMessage('Keine Fahrzeug-ID vorhanden. Abruf nicht möglich.', KL_ERROR);
+        $this->SendDebug('FetchVIN', 'Keine Fahrzeug-ID vorhanden.', 0);
+        return;
+    }
+
     $accessToken = $this->ReadAttributeString('AccessToken');
 
-    if (empty($accessToken) || empty($vehicleID)) {
-        $this->SendDebug('FetchVIN', 'Access Token oder Fahrzeug-ID fehlt!', 0);
+    if (empty($accessToken)) {
+        $this->LogMessage('Kein Access Token vorhanden. Abruf nicht möglich.', KL_ERROR);
+        $this->SendDebug('FetchVIN', 'Kein Access Token vorhanden.', 0);
         return;
     }
 
@@ -278,9 +287,12 @@ private function FetchVIN(string $id)
     $context = stream_context_create($options);
     $response = file_get_contents($url, false, $context);
 
+    $httpStatus = $http_response_header[0] ?? 'Unbekannt';
+    $this->SendDebug('FetchVIN', "HTTP-Status: $httpStatus", 0);
+
     if ($response === false) {
+        $this->LogMessage('Fehler beim Abrufen der Fahrzeugdetails.', KL_ERROR);
         $this->SendDebug('FetchVIN', 'Fehler beim Abrufen der Fahrzeugdetails!', 0);
-        $this->LogMessage('Fahrzeugdaten konnten nicht abgerufen werden.', KL_ERROR);
         return;
     }
 
@@ -296,7 +308,6 @@ private function FetchVIN(string $id)
         $this->SendDebug('FetchVIN', 'VIN nicht gefunden!', 0);
     }
 }
-
 
 public function FetchVehicleData()
 {
