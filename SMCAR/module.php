@@ -140,14 +140,16 @@ class SMCAR extends IPSModule
         }
     
         $authCode = $_GET['code'];
-        $this->SendDebug('ProcessHookData', "Autorisierungscode erhalten: $authCode", 0);
+        $state = $_GET['state'] ?? '';
+    
+        $this->SendDebug('ProcessHookData', "Autorisierungscode erhalten: $authCode, State: $state", 0);
     
         // Tausche den Code gegen Access Token
         $this->RequestAccessToken($authCode);
+    
         echo "Fahrzeug erfolgreich verbunden!";
     }
     
-
     private function RequestAccessToken(string $authCode)
 {
     $clientID = $this->ReadPropertyString('ClientID');
