@@ -349,16 +349,16 @@ private function FetchTirePressure(string $vehicleID)
     if (isset($data['frontLeft'], $data['frontRight'], $data['backLeft'], $data['backRight'])) {
         // Reifendruck-Variablen erstellen
         $this->MaintainVariable('TireFrontLeft', 'Reifendruck Vorderreifen Links', VARIABLETYPE_FLOAT, 'Pressure', 10, true);
-        $this->SetValue('TireFrontLeft', round($data['frontLeft'] / 100, 2));
+        $this->SetValue('TireFrontLeft', $data['frontLeft'] / 100);
     
         $this->MaintainVariable('TireFrontRight', 'Reifendruck Vorderreifen Rechts', VARIABLETYPE_FLOAT, 'Pressure', 11, true);
-        $this->SetValue('TireFrontRight', round($data['frontRight'] / 100, 2));
+        $this->SetValue('TireFrontRight', $data['frontRight'] / 100);
     
         $this->MaintainVariable('TireBackLeft', 'Reifendruck Hinterreifen Links', VARIABLETYPE_FLOAT, 'Pressure', 12, true);
-        $this->SetValue('TireBackLeft', round($data['backLeft'] / 100, 2));
+        $this->SetValue('TireBackLeft', $data['backLeft'] / 100);
     
         $this->MaintainVariable('TireBackRight', 'Reifendruck Hinterreifen Rechts', VARIABLETYPE_FLOAT, 'Pressure', 13, true);
-        $this->SetValue('TireBackRight', round($data['backRight'] / 100, 2));       
+        $this->SetValue('TireBackRight', $data['backRight'] / 100);
     } else {
         $this->SendDebug('FetchTirePressure', 'Reifendruckdaten nicht gefunden!', 0);
     }
