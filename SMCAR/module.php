@@ -151,49 +151,54 @@ class SMCAR extends IPSModule
     }
     
     private function RequestAccessToken(string $authCode)
-{
-    $clientID = $this->ReadPropertyString('ClientID');
-    $clientSecret = $this->ReadPropertyString('ClientSecret');
-    $redirectURI = $this->ReadPropertyString('ConnectAddress') . $this->ReadAttributeString("CurrentHook");
-
-    $url = "https://auth.smartcar.com/oauth/token";
-
-    $data = [
-        'grant_type' => 'authorization_code',
-        'code' => $authCode,
-        'redirect_uri' => $redirectURI,
-        'client_id' => $clientID,
-        'client_secret' => $clientSecret
-    ];
-
-    $options = [
-        'http' => [
-            'header' => "Content-Type: application/json\r\n",
-            'method' => 'POST',
-            'content' => json_encode($data)
-        ]
-    ];
-
-    $context = stream_context_create($options);
-    $response = file_get_contents($url, false, $context);
-
-    if ($response === false) {
-        $this->SendDebug('RequestAccessToken', 'Fehler beim Abruf des Access Tokens!', 0);
-        $this->LogMessage('Token-Abruf fehlgeschlagen.', KL_ERROR);
-        return;
+    {
+        $clientID = $this->ReadPropertyString('ClientID');
+        $clientSecret = $this->ReadPropertyString('ClientSecret');
+        $redirectURI = rtrim($this->ReadPropertyString('ConnectAddress'), '/') . $this->ReadAttributeString("CurrentHook");
+    
+        $url = "https://auth.smartcar.com/oauth/token";
+    
+        $data = [
+            'grant_type'    => 'authorization_code',
+            'code'          => $authCode,
+            'redirect_uri'  => $redirectURI,
+            'client_id'     => $clientID,
+            'client_secret' => $clientSecret
+        ];
+    
+        $this->SendDebug('RequestAccessToken', 'POST-Daten: ' . json_encode($data), 0);
+    
+        $options = [
+            'http' => [
+                'header'  => "Content-Type: application/json\r\n",
+                'method'  => 'POST',
+                'content' => json_encode($data)
+            ]
+        ];
+    
+        $context = stream_context_create($options);
+        $response = file_get_contents($url, false, $context);
+    
+        if ($response === false) {
+            $this->SendDebug('RequestAccessToken', 'Fehler: Keine Antwort von Smartcar API.', 0);
+            $this->LogMessage('Token-Abruf fehlgeschlagen.', KL_ERROR);
+            return;
+        }
+    
+        $responseData = json_decode($response, true);
+    
+        $this->SendDebug('RequestAccessToken', 'Antwort: ' . json_encode($responseData), 0);
+    
+        if (isset($responseData['access_token'])) {
+            $this->WritePropertyString('AccessToken', $responseData['access_token']);
+            $this->SendDebug('RequestAccessToken', 'Access Token erfolgreich gespeichert!', 0);
+            $this->LogMessage('Access Token erfolgreich gespeichert.', KL_NOTIFY);
+        } else {
+            $this->SendDebug('RequestAccessToken', 'Fehler: Token-Austausch fehlgeschlagen!', 0);
+            $this->LogMessage('Token-Austausch fehlgeschlagen.', KL_ERROR);
+        }
     }
-
-    $responseData = json_decode($response, true);
-
-    if (isset($responseData['access_token'])) {
-        $this->WritePropertyString('AccessToken', $responseData['access_token']);
-        $this->SendDebug('RequestAccessToken', 'Access Token erhalten!', 0);
-    } else {
-        $this->SendDebug('RequestAccessToken', 'Token-Austausch fehlgeschlagen!', 0);
-        $this->LogMessage('Fehler beim Token-Austausch.', KL_ERROR);
-    }
-}
-
+    
 private function ExchangeAuthorizationCode(string $authCode)
 {
     $clientID = $this->ReadPropertyString('ClientID');
