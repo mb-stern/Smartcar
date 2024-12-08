@@ -8,7 +8,6 @@ class SMCAR extends IPSModule
 
         $this->RegisterPropertyString('ClientID', '');
         $this->RegisterPropertyString('ClientSecret', '');
-        $this->RegisterPropertyString('AccessToken', '');
         $this->RegisterPropertyString('VIN', '');
         $this->RegisterPropertyString('ConnectAddress', '');
 
@@ -96,12 +95,6 @@ class SMCAR extends IPSModule
         array_splice($form['elements'], 0, 0, [$webhookElement]);
     
         return json_encode($form);
-    }
-
-    public function ConnectVehicle()
-    {
-        $this->LogMessage('Fahrzeug wird verbunden...', KL_NOTIFY);
-        // Logik für die Fahrzeugverbindung
     }
 
     public function GenerateAuthURL()
@@ -206,108 +199,6 @@ class SMCAR extends IPSModule
             $this->LogMessage('Token-Austausch fehlgeschlagen.', KL_ERROR);
         }
     }
-    
-    
-    
-private function ExchangeAuthorizationCode(string $authCode)
-{
-    $clientID = $this->ReadPropertyString('ClientID');
-    $clientSecret = $this->ReadPropertyString('ClientSecret');
-    $redirectURI = $this->ReadAttributeString("CurrentHook");
-
-    $url = "https://auth.smartcar.com/oauth/token";
-
-    $data = [
-        'grant_type' => 'authorization_code',
-        'code' => $authCode,
-        'redirect_uri' => $redirectURI,
-        'client_id' => $clientID,
-        'client_secret' => $clientSecret
-    ];
-
-    $options = [
-        'http' => [
-            'header' => "Content-Type: application/json\r\n",
-            'method' => 'POST',
-            'content' => json_encode($data)
-        ]
-    ];
-
-    $context = stream_context_create($options);
-    $response = file_get_contents($url, false, $context);
-
-    if ($response === false) {
-        $this->SendDebug('ExchangeAuthorizationCode', 'Fehler beim Abruf des Tokens!', 0);
-        $this->LogMessage('Token-Abruf fehlgeschlagen.', KL_ERROR);
-        return;
-    }
-
-    $responseData = json_decode($response, true);
-
-    if (isset($responseData['access_token'])) {
-        $this->WritePropertyString('AccessToken', $responseData['access_token']);
-        $this->SendDebug('ExchangeAuthorizationCode', 'Access Token erhalten!', 0);
-    } else {
-        $this->SendDebug('ExchangeAuthorizationCode', 'Token-Austausch fehlgeschlagen!', 0);
-        $this->LogMessage('Fehler beim Token-Austausch.', KL_ERROR);
-    }
-}
-
-public function FetchVIN()
-{
-    $vehicleID = $this->ReadAttributeString('VehicleID');
-
-    if (empty($vehicleID)) {
-        $this->LogMessage('Keine Fahrzeug-ID vorhanden. Abruf nicht möglich.', KL_ERROR);
-        $this->SendDebug('FetchVIN', 'Keine Fahrzeug-ID vorhanden.', 0);
-        return;
-    }
-
-    $accessToken = $this->ReadAttributeString('AccessToken');
-
-    if (empty($accessToken)) {
-        $this->LogMessage('Kein Access Token vorhanden. Abruf nicht möglich.', KL_ERROR);
-        $this->SendDebug('FetchVIN', 'Kein Access Token vorhanden.', 0);
-        return;
-    }
-
-    $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID";
-
-    $options = [
-        'http' => [
-            'header' => [
-                "Authorization: Bearer $accessToken",
-                "Content-Type: application/json"
-            ],
-            'method' => 'GET',
-            'ignore_errors' => true
-        ]
-    ];
-
-    $context = stream_context_create($options);
-    $response = file_get_contents($url, false, $context);
-
-    $httpStatus = $http_response_header[0] ?? 'Unbekannt';
-    $this->SendDebug('FetchVIN', "HTTP-Status: $httpStatus", 0);
-
-    if ($response === false) {
-        $this->LogMessage('Fehler beim Abrufen der Fahrzeugdetails.', KL_ERROR);
-        $this->SendDebug('FetchVIN', 'Fehler beim Abrufen der Fahrzeugdetails!', 0);
-        return;
-    }
-
-    $data = json_decode($response, true);
-
-    $this->SendDebug('FetchVIN', 'Antwort: ' . json_encode($data), 0);
-
-    if (isset($data['vin'])) {
-        $this->WriteAttributeString('VIN', $data['vin']);
-        $this->SendDebug('FetchVIN', 'Fahrgestellnummer gespeichert: ' . $data['vin'], 0);
-        $this->LogMessage('Fahrgestellnummer erfolgreich gespeichert.', KL_NOTIFY);
-    } else {
-        $this->SendDebug('FetchVIN', 'VIN nicht gefunden!', 0);
-    }
-}
 
 public function FetchVehicleData()
 {
@@ -359,17 +250,18 @@ public function FetchVehicleData()
     }
 }
 
-private function FetchVehicleDetails(string $vehicleID)
+private function FetchVehicleDetails()
 {
     $accessToken = $this->ReadAttributeString('AccessToken');
+    $vin = $this->ReadPropertyString('VIN');
 
-    if (empty($accessToken) || empty($vehicleID)) {
-        $this->SendDebug('FetchVehicleDetails', 'Access Token oder Fahrzeug-ID fehlt!', 0);
+    if (empty($accessToken) || empty($vin)) {
+        $this->SendDebug('FetchVehicleDetails', 'Access Token oder VIN fehlt!', 0);
         $this->LogMessage('Fahrzeugdetails konnten nicht abgerufen werden.', KL_ERROR);
         return;
     }
 
-    $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID";
+    $url = "https://api.smartcar.com/v2.0/vehicles/$vin";
 
     $options = [
         'http' => [
@@ -405,10 +297,9 @@ private function FetchVehicleDetails(string $vehicleID)
     }
 }
 
-
 private function CreateVehicleVariables(array $data)
 {
-    // Fahrzeugdetails verarbeiten und Variablen erstellen
+    // Fahrzeugdetails als Variablen erstellen
     $this->MaintainVariable('VehicleID', 'Fahrzeug-ID', VARIABLETYPE_STRING, '', 1, true);
     $this->SetValue('VehicleID', $data['id']);
 
@@ -421,8 +312,12 @@ private function CreateVehicleVariables(array $data)
     $this->MaintainVariable('Year', 'Baujahr', VARIABLETYPE_INTEGER, '', 4, true);
     $this->SetValue('Year', intval($data['year']));
 
+    // VIN aus Konfiguration abrufen und als Variable speichern
+    $vin = $this->ReadPropertyString('VIN');
+    $this->MaintainVariable('VIN', 'Fahrgestellnummer (VIN)', VARIABLETYPE_STRING, '', 5, true);
+    $this->SetValue('VIN', $vin);
+
     $this->SendDebug('CreateVehicleVariables', 'Fahrzeugdetails als Variablen erstellt.', 0);
 }
-
 
 }
