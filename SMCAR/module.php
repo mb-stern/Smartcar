@@ -372,7 +372,7 @@ private function CreatePressureProfile()
     if (!IPS_VariableProfileExists($profileName)) {
         IPS_CreateVariableProfile($profileName, VARIABLETYPE_FLOAT);
         IPS_SetVariableProfileText($profileName, '', ' bar');
-        IPS_SetVariableProfileValues($profileName, 0, 10, 0.1);
+        IPS_SetVariableProfileValues($profileName, 0, 10, 0.01);
         $this->SendDebug('CreatePressureProfile', 'Profil erstellt: ' . $profileName, 0);
     } else {
         $this->SendDebug('CreatePressureProfile', 'Profil existiert bereits: ' . $profileName, 0);
