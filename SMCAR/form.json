@@ -29,8 +29,8 @@
     },
     {
       "type": "Button",
-      "caption": "Fahrgestellnummer abrufen",
-      "onClick": "SMCAR_FetchVIN($id);"
-    }
+      "caption": "Fahrzeugdaten abrufen",
+      "onClick": "SMCAR_FetchVehicleData($id);"
+    }    
   ]
 }

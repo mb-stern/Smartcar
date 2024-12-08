@@ -311,13 +311,16 @@ public function FetchVIN()
 
 public function FetchVehicleData()
 {
-    $accessToken = $this->ReadPropertyString('AccessToken');
-    if (empty($accessToken)) {
-        $this->SendDebug('FetchVehicleData', 'Kein Access Token vorhanden.', 0);
+    $accessToken = $this->ReadAttributeString('AccessToken');
+    $vin = $this->ReadPropertyString('VIN');
+
+    if (empty($accessToken) || empty($vin)) {
+        $this->SendDebug('FetchVehicleData', 'Access Token oder VIN nicht vorhanden.', 0);
+        $this->LogMessage('Fahrzeugdaten können nicht abgerufen werden.', KL_ERROR);
         return;
     }
 
-    $url = "https://api.smartcar.com/v2.0/vehicles";
+    $url = "https://api.smartcar.com/v2.0/vehicles/$vin";
 
     $options = [
         'http' => [
@@ -325,12 +328,17 @@ public function FetchVehicleData()
                 "Authorization: Bearer $accessToken",
                 "Content-Type: application/json"
             ],
-            'method' => 'GET'
+            'method' => 'GET',
+            'ignore_errors' => true
         ]
     ];
 
     $context = stream_context_create($options);
     $response = @file_get_contents($url, false, $context);
+
+    $httpResponseHeader = $http_response_header ?? [];
+    $httpStatus = isset($httpResponseHeader[0]) ? $httpResponseHeader[0] : "Unbekannt";
+    $this->SendDebug('FetchVehicleData', "HTTP-Status: $httpStatus", 0);
 
     if ($response === false) {
         $this->SendDebug('FetchVehicleData', 'HTTP-Fehler: Keine Antwort erhalten!', 0);
@@ -340,13 +348,13 @@ public function FetchVehicleData()
 
     $data = json_decode($response, true);
 
-    if (!isset($data['vehicles'][0])) {
-        $this->SendDebug('FetchVehicleData', 'Keine Fahrzeuge gefunden!', 0);
-        return;
-    }
+    $this->SendDebug('FetchVehicleData', 'Antwort: ' . json_encode($data), 0);
 
-    $vehicleID = $data['vehicles'][0];
-    $this->FetchVIN($vehicleID);
+    if (isset($data['make'], $data['model'], $data['year'])) {
+        $this->LogMessage("Fahrzeugdaten: {$data['make']} {$data['model']} ({$data['year']})", KL_NOTIFY);
+    } else {
+        $this->SendDebug('FetchVehicleData', 'Keine Fahrzeugdetails gefunden!', 0);
+    }
 }
 
 }
