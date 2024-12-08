@@ -319,7 +319,6 @@ public function FetchVehicleData()
         return;
     }
 
-    // Korrekte API-Abfrage
     $url = "https://api.smartcar.com/v2.0/vehicles";
 
     $options = [
@@ -349,15 +348,60 @@ public function FetchVehicleData()
     $data = json_decode($response, true);
     $this->SendDebug('FetchVehicleData', 'Antwort: ' . json_encode($data), 0);
 
-    // Fahrzeugdaten prüfen
     if (isset($data['vehicles'][0])) {
         $vehicleID = $data['vehicles'][0];
         $this->SendDebug('FetchVehicleData', "Fahrzeug-ID erhalten: $vehicleID", 0);
 
-        // Rufe Fahrzeugdetails ab
+        // Fahrzeugdetails abrufen
         $this->FetchVehicleDetails($vehicleID);
     } else {
         $this->SendDebug('FetchVehicleData', 'Keine Fahrzeugdetails gefunden!', 0);
+    }
+}
+
+private function FetchVehicleDetails(string $vehicleID)
+{
+    $accessToken = $this->ReadAttributeString('AccessToken');
+
+    if (empty($accessToken) || empty($vehicleID)) {
+        $this->SendDebug('FetchVehicleDetails', 'Access Token oder Fahrzeug-ID fehlt!', 0);
+        $this->LogMessage('Fahrzeugdetails konnten nicht abgerufen werden.', KL_ERROR);
+        return;
+    }
+
+    $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID";
+
+    $options = [
+        'http' => [
+            'header' => [
+                "Authorization: Bearer $accessToken",
+                "Content-Type: application/json"
+            ],
+            'method' => 'GET',
+            'ignore_errors' => true
+        ]
+    ];
+
+    $context = stream_context_create($options);
+    $response = @file_get_contents($url, false, $context);
+
+    $httpResponseHeader = $http_response_header ?? [];
+    $httpStatus = isset($httpResponseHeader[0]) ? $httpResponseHeader[0] : "Unbekannt";
+    $this->SendDebug('FetchVehicleDetails', "HTTP-Status: $httpStatus", 0);
+
+    if ($response === false) {
+        $this->SendDebug('FetchVehicleDetails', 'Fehler: Keine Antwort von der API!', 0);
+        $this->LogMessage('Fahrzeugdetails konnten nicht abgerufen werden.', KL_ERROR);
+        return;
+    }
+
+    $data = json_decode($response, true);
+    $this->SendDebug('FetchVehicleDetails', 'Fahrzeugdetails: ' . json_encode($data), 0);
+
+    if (isset($data['make'], $data['model'], $data['year'])) {
+        $this->LogMessage("Fahrzeug: {$data['make']} {$data['model']} ({$data['year']})", KL_NOTIFY);
+    } else {
+        $this->SendDebug('FetchVehicleDetails', 'Fahrzeugdetails nicht gefunden!', 0);
     }
 }
 
