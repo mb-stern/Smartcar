@@ -29,11 +29,13 @@ class SMCAR extends IPSModule
             $this->SendDebug('ApplyChanges', "Die Initialisierung des Hook-Pfades '$hookPath' gestartet.", 0);
         }
     
+        /*
         // Webhook-Pfad in der Form anzeigen
         $this->UpdateFormField("WebhookPath", "caption", "Webhook: " . $hookPath);
 
         $vin = $this->ReadPropertyString('VIN');
         $this->UpdateFormField("VIN", "caption", "Fahrgestellnummer (VIN): " . $vin);
+        */
     }
     
 
