@@ -28,9 +28,10 @@
       "onClick": "SMCAR_GenerateAuthURL($id);"
     },
     {
-      "type": "Button",
-      "caption": "Daten abrufen",
-      "onClick": "SMCAR_FetchData($id);"
-    }  
+  "type": "Button",
+  "caption": "Fahrzeugdaten abrufen",
+  "onClick": "SMCAR_FetchVehicleData($id);"
+}
+
   ]
 }
