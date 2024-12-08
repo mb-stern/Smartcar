@@ -84,25 +84,19 @@ class SMCAR extends IPSModule
     {
         $form = json_decode(file_get_contents(__DIR__ . '/form.json'), true);
     
-        // Webhook-Pfad dynamisch in das Konfigurationsformular einfügen
+        // Webhook-Pfad dynamisch einfügen
         $hookPath = $this->ReadAttributeString("CurrentHook");
         $webhookElement = [
             "type"    => "Label",
             "caption" => "Webhook: " . $hookPath
         ];
     
-        // Fahrgestellnummer (VIN) dynamisch anzeigen
-        $vin = $this->ReadPropertyString('VIN');
-        $vinElement = [
-            "type"    => "Label",
-            "caption" => "Fahrgestellnummer (VIN): " . ($vin ?: "Nicht verfügbar")
-        ];
-    
-        // Elemente einfügen
-        array_splice($form['elements'], 0, 0, [$webhookElement, $vinElement]);
+        // Webhook-Pfad an den Anfang des Formulars setzen
+        array_splice($form['elements'], 0, 0, [$webhookElement]);
     
         return json_encode($form);
     }
+    
 
     public function ConnectVehicle()
     {
