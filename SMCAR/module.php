@@ -97,7 +97,7 @@ class SMCAR extends IPSModule
         return json_encode($form);
     }
 
-    public function GenerateAuthURL()
+    public function GenerateAuthURL() //Hier weitere Scopes eintragen wie read_vehicle_info, read_tires etc
     {
         $clientID = $this->ReadPropertyString('ClientID');
         $connectAddress = $this->ReadPropertyString('ConnectAddress');
@@ -107,8 +107,9 @@ class SMCAR extends IPSModule
             return;
         }
     
+        // Neuen Scope mit Reifendruck-API hinzufügen
         $redirectURI = rtrim($connectAddress, '/') . $this->ReadAttributeString("CurrentHook");
-        $scopes = urlencode('read_vehicle_info read_location');
+        $scopes = urlencode('read_vehicle_info read_location read_tires');
         $state = bin2hex(random_bytes(8));
     
         $authURL = "https://connect.smartcar.com/oauth/authorize?" .
@@ -122,7 +123,6 @@ class SMCAR extends IPSModule
         $this->SendDebug('GenerateAuthURL', "Erstellte URL: $authURL", 0);
         echo "Bitte besuchen Sie die folgende URL, um Ihr Fahrzeug zu verbinden:\n" . $authURL;
     }
-    
     
     public function ProcessHookData()
     {
