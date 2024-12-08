@@ -1,2 +1,2 @@
 # MercedesMe
-Integration von MercedesMe in IP-Symcon.
+Integration von Smartcar in IP-Symcon.
