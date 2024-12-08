@@ -29,8 +29,8 @@
     },
     {
       "type": "Button",
-      "caption": "Fahrzeugdaten abrufen",
-      "onClick": "SMCAR_FetchVehicleData($id);"
-    }    
+      "caption": "Daten abrufen",
+      "onClick": "SMCAR_FetchData($id);"
+    }  
   ]
 }

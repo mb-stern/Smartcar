@@ -405,4 +405,79 @@ private function FetchVehicleDetails(string $vehicleID)
     }
 }
 
+public function FetchData()
+{
+    $vehicleID = $this->ReadAttributeString('VehicleID');
+    $accessToken = $this->ReadAttributeString('AccessToken');
+
+    if (empty($accessToken) || empty($vehicleID)) {
+        $this->SendDebug('FetchData', 'Access Token oder Fahrzeug-ID fehlt!', 0);
+        $this->LogMessage('Fahrzeugdaten konnten nicht abgerufen werden.', KL_ERROR);
+        return;
+    }
+
+    // Endpunkte für alle Fahrzeugdaten
+    $endpoints = [
+        'odometer' => "https://api.smartcar.com/v2.0/vehicles/$vehicleID/odometer",
+        'battery'  => "https://api.smartcar.com/v2.0/vehicles/$vehicleID/battery",
+        'location' => "https://api.smartcar.com/v2.0/vehicles/$vehicleID/location"
+    ];
+
+    $options = [
+        'http' => [
+            'header' => [
+                "Authorization: Bearer $accessToken",
+                "Content-Type: application/json"
+            ],
+            'method' => 'GET',
+            'ignore_errors' => true
+        ]
+    ];
+
+    foreach ($endpoints as $key => $url) {
+        $context = stream_context_create($options);
+        $response = file_get_contents($url, false, $context);
+
+        $httpResponseHeader = $http_response_header ?? [];
+        $httpStatus = isset($httpResponseHeader[0]) ? $httpResponseHeader[0] : "Unbekannt";
+        $this->SendDebug("FetchData - $key", "HTTP-Status: $httpStatus", 0);
+
+        if ($response === false) {
+            $this->SendDebug("FetchData - $key", "Fehler: Keine Antwort von der API!", 0);
+            continue;
+        }
+
+        $data = json_decode($response, true);
+        $this->SendDebug("FetchData - $key", 'Antwort: ' . json_encode($data), 0);
+
+        // Daten verarbeiten
+        switch ($key) {
+            case 'odometer':
+                if (isset($data['distance'])) {
+                    $this->LogMessage("Kilometerstand: {$data['distance']} km", KL_NOTIFY);
+                } else {
+                    $this->SendDebug('FetchData - Odometer', 'Kilometerstand nicht gefunden!', 0);
+                }
+                break;
+
+            case 'battery':
+                if (isset($data['percentRemaining'])) {
+                    $this->LogMessage("Batteriestatus: {$data['percentRemaining']}% verbleibend", KL_NOTIFY);
+                } else {
+                    $this->SendDebug('FetchData - Battery', 'Batteriestatus nicht gefunden!', 0);
+                }
+                break;
+
+            case 'location':
+                if (isset($data['latitude'], $data['longitude'])) {
+                    $this->LogMessage("Standort: Breitengrad {$data['latitude']}, Längengrad {$data['longitude']}", KL_NOTIFY);
+                } else {
+                    $this->SendDebug('FetchData - Location', 'Standortdaten nicht gefunden!', 0);
+                }
+                break;
+        }
+    }
+}
+
+
 }
