@@ -38,7 +38,6 @@ class SMCAR extends IPSModule
         */
     }
     
-
     private function RegisterHook()
     {
 
@@ -96,7 +95,6 @@ class SMCAR extends IPSModule
     
         return json_encode($form);
     }
-    
 
     public function ConnectVehicle()
     {
@@ -112,17 +110,19 @@ class SMCAR extends IPSModule
             return;
         }
     
-        $redirectURI = urlencode($this->ReadAttributeString("CurrentHook"));
+        // Korrekte Redirect URI generieren
+        $redirectURI = IPS_GetProperty(IPS_GetInstanceListByModuleID("{015A6EB8-D6E5-4B93-B496-0D3F77AE9FE1}")[0], 'BaseURL') . $this->ReadAttributeString("CurrentHook");
+    
         $scopes = urlencode('read_vehicle_info read_location');
         $state = bin2hex(random_bytes(8));
     
         $authURL = "https://connect.smartcar.com/oauth/authorize?" .
             "response_type=code" .
             "&client_id=$clientID" .
-            "&redirect_uri=$redirectURI" .
+            "&redirect_uri=" . urlencode($redirectURI) .
             "&scope=$scopes" .
             "&state=$state" .
-            "&mode=test";
+            "&mode=test"; 
     
         $this->SendDebug('GenerateAuthURL', "Erstellte URL: $authURL", 0);
         echo "Bitte besuchen Sie die folgende URL, um Ihr Fahrzeug zu verbinden:\n" . $authURL;
@@ -191,6 +191,7 @@ private function ExchangeAuthorizationCode(string $authCode)
         $this->LogMessage('Fehler beim Token-Austausch.', KL_ERROR);
     }
 }
+
 private function FetchVIN(string $vehicleID)
 {
     $accessToken = $this->ReadPropertyString('AccessToken');
