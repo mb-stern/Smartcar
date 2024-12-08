@@ -76,6 +76,23 @@ class SMCAR extends IPSModule
         return $hookPath;
     }
 
+    public function GetConfigurationForm()
+    {
+        $form = json_decode(file_get_contents(__DIR__ . '/form.json'), true);
+    
+        // Webhook-Pfad dynamisch in das Konfigurationsformular einfügen
+        $hookPath = $this->ReadAttributeString("CurrentHook");
+        $webhookElement = [
+            "type"    => "Label",
+            "caption" => "Webhook: " . $hookPath
+        ];
+    
+        // Einfügen an einer bestimmten Position, z. B. ganz oben oder nach einem spezifischen Element
+        array_splice($form['elements'], 0, 0, [$webhookElement]); // Fügt es an Position 0 ein
+    
+        return json_encode($form);
+    }
+
     public function ConnectVehicle()
     {
         $this->LogMessage('Fahrzeug wird verbunden...', KL_NOTIFY);
