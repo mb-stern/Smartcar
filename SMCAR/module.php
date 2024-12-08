@@ -366,7 +366,7 @@ private function FetchTirePressure(string $vehicleID)
 
 private function CreatePressureProfile()
 {
-    $profileName = 'Pressure';
+    $profileName = 'SMCAR.Pressure';
 
     // Profil nur erstellen, wenn es noch nicht existiert
     if (!IPS_VariableProfileExists($profileName)) {
