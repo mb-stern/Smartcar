@@ -12,6 +12,11 @@
     },
     {
       "type": "ValidationTextBox",
+      "name": "ConnectAddress",
+      "caption": "Symcon Connect-Adresse (https://...)"
+    },
+    {
+      "type": "ValidationTextBox",
       "name": "VIN",
       "caption": "Fahrgestellnummer (VIN)"
     }

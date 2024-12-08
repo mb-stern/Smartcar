@@ -11,6 +11,7 @@ class SMCAR extends IPSModule
         $this->RegisterPropertyString('ClientSecret', '');
         $this->RegisterPropertyString('AccessToken', '');
         $this->RegisterPropertyString('VIN', '');
+        $this->RegisterPropertyString('ConnectAddress', '');
 
         // Webhook registrieren
         $this->RegisterAttributeString("CurrentHook", "");
@@ -105,29 +106,15 @@ class SMCAR extends IPSModule
     public function GenerateAuthURL()
     {
         $clientID = $this->ReadPropertyString('ClientID');
-        if (empty($clientID)) {
-            echo "Fehler: Client ID nicht gesetzt!";
-            return;
-        }
+        $connectAddress = $this->ReadPropertyString('ConnectAddress');
     
-        // Symcon Connect-Instanz über die GUID suchen
-        $connectInstances = IPS_GetInstanceListByModuleID("{7A1272A4-CBDB-46EF-BFC6-DCF4A53D2FC7}");
-        if (count($connectInstances) === 0) {
-            echo "Fehler: Symcon Connect-Instanz nicht gefunden!";
-            return;
-        }
-    
-        $connectInstanceID = $connectInstances[0];
-    
-        // Symcon Connect-Adresse abrufen
-        $connectURL = IPS_GetProperty($connectInstanceID, 'ClientIP');
-        if (empty($connectURL)) {
-            echo "Fehler: Symcon Connect-Adresse nicht konfiguriert!";
+        if (empty($clientID) || empty($connectAddress)) {
+            echo "Fehler: Client ID oder Connect-Adresse nicht gesetzt!";
             return;
         }
     
         // Redirect URI korrekt zusammensetzen
-        $redirectURI = "https://" . $connectURL . $this->ReadAttributeString("CurrentHook");
+        $redirectURI = rtrim($connectAddress, '/') . $this->ReadAttributeString("CurrentHook");
     
         $scopes = urlencode('read_vehicle_info read_location');
         $state = bin2hex(random_bytes(8));
@@ -143,6 +130,7 @@ class SMCAR extends IPSModule
         $this->SendDebug('GenerateAuthURL', "Erstellte URL: $authURL", 0);
         echo "Bitte besuchen Sie die folgende URL, um Ihr Fahrzeug zu verbinden:\n" . $authURL;
     }
+    
     
     public function ProcessHookData()
     {
