@@ -31,6 +31,9 @@ class SMCAR extends IPSModule
     
         // Webhook-Pfad in der Form anzeigen
         $this->UpdateFormField("WebhookPath", "caption", "Webhook: " . $hookPath);
+
+        $vin = $this->ReadPropertyString('VIN');
+        $this->UpdateFormField("VIN", "caption", "Fahrgestellnummer (VIN): " . $vin);
     }
     
 
@@ -86,8 +89,15 @@ class SMCAR extends IPSModule
             "caption" => "Webhook: " . $hookPath
         ];
     
-        // Einfügen an einer bestimmten Position, z. B. ganz oben oder nach einem spezifischen Element
-        array_splice($form['elements'], 0, 0, [$webhookElement]); // Fügt es an Position 0 ein
+        // Fahrgestellnummer (VIN) dynamisch anzeigen
+        $vin = $this->ReadPropertyString('VIN');
+        $vinElement = [
+            "type"    => "Label",
+            "caption" => "Fahrgestellnummer (VIN): " . ($vin ?: "Nicht verfügbar")
+        ];
+    
+        // Elemente einfügen
+        array_splice($form['elements'], 0, 0, [$webhookElement, $vinElement]);
     
         return json_encode($form);
     }
@@ -101,6 +111,11 @@ class SMCAR extends IPSModule
     public function GenerateAuthURL()
     {
         $clientID = $this->ReadPropertyString('ClientID');
+        if (empty($clientID)) {
+            echo "Fehler: Client ID nicht gesetzt!";
+            return;
+        }
+    
         $redirectURI = urlencode($this->ReadAttributeString("CurrentHook"));
         $scopes = urlencode('read_vehicle_info read_location');
         $state = bin2hex(random_bytes(8));
@@ -111,30 +126,31 @@ class SMCAR extends IPSModule
             "&redirect_uri=$redirectURI" .
             "&scope=$scopes" .
             "&state=$state" .
-            "&mode=test"; 
+            "&mode=test";
     
         $this->SendDebug('GenerateAuthURL', "Erstellte URL: $authURL", 0);
         echo "Bitte besuchen Sie die folgende URL, um Ihr Fahrzeug zu verbinden:\n" . $authURL;
     }    
     
     public function ProcessHookData()
-{
-    if (!isset($_GET['code'])) {
-        $this->SendDebug('ProcessHookData', 'Kein Autorisierungscode erhalten.', 0);
-        http_response_code(400);
-        echo "Fehler: Kein Code erhalten.";
-        return;
+    {
+        if (!isset($_GET['code']) || !isset($_GET['state'])) {
+            $this->SendDebug('ProcessHookData', 'Autorisierungscode oder Status fehlt!', 0);
+            http_response_code(400);
+            echo "Fehler: Autorisierungscode fehlt!";
+            return;
+        }
+    
+        $authCode = $_GET['code'];
+        $state = $_GET['state'];
+    
+        $this->SendDebug('ProcessHookData', "Autorisierungscode erhalten: $authCode", 0);
+    
+        // Tausche den Code gegen Access Token
+        $this->ExchangeAuthorizationCode($authCode);
+        echo "Fahrzeug erfolgreich verbunden!";
     }
-
-    $authCode = $_GET['code'];
-    $state = $_GET['state'] ?? '';
-
-    $this->SendDebug('ProcessHookData', "Autorisierungscode erhalten: $authCode", 0);
-
-    // Tausche den Code gegen Access Token
-    $this->ExchangeAuthorizationCode($authCode);
-    echo "Fahrzeug erfolgreich verbunden!";
-}
+    
 
 private function ExchangeAuthorizationCode(string $authCode)
 {
@@ -179,6 +195,79 @@ private function ExchangeAuthorizationCode(string $authCode)
         $this->LogMessage('Fehler beim Token-Austausch.', KL_ERROR);
     }
 }
+private function FetchVIN(string $vehicleID)
+{
+    $accessToken = $this->ReadPropertyString('AccessToken');
 
+    $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID";
+
+    $options = [
+        'http' => [
+            'header' => [
+                "Authorization: Bearer $accessToken",
+                "Content-Type: application/json"
+            ],
+            'method' => 'GET'
+        ]
+    ];
+
+    $context = stream_context_create($options);
+    $response = file_get_contents($url, false, $context);
+
+    if ($response === false) {
+        $this->SendDebug('FetchVIN', 'Fehler beim Abrufen der Fahrzeugdetails!', 0);
+        return;
+    }
+
+    $data = json_decode($response, true);
+
+    if (isset($data['vin'])) {
+        $this->WritePropertyString('VIN', $data['vin']);
+        $this->SendDebug('FetchVIN', 'Fahrgestellnummer gespeichert: ' . $data['vin'], 0);
+        $this->LogMessage('Fahrgestellnummer erfolgreich gespeichert.', KL_NOTIFY);
+    } else {
+        $this->SendDebug('FetchVIN', 'VIN nicht gefunden!', 0);
+    }
+}
+
+public function FetchVehicleData()
+{
+    $accessToken = $this->ReadPropertyString('AccessToken');
+    if (empty($accessToken)) {
+        $this->SendDebug('FetchVehicleData', 'Kein Access Token vorhanden.', 0);
+        return;
+    }
+
+    $url = "https://api.smartcar.com/v2.0/vehicles";
+
+    $options = [
+        'http' => [
+            'header' => [
+                "Authorization: Bearer $accessToken",
+                "Content-Type: application/json"
+            ],
+            'method' => 'GET'
+        ]
+    ];
+
+    $context = stream_context_create($options);
+    $response = @file_get_contents($url, false, $context);
+
+    if ($response === false) {
+        $this->SendDebug('FetchVehicleData', 'HTTP-Fehler: Keine Antwort erhalten!', 0);
+        $this->LogMessage('Fahrzeugdaten konnten nicht abgerufen werden.', KL_ERROR);
+        return;
+    }
+
+    $data = json_decode($response, true);
+
+    if (!isset($data['vehicles'][0])) {
+        $this->SendDebug('FetchVehicleData', 'Keine Fahrzeuge gefunden!', 0);
+        return;
+    }
+
+    $vehicleID = $data['vehicles'][0];
+    $this->FetchVIN($vehicleID);
+}
 
 }

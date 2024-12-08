@@ -9,13 +9,23 @@
       "type": "ValidationTextBox",
       "name": "ClientSecret",
       "caption": "Client Secret"
+    },
+    {
+      "type": "Label",
+      "name": "WebhookPath",
+      "caption": "Webhook: "
+    },
+    {
+      "type": "Label",
+      "name": "VIN",
+      "caption": "Fahrgestellnummer (VIN): "
     }
   ],
   "actions": [
     {
       "type": "Button",
-      "caption": "Verbindung starten",
-      "onClick": "SMCAR_GenerateAuthURL($id);"
+      "caption": "Fahrzeugdaten abrufen",
+      "onClick": "SMCAR_FetchVehicleData($id);"
     }
   ]
 }
