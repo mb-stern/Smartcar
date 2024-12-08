@@ -30,13 +30,9 @@ class SMCAR extends IPSModule
             $this->SendDebug('ApplyChanges', "Die Initialisierung des Hook-Pfades '$hookPath' gestartet.", 0);
         }
     
-        /*
-        // Webhook-Pfad in der Form anzeigen
-        $this->UpdateFormField("WebhookPath", "caption", "Webhook: " . $hookPath);
-
-        $vin = $this->ReadPropertyString('VIN');
-        $this->UpdateFormField("VIN", "caption", "Fahrgestellnummer (VIN): " . $vin);
-        */
+        // Profil für Reifendruck erstellen
+        $this->CreatePressureProfile();
+ 
     }
     
     private function RegisterHook()
@@ -352,19 +348,34 @@ private function FetchTirePressure(string $vehicleID)
 
     if (isset($data['frontLeft'], $data['frontRight'], $data['backLeft'], $data['backRight'])) {
         // Reifendruck-Variablen erstellen
-        $this->MaintainVariable('TireFrontLeft', 'Reifendruck vorne links', VARIABLETYPE_FLOAT, '~Pressure', 5, true);
+        $this->MaintainVariable('TireFrontLeft', 'Reifendruck Vorderreifen Links', VARIABLETYPE_FLOAT, 'Pressure', 10, true);
         $this->SetValue('TireFrontLeft', $data['frontLeft']);
-
-        $this->MaintainVariable('TireFrontRight', 'Reifendruck vorne rechts', VARIABLETYPE_FLOAT, '~Pressure', 6, true);
+        
+        $this->MaintainVariable('TireFrontRight', 'Reifendruck Vorderreifen Rechts', VARIABLETYPE_FLOAT, 'Pressure', 11, true);
         $this->SetValue('TireFrontRight', $data['frontRight']);
-
-        $this->MaintainVariable('TireBackLeft', 'Reifendruck hinten links', VARIABLETYPE_FLOAT, '~Pressure', 7, true);
+        
+        $this->MaintainVariable('TireBackLeft', 'Reifendruck Hinterreifen Links', VARIABLETYPE_FLOAT, 'Pressure', 12, true);
         $this->SetValue('TireBackLeft', $data['backLeft']);
-
-        $this->MaintainVariable('TireBackRight', 'Reifendruck hinten rechts', VARIABLETYPE_FLOAT, '~Pressure', 8, true);
-        $this->SetValue('TireBackRight', $data['backRight']);
+        
+        $this->MaintainVariable('TireBackRight', 'Reifendruck Hinterreifen Rechts', VARIABLETYPE_FLOAT, 'Pressure', 13, true);
+        $this->SetValue('TireBackRight', $data['backRight']);        
     } else {
         $this->SendDebug('FetchTirePressure', 'Reifendruckdaten nicht gefunden!', 0);
+    }
+}
+
+private function CreatePressureProfile()
+{
+    $profileName = 'Pressure';
+
+    // Profil nur erstellen, wenn es noch nicht existiert
+    if (!IPS_VariableProfileExists($profileName)) {
+        IPS_CreateVariableProfile($profileName, VARIABLETYPE_FLOAT);
+        IPS_SetVariableProfileText($profileName, '', ' bar');
+        IPS_SetVariableProfileValues($profileName, 0, 100, 0.1);
+        $this->SendDebug('CreatePressureProfile', 'Profil erstellt: ' . $profileName, 0);
+    } else {
+        $this->SendDebug('CreatePressureProfile', 'Profil existiert bereits: ' . $profileName, 0);
     }
 }
 
