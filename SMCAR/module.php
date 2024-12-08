@@ -207,6 +207,7 @@ class SMCAR extends IPSModule
     }
     
     
+    
 private function ExchangeAuthorizationCode(string $authCode)
 {
     $clientID = $this->ReadPropertyString('ClientID');
