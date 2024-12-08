@@ -9,23 +9,13 @@
       "type": "ValidationTextBox",
       "name": "ClientSecret",
       "caption": "Client Secret"
-    },
-    {
-      "type": "ValidationTextBox",
-      "name": "RedirectURI",
-      "caption": "Redirect URI"
-    },
-    {
-      "type": "ValidationTextBox",
-      "name": "VIN",
-      "caption": "Fahrgestellnummer (VIN)"
     }
   ],
   "actions": [
     {
       "type": "Button",
-      "caption": "Fahrzeug verbinden",
-      "onClick": "Smartcar_ConnectVehicle($id);"
+      "caption": "Verbindung starten",
+      "onClick": "SMCAR_GenerateAuthURL($id);"
     }
   ]
 }
