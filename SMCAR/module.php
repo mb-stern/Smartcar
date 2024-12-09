@@ -187,6 +187,9 @@ class SMCAR extends IPSModule
             $this->WriteAttributeString('AccessToken', $responseData['access_token']);
             $this->WriteAttributeString('RefreshToken', $responseData['refresh_token']);
             $this->SendDebug('RequestAccessToken', 'Access und Refresh Token gespeichert!', 0);
+    
+            // Wende Änderungen an, um den Timer zu starten
+            $this->ApplyChanges(); 
         } else {
             $this->SendDebug('RequestAccessToken', 'Token-Austausch fehlgeschlagen!', 0);
             $this->LogMessage('Token-Austausch fehlgeschlagen.', KL_ERROR);
