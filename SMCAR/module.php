@@ -301,8 +301,9 @@ class SMCAR extends IPSModule
     } else {
         $this->SendDebug('FetchVehicleData', 'Keine Fahrzeugdetails gefunden!', 0);
     }
-    
-    
+  
+    private function FetchVehicleData()
+    {
         $accessToken = $this->ReadAttributeString('AccessToken');
     
         if (empty($accessToken)) {
