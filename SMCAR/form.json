@@ -80,9 +80,9 @@
     },
     {
       "type": "Button",
-      "caption": "Fahrzeugdaten aktualisieren",
-      "onClick": "SMCAR_FetchScopes($id);"
-  },
+      "caption": "Fahrzeugdaten abrufen",
+      "onClick": "SMCAR_FetchVehicleData($id);"
+    },
     {
       "type": "Label",
       "caption": "Sag danke und unterstütze den Modulentwickler:"
