@@ -369,43 +369,38 @@ class SMCAR extends IPSModule
 
 public function RotateScopes()
 {
+    $this->SendDebug('RotateScopes', 'Timer-Funktion gestartet', 0);
+    
     $scopes = [
         'ScopeReadVehicleInfo' => 'FetchVehicleDetails',
         'ScopeReadLocation' => 'FetchLocation',
         'ScopeReadTires' => 'FetchTirePressure',
         'ScopeReadOdometer' => 'FetchOdometer',
-        'ScopeReadBattery' => 'FetchBatteryStatus',
+        'ScopeReadBattery' => 'FetchBattery',
         'ScopeControlCharge' => 'FetchChargeStatus',
         'ScopeControlSecurity' => 'FetchSecurityStatus'
     ];
 
-    // Aktuellen Scope-Index abrufen
     $currentIndex = $this->ReadAttributeInteger('CurrentScopeIndex');
 
-    // Index begrenzen, falls außerhalb des Bereichs
     if ($currentIndex >= count($scopes)) {
         $currentIndex = 0;
     }
 
     $currentScope = array_keys($scopes)[$currentIndex];
 
-    // Überprüfen, ob der aktuelle Scope aktiviert ist
     if ($this->ReadPropertyBoolean($currentScope)) {
         $methodName = $scopes[$currentScope];
-
-        // Methode aufrufen, falls vorhanden
         if (method_exists($this, $methodName)) {
             $this->$methodName();
             $this->SendDebug('RotateScopes', "Abfrage für $currentScope durchgeführt.", 0);
         }
     }
 
-    // Nächsten Scope-Index speichern
     $newIndex = ($currentIndex + 1) % count($scopes);
     $this->WriteAttributeInteger('CurrentScopeIndex', $newIndex);
 }
 
-    
     private function FetchVehicleDetails(string $vehicleID)
     {
         $accessToken = $this->ReadAttributeString('AccessToken');
