@@ -170,8 +170,6 @@ class SMCAR extends IPSModule
             'client_secret' => $clientSecret
         ]);
     
-        $this->SendDebug('RequestAccessToken', 'POST-Daten: ' . $postData, 0);
-    
         $options = [
             'http' => [
                 'header'  => "Content-Type: application/x-www-form-urlencoded\r\n",
@@ -183,33 +181,18 @@ class SMCAR extends IPSModule
     
         $context = stream_context_create($options);
         $response = file_get_contents($url, false, $context);
-    
-        // HTTP-Status prüfen
-        $httpResponseHeader = $http_response_header ?? [];
-        $httpStatus = isset($httpResponseHeader[0]) ? $httpResponseHeader[0] : "Unbekannt";
-        $this->SendDebug('RequestAccessToken', "HTTP-Status: $httpStatus", 0);
-    
-        if ($response === false) {
-            $this->SendDebug('RequestAccessToken', 'Fehler: Keine Antwort von Smartcar API.', 0);
-            $this->LogMessage('Token-Abruf fehlgeschlagen.', KL_ERROR);
-            return;
-        }
-    
         $responseData = json_decode($response, true);
     
-        $this->SendDebug('RequestAccessToken', 'Antwort: ' . json_encode($responseData), 0);
-    
-        if (isset($responseData['access_token'])) {
-            // Verwenden Sie WriteAttributeString anstelle von WritePropertyString
+        if (isset($responseData['access_token'], $responseData['refresh_token'])) {
             $this->WriteAttributeString('AccessToken', $responseData['access_token']);
-            $this->SendDebug('RequestAccessToken', 'Access Token erfolgreich gespeichert!', 0);
-            $this->LogMessage('Access Token erfolgreich gespeichert.', KL_NOTIFY);
+            $this->WriteAttributeString('RefreshToken', $responseData['refresh_token']);
+            $this->SendDebug('RequestAccessToken', 'Access und Refresh Token gespeichert!', 0);
         } else {
-            $this->SendDebug('RequestAccessToken', 'Fehler: Token-Austausch fehlgeschlagen!', 0);
+            $this->SendDebug('RequestAccessToken', 'Token-Austausch fehlgeschlagen!', 0);
             $this->LogMessage('Token-Austausch fehlgeschlagen.', KL_ERROR);
         }
     }
-
+    
     public function RefreshAccessToken()
     {
         $clientID = $this->ReadPropertyString('ClientID');
@@ -218,6 +201,7 @@ class SMCAR extends IPSModule
     
         if (empty($clientID) || empty($clientSecret) || empty($refreshToken)) {
             $this->LogMessage('Fehler: Client ID, Client Secret oder Refresh Token fehlt!', KL_ERROR);
+            $this->SendDebug('RefreshAccessToken', 'Fehler: Client ID, Client Secret oder Refresh Token fehlt!', 0);
             return;
         }
     
@@ -227,10 +211,8 @@ class SMCAR extends IPSModule
             'grant_type'    => 'refresh_token',
             'refresh_token' => $refreshToken,
             'client_id'     => $clientID,
-            'client_secret' => $clientSecret,
+            'client_secret' => $clientSecret
         ]);
-    
-        $this->SendDebug('RefreshAccessToken', 'POST-Daten: ' . $postData, 0);
     
         $options = [
             'http' => [
@@ -243,28 +225,18 @@ class SMCAR extends IPSModule
     
         $context = stream_context_create($options);
         $response = file_get_contents($url, false, $context);
+        $responseData = json_decode($response, true);
     
-        $httpStatus = $http_response_header[0] ?? 'Unbekannt';
-        $this->SendDebug('RefreshAccessToken', "HTTP-Status: $httpStatus", 0);
-    
-        if ($response === false) {
-            $this->LogMessage('Fehler: Keine Antwort von der Smartcar API.', KL_ERROR);
-            return;
-        }
-    
-        $data = json_decode($response, true);
-        $this->SendDebug('RefreshAccessToken', 'Antwort: ' . json_encode($data), 0);
-    
-        if (isset($data['access_token'], $data['refresh_token'])) {
-            $this->WriteAttributeString('AccessToken', $data['access_token']);
-            $this->WriteAttributeString('RefreshToken', $data['refresh_token']);
-            $this->LogMessage('Access Token erfolgreich erneuert.', KL_NOTIFY);
+        if (isset($responseData['access_token'], $responseData['refresh_token'])) {
+            $this->WriteAttributeString('AccessToken', $responseData['access_token']);
+            $this->WriteAttributeString('RefreshToken', $responseData['refresh_token']);
+            $this->SendDebug('RefreshAccessToken', 'Token erfolgreich erneuert!', 0);
         } else {
-            $this->LogMessage('Fehler beim Erneuern des Access Tokens!', KL_ERROR);
+            $this->SendDebug('RefreshAccessToken', 'Token-Erneuerung fehlgeschlagen!', 0);
+            $this->LogMessage('Token-Erneuerung fehlgeschlagen.', KL_ERROR);
         }
     }
     
-
 public function FetchVehicleData()
 {
     $accessToken = $this->ReadAttributeString('AccessToken');
