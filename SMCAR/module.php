@@ -8,7 +8,6 @@ class SMCAR extends IPSModule
 
         $this->RegisterPropertyString('ClientID', '');
         $this->RegisterPropertyString('ClientSecret', '');
-        $this->RegisterPropertyString('VIN', '');
         $this->RegisterPropertyString('ConnectAddress', '');
         $this->RegisterPropertyString('Mode', 'simulated');
 
@@ -23,6 +22,7 @@ class SMCAR extends IPSModule
         $this->RegisterAttributeString("CurrentHook", "");
         $this->RegisterAttributeString('AccessToken', '');
         $this->RegisterAttributeString('RefreshToken', '');
+        $this->RegisterAttributeString('VehicleID', '');
 
         $this->RegisterTimer('TokenRefreshTimer', 0, 'SMCAR_RefreshAccessToken($id);');
 
@@ -280,6 +280,19 @@ class SMCAR extends IPSModule
         }
     }
 
+    private function SaveVehicleID(string $vehicleID)
+{
+    if (!empty($vehicleID)) {
+        $this->WriteAttributeString('VehicleID', $vehicleID);
+        $this->MaintainVariable('VehicleID', 'Fahrzeug-ID', VARIABLETYPE_STRING, '', 1, true);
+        $this->SetValue('VehicleID', $vehicleID);
+        $this->SendDebug('SaveVehicleID', "Fahrzeug-ID gespeichert: $vehicleID", 0);
+    } else {
+        $this->SendDebug('SaveVehicleID', 'Keine Fahrzeug-ID erhalten!', 0);
+    }
+}
+
+
     public function FetchScopes()
 {
     $vehicleID = $this->ReadAttributeString('VehicleID');
@@ -305,115 +318,113 @@ class SMCAR extends IPSModule
     }
 }
     
-    public function FetchVehicleData()
-    {
-        if (!$this->ReadPropertyBoolean('ScopeReadVehicleInfo')) {
-            $this->SendDebug('FetchVehicleData', 'Scope "read_vehicle_info" nicht aktiviert.', 0);
-            return;
-        }
-    
-        $accessToken = $this->ReadAttributeString('AccessToken');
-    
-        if (empty($accessToken)) {
-            $this->SendDebug('FetchVehicleData', 'Kein Access Token vorhanden.', 0);
-            $this->LogMessage('Fahrzeugdaten konnten nicht abgerufen werden.', KL_ERROR);
-            return;
-        }
-    
-        $url = "https://api.smartcar.com/v2.0/vehicles";
-    
-        $options = [
-            'http' => [
-                'header' => [
-                    "Authorization: Bearer $accessToken",
-                    "Content-Type: application/json"
-                ],
-                'method' => 'GET',
-                'ignore_errors' => true
-            ]
-        ];
-    
-        $context = stream_context_create($options);
-        $response = @file_get_contents($url, false, $context);
-    
-        $httpResponseHeader = $http_response_header ?? [];
-        $httpStatus = isset($httpResponseHeader[0]) ? $httpResponseHeader[0] : "Unbekannt";
-        $this->SendDebug('FetchVehicleData', "HTTP-Status: $httpStatus", 0);
-    
-        if ($response === false) {
-            $this->SendDebug('FetchVehicleData', 'Fehler: Keine Antwort von der API!', 0);
-            $this->LogMessage('Fahrzeugdaten konnten nicht abgerufen werden.', KL_ERROR);
-            return;
-        }
-    
-        $data = json_decode($response, true);
-        $this->SendDebug('FetchVehicleData', 'Antwort: ' . json_encode($data), 0);
-    
-        if (isset($data['vehicles'][0])) {
-            $vehicleID = $data['vehicles'][0];
-            $this->SendDebug('FetchVehicleData', "Fahrzeug-ID erhalten: $vehicleID", 0);
-            $this->FetchVehicleDetails($vehicleID);
-        } else {
-            $this->SendDebug('FetchVehicleData', 'Keine Fahrzeugdetails gefunden!', 0);
-        }
+public function FetchVehicleData()
+{
+    $accessToken = $this->ReadAttributeString('AccessToken');
+
+    if (empty($accessToken)) {
+        $this->SendDebug('FetchVehicleData', 'Kein Access Token vorhanden.', 0);
+        $this->LogMessage('Fahrzeugdaten konnten nicht abgerufen werden.', KL_ERROR);
+        return;
     }
-    
-    private function FetchVehicleDetails(string $vehicleID)
-    {
-        $accessToken = $this->ReadAttributeString('AccessToken');
-    
-        if (empty($accessToken) || empty($vehicleID)) {
-            $this->SendDebug('FetchVehicleDetails', 'Access Token oder Fahrzeug-ID fehlt!', 0);
-            $this->LogMessage('Fahrzeugdetails konnten nicht abgerufen werden.', KL_ERROR);
-            return;
-        }
-    
-        $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID";
-    
-        $options = [
-            'http' => [
-                'header' => [
-                    "Authorization: Bearer $accessToken",
-                    "Content-Type: application/json"
-                ],
-                'method' => 'GET',
-                'ignore_errors' => true
-            ]
-        ];
-    
-        $context = stream_context_create($options);
-        $response = @file_get_contents($url, false, $context);
-    
-        $httpResponseHeader = $http_response_header ?? [];
-        $httpStatus = isset($httpResponseHeader[0]) ? $httpResponseHeader[0] : "Unbekannt";
-        $this->SendDebug('FetchVehicleDetails', "HTTP-Status: $httpStatus", 0);
-    
-        if ($response === false) {
-            $this->SendDebug('FetchVehicleDetails', 'Fehler: Keine Antwort von der API!', 0);
-            $this->LogMessage('Fahrzeugdetails konnten nicht abgerufen werden.', KL_ERROR);
-            return;
-        }
-    
-        $data = json_decode($response, true);
-        $this->SendDebug('FetchVehicleDetails', 'Fahrzeugdetails: ' . json_encode($data), 0);
-    
-        if (isset($data['make'], $data['model'], $data['year'], $data['id'])) {
-            $this->MaintainVariable('VehicleID', 'Fahrzeug-ID', VARIABLETYPE_STRING, '', 1, true);
-            $this->SetValue('VehicleID', $data['id']);
-    
-            $this->MaintainVariable('Make', 'Hersteller', VARIABLETYPE_STRING, '', 2, true);
-            $this->SetValue('Make', $data['make']);
-    
-            $this->MaintainVariable('Model', 'Modell', VARIABLETYPE_STRING, '', 3, true);
-            $this->SetValue('Model', $data['model']);
-    
-            $this->MaintainVariable('Year', 'Baujahr', VARIABLETYPE_INTEGER, '', 4, true);
-            $this->SetValue('Year', intval($data['year']));
-        } else {
-            $this->SendDebug('FetchVehicleDetails', 'Fahrzeugdetails nicht gefunden!', 0);
-        }
+
+    $url = "https://api.smartcar.com/v2.0/vehicles";
+
+    $options = [
+        'http' => [
+            'header' => [
+                "Authorization: Bearer $accessToken",
+                "Content-Type: application/json"
+            ],
+            'method' => 'GET',
+            'ignore_errors' => true
+        ]
+    ];
+
+    $context = stream_context_create($options);
+    $response = @file_get_contents($url, false, $context);
+
+    $httpResponseHeader = $http_response_header ?? [];
+    $httpStatus = isset($httpResponseHeader[0]) ? $httpResponseHeader[0] : "Unbekannt";
+    $this->SendDebug('FetchVehicleData', "HTTP-Status: $httpStatus", 0);
+
+    if ($response === false) {
+        $this->SendDebug('FetchVehicleData', 'Fehler: Keine Antwort von der API!', 0);
+        $this->LogMessage('Fahrzeugdaten konnten nicht abgerufen werden.', KL_ERROR);
+        return;
     }
+
+    $data = json_decode($response, true);
+    $this->SendDebug('FetchVehicleData', 'Antwort: ' . json_encode($data), 0);
+
+    if (isset($data['vehicles'][0])) {
+        $vehicleID = $data['vehicles'][0];
+
+        // Fahrzeug-ID speichern
+        $this->SaveVehicleID($vehicleID);
+
+        // Fahrzeugdetails abrufen
+        $this->FetchVehicleDetails($vehicleID);
+
+    } else {
+        $this->SendDebug('FetchVehicleData', 'Keine Fahrzeugdetails gefunden!', 0);
+    }
+}
+
     
+private function FetchVehicleDetails(string $vehicleID)
+{
+    $accessToken = $this->ReadAttributeString('AccessToken');
+
+    if (empty($accessToken) || empty($vehicleID)) {
+        $this->SendDebug('FetchVehicleDetails', 'Access Token oder Fahrzeug-ID fehlt!', 0);
+        $this->LogMessage('Fahrzeugdetails konnten nicht abgerufen werden.', KL_ERROR);
+        return;
+    }
+
+    $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID";
+
+    $options = [
+        'http' => [
+            'header' => [
+                "Authorization: Bearer $accessToken",
+                "Content-Type: application/json"
+            ],
+            'method' => 'GET',
+            'ignore_errors' => true
+        ]
+    ];
+
+    $context = stream_context_create($options);
+    $response = @file_get_contents($url, false, $context);
+
+    $httpResponseHeader = $http_response_header ?? [];
+    $httpStatus = isset($httpResponseHeader[0]) ? $httpResponseHeader[0] : "Unbekannt";
+    $this->SendDebug('FetchVehicleDetails', "HTTP-Status: $httpStatus", 0);
+
+    if ($response === false) {
+        $this->SendDebug('FetchVehicleDetails', 'Fehler: Keine Antwort von der API!', 0);
+        $this->LogMessage('Fahrzeugdetails konnten nicht abgerufen werden.', KL_ERROR);
+        return;
+    }
+
+    $data = json_decode($response, true);
+    $this->SendDebug('FetchVehicleDetails', 'Fahrzeugdetails: ' . json_encode($data), 0);
+
+    if (isset($data['make'], $data['model'], $data['year'])) {
+        $this->MaintainVariable('Make', 'Hersteller', VARIABLETYPE_STRING, '', 2, true);
+        $this->SetValue('Make', $data['make']);
+
+        $this->MaintainVariable('Model', 'Modell', VARIABLETYPE_STRING, '', 3, true);
+        $this->SetValue('Model', $data['model']);
+
+        $this->MaintainVariable('Year', 'Baujahr', VARIABLETYPE_INTEGER, '', 4, true);
+        $this->SetValue('Year', intval($data['year']));
+    } else {
+        $this->SendDebug('FetchVehicleDetails', 'Fahrzeugdetails nicht gefunden!', 0);
+    }
+}
+
 
 private function FetchTirePressure(string $vehicleID)
 {
