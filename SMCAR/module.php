@@ -25,6 +25,8 @@ class SMCAR extends IPSModule
         $this->RegisterAttributeString('RefreshToken', '');
 
         $this->RegisterTimer('TokenRefreshTimer', 0, 'SMCAR_RefreshAccessToken(' . $this->InstanceID . ');');
+        $this->RegisterTimer('ScopeFetchTimer', 0, 'SMCAR_FetchScopes(' . $this->InstanceID . ');');
+
 
     }
 
@@ -52,6 +54,16 @@ class SMCAR extends IPSModule
                 $this->SetTimerInterval('TokenRefreshTimer', 0); // Timer deaktivieren
                 $this->SendDebug('ApplyChanges', 'Token-Erneuerungs-Timer gestoppt.', 0);
             }
+
+            // Timer aktivieren, wenn die Instanz korrekt konfiguriert ist
+            if ($this->HasSelectedScopes() && !empty($this->ReadAttributeString('AccessToken'))) {
+                $this->SetTimerInterval('ScopeFetchTimer', 60 * 1000); // Alle 60 Sekunden
+                $this->SendDebug('ApplyChanges', 'Scope-Fetch-Timer gestartet.', 0);
+            } else {
+                $this->SetTimerInterval('ScopeFetchTimer', 0); // Timer deaktivieren
+                $this->SendDebug('ApplyChanges', 'Scope-Fetch-Timer gestoppt.', 0);
+            }
+
     
         //Profile für erstellen
         $this->CreateProfile();
@@ -282,6 +294,29 @@ class SMCAR extends IPSModule
         }
     }
     
+    public function FetchScopes()
+{
+    $vehicleID = $this->ReadAttributeString('VehicleID');
+    if (empty($vehicleID)) {
+        $this->SendDebug('FetchScopes', 'Fahrzeug-ID fehlt! Scopes können nicht abgefragt werden.', 0);
+        return;
+    }
+
+    // Beispiel: Aufruf aktiver Scopes
+    if ($this->ReadPropertyBoolean('ScopeReadVehicleInfo')) {
+        $this->FetchVehicleDetails($vehicleID);
+    }
+    if ($this->ReadPropertyBoolean('ScopeReadOdometer')) {
+        $this->FetchOdometer($vehicleID);
+    }
+    if ($this->ReadPropertyBoolean('ScopeReadBattery')) {
+        $this->FetchBattery($vehicleID);
+    }
+    if ($this->ReadPropertyBoolean('ScopeReadLocation')) {
+        $this->FetchLocation($vehicleID);
+    }
+}
+
     
     public function FetchVehicleData()
     {
