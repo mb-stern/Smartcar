@@ -52,6 +52,10 @@ class SMCAR extends IPSModule
                 $this->SetTimerInterval('TokenRefreshTimer', 0); // Timer deaktivieren
                 $this->SendDebug('ApplyChanges', 'Token-Erneuerungs-Timer gestoppt.', 0);
             }
+
+            if (!empty($accessToken) && !empty($refreshToken)) {
+                $this->FetchVehicleData(); // Fahrzeugdaten abrufen und Fahrzeug-ID speichern
+            }
     
         //Profile für erstellen
         $this->CreateProfile();
@@ -288,40 +292,36 @@ class SMCAR extends IPSModule
             $this->SetValue('VehicleID', $vehicleID);
             $this->SendDebug('SaveVehicleID', "Fahrzeug-ID erfolgreich gespeichert: $vehicleID", 0);
         } else {
-            $this->SendDebug('SaveVehicleID', 'Keine Fahrzeug-ID erhalten!', 0);
+            $this->SendDebug('SaveVehicleID', 'Fahrzeug-ID ist leer!', 0);
         }
     }
     
 
-public function FetchScopes()
-{
-    $vehicleID = $this->ReadAttributeString('VehicleID');
-
-    if (empty($vehicleID)) {
-        $this->SendDebug('FetchScopes', 'Fahrzeug-ID fehlt!', 0);
-        $this->LogMessage('Fahrzeug-ID fehlt! Scopes können nicht abgefragt werden.', KL_ERROR);
-        return;
+    public function FetchScopes()
+    {
+        $vehicleID = $this->ReadAttributeString('VehicleID');
+    
+        if (empty($vehicleID)) {
+            $this->SendDebug('FetchScopes', 'Fahrzeug-ID fehlt!', 0);
+            $this->LogMessage('Fahrzeug-ID fehlt! Scopes können nicht abgefragt werden.', KL_ERROR);
+            return;
+        }
+    
+        $this->SendDebug('FetchScopes', "Fahrzeug-ID gefunden: $vehicleID", 0);
+    
+        if ($this->ReadPropertyBoolean('ScopeReadVehicleInfo')) {
+            $this->FetchVehicleDetails($vehicleID);
+        }
+        if ($this->ReadPropertyBoolean('ScopeReadOdometer')) {
+            $this->FetchOdometer($vehicleID);
+        }
+        if ($this->ReadPropertyBoolean('ScopeReadBattery')) {
+            $this->FetchBattery($vehicleID);
+        }
+        if ($this->ReadPropertyBoolean('ScopeReadLocation')) {
+            $this->FetchLocation($vehicleID);
+        }
     }
-
-    $this->SendDebug('FetchScopes', "Fahrzeug-ID gefunden: $vehicleID", 0);
-
-    if ($this->ReadPropertyBoolean('ScopeReadVehicleInfo')) {
-        $this->FetchVehicleDetails($vehicleID);
-    }
-
-    if ($this->ReadPropertyBoolean('ScopeReadOdometer')) {
-        $this->FetchOdometer($vehicleID);
-    }
-
-    if ($this->ReadPropertyBoolean('ScopeReadBattery')) {
-        $this->FetchBattery($vehicleID);
-    }
-
-    if ($this->ReadPropertyBoolean('ScopeReadLocation')) {
-        $this->FetchLocation($vehicleID);
-    }
-}
-
     
 public function FetchVehicleData()
 {
