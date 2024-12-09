@@ -26,12 +26,6 @@ class SMCAR extends IPSModule
 
         $this->RegisterTimer('TokenRefreshTimer', 0, 'SMCAR_RefreshAccessToken($id);');
 
-        // Timer für Scope-Rotationen
-        $this->RegisterTimer('ScopeRotationTimer', 0, 'SMCAR_RotateScopes(' . $this->InstanceID . ');');
-
-        // Attribute für den aktuellen Scope-Index
-        $this->RegisterAttributeInteger('CurrentScopeIndex', 0);
-
     }
 
     public function ApplyChanges()
@@ -59,14 +53,6 @@ class SMCAR extends IPSModule
                 $this->SendDebug('ApplyChanges', 'Token-Erneuerungs-Timer gestoppt.', 0);
             }
     
-        // Timer starten, wenn Scopes ausgewählt wurden
-        if ($this->HasSelectedScopes()) {
-            $this->SetTimerInterval('ScopeRotationTimer', 60 * 1000); // Alle 60 Sekunden
-            $this->SendDebug('ApplyChanges', 'Scope-Rotations-Timer gestartet.', 0);
-        } else {
-            $this->SetTimerInterval('ScopeRotationTimer', 0); // Timer deaktivieren
-            $this->SendDebug('ApplyChanges', 'Scope-Rotations-Timer gestoppt.', 0);
-        }
         //Profile für erstellen
         $this->CreateProfile();
  
@@ -292,124 +278,61 @@ class SMCAR extends IPSModule
             $this->SendDebug('RefreshAccessToken', 'Token-Erneuerung fehlgeschlagen!', 0);
             $this->LogMessage('Token-Erneuerung fehlgeschlagen.', KL_ERROR);
         }
+    }
+    
+    public function FetchVehicleData()
+    {
+        if (!$this->ReadPropertyBoolean('ScopeReadVehicleInfo')) {
+            $this->SendDebug('FetchVehicleData', 'Scope "read_vehicle_info" nicht aktiviert.', 0);
+            return;
+        }
+    
+        $accessToken = $this->ReadAttributeString('AccessToken');
+    
+        if (empty($accessToken)) {
+            $this->SendDebug('FetchVehicleData', 'Kein Access Token vorhanden.', 0);
+            $this->LogMessage('Fahrzeugdaten konnten nicht abgerufen werden.', KL_ERROR);
+            return;
+        }
+    
+        $url = "https://api.smartcar.com/v2.0/vehicles";
+    
+        $options = [
+            'http' => [
+                'header' => [
+                    "Authorization: Bearer $accessToken",
+                    "Content-Type: application/json"
+                ],
+                'method' => 'GET',
+                'ignore_errors' => true
+            ]
+        ];
+    
+        $context = stream_context_create($options);
+        $response = @file_get_contents($url, false, $context);
+    
+        $httpResponseHeader = $http_response_header ?? [];
+        $httpStatus = isset($httpResponseHeader[0]) ? $httpResponseHeader[0] : "Unbekannt";
+        $this->SendDebug('FetchVehicleData', "HTTP-Status: $httpStatus", 0);
+    
+        if ($response === false) {
+            $this->SendDebug('FetchVehicleData', 'Fehler: Keine Antwort von der API!', 0);
+            $this->LogMessage('Fahrzeugdaten konnten nicht abgerufen werden.', KL_ERROR);
+            return;
+        }
+    
+        $data = json_decode($response, true);
+        $this->SendDebug('FetchVehicleData', 'Antwort: ' . json_encode($data), 0);
+    
         if (isset($data['vehicles'][0])) {
             $vehicleID = $data['vehicles'][0];
-            $this->WriteAttributeString('VehicleID', $vehicleID); // Fahrzeug-ID speichern
-            $this->SendDebug('FetchVehicleData', "Fahrzeug-ID gespeichert: $vehicleID", 0);
+            $this->SendDebug('FetchVehicleData', "Fahrzeug-ID erhalten: $vehicleID", 0);
+            $this->FetchVehicleDetails($vehicleID);
         } else {
             $this->SendDebug('FetchVehicleData', 'Keine Fahrzeugdetails gefunden!', 0);
         }
     }
-
-        private function FetchVehicleData()
-        {
-            $accessToken = $this->ReadAttributeString('AccessToken');
-        
-            if (empty($accessToken)) {
-                $this->SendDebug('FetchVehicleData', 'Kein Access Token vorhanden.', 0);
-                $this->LogMessage('Fahrzeugdaten konnten nicht abgerufen werden.', KL_ERROR);
-                return;
-            }
-        
-            $url = "https://api.smartcar.com/v2.0/vehicles";
-        
-            $options = [
-                'http' => [
-                    'header' => [
-                        "Authorization: Bearer $accessToken",
-                        "Content-Type: application/json"
-                    ],
-                    'method' => 'GET',
-                    'ignore_errors' => true
-                ]
-            ];
-        
-            $context = stream_context_create($options);
-            $response = @file_get_contents($url, false, $context);
-        
-            $httpResponseHeader = $http_response_header ?? [];
-            $httpStatus = isset($httpResponseHeader[0]) ? $http_responseHeader[0] : "Unbekannt";
-            $this->SendDebug('FetchVehicleData', "HTTP-Status: $httpStatus", 0);
-        
-            if ($response === false) {
-                $this->SendDebug('FetchVehicleData', 'Fehler: Keine Antwort von der API!', 0);
-                $this->LogMessage('Fahrzeugdaten konnten nicht abgerufen werden.', KL_ERROR);
-                return;
-            }
-        
-            $data = json_decode($response, true);
-            $this->SendDebug('FetchVehicleData', 'Antwort: ' . json_encode($data), 0);
-        
-            if (isset($data['vehicles'][0])) {
-                $vehicleID = $data['vehicles'][0];
-                $this->WriteAttributeString('VehicleID', $vehicleID); // Fahrzeug-ID speichern
-                $this->SendDebug('FetchVehicleData', "Fahrzeug-ID gespeichert: $vehicleID", 0);
-            } else {
-                $this->SendDebug('FetchVehicleData', 'Keine Fahrzeugdetails gefunden!', 0);
-            }
-        }
-        
-    private function HasSelectedScopes(): bool
-{
-    $scopes = [
-        'ScopeReadVehicleInfo',
-        'ScopeReadLocation',
-        'ScopeReadTires',
-        'ScopeReadOdometer',
-        'ScopeReadBattery',
-        'ScopeControlCharge',
-        'ScopeControlSecurity'
-    ];
-
-    foreach ($scopes as $scope) {
-        if ($this->ReadPropertyBoolean($scope)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-public function RotateScopes()
-{
-    $this->SendDebug('RotateScopes', 'Timer ausgeführt.', 0);
-
-    $vehicleID = $this->ReadAttributeString('VehicleID');
-    if (empty($vehicleID)) {
-        $this->SendDebug('RotateScopes', 'Fahrzeug-ID fehlt!', 0);
-        return;
-    }
-
-    $scopes = [
-        'ScopeReadVehicleInfo' => 'FetchVehicleDetails',
-        'ScopeReadLocation'    => 'FetchLocation',
-        'ScopeReadTires'       => 'FetchTirePressure',
-        'ScopeReadOdometer'    => 'FetchOdometer',
-        'ScopeReadBattery'     => 'FetchBattery',
-        'ScopeControlCharge'   => 'FetchChargeStatus',
-        'ScopeControlSecurity' => 'FetchSecurityStatus'
-    ];
-
-    // Aktuellen Scope-Index abrufen und erhöhen
-    $currentIndex = $this->ReadAttributeInteger('CurrentScopeIndex');
-    $currentIndex = $currentIndex >= count($scopes) ? 0 : $currentIndex;
-
-    $currentScope = array_keys($scopes)[$currentIndex];
-    $this->SendDebug('RotateScopes', "Aktueller Scope: $currentScope", 0);
-
-    if ($this->ReadPropertyBoolean($currentScope)) {
-        $methodName = $scopes[$currentScope];
-        if (method_exists($this, $methodName)) {
-            $this->$methodName($vehicleID);  // Fahrzeug-ID übergeben
-            $this->SendDebug('RotateScopes', "Abfrage für $currentScope durchgeführt.", 0);
-        }
-    }
-
-    // Nächsten Scope-Index speichern
-    $newIndex = ($currentIndex + 1) % count($scopes);
-    $this->WriteAttributeInteger('CurrentScopeIndex', $newIndex);
-}
-
-
+    
     private function FetchVehicleDetails(string $vehicleID)
     {
         $accessToken = $this->ReadAttributeString('AccessToken');
