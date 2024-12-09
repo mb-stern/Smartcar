@@ -25,8 +25,6 @@ class SMCAR extends IPSModule
         $this->RegisterAttributeString('RefreshToken', '');
 
         $this->RegisterTimer('TokenRefreshTimer', 0, 'SMCAR_RefreshAccessToken($id);');
-        $this->RegisterTimer('ScopeRotationTimer', 0, 'SMCAR_RotateScopes($id);');
-
 
     }
 
@@ -54,15 +52,6 @@ class SMCAR extends IPSModule
                 $this->SetTimerInterval('TokenRefreshTimer', 0); // Timer deaktivieren
                 $this->SendDebug('ApplyChanges', 'Token-Erneuerungs-Timer gestoppt.', 0);
             }
-
-                // Scopes überprüfen und Rotationstimer aktivieren
-            if ($this->HasSelectedScopes()) {
-                $this->SetTimerInterval('ScopeRotationTimer', 60 * 1000); // Alle 60 Sekunden
-                $this->SendDebug('ApplyChanges', 'Scope-Rotations-Timer gestartet.', 0);
-            } else {
-                $this->SetTimerInterval('ScopeRotationTimer', 0); // Timer deaktivieren
-                $this->SendDebug('ApplyChanges', 'Scope-Rotations-Timer gestoppt.', 0);
-        }
     
         //Profile für erstellen
         $this->CreateProfile();
@@ -290,64 +279,7 @@ class SMCAR extends IPSModule
             $this->LogMessage('Token-Erneuerung fehlgeschlagen.', KL_ERROR);
         }
     }
-
-    public function RotateScopes()
-{
-    $this->SendDebug('RotateScopes', 'Timer ausgeführt.', 0);
-
-    $vehicleID = $this->ReadAttributeString('VehicleID');
-    if (empty($vehicleID)) {
-        $this->SendDebug('RotateScopes', 'Fahrzeug-ID fehlt!', 0);
-        return;
-    }
-
-    $scopes = [
-        'ScopeReadVehicleInfo' => 'FetchVehicleDetails',
-        'ScopeReadLocation'    => 'FetchLocation',
-        'ScopeReadTires'       => 'FetchTirePressure',
-        'ScopeReadOdometer'    => 'FetchOdometer',
-        'ScopeReadBattery'     => 'FetchBattery'
-    ];
-
-    $currentIndex = $this->ReadAttributeInteger('CurrentScopeIndex');
-    $scopeKeys = array_keys($scopes);
-    $currentIndex = $currentIndex >= count($scopeKeys) ? 0 : $currentIndex;
-
-    $currentScope = $scopeKeys[$currentIndex];
-    $this->SendDebug('RotateScopes', "Aktueller Scope: $currentScope", 0);
-
-    // Prüfen, ob der aktuelle Scope aktiv ist
-    if ($this->ReadPropertyBoolean($currentScope)) {
-        $methodName = $scopes[$currentScope];
-        if (method_exists($this, $methodName)) {
-            $this->$methodName($vehicleID);
-            $this->SendDebug('RotateScopes', "Abfrage für $currentScope durchgeführt.", 0);
-        }
-    }
-
-    // Nächsten Scope-Index speichern
-    $newIndex = ($currentIndex + 1) % count($scopeKeys);
-    $this->WriteAttributeInteger('CurrentScopeIndex', $newIndex);
-}
-
-private function HasSelectedScopes(): bool
-{
-    $scopes = [
-        'ScopeReadVehicleInfo',
-        'ScopeReadLocation',
-        'ScopeReadTires',
-        'ScopeReadOdometer',
-        'ScopeReadBattery'
-    ];
-
-    foreach ($scopes as $scope) {
-        if ($this->ReadPropertyBoolean($scope)) {
-            return true;
-        }
-    }
-    return false;
-}
-
+    
     public function FetchVehicleData()
     {
         if (!$this->ReadPropertyBoolean('ScopeReadVehicleInfo')) {
@@ -411,6 +343,7 @@ private function HasSelectedScopes(): bool
             return;
         }
     
+        // Fahrzeugdetails abrufen
         $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID";
     
         $options = [
@@ -431,22 +364,17 @@ private function HasSelectedScopes(): bool
         $httpStatus = isset($httpResponseHeader[0]) ? $httpResponseHeader[0] : "Unbekannt";
         $this->SendDebug('FetchVehicleDetails', "HTTP-Status: $httpStatus", 0);
     
-        if ($response === false || empty($response)) {
+        if ($response === false) {
             $this->SendDebug('FetchVehicleDetails', 'Fehler: Keine Antwort von der API!', 0);
             $this->LogMessage('Fahrzeugdetails konnten nicht abgerufen werden.', KL_ERROR);
             return;
         }
     
         $data = json_decode($response, true);
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            $this->SendDebug('FetchVehicleDetails', 'JSON-Fehler: ' . json_last_error_msg(), 0);
-            $this->LogMessage('Ungültige API-Antwort erhalten.', KL_ERROR);
-            return;
-        }
-    
         $this->SendDebug('FetchVehicleDetails', 'Fahrzeugdetails: ' . json_encode($data), 0);
     
         if (isset($data['make'], $data['model'], $data['year'], $data['id'])) {
+            // Fahrzeugdetails-Variablen erstellen
             $this->MaintainVariable('VehicleID', 'Fahrzeug-ID', VARIABLETYPE_STRING, '', 1, true);
             $this->SetValue('VehicleID', $data['id']);
     
@@ -461,8 +389,24 @@ private function HasSelectedScopes(): bool
         } else {
             $this->SendDebug('FetchVehicleDetails', 'Fahrzeugdetails nicht gefunden!', 0);
         }
-    }
     
+        // Scopes überprüfen und Daten abrufen
+        if ($this->ReadPropertyBoolean('ScopeReadTires')) {
+            $this->FetchTirePressure($vehicleID);
+        }
+    
+        if ($this->ReadPropertyBoolean('ScopeReadOdometer')) {
+            $this->FetchOdometer($vehicleID);
+        }
+    
+        if ($this->ReadPropertyBoolean('ScopeReadBattery')) {
+            $this->FetchBattery($vehicleID);
+        }
+    
+        if ($this->ReadPropertyBoolean('ScopeReadLocation')) {
+            $this->FetchLocation($vehicleID);
+        }
+    }    
 
 private function FetchTirePressure(string $vehicleID)
 {
