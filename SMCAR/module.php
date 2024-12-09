@@ -299,6 +299,7 @@ class SMCAR extends IPSModule
         } else {
             $this->SendDebug('FetchVehicleData', 'Keine Fahrzeugdetails gefunden!', 0);
         }
+    }
 
         private function FetchVehicleData()
         {
@@ -347,7 +348,6 @@ class SMCAR extends IPSModule
                 $this->SendDebug('FetchVehicleData', 'Keine Fahrzeugdetails gefunden!', 0);
             }
         }
-    }
         
     private function HasSelectedScopes(): bool
 {
