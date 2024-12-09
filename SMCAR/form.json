@@ -31,31 +31,28 @@
       ]
     },
     {
-      "type": "SelectMulti",
-      "name": "Scopes",
-      "caption": "Berechtigungen (Scopes)",
-      "options": [
-        {
-          "caption": "Fahrzeuginformationen lesen",
-          "value": "read_vehicle_info"
-        },
-        {
-          "caption": "Standort lesen",
-          "value": "read_location"
-        },
-        {
-          "caption": "Reifendruck lesen",
-          "value": "read_tires"
-        },
-        {
-          "caption": "Kilometerstand lesen",
-          "value": "read_odometer"
-        },
-        {
-          "caption": "Batteriestatus lesen",
-          "value": "read_battery"
-        }
-      ]
+      "type": "Label",
+      "caption": "Berechtigungen (Scopes):"
+    },
+    {
+      "type": "CheckBox",
+      "name": "ScopeReadVehicleInfo",
+      "caption": "Fahrzeuginformationen lesen (read_vehicle_info)"
+    },
+    {
+      "type": "CheckBox",
+      "name": "ScopeReadLocation",
+      "caption": "Standort lesen (read_location)"
+    },
+    {
+      "type": "CheckBox",
+      "name": "ScopeReadTires",
+      "caption": "Reifendruck lesen (read_tires)"
+    },
+    {
+      "type": "CheckBox",
+      "name": "ScopeControlSecurity",
+      "caption": "Fahrzeugsteuerung (control_security)"
     }
   ],
   "actions": [
