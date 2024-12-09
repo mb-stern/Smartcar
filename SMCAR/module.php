@@ -317,6 +317,26 @@ class SMCAR extends IPSModule
     }
 }
 
+private function HasSelectedScopes(): bool
+{
+    $scopes = [
+        'ScopeReadVehicleInfo',
+        'ScopeReadLocation',
+        'ScopeReadTires',
+        'ScopeReadOdometer',
+        'ScopeReadBattery',
+        'ScopeControlCharge',
+        'ScopeControlSecurity'
+    ];
+
+    foreach ($scopes as $scope) {
+        if ($this->ReadPropertyBoolean($scope)) {
+            return true; // Mindestens ein Scope ist aktiv
+        }
+    }
+    return false; // Kein Scope aktiv
+}
+
     
     public function FetchVehicleData()
     {
