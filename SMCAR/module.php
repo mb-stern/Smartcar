@@ -33,14 +33,16 @@ class SMCAR extends IPSModule
         }
 
             // Timer nur starten, wenn der Access Token vorhanden ist
-        $accessToken = $this->ReadAttributeString('AccessToken');
-        if (!empty($accessToken)) {
-            $this->SetTimerInterval('TokenRefreshTimer', 90 * 60 * 1000); // Alle 90 Minuten
-            $this->SendDebug('ApplyChanges', 'Token-Erneuerungs-Timer gestartet.', 0);
-        } else {
-            $this->SetTimerInterval('TokenRefreshTimer', 0); // Timer deaktivieren
-            $this->SendDebug('ApplyChanges', 'Token-Erneuerungs-Timer gestoppt.', 0);
-        }
+            $accessToken = $this->ReadAttributeString('AccessToken');
+            $refreshToken = $this->ReadAttributeString('RefreshToken');
+        
+            if (!empty($accessToken) && !empty($refreshToken)) {
+                $this->SetTimerInterval('TokenRefreshTimer', 90 * 60 * 1000); // Alle 90 Minuten
+                $this->SendDebug('ApplyChanges', 'Token-Erneuerungs-Timer gestartet.', 0);
+            } else {
+                $this->SetTimerInterval('TokenRefreshTimer', 0); // Timer deaktivieren
+                $this->SendDebug('ApplyChanges', 'Token-Erneuerungs-Timer gestoppt.', 0);
+            }
     
         // Profil für Reifendruck erstellen
         $this->CreatePressureProfile();
@@ -228,6 +230,8 @@ class SMCAR extends IPSModule
             'client_secret' => $clientSecret,
         ]);
     
+        $this->SendDebug('RefreshAccessToken', 'POST-Daten: ' . $postData, 0);
+    
         $options = [
             'http' => [
                 'header'  => "Content-Type: application/x-www-form-urlencoded\r\n",
@@ -258,7 +262,8 @@ class SMCAR extends IPSModule
         } else {
             $this->LogMessage('Fehler beim Erneuern des Access Tokens!', KL_ERROR);
         }
-    }    
+    }
+    
 
 public function FetchVehicleData()
 {
