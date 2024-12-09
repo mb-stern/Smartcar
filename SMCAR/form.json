@@ -31,8 +31,12 @@
       ]
     },
     {
-      "type": "Expand",
-      "caption": "Berechtigungen (Scopes)",
+      "type": "Label",
+      "caption": "Berechtigungen (Scopes):"
+    },
+    {
+      "type": "Category",
+      "caption": "Scopes (Berechtigungen)",
       "items": [
         {
           "type": "CheckBox",
