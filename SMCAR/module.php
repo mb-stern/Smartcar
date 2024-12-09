@@ -15,6 +15,8 @@ class SMCAR extends IPSModule
         $this->RegisterAttributeString('AccessToken', '');
         $this->RegisterAttributeString('VIN', '');
 
+        $this->RegisterTimer('TokenRefreshTimer', 0, 'SMCAR_RefreshAccessToken($id);');
+
     }
 
     public function ApplyChanges()
@@ -28,6 +30,16 @@ class SMCAR extends IPSModule
         if ($hookPath === "") {
             $hookPath = $this->RegisterHook();
             $this->SendDebug('ApplyChanges', "Die Initialisierung des Hook-Pfades '$hookPath' gestartet.", 0);
+        }
+
+            // Timer nur starten, wenn der Access Token vorhanden ist
+        $accessToken = $this->ReadAttributeString('AccessToken');
+        if (!empty($accessToken)) {
+            $this->SetTimerInterval('TokenRefreshTimer', 90 * 60 * 1000); // Alle 90 Minuten
+            $this->SendDebug('ApplyChanges', 'Token-Erneuerungs-Timer gestartet.', 0);
+        } else {
+            $this->SetTimerInterval('TokenRefreshTimer', 0); // Timer deaktivieren
+            $this->SendDebug('ApplyChanges', 'Token-Erneuerungs-Timer gestoppt.', 0);
         }
     
         // Profil für Reifendruck erstellen
@@ -195,6 +207,58 @@ class SMCAR extends IPSModule
             $this->LogMessage('Token-Austausch fehlgeschlagen.', KL_ERROR);
         }
     }
+
+    public function RefreshAccessToken()
+    {
+        $clientID = $this->ReadPropertyString('ClientID');
+        $clientSecret = $this->ReadPropertyString('ClientSecret');
+        $refreshToken = $this->ReadAttributeString('RefreshToken');
+    
+        if (empty($clientID) || empty($clientSecret) || empty($refreshToken)) {
+            $this->LogMessage('Fehler: Client ID, Client Secret oder Refresh Token fehlt!', KL_ERROR);
+            return;
+        }
+    
+        $url = "https://auth.smartcar.com/oauth/token";
+    
+        $postData = http_build_query([
+            'grant_type'    => 'refresh_token',
+            'refresh_token' => $refreshToken,
+            'client_id'     => $clientID,
+            'client_secret' => $clientSecret,
+        ]);
+    
+        $options = [
+            'http' => [
+                'header'  => "Content-Type: application/x-www-form-urlencoded\r\n",
+                'method'  => 'POST',
+                'content' => $postData,
+                'ignore_errors' => true
+            ]
+        ];
+    
+        $context = stream_context_create($options);
+        $response = file_get_contents($url, false, $context);
+    
+        $httpStatus = $http_response_header[0] ?? 'Unbekannt';
+        $this->SendDebug('RefreshAccessToken', "HTTP-Status: $httpStatus", 0);
+    
+        if ($response === false) {
+            $this->LogMessage('Fehler: Keine Antwort von der Smartcar API.', KL_ERROR);
+            return;
+        }
+    
+        $data = json_decode($response, true);
+        $this->SendDebug('RefreshAccessToken', 'Antwort: ' . json_encode($data), 0);
+    
+        if (isset($data['access_token'], $data['refresh_token'])) {
+            $this->WriteAttributeString('AccessToken', $data['access_token']);
+            $this->WriteAttributeString('RefreshToken', $data['refresh_token']);
+            $this->LogMessage('Access Token erfolgreich erneuert.', KL_NOTIFY);
+        } else {
+            $this->LogMessage('Fehler beim Erneuern des Access Tokens!', KL_ERROR);
+        }
+    }    
 
 public function FetchVehicleData()
 {
