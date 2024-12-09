@@ -279,6 +279,31 @@ class SMCAR extends IPSModule
             $this->LogMessage('Token-Erneuerung fehlgeschlagen.', KL_ERROR);
         }
     }
+
+    public function FetchScopes()
+{
+    $vehicleID = $this->ReadAttributeString('VehicleID');
+
+    if (empty($vehicleID)) {
+        $this->SendDebug('FetchScopes', 'Fahrzeug-ID fehlt!', 0);
+        return;
+    }
+
+    $scopes = [
+        'ScopeReadVehicleInfo' => 'FetchVehicleDetails',
+        'ScopeReadLocation'    => 'FetchLocation',
+        'ScopeReadTires'       => 'FetchTirePressure',
+        'ScopeReadOdometer'    => 'FetchOdometer',
+        'ScopeReadBattery'     => 'FetchBattery'
+    ];
+
+    foreach ($scopes as $scope => $method) {
+        if ($this->ReadPropertyBoolean($scope) && method_exists($this, $method)) {
+            $this->$method($vehicleID);
+            $this->SendDebug('FetchScopes', "Abfrage für $scope durchgeführt.", 0);
+        }
+    }
+}
     
     public function FetchVehicleData()
     {
@@ -343,7 +368,6 @@ class SMCAR extends IPSModule
             return;
         }
     
-        // Fahrzeugdetails abrufen
         $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID";
     
         $options = [
@@ -374,7 +398,6 @@ class SMCAR extends IPSModule
         $this->SendDebug('FetchVehicleDetails', 'Fahrzeugdetails: ' . json_encode($data), 0);
     
         if (isset($data['make'], $data['model'], $data['year'], $data['id'])) {
-            // Fahrzeugdetails-Variablen erstellen
             $this->MaintainVariable('VehicleID', 'Fahrzeug-ID', VARIABLETYPE_STRING, '', 1, true);
             $this->SetValue('VehicleID', $data['id']);
     
@@ -389,24 +412,8 @@ class SMCAR extends IPSModule
         } else {
             $this->SendDebug('FetchVehicleDetails', 'Fahrzeugdetails nicht gefunden!', 0);
         }
+    }
     
-        // Scopes überprüfen und Daten abrufen
-        if ($this->ReadPropertyBoolean('ScopeReadTires')) {
-            $this->FetchTirePressure($vehicleID);
-        }
-    
-        if ($this->ReadPropertyBoolean('ScopeReadOdometer')) {
-            $this->FetchOdometer($vehicleID);
-        }
-    
-        if ($this->ReadPropertyBoolean('ScopeReadBattery')) {
-            $this->FetchBattery($vehicleID);
-        }
-    
-        if ($this->ReadPropertyBoolean('ScopeReadLocation')) {
-            $this->FetchLocation($vehicleID);
-        }
-    }    
 
 private function FetchTirePressure(string $vehicleID)
 {
