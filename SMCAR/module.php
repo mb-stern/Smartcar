@@ -292,18 +292,16 @@ class SMCAR extends IPSModule
             $this->SendDebug('RefreshAccessToken', 'Token-Erneuerung fehlgeschlagen!', 0);
             $this->LogMessage('Token-Erneuerung fehlgeschlagen.', KL_ERROR);
         }
-    }
-    
-    if (isset($data['vehicles'][0])) {
-        $vehicleID = $data['vehicles'][0];
-        $this->WriteAttributeString('VehicleID', $vehicleID); // Fahrzeug-ID speichern
-        $this->SendDebug('FetchVehicleData', "Fahrzeug-ID gespeichert: $vehicleID", 0);
-    } else {
-        $this->SendDebug('FetchVehicleData', 'Keine Fahrzeugdetails gefunden!', 0);
-    }
-  
-    private function FetchVehicleData()
-    {
+        if (isset($data['vehicles'][0])) {
+            $vehicleID = $data['vehicles'][0];
+            $this->WriteAttributeString('VehicleID', $vehicleID); // Fahrzeug-ID speichern
+            $this->SendDebug('FetchVehicleData', "Fahrzeug-ID gespeichert: $vehicleID", 0);
+        } else {
+            $this->SendDebug('FetchVehicleData', 'Keine Fahrzeugdetails gefunden!', 0);
+        }
+
+        private function FetchVehicleData()
+        {
         $accessToken = $this->ReadAttributeString('AccessToken');
     
         if (empty($accessToken)) {
