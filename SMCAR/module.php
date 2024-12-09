@@ -24,7 +24,7 @@ class SMCAR extends IPSModule
         $this->RegisterAttributeString('AccessToken', '');
         $this->RegisterAttributeString('RefreshToken', '');
 
-        $this->RegisterTimer('TokenRefreshTimer', 0, 'SMCAR_RefreshAccessToken($id);');
+        $this->RegisterTimer('TokenRefreshTimer', 0, 'SMCAR_RefreshAccessToken(' . $this->InstanceID . ');');
 
     }
 
@@ -242,6 +242,8 @@ class SMCAR extends IPSModule
         $clientSecret = $this->ReadPropertyString('ClientSecret');
         $refreshToken = $this->ReadAttributeString('RefreshToken');
     
+        $this->SendDebug('RefreshAccessToken', "Starte Token-Erneuerung mit Refresh Token: $refreshToken", 0);
+    
         if (empty($clientID) || empty($clientSecret) || empty($refreshToken)) {
             $this->LogMessage('Fehler: Client ID, Client Secret oder Refresh Token fehlt!', KL_ERROR);
             $this->SendDebug('RefreshAccessToken', 'Fehler: Client ID, Client Secret oder Refresh Token fehlt!', 0);
@@ -279,6 +281,7 @@ class SMCAR extends IPSModule
             $this->LogMessage('Token-Erneuerung fehlgeschlagen.', KL_ERROR);
         }
     }
+    
     
     public function FetchVehicleData()
     {
