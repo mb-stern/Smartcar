@@ -411,7 +411,6 @@ private function HasSelectedScopes(): bool
             return;
         }
     
-        // Fahrzeugdetails abrufen
         $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID";
     
         $options = [
@@ -432,13 +431,19 @@ private function HasSelectedScopes(): bool
         $httpStatus = isset($httpResponseHeader[0]) ? $httpResponseHeader[0] : "Unbekannt";
         $this->SendDebug('FetchVehicleDetails', "HTTP-Status: $httpStatus", 0);
     
-        if ($response === false) {
+        if ($response === false || empty($response)) {
             $this->SendDebug('FetchVehicleDetails', 'Fehler: Keine Antwort von der API!', 0);
             $this->LogMessage('Fahrzeugdetails konnten nicht abgerufen werden.', KL_ERROR);
             return;
         }
     
         $data = json_decode($response, true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            $this->SendDebug('FetchVehicleDetails', 'JSON-Fehler: ' . json_last_error_msg(), 0);
+            $this->LogMessage('Ungültige API-Antwort erhalten.', KL_ERROR);
+            return;
+        }
+    
         $this->SendDebug('FetchVehicleDetails', 'Fahrzeugdetails: ' . json_encode($data), 0);
     
         if (isset($data['make'], $data['model'], $data['year'], $data['id'])) {
