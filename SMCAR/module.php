@@ -27,7 +27,7 @@ class SMCAR extends IPSModule
         $this->RegisterTimer('TokenRefreshTimer', 0, 'SMCAR_RefreshAccessToken($id);');
 
         // Timer für Scope-Rotationen
-        $this->RegisterTimer('ScopeRotationTimer', 0, 'SMCAR_RotateScopes($id);');
+        $this->RegisterTimer('ScopeRotationTimer', 60 * 1000, 'SMCAR_RotateScopes($_IPS["TARGET"]);');
 
         // Attribute für den aktuellen Scope-Index
         $this->RegisterAttributeInteger('CurrentScopeIndex', 0);
