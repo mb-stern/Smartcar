@@ -10,6 +10,7 @@ class SMCAR extends IPSModule
         $this->RegisterPropertyString('ClientSecret', '');
         $this->RegisterPropertyString('VIN', '');
         $this->RegisterPropertyString('ConnectAddress', '');
+        $this->RegisterPropertyString('Mode', 'simulated');
 
         $this->RegisterAttributeString("CurrentHook", "");
         $this->RegisterAttributeString('AccessToken', '');
@@ -107,17 +108,17 @@ class SMCAR extends IPSModule
         return json_encode($form);
     }
 
-    public function GenerateAuthURL() //Hier weitere Scopes eintragen wie read_vehicle_info, read_tires etc
+    public function GenerateAuthURL()
     {
         $clientID = $this->ReadPropertyString('ClientID');
         $connectAddress = $this->ReadPropertyString('ConnectAddress');
+        $mode = $this->ReadPropertyString('Mode'); 
     
         if (empty($clientID) || empty($connectAddress)) {
             echo "Fehler: Client ID oder Connect-Adresse nicht gesetzt!";
             return;
         }
     
-        // Neuen Scope mit Reifendruck-API hinzufügen
         $redirectURI = rtrim($connectAddress, '/') . $this->ReadAttributeString("CurrentHook");
         $scopes = urlencode('read_vehicle_info read_location read_tires');
         $state = bin2hex(random_bytes(8));
@@ -128,7 +129,7 @@ class SMCAR extends IPSModule
             "&redirect_uri=" . urlencode($redirectURI) .
             "&scope=$scopes" .
             "&state=$state" .
-            "&mode=simulated"; 
+            "&mode=$mode";  // Dynamischer Modus
     
         $this->SendDebug('GenerateAuthURL', "Erstellte URL: $authURL", 0);
         echo "Bitte besuchen Sie die folgende URL, um Ihr Fahrzeug zu verbinden:\n" . $authURL;
