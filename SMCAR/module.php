@@ -44,8 +44,8 @@ class SMCAR extends IPSModule
                 $this->SendDebug('ApplyChanges', 'Token-Erneuerungs-Timer gestoppt.', 0);
             }
     
-        // Profil für Reifendruck erstellen
-        $this->CreatePressureProfile();
+        //Profile für erstellen
+        $this->CreateProfile();
  
     }
     
@@ -433,7 +433,7 @@ private function FetchTirePressure(string $vehicleID)
     }
 }
 
-private function CreatePressureProfile()
+private function CreateProfile()
 {
     $profileName = 'SMCAR.Pressure';
 
