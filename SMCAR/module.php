@@ -26,6 +26,12 @@ class SMCAR extends IPSModule
 
         $this->RegisterTimer('TokenRefreshTimer', 0, 'SMCAR_RefreshAccessToken($id);');
 
+        // Timer für Scope-Rotationen
+        $this->RegisterTimer('ScopeRotationTimer', 0, 'SMCAR_RotateScopes($id);');
+
+        // Attribute für den aktuellen Scope-Index
+        $this->RegisterAttributeInteger('CurrentScopeIndex', 0);
+
     }
 
     public function ApplyChanges()
@@ -53,6 +59,14 @@ class SMCAR extends IPSModule
                 $this->SendDebug('ApplyChanges', 'Token-Erneuerungs-Timer gestoppt.', 0);
             }
     
+        // Timer starten, wenn Scopes ausgewählt wurden
+        if ($this->HasSelectedScopes()) {
+            $this->SetTimerInterval('ScopeRotationTimer', 60 * 1000); // Alle 60 Sekunden
+            $this->SendDebug('ApplyChanges', 'Scope-Rotations-Timer gestartet.', 0);
+        } else {
+            $this->SetTimerInterval('ScopeRotationTimer', 0); // Timer deaktivieren
+            $this->SendDebug('ApplyChanges', 'Scope-Rotations-Timer gestoppt.', 0);
+        }
         //Profile für erstellen
         $this->CreateProfile();
  
@@ -332,8 +346,66 @@ class SMCAR extends IPSModule
             $this->SendDebug('FetchVehicleData', 'Keine Fahrzeugdetails gefunden!', 0);
         }
     }
-    
 
+    private function HasSelectedScopes(): bool
+{
+    $scopes = [
+        'ScopeReadVehicleInfo',
+        'ScopeReadLocation',
+        'ScopeReadTires',
+        'ScopeReadOdometer',
+        'ScopeReadBattery',
+        'ScopeControlCharge',
+        'ScopeControlSecurity'
+    ];
+
+    foreach ($scopes as $scope) {
+        if ($this->ReadPropertyBoolean($scope)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+public function RotateScopes()
+{
+    $scopes = [
+        'ScopeReadVehicleInfo' => 'FetchVehicleDetails',
+        'ScopeReadLocation' => 'FetchLocation',
+        'ScopeReadTires' => 'FetchTirePressure',
+        'ScopeReadOdometer' => 'FetchOdometer',
+        'ScopeReadBattery' => 'FetchBatteryStatus',
+        'ScopeControlCharge' => 'FetchChargeStatus',
+        'ScopeControlSecurity' => 'FetchSecurityStatus'
+    ];
+
+    // Aktuellen Scope-Index abrufen
+    $currentIndex = $this->ReadAttributeInteger('CurrentScopeIndex');
+
+    // Index begrenzen, falls außerhalb des Bereichs
+    if ($currentIndex >= count($scopes)) {
+        $currentIndex = 0;
+    }
+
+    $currentScope = array_keys($scopes)[$currentIndex];
+
+    // Überprüfen, ob der aktuelle Scope aktiviert ist
+    if ($this->ReadPropertyBoolean($currentScope)) {
+        $methodName = $scopes[$currentScope];
+
+        // Methode aufrufen, falls vorhanden
+        if (method_exists($this, $methodName)) {
+            $this->$methodName();
+            $this->SendDebug('RotateScopes', "Abfrage für $currentScope durchgeführt.", 0);
+        }
+    }
+
+    // Nächsten Scope-Index speichern
+    $newIndex = ($currentIndex + 1) % count($scopes);
+    $this->WriteAttributeInteger('CurrentScopeIndex', $newIndex);
+}
+
+    
     private function FetchVehicleDetails(string $vehicleID)
     {
         $accessToken = $this->ReadAttributeString('AccessToken');
@@ -648,6 +720,5 @@ private function CreateProfile()
         $this->SendDebug('CreatePressureProfile', 'Profil existiert bereits: ' . $profileName, 0);
     }
 }
-
 
 }
