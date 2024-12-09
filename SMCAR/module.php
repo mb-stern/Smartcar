@@ -12,6 +12,11 @@ class SMCAR extends IPSModule
         $this->RegisterPropertyString('ConnectAddress', '');
         $this->RegisterPropertyString('Mode', 'simulated');
 
+        $this->RegisterPropertyBoolean('ScopeReadVehicleInfo', true);
+        $this->RegisterPropertyBoolean('ScopeReadLocation', false);
+        $this->RegisterPropertyBoolean('ScopeReadTires', false);
+        $this->RegisterPropertyBoolean('ScopeControlSecurity', false);
+
         $this->RegisterAttributeString("CurrentHook", "");
         $this->RegisterAttributeString('AccessToken', '');
         $this->RegisterAttributeString('RefreshToken', '');
@@ -108,32 +113,48 @@ class SMCAR extends IPSModule
         return json_encode($form);
     }
 
-    public function GenerateAuthURL()
+    public function GenerateAuthURL() //hier die Scopes definieren
     {
         $clientID = $this->ReadPropertyString('ClientID');
         $connectAddress = $this->ReadPropertyString('ConnectAddress');
-        $mode = $this->ReadPropertyString('Mode'); 
+        $mode = $this->ReadPropertyString('Mode');
     
         if (empty($clientID) || empty($connectAddress)) {
             echo "Fehler: Client ID oder Connect-Adresse nicht gesetzt!";
             return;
         }
     
-        $redirectURI = rtrim($connectAddress, '/') . $this->ReadAttributeString("CurrentHook");
-        $scopes = urlencode('read_vehicle_info read_location read_tires');
+        // Scopes sammeln
+        $scopes = [];
+        if ($this->ReadPropertyBoolean('ScopeReadVehicleInfo')) {
+            $scopes[] = 'read_vehicle_info';
+        }
+        if ($this->ReadPropertyBoolean('ScopeReadLocation')) {
+            $scopes[] = 'read_location';
+        }
+        if ($this->ReadPropertyBoolean('ScopeReadTires')) {
+            $scopes[] = 'read_tires';
+        }
+        if ($this->ReadPropertyBoolean('ScopeControlSecurity')) {
+            $scopes[] = 'control_security';
+        }
+    
+        $scopeString = implode(' ', $scopes);
         $state = bin2hex(random_bytes(8));
+        $redirectURI = rtrim($connectAddress, '/') . $this->ReadAttributeString("CurrentHook");
     
         $authURL = "https://connect.smartcar.com/oauth/authorize?" .
             "response_type=code" .
             "&client_id=$clientID" .
             "&redirect_uri=" . urlencode($redirectURI) .
-            "&scope=$scopes" .
+            "&scope=" . urlencode($scopeString) .
             "&state=$state" .
-            "&mode=$mode";  // Dynamischer Modus
+            "&mode=$mode";
     
         $this->SendDebug('GenerateAuthURL', "Erstellte URL: $authURL", 0);
         echo "Bitte besuchen Sie die folgende URL, um Ihr Fahrzeug zu verbinden:\n" . $authURL;
     }
+    
     
     public function ProcessHookData()
     {
