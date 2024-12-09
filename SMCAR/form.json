@@ -14,6 +14,21 @@
       "type": "ValidationTextBox",
       "name": "ConnectAddress",
       "caption": "Symcon Connect-Adresse (https://...)"
+    },
+    {
+      "type": "Select",
+      "name": "Mode",
+      "caption": "Verbindungsmodus",
+      "options": [
+        {
+          "caption": "Simuliert",
+          "value": "simulated"
+        },
+        {
+          "caption": "Live",
+          "value": "live"
+        }
+      ]
     }
   ],
   "actions": [
