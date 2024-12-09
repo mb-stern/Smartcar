@@ -294,12 +294,14 @@ class SMCAR extends IPSModule
         }
     }
     
-    public function FetchVehicleData()
-    {
-        if (!$this->ReadPropertyBoolean('ScopeReadVehicleInfo')) {
-            $this->SendDebug('FetchVehicleData', 'Scope "read_vehicle_info" nicht aktiviert.', 0);
-            return;
-        }
+    if (isset($data['vehicles'][0])) {
+        $vehicleID = $data['vehicles'][0];
+        $this->WriteAttributeString('VehicleID', $vehicleID); // Fahrzeug-ID speichern
+        $this->SendDebug('FetchVehicleData', "Fahrzeug-ID gespeichert: $vehicleID", 0);
+    } else {
+        $this->SendDebug('FetchVehicleData', 'Keine Fahrzeugdetails gefunden!', 0);
+    }
+    
     
         $accessToken = $this->ReadAttributeString('AccessToken');
     
@@ -369,37 +371,44 @@ class SMCAR extends IPSModule
 
 public function RotateScopes()
 {
-    $this->SendDebug('RotateScopes', 'Timer-Funktion gestartet', 0);
-    
+    $this->SendDebug('RotateScopes', 'Timer ausgeführt.', 0);
+
+    $vehicleID = $this->ReadAttributeString('VehicleID');
+    if (empty($vehicleID)) {
+        $this->SendDebug('RotateScopes', 'Fahrzeug-ID fehlt!', 0);
+        return;
+    }
+
     $scopes = [
         'ScopeReadVehicleInfo' => 'FetchVehicleDetails',
-        'ScopeReadLocation' => 'FetchLocation',
-        'ScopeReadTires' => 'FetchTirePressure',
-        'ScopeReadOdometer' => 'FetchOdometer',
-        'ScopeReadBattery' => 'FetchBattery',
-        'ScopeControlCharge' => 'FetchChargeStatus',
+        'ScopeReadLocation'    => 'FetchLocation',
+        'ScopeReadTires'       => 'FetchTirePressure',
+        'ScopeReadOdometer'    => 'FetchOdometer',
+        'ScopeReadBattery'     => 'FetchBattery',
+        'ScopeControlCharge'   => 'FetchChargeStatus',
         'ScopeControlSecurity' => 'FetchSecurityStatus'
     ];
 
+    // Aktuellen Scope-Index abrufen und erhöhen
     $currentIndex = $this->ReadAttributeInteger('CurrentScopeIndex');
-
-    if ($currentIndex >= count($scopes)) {
-        $currentIndex = 0;
-    }
+    $currentIndex = $currentIndex >= count($scopes) ? 0 : $currentIndex;
 
     $currentScope = array_keys($scopes)[$currentIndex];
+    $this->SendDebug('RotateScopes', "Aktueller Scope: $currentScope", 0);
 
     if ($this->ReadPropertyBoolean($currentScope)) {
         $methodName = $scopes[$currentScope];
         if (method_exists($this, $methodName)) {
-            $this->$methodName();
+            $this->$methodName($vehicleID);  // Fahrzeug-ID übergeben
             $this->SendDebug('RotateScopes', "Abfrage für $currentScope durchgeführt.", 0);
         }
     }
 
+    // Nächsten Scope-Index speichern
     $newIndex = ($currentIndex + 1) % count($scopes);
     $this->WriteAttributeInteger('CurrentScopeIndex', $newIndex);
 }
+
 
     private function FetchVehicleDetails(string $vehicleID)
     {
