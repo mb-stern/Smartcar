@@ -20,7 +20,7 @@ class SMCAR extends IPSModule
         $this->RegisterPropertyBoolean('ScopeControlCharge', false);
         $this->RegisterPropertyBoolean('ScopeControlSecurity', false);
 
-        $this->RegisterPropertyInteger('FetchInterval', 60);
+        $this->RegisterPropertyInteger('FetchInterval', 120);
 
 
         $this->RegisterAttributeString("CurrentHook", "");
