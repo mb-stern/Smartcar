@@ -12,7 +12,7 @@ class SMCAR extends IPSModule
         $this->RegisterPropertyString('ConnectAddress', '');
         $this->RegisterPropertyString('Mode', 'simulated');
 
-        $this->RegisterPropertyBoolean('ScopeReadVehicleInfo', true);
+        $this->RegisterPropertyBoolean('ScopeReadVehicleInfo', false);
         $this->RegisterPropertyBoolean('ScopeReadLocation', false);
         $this->RegisterPropertyBoolean('ScopeReadTires', false);
         $this->RegisterPropertyBoolean('ScopeReadOdometer', false);
@@ -20,17 +20,12 @@ class SMCAR extends IPSModule
         $this->RegisterPropertyBoolean('ScopeControlCharge', false);
         $this->RegisterPropertyBoolean('ScopeControlSecurity', false);
 
-        $this->RegisterPropertyInteger('FetchInterval', 120);
-
-
         $this->RegisterAttributeString("CurrentHook", "");
         $this->RegisterAttributeString('AccessToken', '');
         $this->RegisterAttributeString('RefreshToken', '');
         $this->RegisterAttributeString('VehicleID', '');
 
         $this->RegisterTimer('TokenRefreshTimer', 0, 'SMCAR_RefreshAccessToken(' . $this->InstanceID . ');');  
-        $this->RegisterTimer('FetchDataTimer', 0, 'SMCAR_FetchAllData(' . $this->InstanceID . ');');
-
 
     }
 
@@ -60,11 +55,6 @@ class SMCAR extends IPSModule
                 $this->SendDebug('ApplyChanges', 'Token-Erneuerungs-Timer gestoppt.', 0);
             }
     
-            $fetchInterval = max(60, $this->ReadPropertyInteger('FetchInterval')) * 1000; // Minimum 60 Sekunden
-            $this->SetTimerInterval('FetchDataTimer', $fetchInterval);
-            $this->SendDebug('ApplyChanges', "Datenabfrage-Timer auf {$fetchInterval} ms gesetzt.", 0);
-
-
         //Profile für erstellen
         $this->CreateProfile();
  
@@ -662,101 +652,6 @@ private function CreateProfile()
     } else {
         $this->SendDebug('CreatePressureProfile', 'Profil existiert bereits: ' . $profileName, 0);
     }
-}
-
-public function FetchAllData()
-{
-    // Verhindere mehrfachen Aufruf
-    if ($this->IsRateLimited()) {
-        $this->SendDebug('FetchAllData', 'Rate-Limit aktiv, Anfrage übersprungen.', 0);
-        return;
-    }
-
-    $accessToken = $this->ReadAttributeString('AccessToken');
-    $vehicleID = $this->ReadAttributeString('VehicleID');
-
-    if (empty($accessToken) || empty($vehicleID)) {
-        $this->SendDebug('FetchAllData', 'Access Token oder Fahrzeug-ID fehlt!', 0);
-        return;
-    }
-
-    // Sammle die aktivierten Endpunkte
-    $endpoints = [];
-
-    if ($this->ReadPropertyBoolean('ScopeReadVehicleInfo')) {
-        $endpoints[] = ["path" => "/"];
-    }
-    if ($this->ReadPropertyBoolean('ScopeReadLocation')) {
-        $endpoints[] = ["path" => "/location"];
-    }
-    if ($this->ReadPropertyBoolean('ScopeReadTires')) {
-        $endpoints[] = ["path" => "/tires/pressure"];
-    }
-    if ($this->ReadPropertyBoolean('ScopeReadOdometer')) {
-        $endpoints[] = ["path" => "/odometer"];
-    }
-    if ($this->ReadPropertyBoolean('ScopeReadBattery')) {
-        $endpoints[] = ["path" => "/battery"];
-    }
-
-    if (empty($endpoints)) {
-        $this->SendDebug('FetchAllData', 'Keine Scopes aktiviert!', 0);
-        return;
-    }
-
-    // Erstelle den Batch-Request
-    $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID/batch";
-    $postData = json_encode(["requests" => $endpoints]);
-
-    $options = [
-        'http' => [
-            'header'  => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
-            'method'  => 'POST',
-            'content' => $postData,
-            'ignore_errors' => true
-        ]
-    ];
-
-    $context = stream_context_create($options);
-    $response = @file_get_contents($url, false, $context);
-
-    if ($response === false) {
-        $this->SendDebug('FetchAllData', 'Fehler: Keine Antwort von der API!', 0);
-        return;
-    }
-
-    $data = json_decode($response, true);
-    $this->SendDebug('FetchAllData', 'Antwort: ' . json_encode($data), 0);
-
-    // Verarbeite die Antwort
-    if (isset($data['responses']) && is_array($data['responses'])) {
-        foreach ($data['responses'] as $response) {
-            if ($response['code'] === 200 && isset($response['body'])) {
-                $this->ProcessResponse($response['path'], $response['body']);
-            } elseif (isset($response['headers']['Retry-After'])) {
-                // Setze das Rate-Limit basierend auf dem "Retry-After"-Header
-                $retryAfter = (int)$response['headers']['Retry-After'];
-                $this->SetRateLimit($retryAfter);
-                $this->SendDebug('FetchAllData', "Rate-Limit gesetzt auf $retryAfter Sekunden.", 0);
-            } else {
-                $this->SendDebug('FetchAllData', "Fehlerhafte Antwort: " . json_encode($response), 0);
-            }
-        }
-    } else {
-        $this->SendDebug('FetchAllData', 'Unerwartete Antwortstruktur: ' . json_encode($data), 0);
-    }
-}
-
-
-private function IsRateLimited(): bool
-{
-    $rateLimitEnd = $this->ReadAttributeInteger('RateLimitEnd');
-    return time() < $rateLimitEnd;
-}
-
-private function SetRateLimit(int $seconds)
-{
-    $this->WriteAttributeInteger('RateLimitEnd', time() + $seconds);
 }
 
 }

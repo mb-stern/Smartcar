@@ -37,7 +37,7 @@
         {
           "type": "CheckBox",
           "name": "ScopeReadVehicleInfo",
-          "caption": "Fahrzeuginformationen lesen (read_vehicle_info, muss aktiviert sein)"
+          "caption": "Fahrzeuginformationen lesen (read_vehicle_info)"
         },
         {
           "type": "CheckBox",
@@ -68,13 +68,7 @@
           "type": "CheckBox",
           "name": "ScopeControlSecurity",
           "caption": "Fahrzeugsteuerung (control_security)"
-        },
-        {
-          "type": "NumberSpinner",
-          "name": "FetchInterval",
-          "caption": "Intervall für Datenabfragen (Sekunden)",
-          "minimum": 60
-      }
+        }
       ]
     }
   ],
