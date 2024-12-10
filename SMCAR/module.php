@@ -337,7 +337,9 @@ class SMCAR extends IPSModule
         if ($this->ReadPropertyBoolean('ScopeReadVehicleInfo')) {
             $this->FetchVehicleDetails($vehicleID);
  
-        if ($this->ReadPropertyBoolean('ScopeReadTires')) {
+            $this->FetchTirePressure($vehicleID);
+        
+            if ($this->ReadPropertyBoolean('ScopeReadTires')) {
             $this->FetchTirePressure($vehicleID);
         }
     
