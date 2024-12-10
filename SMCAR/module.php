@@ -286,6 +286,8 @@ class SMCAR extends IPSModule
     
     public function FetchAllData()
     {
+        $this->SendDebug('FetchAllData', 'Timer ausgelöst. Starte Fahrzeugdatenabfrage...', 0);
+    
         $accessToken = $this->ReadAttributeString('AccessToken');
         $vehicleID = $this->ReadAttributeString('VehicleID');
     
@@ -294,7 +296,6 @@ class SMCAR extends IPSModule
             return;
         }
     
-        // Endpunkte mit zugehörigen Funktionen
         $endpoints = [
             'read_vehicle_info' => ["https://api.smartcar.com/v2.0/vehicles/$vehicleID", 'HandleVehicleInfo'],
             'read_location'     => ["https://api.smartcar.com/v2.0/vehicles/$vehicleID/location", 'HandleLocation'],
@@ -303,7 +304,6 @@ class SMCAR extends IPSModule
             'read_battery'      => ["https://api.smartcar.com/v2.0/vehicles/$vehicleID/battery", 'HandleBattery']
         ];
     
-        // Daten sammeln und verarbeiten
         foreach ($endpoints as $scope => [$url, $callback]) {
             if ($this->IsScopeEnabled($scope)) {
                 $this->FetchEndpointData($url, $callback);
