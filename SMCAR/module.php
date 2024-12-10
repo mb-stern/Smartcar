@@ -24,7 +24,7 @@ class SMCAR extends IPSModule
         $this->RegisterAttributeString('AccessToken', '');
         $this->RegisterAttributeString('RefreshToken', '');
 
-        $this->RegisterTimer('UpdateTimer', 0, 'RefreshAccessToken(' . $this->InstanceID . ');');  
+        $this->RegisterTimer('TokenRefreshTimer', 0, 'RefreshAccessToken(' . $this->InstanceID . ');');  
 
     }
 
