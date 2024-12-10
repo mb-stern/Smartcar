@@ -12,7 +12,7 @@ class SMCAR extends IPSModule
         $this->RegisterPropertyString('ConnectAddress', '');
         $this->RegisterPropertyString('Mode', 'simulated');
 
-        $this->RegisterPropertyBoolean('ScopeReadVehicleDetails', false);
+        $this->RegisterPropertyBoolean('ScopeReadVehicleInfo', false);
         $this->RegisterPropertyBoolean('ScopeReadLocation', false);
         $this->RegisterPropertyBoolean('ScopeReadTires', false);
         $this->RegisterPropertyBoolean('ScopeReadOdometer', false);
@@ -285,6 +285,10 @@ class SMCAR extends IPSModule
     
     public function FetchVehicleData()
     {
+        if (!$this->ReadPropertyBoolean('ScopeReadVehicleInfo')) {
+            $this->SendDebug('FetchVehicleData', 'Scope "read_vehicle_info" nicht aktiviert.', 0);
+            return;
+        }
     
         $accessToken = $this->ReadAttributeString('AccessToken');
     
@@ -326,35 +330,11 @@ class SMCAR extends IPSModule
         if (isset($data['vehicles'][0])) {
             $vehicleID = $data['vehicles'][0];
             $this->SendDebug('FetchVehicleData', "Fahrzeug-ID erhalten: $vehicleID", 0);
-            //$this->FetchVehicleDetails($vehicleID);
+            $this->FetchVehicleDetails($vehicleID);
         } else {
             $this->SendDebug('FetchVehicleData', 'Keine Fahrzeugdetails gefunden!', 0);
         }
-
-        $this->WriteAttributeString('VehicleID', $vehicleID); // Fahrzeug-ID speichern
-        $this->SendDebug('FetchVehicleData', "Fahrzeug-ID gespeichert: $vehicleID", 0);
-
-        if ($this->ReadPropertyBoolean('ScopeReadVehicleDetails')) {
-            $this->FetchVehicleDetails($vehicleID);
-        }
- 
-        if ($this->ReadPropertyBoolean('ScopeReadTires')) {
-            $this->FetchTirePressure($vehicleID);
-        }
-    
-        if ($this->ReadPropertyBoolean('ScopeReadOdometer')) {
-            $this->FetchOdometer($vehicleID);
-        }
-    
-        if ($this->ReadPropertyBoolean('ScopeReadBattery')) {
-            $this->FetchBattery($vehicleID);
-        }
-    
-        if ($this->ReadPropertyBoolean('ScopeReadLocation')) {
-            $this->FetchLocation($vehicleID);
-        }
-    
-}
+    }
     
     private function FetchVehicleDetails(string $vehicleID)
     {
@@ -399,7 +379,10 @@ class SMCAR extends IPSModule
         if (isset($data['make'], $data['model'], $data['year'], $data['id'])) {
             // Fahrzeugdetails-Variablen erstellen
             $this->MaintainVariable('VehicleID', 'Fahrzeug-ID', VARIABLETYPE_STRING, '', 1, true);
-            $this->SetValue('VehicleID', $data['id']);
+            $vehicleID = $data['id'];
+            $this->WriteAttributeString('VehicleID', $vehicleID); // Fahrzeug-ID speichern
+            $this->SetValue('VehicleID', $vehicleID); // Fahrzeug-ID als Variable setzen
+            $this->SendDebug('FetchVehicleDetails', "Fahrzeug-ID gespeichert: $vehicleID", 0);
     
             $this->MaintainVariable('Make', 'Hersteller', VARIABLETYPE_STRING, '', 2, true);
             $this->SetValue('Make', $data['make']);
@@ -411,6 +394,23 @@ class SMCAR extends IPSModule
             $this->SetValue('Year', intval($data['year']));
         } else {
             $this->SendDebug('FetchVehicleDetails', 'Fahrzeugdetails nicht gefunden!', 0);
+        }
+    
+        // Scopes überprüfen und Daten abrufen
+        if ($this->ReadPropertyBoolean('ScopeReadTires')) {
+            $this->FetchTirePressure($vehicleID);
+        }
+    
+        if ($this->ReadPropertyBoolean('ScopeReadOdometer')) {
+            $this->FetchOdometer($vehicleID);
+        }
+    
+        if ($this->ReadPropertyBoolean('ScopeReadBattery')) {
+            $this->FetchBattery($vehicleID);
+        }
+    
+        if ($this->ReadPropertyBoolean('ScopeReadLocation')) {
+            $this->FetchLocation($vehicleID);
         }
     }    
 
