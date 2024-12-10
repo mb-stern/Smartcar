@@ -666,6 +666,12 @@ private function CreateProfile()
 
 public function FetchAllData()
 {
+    // Verhindere mehrfachen Aufruf
+    if ($this->IsRateLimited()) {
+        $this->SendDebug('FetchAllData', 'Rate-Limit aktiv, Anfrage übersprungen.', 0);
+        return;
+    }
+
     $accessToken = $this->ReadAttributeString('AccessToken');
     $vehicleID = $this->ReadAttributeString('VehicleID');
 
@@ -674,7 +680,7 @@ public function FetchAllData()
         return;
     }
 
-    // Scopes in Batch-Request umwandeln
+    // Sammle die aktivierten Endpunkte
     $endpoints = [];
 
     if ($this->ReadPropertyBoolean('ScopeReadVehicleInfo')) {
@@ -698,6 +704,7 @@ public function FetchAllData()
         return;
     }
 
+    // Erstelle den Batch-Request
     $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID/batch";
     $postData = json_encode(["requests" => $endpoints]);
 
@@ -726,6 +733,11 @@ public function FetchAllData()
         foreach ($data['responses'] as $response) {
             if ($response['code'] === 200 && isset($response['body'])) {
                 $this->ProcessResponse($response['path'], $response['body']);
+            } elseif (isset($response['headers']['Retry-After'])) {
+                // Setze das Rate-Limit basierend auf dem "Retry-After"-Header
+                $retryAfter = (int)$response['headers']['Retry-After'];
+                $this->SetRateLimit($retryAfter);
+                $this->SendDebug('FetchAllData', "Rate-Limit gesetzt auf $retryAfter Sekunden.", 0);
             } else {
                 $this->SendDebug('FetchAllData', "Fehlerhafte Antwort: " . json_encode($response), 0);
             }
@@ -735,45 +747,16 @@ public function FetchAllData()
     }
 }
 
-private function ProcessResponse(string $path, array $body)
+
+private function IsRateLimited(): bool
 {
-    switch ($path) {
-        case "/location":
-            if (isset($body['latitude'], $body['longitude'])) {
-                $this->SetValue('Latitude', $body['latitude']);
-                $this->SetValue('Longitude', $body['longitude']);
-            }
-            break;
+    $rateLimitEnd = $this->ReadAttributeInteger('RateLimitEnd');
+    return time() < $rateLimitEnd;
+}
 
-        case "/tires/pressure":
-            if (isset($body['frontLeft'], $body['frontRight'], $body['backLeft'], $body['backRight'])) {
-                $this->SetValue('TireFrontLeft', $body['frontLeft']);
-                $this->SetValue('TireFrontRight', $body['frontRight']);
-                $this->SetValue('TireBackLeft', $body['backLeft']);
-                $this->SetValue('TireBackRight', $body['backRight']);
-            }
-            break;
-
-        case "/odometer":
-            if (isset($body['distance'])) {
-                $this->SetValue('Odometer', $body['distance']);
-            }
-            break;
-
-        case "/battery":
-            if (isset($body['percent'], $body['range'])) {
-                $this->SetValue('BatteryLevel', $body['percent']);
-                $this->SetValue('BatteryRange', $body['range']);
-            }
-            break;
-
-        case "/":
-            // Fahrzeuginfos verarbeiten, falls erforderlich
-            break;
-
-        default:
-            $this->SendDebug('ProcessResponse', "Unbekannter Pfad: $path", 0);
-    }
+private function SetRateLimit(int $seconds)
+{
+    $this->WriteAttributeInteger('RateLimitEnd', time() + $seconds);
 }
 
 }
