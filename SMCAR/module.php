@@ -297,8 +297,6 @@ class SMCAR extends IPSModule
    
    
    
-   
-   
     private function ValidateAccess(): bool
     {
         $vehicleID = $this->ReadAttributeString('VehicleID');
@@ -352,31 +350,23 @@ class SMCAR extends IPSModule
     
         $context = stream_context_create($options);
         $response = @file_get_contents($url, false, $context);
-        $httpResponseHeader = $http_response_header ?? [];
-        $httpStatus = $httpResponseHeader[0] ?? "Unbekannt";
     
-        $this->SendDebug('FetchEndpointData', "HTTP-Status: $httpStatus", 0);
-    
-        if ($response === false) {
+        if ($response === false || empty($http_response_header[0])) {
             $this->SendDebug($callback, "Fehler: Keine Antwort von der API!", 0);
+            $this->LogMessage("$callback fehlgeschlagen.", KL_ERROR);
             return;
         }
     
+        $httpStatus = $http_response_header[0] ?? "Unbekannt";
+        $this->SendDebug('FetchEndpointData', "HTTP-Status: $httpStatus", 0);
+    
         $data = json_decode($response, true);
+        if ($data === null) {
+            $this->SendDebug($callback, 'Ungültige JSON-Daten!', 0);
+            return;
+        }
+    
         $this->$callback($data);
-    }
-    
-    private function IsScopeEnabled(string $scope): bool
-    {
-        $scopeMapping = [
-            'read_vehicle_info' => 'ScopeReadVehicleInfo',
-            'read_location'     => 'ScopeReadLocation',
-            'read_tires'        => 'ScopeReadTires',
-            'read_odometer'     => 'ScopeReadOdometer',
-            'read_battery'      => 'ScopeReadBattery'
-        ];
-    
-        return $this->ReadPropertyBoolean($scopeMapping[$scope] ?? '');
     }
     
     private function HandleVehicleInfo(array $data)
