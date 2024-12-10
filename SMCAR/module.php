@@ -223,8 +223,8 @@ class SMCAR extends IPSModule
     
         $options = [
             'http' => [
-                'header'  => "Content-Type: application/x-www-form-urlencoded\r\n",
-                'method'  => 'POST',
+                'header' => "Content-Type: application/x-www-form-urlencoded\r\n",
+                'method' => 'POST',
                 'content' => $postData,
                 'ignore_errors' => true
             ]
@@ -239,13 +239,13 @@ class SMCAR extends IPSModule
             $this->WriteAttributeString('RefreshToken', $responseData['refresh_token']);
             $this->SendDebug('RequestAccessToken', 'Access und Refresh Token gespeichert!', 0);
     
-            // Wende Änderungen an, um den Timer zu starten
-            $this->ApplyChanges(); 
+            // Fahrzeug-ID nach Token-Austausch abrufen
+            $this->FetchVehicleID();
         } else {
             $this->SendDebug('RequestAccessToken', 'Token-Austausch fehlgeschlagen!', 0);
-            $this->LogMessage('Token-Austausch fehlgeschlagen.', KL_ERROR);
         }
     }
+    
     
     public function RefreshAccessToken()
     {
@@ -291,9 +291,51 @@ class SMCAR extends IPSModule
         }
     }
     
-   
-   
-   
+    private function SaveVehicleID(string $vehicleID)
+    {
+        $this->WriteAttributeString('VehicleID', $vehicleID);
+        $this->SendDebug('SaveVehicleID', "Fahrzeug-ID gespeichert: $vehicleID", 0);
+    }
+       
+    private function FetchVehicleID()
+    {
+        $accessToken = $this->ReadAttributeString('AccessToken');
+    
+        $url = "https://api.smartcar.com/v2.0/vehicles";
+        $options = [
+            'http' => [
+                'header' => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
+                'method' => 'GET',
+                'ignore_errors' => true
+            ]
+        ];
+    
+        $context = stream_context_create($options);
+        $response = file_get_contents($url, false, $context);
+        $responseData = json_decode($response, true);
+    
+        if (isset($responseData['vehicles'][0])) {
+            $vehicleID = $responseData['vehicles'][0];
+            $this->SaveVehicleID($vehicleID);
+            $this->SendDebug('FetchVehicleID', "Fahrzeug-ID erhalten: $vehicleID", 0);
+        } else {
+            $this->SendDebug('FetchVehicleID', 'Fahrzeug-ID konnte nicht abgerufen werden!', 0);
+        }
+    }
+    
+    private function IsScopeEnabled(string $scope): bool
+    {
+        $scopeMapping = [
+            'read_vehicle_info' => 'ScopeReadVehicleInfo',
+            'read_location'     => 'ScopeReadLocation',
+            'read_tires'        => 'ScopeReadTires',
+            'read_odometer'     => 'ScopeReadOdometer',
+            'read_battery'      => 'ScopeReadBattery'
+        ];
+    
+        return $this->ReadPropertyBoolean($scopeMapping[$scope] ?? '') ?? false;
+    }
+    
    
    
    
