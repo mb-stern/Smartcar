@@ -331,6 +331,10 @@ class SMCAR extends IPSModule
             $this->SendDebug('FetchVehicleData', 'Keine Fahrzeugdetails gefunden!', 0);
         }
 
+        $vehicleID = $data['id'];
+        $this->WriteAttributeString('VehicleID', $vehicleID); // Fahrzeug-ID speichern
+        $this->SendDebug('FetchVehicleData', "Fahrzeug-ID gespeichert: $vehicleID", 0);
+
         if ($this->ReadPropertyBoolean('ScopeReadVehicleInfo')) {
             $this->FetchVehicleDetails($vehicleID);
  
@@ -395,10 +399,7 @@ class SMCAR extends IPSModule
         if (isset($data['make'], $data['model'], $data['year'], $data['id'])) {
             // Fahrzeugdetails-Variablen erstellen
             $this->MaintainVariable('VehicleID', 'Fahrzeug-ID', VARIABLETYPE_STRING, '', 1, true);
-            $vehicleID = $data['id'];
-            $this->WriteAttributeString('VehicleID', $vehicleID); // Fahrzeug-ID speichern
-            $this->SetValue('VehicleID', $vehicleID); // Fahrzeug-ID als Variable setzen
-            $this->SendDebug('FetchVehicleDetails', "Fahrzeug-ID gespeichert: $vehicleID", 0);
+            $this->SetValue('VehicleID', $data['id']);
     
             $this->MaintainVariable('Make', 'Hersteller', VARIABLETYPE_STRING, '', 2, true);
             $this->SetValue('Make', $data['make']);
