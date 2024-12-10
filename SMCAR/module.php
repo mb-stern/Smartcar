@@ -415,6 +415,9 @@ class SMCAR extends IPSModule
 
 private function FetchTirePressure(string $vehicleID)
 {
+
+    $this->SendDebug('FetchTirePressure', 'Scope "read_tires" nicht aktiviert.', 0);
+
     if (!$this->ReadPropertyBoolean('ScopeReadTires')) {
         $this->SendDebug('FetchTirePressure', 'Scope "read_tires" nicht aktiviert.', 0);
         return;
