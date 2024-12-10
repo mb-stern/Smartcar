@@ -46,7 +46,8 @@ class SMCAR extends IPSModule
             $refreshToken = $this->ReadAttributeString('RefreshToken');
         
             if (!empty($accessToken) && !empty($refreshToken)) {
-                $this->SetTimerInterval('TokenRefreshTimer', 90 * 60 * 1000); // Alle 90 Minuten
+                //$this->SetTimerInterval('TokenRefreshTimer', 90 * 60 * 1000); // Alle 90 Minuten
+                $this->SetTimerInterval('TokenRefreshTimer', 60 * 1000); // Alle Minuten
                 $this->SendDebug('ApplyChanges', 'Token-Erneuerungs-Timer gestartet.', 0);
             } else {
                 $this->SetTimerInterval('TokenRefreshTimer', 0); // Timer deaktivieren
@@ -238,13 +239,14 @@ class SMCAR extends IPSModule
     
     public function RefreshAccessToken()
     {
+        $this->SendDebug('RefreshAccessToken', 'Timer ausgelöst.', 0);
+    
         $clientID = $this->ReadPropertyString('ClientID');
         $clientSecret = $this->ReadPropertyString('ClientSecret');
         $refreshToken = $this->ReadAttributeString('RefreshToken');
     
         if (empty($clientID) || empty($clientSecret) || empty($refreshToken)) {
-            $this->LogMessage('Fehler: Client ID, Client Secret oder Refresh Token fehlt!', KL_ERROR);
-            $this->SendDebug('RefreshAccessToken', 'Fehler: Client ID, Client Secret oder Refresh Token fehlt!', 0);
+            $this->SendDebug('RefreshAccessToken', 'Fehler: Fehlende Zugangsdaten!', 0);
             return;
         }
     
@@ -259,9 +261,9 @@ class SMCAR extends IPSModule
     
         $options = [
             'http' => [
-                'header'  => "Content-Type: application/x-www-form-urlencoded\r\n",
-                'method'  => 'POST',
-                'content' => $postData,
+                'header'        => "Content-Type: application/x-www-form-urlencoded\r\n",
+                'method'        => 'POST',
+                'content'       => $postData,
                 'ignore_errors' => true
             ]
         ];
@@ -273,12 +275,12 @@ class SMCAR extends IPSModule
         if (isset($responseData['access_token'], $responseData['refresh_token'])) {
             $this->WriteAttributeString('AccessToken', $responseData['access_token']);
             $this->WriteAttributeString('RefreshToken', $responseData['refresh_token']);
-            $this->SendDebug('RefreshAccessToken', 'Token erfolgreich erneuert!', 0);
+            $this->SendDebug('RefreshAccessToken', 'Token erfolgreich erneuert.', 0);
         } else {
             $this->SendDebug('RefreshAccessToken', 'Token-Erneuerung fehlgeschlagen!', 0);
-            $this->LogMessage('Token-Erneuerung fehlgeschlagen.', KL_ERROR);
         }
     }
+    
     
     public function FetchVehicleData()
     {
