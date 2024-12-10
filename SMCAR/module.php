@@ -46,8 +46,8 @@ class SMCAR extends IPSModule
             $refreshToken = $this->ReadAttributeString('RefreshToken');
         
             if (!empty($accessToken) && !empty($refreshToken)) {
-                //$this->SetTimerInterval('TokenRefreshTimer', 90 * 60 * 1000); // Alle 90 Minuten
-                $this->SetTimerInterval('TokenRefreshTimer', 60 * 1000); // Alle Minuten
+                $this->SetTimerInterval('TokenRefreshTimer', 90 * 60 * 1000); // Alle 90 Minuten
+                //$this->SetTimerInterval('TokenRefreshTimer', 60 * 1000); // Alle Minuten
                 $this->SendDebug('ApplyChanges', 'Token-Erneuerungs-Timer gestartet.', 0);
             } else {
                 $this->SetTimerInterval('TokenRefreshTimer', 0); // Timer deaktivieren
