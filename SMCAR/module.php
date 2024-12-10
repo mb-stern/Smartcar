@@ -674,30 +674,32 @@ public function FetchAllData()
         return;
     }
 
-    // Endpunkte basierend auf den ausgewählten Scopes definieren
-    $requests = [];
+    // Scopes in Batch-Request umwandeln
+    $endpoints = [];
 
-    if ($this->ReadPropertyBoolean('ScopeReadOdometer')) {
-        $requests[] = ["path" => "/odometer"];
+    if ($this->ReadPropertyBoolean('ScopeReadVehicleInfo')) {
+        $endpoints[] = ["path" => "/"];
     }
     if ($this->ReadPropertyBoolean('ScopeReadLocation')) {
-        $requests[] = ["path" => "/location"];
+        $endpoints[] = ["path" => "/location"];
     }
     if ($this->ReadPropertyBoolean('ScopeReadTires')) {
-        $requests[] = ["path" => "/tires/pressure"];
+        $endpoints[] = ["path" => "/tires/pressure"];
+    }
+    if ($this->ReadPropertyBoolean('ScopeReadOdometer')) {
+        $endpoints[] = ["path" => "/odometer"];
     }
     if ($this->ReadPropertyBoolean('ScopeReadBattery')) {
-        $requests[] = ["path" => "/battery"];
+        $endpoints[] = ["path" => "/battery"];
     }
 
-    if (empty($requests)) {
-        $this->SendDebug('FetchAllData', 'Keine Endpunkte ausgewählt!', 0);
+    if (empty($endpoints)) {
+        $this->SendDebug('FetchAllData', 'Keine Scopes aktiviert!', 0);
         return;
     }
 
-    // Batch-Request vorbereiten
     $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID/batch";
-    $postData = json_encode(["requests" => $requests]);
+    $postData = json_encode(["requests" => $endpoints]);
 
     $options = [
         'http' => [
@@ -708,7 +710,6 @@ public function FetchAllData()
         ]
     ];
 
-    // Anfrage senden
     $context = stream_context_create($options);
     $response = @file_get_contents($url, false, $context);
 
@@ -717,58 +718,62 @@ public function FetchAllData()
         return;
     }
 
-    // Antwort verarbeiten
     $data = json_decode($response, true);
     $this->SendDebug('FetchAllData', 'Antwort: ' . json_encode($data), 0);
 
+    // Verarbeite die Antwort
     if (isset($data['responses']) && is_array($data['responses'])) {
         foreach ($data['responses'] as $response) {
-            if (isset($response['path'], $response['body']) && $response['code'] === 200) {
-                $this->ProcessResponseData($response['path'], $response['body']);
+            if ($response['code'] === 200 && isset($response['body'])) {
+                $this->ProcessResponse($response['path'], $response['body']);
             } else {
-                $this->SendDebug('FetchAllData', 'Fehlerhafte Antwort: ' . json_encode($response), 0);
+                $this->SendDebug('FetchAllData', "Fehlerhafte Antwort: " . json_encode($response), 0);
             }
         }
+    } else {
+        $this->SendDebug('FetchAllData', 'Unerwartete Antwortstruktur: ' . json_encode($data), 0);
     }
 }
 
-private function ProcessResponseData(string $path, array $data)
+private function ProcessResponse(string $path, array $body)
 {
     switch ($path) {
-        case "/odometer":
-            if (isset($data['distance'])) {
-                $this->SetValue('Odometer', $data['distance']);
-            }
-            break;
-
         case "/location":
-            if (isset($data['latitude'], $data['longitude'])) {
-                $this->SetValue('Latitude', $data['latitude']);
-                $this->SetValue('Longitude', $data['longitude']);
+            if (isset($body['latitude'], $body['longitude'])) {
+                $this->SetValue('Latitude', $body['latitude']);
+                $this->SetValue('Longitude', $body['longitude']);
             }
             break;
 
         case "/tires/pressure":
-            if (isset($data['frontLeft'], $data['frontRight'], $data['backLeft'], $data['backRight'])) {
-                $this->SetValue('TireFrontLeft', $data['frontLeft']);
-                $this->SetValue('TireFrontRight', $data['frontRight']);
-                $this->SetValue('TireBackLeft', $data['backLeft']);
-                $this->SetValue('TireBackRight', $data['backRight']);
+            if (isset($body['frontLeft'], $body['frontRight'], $body['backLeft'], $body['backRight'])) {
+                $this->SetValue('TireFrontLeft', $body['frontLeft']);
+                $this->SetValue('TireFrontRight', $body['frontRight']);
+                $this->SetValue('TireBackLeft', $body['backLeft']);
+                $this->SetValue('TireBackRight', $body['backRight']);
+            }
+            break;
+
+        case "/odometer":
+            if (isset($body['distance'])) {
+                $this->SetValue('Odometer', $body['distance']);
             }
             break;
 
         case "/battery":
-            if (isset($data['percent'], $data['range'])) {
-                $this->SetValue('BatteryLevel', $data['percent']);
-                $this->SetValue('BatteryRange', $data['range']);
+            if (isset($body['percent'], $body['range'])) {
+                $this->SetValue('BatteryLevel', $body['percent']);
+                $this->SetValue('BatteryRange', $body['range']);
             }
             break;
 
+        case "/":
+            // Fahrzeuginfos verarbeiten, falls erforderlich
+            break;
+
         default:
-            $this->SendDebug('ProcessResponseData', "Unbekannter Pfad: $path", 0);
+            $this->SendDebug('ProcessResponse', "Unbekannter Pfad: $path", 0);
     }
 }
-
-
 
 }
