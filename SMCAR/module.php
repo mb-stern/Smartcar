@@ -666,6 +666,12 @@ private function CreateProfile()
 
 public function FetchAllData()
 {
+    // Verhindere mehrfachen Aufruf
+    if ($this->IsRateLimited()) {
+        $this->SendDebug('FetchAllData', 'Rate-Limit aktiv, Anfrage übersprungen.', 0);
+        return;
+    }
+
     $accessToken = $this->ReadAttributeString('AccessToken');
     $vehicleID = $this->ReadAttributeString('VehicleID');
 
@@ -675,32 +681,32 @@ public function FetchAllData()
     }
 
     // Sammle die aktivierten Endpunkte
-    $requests = [];
+    $endpoints = [];
 
     if ($this->ReadPropertyBoolean('ScopeReadVehicleInfo')) {
-        $requests[] = ["path" => "/"];
+        $endpoints[] = ["path" => "/"];
     }
     if ($this->ReadPropertyBoolean('ScopeReadLocation')) {
-        $requests[] = ["path" => "/location"];
+        $endpoints[] = ["path" => "/location"];
     }
     if ($this->ReadPropertyBoolean('ScopeReadTires')) {
-        $requests[] = ["path" => "/tires/pressure"];
+        $endpoints[] = ["path" => "/tires/pressure"];
     }
     if ($this->ReadPropertyBoolean('ScopeReadOdometer')) {
-        $requests[] = ["path" => "/odometer"];
+        $endpoints[] = ["path" => "/odometer"];
     }
     if ($this->ReadPropertyBoolean('ScopeReadBattery')) {
-        $requests[] = ["path" => "/battery"];
+        $endpoints[] = ["path" => "/battery"];
     }
 
-    if (empty($requests)) {
-        $this->SendDebug('FetchAllData', 'Keine Endpunkte aktiviert!', 0);
+    if (empty($endpoints)) {
+        $this->SendDebug('FetchAllData', 'Keine Scopes aktiviert!', 0);
         return;
     }
 
-    // API-Request vorbereiten
+    // Erstelle den Batch-Request
     $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID/batch";
-    $postData = json_encode(["requests" => $requests]);
+    $postData = json_encode(["requests" => $endpoints]);
 
     $options = [
         'http' => [
@@ -722,11 +728,16 @@ public function FetchAllData()
     $data = json_decode($response, true);
     $this->SendDebug('FetchAllData', 'Antwort: ' . json_encode($data), 0);
 
-    // Verarbeitung der API-Antwort
+    // Verarbeite die Antwort
     if (isset($data['responses']) && is_array($data['responses'])) {
         foreach ($data['responses'] as $response) {
             if ($response['code'] === 200 && isset($response['body'])) {
                 $this->ProcessResponse($response['path'], $response['body']);
+            } elseif (isset($response['headers']['Retry-After'])) {
+                // Setze das Rate-Limit basierend auf dem "Retry-After"-Header
+                $retryAfter = (int)$response['headers']['Retry-After'];
+                $this->SetRateLimit($retryAfter);
+                $this->SendDebug('FetchAllData', "Rate-Limit gesetzt auf $retryAfter Sekunden.", 0);
             } else {
                 $this->SendDebug('FetchAllData', "Fehlerhafte Antwort: " . json_encode($response), 0);
             }
