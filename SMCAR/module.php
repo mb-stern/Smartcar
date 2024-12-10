@@ -326,7 +326,7 @@ class SMCAR extends IPSModule
         if (isset($data['vehicles'][0])) {
             $vehicleID = $data['vehicles'][0];
             $this->SendDebug('FetchVehicleData', "Fahrzeug-ID erhalten: $vehicleID", 0);
-            $this->FetchVehicleDetails($vehicleID);
+            //$this->FetchVehicleDetails($vehicleID);
         } else {
             $this->SendDebug('FetchVehicleData', 'Keine Fahrzeugdetails gefunden!', 0);
         }
