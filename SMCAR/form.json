@@ -27,13 +27,7 @@
         {
           "caption": "Live",
           "value": "live"
-        },
-        {
-          "name": "FetchInterval",
-          "type": "NumberSpinner",
-          "caption": "Abfrageintervall (Sekunden)",
-          "minimum": 60
-      }
+        }
       ]
     },
     {
