@@ -55,7 +55,7 @@ class SMCAR extends IPSModule
                 $this->SetTimerInterval('TokenRefreshTimer', 0); // Timer deaktivieren
                 $this->SendDebug('ApplyChanges', 'Token-Erneuerungs-Timer gestoppt.', 0);
             }
-
+    
             if (!empty($accessToken)) {
                 $this->SetTimerInterval('ScopeFetchTimer', 60 * 1000); // Jede Minute abfragen
                 $this->SendDebug('ApplyChanges', 'Scope-Abfrage-Timer gestartet.', 0);
@@ -63,7 +63,6 @@ class SMCAR extends IPSModule
                 $this->SetTimerInterval('ScopeFetchTimer', 0); // Timer deaktivieren
                 $this->SendDebug('ApplyChanges', 'Scope-Abfrage-Timer gestoppt.', 0);
             }
-    
         //Profile für erstellen
         $this->CreateProfile();
  
@@ -291,253 +290,168 @@ class SMCAR extends IPSModule
         }
     }
     
- public function FetchAllVehicleData()
-{
-    $this->SendDebug('FetchAllVehicleData', 'Starte Fahrzeugdatenabfrage...', 0);
-
-    $vehicleID = $this->ReadAttributeString('VehicleID');
-    $accessToken = $this->ReadAttributeString('AccessToken');
-
-    if (empty($vehicleID) || empty($accessToken)) {
-        $this->SendDebug('FetchAllVehicleData', 'Fahrzeug-ID oder Access Token fehlt!', 0);
-        $this->LogMessage('Fahrzeugdaten konnten nicht abgerufen werden.', KL_ERROR);
-        return;
-    }
-
-    // Array für Endpunkte und Scopes
-    $endpoints = [
-        'read_vehicle_info' => [
-            'url'    => "https://api.smartcar.com/v2.0/vehicles/$vehicleID",
-            'method' => 'HandleVehicleInfo'
-        ],
-        'read_location' => [
-            'url'    => "https://api.smartcar.com/v2.0/vehicles/$vehicleID/location",
-            'method' => 'HandleLocation'
-        ],
-        'read_tires' => [
-            'url'    => "https://api.smartcar.com/v2.0/vehicles/$vehicleID/tires/pressure",
-            'method' => 'HandleTirePressure'
-        ],
-        'read_odometer' => [
-            'url'    => "https://api.smartcar.com/v2.0/vehicles/$vehicleID/odometer",
-            'method' => 'HandleOdometer'
-        ],
-        'read_battery' => [
-            'url'    => "https://api.smartcar.com/v2.0/vehicles/$vehicleID/battery",
-            'method' => 'HandleBattery'
-        ]
-    ];
-
-    // Scopes und Endpunkte durchlaufen
-    foreach ($endpoints as $scope => $data) {
-        if ($this->IsScopeEnabled($scope)) {
-            $this->FetchEndpointData($data['url'], $data['method']);
+    public function FetchAllVehicleData()
+    {
+        $this->SendDebug('FetchAllVehicleData', 'Starte Fahrzeugdatenabfrage...', 0);
+    
+        $vehicleID = $this->ReadAttributeString('VehicleID');
+        $accessToken = $this->ReadAttributeString('AccessToken');
+    
+        if (empty($vehicleID) || empty($accessToken)) {
+            $this->SendDebug('FetchAllVehicleData', 'Fahrzeug-ID oder Access Token fehlt!', 0);
+            $this->LogMessage('Fahrzeugdaten konnten nicht abgerufen werden.', KL_ERROR);
+            return;
+        }
+    
+        // Array für Endpunkte und Scopes
+        $endpoints = [
+            'read_vehicle_info' => [
+                'url'    => "https://api.smartcar.com/v2.0/vehicles/$vehicleID",
+                'method' => 'HandleVehicleInfo'
+            ],
+            'read_location' => [
+                'url'    => "https://api.smartcar.com/v2.0/vehicles/$vehicleID/location",
+                'method' => 'HandleLocation'
+            ],
+            'read_tires' => [
+                'url'    => "https://api.smartcar.com/v2.0/vehicles/$vehicleID/tires/pressure",
+                'method' => 'HandleTirePressure'
+            ],
+            'read_odometer' => [
+                'url'    => "https://api.smartcar.com/v2.0/vehicles/$vehicleID/odometer",
+                'method' => 'HandleOdometer'
+            ],
+            'read_battery' => [
+                'url'    => "https://api.smartcar.com/v2.0/vehicles/$vehicleID/battery",
+                'method' => 'HandleBattery'
+            ]
+        ];
+    
+        // Scopes und Endpunkte durchlaufen
+        foreach ($endpoints as $scope => $data) {
+            if ($this->IsScopeEnabled($scope)) {
+                $this->FetchEndpointData($data['url'], $data['method']);
+            }
         }
     }
-}
-
-private function FetchEndpointData(string $url, string $callback)
-{
-    $accessToken = $this->ReadAttributeString('AccessToken');
-
-    $options = [
-        'http' => [
-            'header'        => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
-            'method'        => 'GET',
-            'ignore_errors' => true
-        ]
-    ];
-
-    $context = stream_context_create($options);
-    $response = @file_get_contents($url, false, $context);
-    $httpResponseHeader = $http_response_header ?? [];
-    $httpStatus = $httpResponseHeader[0] ?? "Unbekannt";
-
-    $this->SendDebug('FetchEndpointData', "HTTP-Status: $httpStatus", 0);
-
-    if ($response === false) {
-        $this->SendDebug($callback, "Fehler: Keine Antwort von der API!", 0);
-        return;
-    }
-
-    $data = json_decode($response, true);
-    $this->$callback($data);
-}
-
-private function IsScopeEnabled(string $scope): bool
-{
-    $scopeMapping = [
-        'read_vehicle_info' => 'ScopeReadVehicleInfo',
-        'read_location'     => 'ScopeReadLocation',
-        'read_tires'        => 'ScopeReadTires',
-        'read_odometer'     => 'ScopeReadOdometer',
-        'read_battery'      => 'ScopeReadBattery'
-    ];
-
-    return $this->ReadPropertyBoolean($scopeMapping[$scope] ?? '');
-}
-
-public function FetchAllVehicleData()
-{
-    $this->SendDebug('FetchAllVehicleData', 'Starte Fahrzeugdatenabfrage...', 0);
-
-    $vehicleID = $this->ReadAttributeString('VehicleID');
-    $accessToken = $this->ReadAttributeString('AccessToken');
-
-    if (empty($vehicleID) || empty($accessToken)) {
-        $this->SendDebug('FetchAllVehicleData', 'Fahrzeug-ID oder Access Token fehlt!', 0);
-        $this->LogMessage('Fahrzeugdaten konnten nicht abgerufen werden.', KL_ERROR);
-        return;
-    }
-
-    // Array für Endpunkte und Scopes
-    $endpoints = [
-        'read_vehicle_info' => [
-            'url'    => "https://api.smartcar.com/v2.0/vehicles/$vehicleID",
-            'method' => 'HandleVehicleInfo'
-        ],
-        'read_location' => [
-            'url'    => "https://api.smartcar.com/v2.0/vehicles/$vehicleID/location",
-            'method' => 'HandleLocation'
-        ],
-        'read_tires' => [
-            'url'    => "https://api.smartcar.com/v2.0/vehicles/$vehicleID/tires/pressure",
-            'method' => 'HandleTirePressure'
-        ],
-        'read_odometer' => [
-            'url'    => "https://api.smartcar.com/v2.0/vehicles/$vehicleID/odometer",
-            'method' => 'HandleOdometer'
-        ],
-        'read_battery' => [
-            'url'    => "https://api.smartcar.com/v2.0/vehicles/$vehicleID/battery",
-            'method' => 'HandleBattery'
-        ]
-    ];
-
-    // Scopes und Endpunkte durchlaufen
-    foreach ($endpoints as $scope => $data) {
-        if ($this->IsScopeEnabled($scope)) {
-            $this->FetchEndpointData($data['url'], $data['method']);
+    
+    private function FetchEndpointData(string $url, string $callback)
+    {
+        $accessToken = $this->ReadAttributeString('AccessToken');
+    
+        $options = [
+            'http' => [
+                'header'        => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
+                'method'        => 'GET',
+                'ignore_errors' => true
+            ]
+        ];
+    
+        $context = stream_context_create($options);
+        $response = @file_get_contents($url, false, $context);
+        $httpResponseHeader = $http_response_header ?? [];
+        $httpStatus = $httpResponseHeader[0] ?? "Unbekannt";
+    
+        $this->SendDebug('FetchEndpointData', "HTTP-Status: $httpStatus", 0);
+    
+        if ($response === false) {
+            $this->SendDebug($callback, "Fehler: Keine Antwort von der API!", 0);
+            return;
         }
+    
+        $data = json_decode($response, true);
+        $this->$callback($data);
     }
-}
-
-private function FetchEndpointData(string $url, string $callback)
-{
-    $accessToken = $this->ReadAttributeString('AccessToken');
-
-    $options = [
-        'http' => [
-            'header'        => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
-            'method'        => 'GET',
-            'ignore_errors' => true
-        ]
-    ];
-
-    $context = stream_context_create($options);
-    $response = @file_get_contents($url, false, $context);
-    $httpResponseHeader = $http_response_header ?? [];
-    $httpStatus = $httpResponseHeader[0] ?? "Unbekannt";
-
-    $this->SendDebug('FetchEndpointData', "HTTP-Status: $httpStatus", 0);
-
-    if ($response === false) {
-        $this->SendDebug($callback, "Fehler: Keine Antwort von der API!", 0);
-        return;
+    
+    private function IsScopeEnabled(string $scope): bool
+    {
+        $scopeMapping = [
+            'read_vehicle_info' => 'ScopeReadVehicleInfo',
+            'read_location'     => 'ScopeReadLocation',
+            'read_tires'        => 'ScopeReadTires',
+            'read_odometer'     => 'ScopeReadOdometer',
+            'read_battery'      => 'ScopeReadBattery'
+        ];
+    
+        return $this->ReadPropertyBoolean($scopeMapping[$scope] ?? '');
     }
-
-    $data = json_decode($response, true);
-    $this->$callback($data);
-}
-
-private function IsScopeEnabled(string $scope): bool
-{
-    $scopeMapping = [
-        'read_vehicle_info' => 'ScopeReadVehicleInfo',
-        'read_location'     => 'ScopeReadLocation',
-        'read_tires'        => 'ScopeReadTires',
-        'read_odometer'     => 'ScopeReadOdometer',
-        'read_battery'      => 'ScopeReadBattery'
-    ];
-
-    return $this->ReadPropertyBoolean($scopeMapping[$scope] ?? '');
-}   
-
-private function HandleVehicleInfo(array $data)
-{
-    if (!isset($data['make'], $data['model'], $data['year'], $data['id'])) {
-        $this->SendDebug('HandleVehicleInfo', 'Fahrzeugdaten nicht gefunden!', 0);
-        return;
+    
+    private function HandleVehicleInfo(array $data)
+    {
+        if (!isset($data['make'], $data['model'], $data['year'], $data['id'])) {
+            $this->SendDebug('HandleVehicleInfo', 'Fahrzeugdaten nicht gefunden!', 0);
+            return;
+        }
+    
+        $this->MaintainVariable('Make', 'Hersteller', VARIABLETYPE_STRING, '', 1, true);
+        $this->SetValue('Make', $data['make']);
+    
+        $this->MaintainVariable('Model', 'Modell', VARIABLETYPE_STRING, '', 2, true);
+        $this->SetValue('Model', $data['model']);
+    
+        $this->MaintainVariable('Year', 'Baujahr', VARIABLETYPE_INTEGER, '', 3, true);
+        $this->SetValue('Year', intval($data['year']));
     }
-
-    $this->MaintainVariable('Make', 'Hersteller', VARIABLETYPE_STRING, '', 1, true);
-    $this->SetValue('Make', $data['make']);
-
-    $this->MaintainVariable('Model', 'Modell', VARIABLETYPE_STRING, '', 2, true);
-    $this->SetValue('Model', $data['model']);
-
-    $this->MaintainVariable('Year', 'Baujahr', VARIABLETYPE_INTEGER, '', 3, true);
-    $this->SetValue('Year', intval($data['year']));
-}
-
-private function HandleLocation(array $data)
-{
-    if (!isset($data['latitude'], $data['longitude'])) {
-        $this->SendDebug('HandleLocation', 'Standortdaten nicht gefunden!', 0);
-        return;
+    
+    private function HandleLocation(array $data)
+    {
+        if (!isset($data['latitude'], $data['longitude'])) {
+            $this->SendDebug('HandleLocation', 'Standortdaten nicht gefunden!', 0);
+            return;
+        }
+    
+        $this->MaintainVariable('Latitude', 'Breitengrad', VARIABLETYPE_FLOAT, '', 4, true);
+        $this->SetValue('Latitude', $data['latitude']);
+    
+        $this->MaintainVariable('Longitude', 'Längengrad', VARIABLETYPE_FLOAT, '', 5, true);
+        $this->SetValue('Longitude', $data['longitude']);
     }
-
-    $this->MaintainVariable('Latitude', 'Breitengrad', VARIABLETYPE_FLOAT, '', 4, true);
-    $this->SetValue('Latitude', $data['latitude']);
-
-    $this->MaintainVariable('Longitude', 'Längengrad', VARIABLETYPE_FLOAT, '', 5, true);
-    $this->SetValue('Longitude', $data['longitude']);
-}
-
-private function HandleTirePressure(array $data)
-{
-    if (!isset($data['frontLeft'], $data['frontRight'], $data['backLeft'], $data['backRight'])) {
-        $this->SendDebug('HandleTirePressure', 'Reifendruckdaten nicht gefunden!', 0);
-        return;
+    
+    private function HandleTirePressure(array $data)
+    {
+        if (!isset($data['frontLeft'], $data['frontRight'], $data['backLeft'], $data['backRight'])) {
+            $this->SendDebug('HandleTirePressure', 'Reifendruckdaten nicht gefunden!', 0);
+            return;
+        }
+    
+        $this->MaintainVariable('TireFrontLeft', 'Vorderreifen Links', VARIABLETYPE_FLOAT, 'SMCAR.Pressure', 6, true);
+        $this->SetValue('TireFrontLeft', $data['frontLeft'] / 100);
+    
+        $this->MaintainVariable('TireFrontRight', 'Vorderreifen Rechts', VARIABLETYPE_FLOAT, 'SMCAR.Pressure', 7, true);
+        $this->SetValue('TireFrontRight', $data['frontRight'] / 100);
+    
+        $this->MaintainVariable('TireBackLeft', 'Hinterreifen Links', VARIABLETYPE_FLOAT, 'SMCAR.Pressure', 8, true);
+        $this->SetValue('TireBackLeft', $data['backLeft'] / 100);
+    
+        $this->MaintainVariable('TireBackRight', 'Hinterreifen Rechts', VARIABLETYPE_FLOAT, 'SMCAR.Pressure', 9, true);
+        $this->SetValue('TireBackRight', $data['backRight'] / 100);
     }
-
-    $this->MaintainVariable('TireFrontLeft', 'Vorderreifen Links', VARIABLETYPE_FLOAT, 'SMCAR.Pressure', 6, true);
-    $this->SetValue('TireFrontLeft', $data['frontLeft'] / 100);
-
-    $this->MaintainVariable('TireFrontRight', 'Vorderreifen Rechts', VARIABLETYPE_FLOAT, 'SMCAR.Pressure', 7, true);
-    $this->SetValue('TireFrontRight', $data['frontRight'] / 100);
-
-    $this->MaintainVariable('TireBackLeft', 'Hinterreifen Links', VARIABLETYPE_FLOAT, 'SMCAR.Pressure', 8, true);
-    $this->SetValue('TireBackLeft', $data['backLeft'] / 100);
-
-    $this->MaintainVariable('TireBackRight', 'Hinterreifen Rechts', VARIABLETYPE_FLOAT, 'SMCAR.Pressure', 9, true);
-    $this->SetValue('TireBackRight', $data['backRight'] / 100);
-}
-
-private function HandleOdometer(array $data)
-{
-    if (!isset($data['distance'])) {
-        $this->SendDebug('HandleOdometer', 'Kilometerstand nicht gefunden!', 0);
-        return;
+    
+    private function HandleOdometer(array $data)
+    {
+        if (!isset($data['distance'])) {
+            $this->SendDebug('HandleOdometer', 'Kilometerstand nicht gefunden!', 0);
+            return;
+        }
+    
+        $this->MaintainVariable('Odometer', 'Kilometerstand', VARIABLETYPE_FLOAT, '', 10, true);
+        $this->SetValue('Odometer', $data['distance']);
     }
-
-    $this->MaintainVariable('Odometer', 'Kilometerstand', VARIABLETYPE_FLOAT, '', 10, true);
-    $this->SetValue('Odometer', $data['distance']);
-}
-
-private function HandleBattery(array $data)
-{
-    if (!isset($data['range'], $data['percent'])) {
-        $this->SendDebug('HandleBattery', 'Batteriedaten nicht gefunden!', 0);
-        return;
+    
+    private function HandleBattery(array $data)
+    {
+        if (!isset($data['range'], $data['percent'])) {
+            $this->SendDebug('HandleBattery', 'Batteriedaten nicht gefunden!', 0);
+            return;
+        }
+    
+        $this->MaintainVariable('BatteryRange', 'Reichweite (km)', VARIABLETYPE_FLOAT, '', 11, true);
+        $this->SetValue('BatteryRange', $data['range']);
+    
+        $this->MaintainVariable('BatteryLevel', 'Batterieladestand (%)', VARIABLETYPE_FLOAT, '', 12, true);
+        $this->SetValue('BatteryLevel', $data['percent']);
     }
-
-    $this->MaintainVariable('BatteryRange', 'Reichweite (km)', VARIABLETYPE_FLOAT, '', 11, true);
-    $this->SetValue('BatteryRange', $data['range']);
-
-    $this->MaintainVariable('BatteryLevel', 'Batterieladestand (%)', VARIABLETYPE_FLOAT, '', 12, true);
-    $this->SetValue('BatteryLevel', $data['percent']);
-}
+           
 
 
 private function CreateProfile()
