@@ -291,50 +291,52 @@ class SMCAR extends IPSModule
         }
     }
     
-    public function FetchAllVehicleData()
+   
+   
+   
+   
+   
+   
+   
+   
+    private function ValidateAccess(): bool
     {
-        $this->SendDebug('FetchAllVehicleData', 'Starte Fahrzeugdatenabfrage...', 0);
-    
         $vehicleID = $this->ReadAttributeString('VehicleID');
         $accessToken = $this->ReadAttributeString('AccessToken');
     
         if (empty($vehicleID) || empty($accessToken)) {
-            $this->SendDebug('FetchAllVehicleData', 'Fahrzeug-ID oder Access Token fehlt!', 0);
+            $this->SendDebug('ValidateAccess', 'Fahrzeug-ID oder Access Token fehlt!', 0);
             $this->LogMessage('Fahrzeugdaten konnten nicht abgerufen werden.', KL_ERROR);
+            return false;
+        }
+        return true;
+    }
+      
+   
+    public function FetchAllVehicleData()
+    {
+        if (!$this->ValidateAccess()) {
             return;
         }
     
-        // Array für Endpunkte und Scopes
+        $this->SendDebug('FetchAllVehicleData', 'Starte Fahrzeugdatenabfrage...', 0);
+    
+        $vehicleID = $this->ReadAttributeString('VehicleID');
         $endpoints = [
-            'read_vehicle_info' => [
-                'url'    => "https://api.smartcar.com/v2.0/vehicles/$vehicleID",
-                'method' => 'HandleVehicleInfo'
-            ],
-            'read_location' => [
-                'url'    => "https://api.smartcar.com/v2.0/vehicles/$vehicleID/location",
-                'method' => 'HandleLocation'
-            ],
-            'read_tires' => [
-                'url'    => "https://api.smartcar.com/v2.0/vehicles/$vehicleID/tires/pressure",
-                'method' => 'HandleTirePressure'
-            ],
-            'read_odometer' => [
-                'url'    => "https://api.smartcar.com/v2.0/vehicles/$vehicleID/odometer",
-                'method' => 'HandleOdometer'
-            ],
-            'read_battery' => [
-                'url'    => "https://api.smartcar.com/v2.0/vehicles/$vehicleID/battery",
-                'method' => 'HandleBattery'
-            ]
+            'read_vehicle_info' => ["https://api.smartcar.com/v2.0/vehicles/$vehicleID", 'HandleVehicleInfo'],
+            'read_location'     => ["https://api.smartcar.com/v2.0/vehicles/$vehicleID/location", 'HandleLocation'],
+            'read_tires'        => ["https://api.smartcar.com/v2.0/vehicles/$vehicleID/tires/pressure", 'HandleTirePressure'],
+            'read_odometer'     => ["https://api.smartcar.com/v2.0/vehicles/$vehicleID/odometer", 'HandleOdometer'],
+            'read_battery'      => ["https://api.smartcar.com/v2.0/vehicles/$vehicleID/battery", 'HandleBattery']
         ];
     
-        // Scopes und Endpunkte durchlaufen
-        foreach ($endpoints as $scope => $data) {
+        foreach ($endpoints as $scope => [$url, $method]) {
             if ($this->IsScopeEnabled($scope)) {
-                $this->FetchEndpointData($data['url'], $data['method']);
+                $this->FetchEndpointData($url, $method);
             }
         }
     }
+    
     
     private function FetchEndpointData(string $url, string $callback)
     {
