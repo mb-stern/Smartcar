@@ -331,7 +331,6 @@ class SMCAR extends IPSModule
             $this->SendDebug('FetchVehicleData', 'Keine Fahrzeugdetails gefunden!', 0);
         }
 
-        $vehicleID = $data['id'];
         $this->WriteAttributeString('VehicleID', $vehicleID); // Fahrzeug-ID speichern
         $this->SendDebug('FetchVehicleData', "Fahrzeug-ID gespeichert: $vehicleID", 0);
 
