@@ -20,12 +20,17 @@ class SMCAR extends IPSModule
         $this->RegisterPropertyBoolean('ScopeControlCharge', false);
         $this->RegisterPropertyBoolean('ScopeControlSecurity', false);
 
+        $this->RegisterPropertyInteger('FetchInterval', 60);
+
+
         $this->RegisterAttributeString("CurrentHook", "");
         $this->RegisterAttributeString('AccessToken', '');
         $this->RegisterAttributeString('RefreshToken', '');
         $this->RegisterAttributeString('VehicleID', '');
 
         $this->RegisterTimer('TokenRefreshTimer', 0, 'SMCAR_RefreshAccessToken(' . $this->InstanceID . ');');  
+        $this->RegisterTimer('FetchDataTimer', 0, 'SMCAR_FetchAllData(' . $this->InstanceID . ');');
+
 
     }
 
@@ -55,6 +60,11 @@ class SMCAR extends IPSModule
                 $this->SendDebug('ApplyChanges', 'Token-Erneuerungs-Timer gestoppt.', 0);
             }
     
+            $fetchInterval = max(60, $this->ReadPropertyInteger('FetchInterval')) * 1000; // Minimum 60 Sekunden
+            $this->SetTimerInterval('FetchDataTimer', $fetchInterval);
+            $this->SendDebug('ApplyChanges', "Datenabfrage-Timer auf {$fetchInterval} ms gesetzt.", 0);
+
+
         //Profile für erstellen
         $this->CreateProfile();
  
@@ -653,5 +663,112 @@ private function CreateProfile()
         $this->SendDebug('CreatePressureProfile', 'Profil existiert bereits: ' . $profileName, 0);
     }
 }
+
+public function FetchAllData()
+{
+    $accessToken = $this->ReadAttributeString('AccessToken');
+    $vehicleID = $this->ReadAttributeString('VehicleID');
+
+    if (empty($accessToken) || empty($vehicleID)) {
+        $this->SendDebug('FetchAllData', 'Access Token oder Fahrzeug-ID fehlt!', 0);
+        return;
+    }
+
+    // Endpunkte basierend auf den ausgewählten Scopes definieren
+    $requests = [];
+
+    if ($this->ReadPropertyBoolean('ScopeReadOdometer')) {
+        $requests[] = ["path" => "/odometer"];
+    }
+    if ($this->ReadPropertyBoolean('ScopeReadLocation')) {
+        $requests[] = ["path" => "/location"];
+    }
+    if ($this->ReadPropertyBoolean('ScopeReadTires')) {
+        $requests[] = ["path" => "/tires/pressure"];
+    }
+    if ($this->ReadPropertyBoolean('ScopeReadBattery')) {
+        $requests[] = ["path" => "/battery"];
+    }
+
+    if (empty($requests)) {
+        $this->SendDebug('FetchAllData', 'Keine Endpunkte ausgewählt!', 0);
+        return;
+    }
+
+    // Batch-Request vorbereiten
+    $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID/batch";
+    $postData = json_encode(["requests" => $requests]);
+
+    $options = [
+        'http' => [
+            'header'  => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
+            'method'  => 'POST',
+            'content' => $postData,
+            'ignore_errors' => true
+        ]
+    ];
+
+    // Anfrage senden
+    $context = stream_context_create($options);
+    $response = @file_get_contents($url, false, $context);
+
+    if ($response === false) {
+        $this->SendDebug('FetchAllData', 'Fehler: Keine Antwort von der API!', 0);
+        return;
+    }
+
+    // Antwort verarbeiten
+    $data = json_decode($response, true);
+    $this->SendDebug('FetchAllData', 'Antwort: ' . json_encode($data), 0);
+
+    if (isset($data['responses']) && is_array($data['responses'])) {
+        foreach ($data['responses'] as $response) {
+            if (isset($response['path'], $response['body']) && $response['code'] === 200) {
+                $this->ProcessResponseData($response['path'], $response['body']);
+            } else {
+                $this->SendDebug('FetchAllData', 'Fehlerhafte Antwort: ' . json_encode($response), 0);
+            }
+        }
+    }
+}
+
+private function ProcessResponseData(string $path, array $data)
+{
+    switch ($path) {
+        case "/odometer":
+            if (isset($data['distance'])) {
+                $this->SetValue('Odometer', $data['distance']);
+            }
+            break;
+
+        case "/location":
+            if (isset($data['latitude'], $data['longitude'])) {
+                $this->SetValue('Latitude', $data['latitude']);
+                $this->SetValue('Longitude', $data['longitude']);
+            }
+            break;
+
+        case "/tires/pressure":
+            if (isset($data['frontLeft'], $data['frontRight'], $data['backLeft'], $data['backRight'])) {
+                $this->SetValue('TireFrontLeft', $data['frontLeft']);
+                $this->SetValue('TireFrontRight', $data['frontRight']);
+                $this->SetValue('TireBackLeft', $data['backLeft']);
+                $this->SetValue('TireBackRight', $data['backRight']);
+            }
+            break;
+
+        case "/battery":
+            if (isset($data['percent'], $data['range'])) {
+                $this->SetValue('BatteryLevel', $data['percent']);
+                $this->SetValue('BatteryRange', $data['range']);
+            }
+            break;
+
+        default:
+            $this->SendDebug('ProcessResponseData', "Unbekannter Pfad: $path", 0);
+    }
+}
+
+
 
 }

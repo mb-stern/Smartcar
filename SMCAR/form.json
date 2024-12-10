@@ -68,7 +68,13 @@
           "type": "CheckBox",
           "name": "ScopeControlSecurity",
           "caption": "Fahrzeugsteuerung (control_security)"
-        }
+        },
+        {
+          "type": "NumberSpinner",
+          "name": "FetchInterval",
+          "caption": "Intervall für Datenabfragen (Sekunden)",
+          "minimum": 60
+      }
       ]
     }
   ],
