@@ -710,13 +710,21 @@ public function FetchAllData()
     $context = stream_context_create($options);
     $response = @file_get_contents($url, false, $context);
 
+    $httpResponseHeader = $http_response_header ?? [];
+    $httpStatus = isset($httpResponseHeader[0]) ? $httpResponseHeader[0] : "Unbekannt";
+
     if ($response === false) {
-        $this->SendDebug('FetchAllData', 'Fehler: Keine Antwort von der API!', 0);
+        $this->SendDebug('FetchAllData', "Fehler: Keine Antwort von der API! HTTP-Status: $httpStatus", 0);
         return;
     }
 
     $data = json_decode($response, true);
     $this->SendDebug('FetchAllData', 'Antwort: ' . json_encode($data), 0);
+
+    if (isset($data['statusCode']) && $data['statusCode'] !== 200) {
+        $this->SendDebug('FetchAllData', "API-Fehler: " . $data['message'], 0);
+        return;
+    }
 }
 
 
