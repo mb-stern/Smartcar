@@ -12,7 +12,7 @@ class SMCAR extends IPSModule
         $this->RegisterPropertyString('ConnectAddress', '');
         $this->RegisterPropertyString('Mode', 'simulated');
 
-        $this->RegisterPropertyBoolean('ScopeReadVehicleInfo', false);
+        $this->RegisterPropertyBoolean('ScopeReadVehicleDetails', false);
         $this->RegisterPropertyBoolean('ScopeReadLocation', false);
         $this->RegisterPropertyBoolean('ScopeReadTires', false);
         $this->RegisterPropertyBoolean('ScopeReadOdometer', false);
@@ -334,7 +334,7 @@ class SMCAR extends IPSModule
         $this->WriteAttributeString('VehicleID', $vehicleID); // Fahrzeug-ID speichern
         $this->SendDebug('FetchVehicleData', "Fahrzeug-ID gespeichert: $vehicleID", 0);
 
-        if ($this->ReadPropertyBoolean('ScopeReadVehicleInfo')) {
+        if ($this->ReadPropertyBoolean('ScopeReadVehicleDetails')) {
             $this->FetchVehicleDetails($vehicleID);
         }
  
