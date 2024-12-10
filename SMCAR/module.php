@@ -12,7 +12,7 @@ class SMCAR extends IPSModule
         $this->RegisterPropertyString('ConnectAddress', '');
         $this->RegisterPropertyString('Mode', 'simulated');
 
-        $this->RegisterPropertyBoolean('ScopeReadVehicleInfo', false);
+        $this->RegisterPropertyBoolean('ScopeReadVehicleInfo', true);
         $this->RegisterPropertyBoolean('ScopeReadLocation', false);
         $this->RegisterPropertyBoolean('ScopeReadTires', false);
         $this->RegisterPropertyBoolean('ScopeReadOdometer', false);

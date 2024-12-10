@@ -37,7 +37,7 @@
         {
           "type": "CheckBox",
           "name": "ScopeReadVehicleInfo",
-          "caption": "Fahrzeuginformationen lesen (read_vehicle_info)"
+          "caption": "Fahrzeuginformationen lesen (read_vehicle_info, muss aktiviert sein)"
         },
         {
           "type": "CheckBox",
