@@ -336,10 +336,9 @@ class SMCAR extends IPSModule
 
         if ($this->ReadPropertyBoolean('ScopeReadVehicleInfo')) {
             $this->FetchVehicleDetails($vehicleID);
+        }
  
-            $this->FetchTirePressure($vehicleID);
-        
-            if ($this->ReadPropertyBoolean('ScopeReadTires')) {
+        if ($this->ReadPropertyBoolean('ScopeReadTires')) {
             $this->FetchTirePressure($vehicleID);
         }
     
@@ -354,7 +353,7 @@ class SMCAR extends IPSModule
         if ($this->ReadPropertyBoolean('ScopeReadLocation')) {
             $this->FetchLocation($vehicleID);
         }
-    }
+    
 }
     
     private function FetchVehicleDetails(string $vehicleID)
@@ -417,9 +416,6 @@ class SMCAR extends IPSModule
 
 private function FetchTirePressure(string $vehicleID)
 {
-
-    $this->SendDebug('FetchTirePressure', 'Scope "read_tires" nicht aktiviert.', 0);
-
     if (!$this->ReadPropertyBoolean('ScopeReadTires')) {
         $this->SendDebug('FetchTirePressure', 'Scope "read_tires" nicht aktiviert.', 0);
         return;
