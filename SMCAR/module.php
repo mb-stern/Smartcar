@@ -234,7 +234,7 @@ class SMCAR extends IPSModule
         
             // Fahrzeugdaten abrufen
             $this->FetchVehicleData(); 
-        }
+
             // Wende Änderungen an, um den Timer zu starten
             $this->ApplyChanges(); 
         } else {
