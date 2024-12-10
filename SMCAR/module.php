@@ -350,6 +350,7 @@ class SMCAR extends IPSModule
             $this->FetchLocation($vehicleID);
         }
     }
+}
     
     private function FetchVehicleDetails(string $vehicleID)
     {
