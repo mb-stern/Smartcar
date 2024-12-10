@@ -285,10 +285,6 @@ class SMCAR extends IPSModule
     
     public function FetchVehicleData()
     {
-        if (!$this->ReadPropertyBoolean('ScopeReadVehicleInfo')) {
-            $this->SendDebug('FetchVehicleData', 'Scope "read_vehicle_info" nicht aktiviert.', 0);
-            return;
-        }
     
         $accessToken = $this->ReadAttributeString('AccessToken');
     
@@ -333,6 +329,25 @@ class SMCAR extends IPSModule
             $this->FetchVehicleDetails($vehicleID);
         } else {
             $this->SendDebug('FetchVehicleData', 'Keine Fahrzeugdetails gefunden!', 0);
+        }
+
+        if ($this->ReadPropertyBoolean('ScopeReadVehicleInfo')) {
+            $this->FetchVehicleDetails($vehicleID);
+ 
+        if ($this->ReadPropertyBoolean('ScopeReadTires')) {
+            $this->FetchTirePressure($vehicleID);
+        }
+    
+        if ($this->ReadPropertyBoolean('ScopeReadOdometer')) {
+            $this->FetchOdometer($vehicleID);
+        }
+    
+        if ($this->ReadPropertyBoolean('ScopeReadBattery')) {
+            $this->FetchBattery($vehicleID);
+        }
+    
+        if ($this->ReadPropertyBoolean('ScopeReadLocation')) {
+            $this->FetchLocation($vehicleID);
         }
     }
     
@@ -394,23 +409,6 @@ class SMCAR extends IPSModule
             $this->SetValue('Year', intval($data['year']));
         } else {
             $this->SendDebug('FetchVehicleDetails', 'Fahrzeugdetails nicht gefunden!', 0);
-        }
-    
-        // Scopes überprüfen und Daten abrufen
-        if ($this->ReadPropertyBoolean('ScopeReadTires')) {
-            $this->FetchTirePressure($vehicleID);
-        }
-    
-        if ($this->ReadPropertyBoolean('ScopeReadOdometer')) {
-            $this->FetchOdometer($vehicleID);
-        }
-    
-        if ($this->ReadPropertyBoolean('ScopeReadBattery')) {
-            $this->FetchBattery($vehicleID);
-        }
-    
-        if ($this->ReadPropertyBoolean('ScopeReadLocation')) {
-            $this->FetchLocation($vehicleID);
         }
     }    
 
