@@ -239,7 +239,7 @@ class SMCAR extends IPSModule
             $this->WriteAttributeString('RefreshToken', $responseData['refresh_token']);
             $this->SendDebug('RequestAccessToken', 'Access und Refresh Token gespeichert!', 0);
     
-            // Fahrzeug-ID nach erfolgreicher Authentifizierung abrufen
+            // Fahrzeug-ID sofort abrufen
             $this->FetchVehicleID();
         } else {
             $this->SendDebug('RequestAccessToken', 'Token-Austausch fehlgeschlagen!', 0);
@@ -317,7 +317,17 @@ class SMCAR extends IPSModule
         ];
     
         $context = stream_context_create($options);
-        $response = file_get_contents($url, false, $context);
+        $response = @file_get_contents($url, false, $context);
+    
+        $httpResponseHeader = $http_response_header ?? [];
+        $httpStatus = isset($httpResponseHeader[0]) ? $httpResponseHeader[0] : "Unbekannt";
+        $this->SendDebug('FetchVehicleID', "HTTP-Status: $httpStatus", 0);
+    
+        if ($response === false || empty($response)) {
+            $this->SendDebug('FetchVehicleID', 'API-Antwort fehlgeschlagen!', 0);
+            return;
+        }
+    
         $responseData = json_decode($response, true);
     
         if (isset($responseData['vehicles'][0])) {
