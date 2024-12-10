@@ -223,9 +223,9 @@ class SMCAR extends IPSModule
     
         $options = [
             'http' => [
-                'header' => "Content-Type: application/x-www-form-urlencoded\r\n",
-                'method' => 'POST',
-                'content' => $postData,
+                'header'        => "Content-Type: application/x-www-form-urlencoded\r\n",
+                'method'        => 'POST',
+                'content'       => $postData,
                 'ignore_errors' => true
             ]
         ];
@@ -239,12 +239,13 @@ class SMCAR extends IPSModule
             $this->WriteAttributeString('RefreshToken', $responseData['refresh_token']);
             $this->SendDebug('RequestAccessToken', 'Access und Refresh Token gespeichert!', 0);
     
-            // Fahrzeug-ID nach Token-Austausch abrufen
+            // Fahrzeug-ID nach erfolgreicher Authentifizierung abrufen
             $this->FetchVehicleID();
         } else {
             $this->SendDebug('RequestAccessToken', 'Token-Austausch fehlgeschlagen!', 0);
         }
     }
+    
     
     
     public function RefreshAccessToken()
@@ -301,11 +302,16 @@ class SMCAR extends IPSModule
     {
         $accessToken = $this->ReadAttributeString('AccessToken');
     
+        if (empty($accessToken)) {
+            $this->SendDebug('FetchVehicleID', 'Access Token fehlt!', 0);
+            return;
+        }
+    
         $url = "https://api.smartcar.com/v2.0/vehicles";
         $options = [
             'http' => [
-                'header' => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
-                'method' => 'GET',
+                'header'        => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
+                'method'        => 'GET',
                 'ignore_errors' => true
             ]
         ];
@@ -316,27 +322,13 @@ class SMCAR extends IPSModule
     
         if (isset($responseData['vehicles'][0])) {
             $vehicleID = $responseData['vehicles'][0];
-            $this->SaveVehicleID($vehicleID);
-            $this->SendDebug('FetchVehicleID', "Fahrzeug-ID erhalten: $vehicleID", 0);
+            $this->WriteAttributeString('VehicleID', $vehicleID);
+            $this->SendDebug('FetchVehicleID', "Fahrzeug-ID erfolgreich gespeichert: $vehicleID", 0);
         } else {
             $this->SendDebug('FetchVehicleID', 'Fahrzeug-ID konnte nicht abgerufen werden!', 0);
         }
     }
     
-    private function IsScopeEnabled(string $scope): bool
-    {
-        $scopeMapping = [
-            'read_vehicle_info' => 'ScopeReadVehicleInfo',
-            'read_location'     => 'ScopeReadLocation',
-            'read_tires'        => 'ScopeReadTires',
-            'read_odometer'     => 'ScopeReadOdometer',
-            'read_battery'      => 'ScopeReadBattery'
-        ];
-    
-        return $this->ReadPropertyBoolean($scopeMapping[$scope] ?? '') ?? false;
-    }
-    
-   
    
    
     private function ValidateAccess(): bool
@@ -344,14 +336,20 @@ class SMCAR extends IPSModule
         $vehicleID = $this->ReadAttributeString('VehicleID');
         $accessToken = $this->ReadAttributeString('AccessToken');
     
-        if (empty($vehicleID) || empty($accessToken)) {
-            $this->SendDebug('ValidateAccess', 'Fahrzeug-ID oder Access Token fehlt!', 0);
-            $this->LogMessage('Fahrzeugdaten konnten nicht abgerufen werden.', KL_ERROR);
+        if (empty($vehicleID)) {
+            $this->SendDebug('ValidateAccess', 'Fahrzeug-ID fehlt!', 0);
             return false;
         }
+    
+        if (empty($accessToken)) {
+            $this->SendDebug('ValidateAccess', 'Access Token fehlt!', 0);
+            return false;
+        }
+    
+        $this->SendDebug('ValidateAccess', 'Zugangsdaten vorhanden.', 0);
         return true;
     }
-      
+    
    
     public function FetchAllVehicleData()
     {
