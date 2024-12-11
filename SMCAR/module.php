@@ -285,38 +285,55 @@ class SMCAR extends IPSModule
     
     public function FetchVehicleData()
     {
-        if (!$this->ReadPropertyBoolean('ScopeReadVehicleInfo')) {
-            $this->SendDebug('FetchVehicleData', 'Scope "read_vehicle_info" nicht aktiviert.', 0);
-            return;
-        }
-    
+        // Access Token und Vehicle ID prüfen
         $accessToken = $this->ReadAttributeString('AccessToken');
+        $vehicleID = $this->ReadAttributeString('VehicleID');
     
-        if (empty($accessToken)) {
-            $this->SendDebug('FetchVehicleData', 'Kein Access Token vorhanden.', 0);
+        if (empty($accessToken) || empty($vehicleID)) {
+            $this->SendDebug('FetchVehicleData', 'Access Token oder Fahrzeug-ID fehlt!', 0);
             $this->LogMessage('Fahrzeugdaten konnten nicht abgerufen werden.', KL_ERROR);
             return;
         }
     
-        $url = "https://api.smartcar.com/v2.0/vehicles";
+        // Sammle die aktivierten Endpunkte
+        $endpoints = [];
+    
+        if ($this->ReadPropertyBoolean('ScopeReadVehicleInfo')) {
+            $endpoints[] = ["path" => "/"];
+        }
+        if ($this->ReadPropertyBoolean('ScopeReadLocation')) {
+            $endpoints[] = ["path" => "/location"];
+        }
+        if ($this->ReadPropertyBoolean('ScopeReadTires')) {
+            $endpoints[] = ["path" => "/tires/pressure"];
+        }
+        if ($this->ReadPropertyBoolean('ScopeReadOdometer')) {
+            $endpoints[] = ["path" => "/odometer"];
+        }
+        if ($this->ReadPropertyBoolean('ScopeReadBattery')) {
+            $endpoints[] = ["path" => "/battery"];
+        }
+    
+        if (empty($endpoints)) {
+            $this->SendDebug('FetchVehicleData', 'Keine Scopes aktiviert!', 0);
+            return;
+        }
+    
+        // Erstelle den Batch-Request
+        $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID/batch";
+        $postData = json_encode(["requests" => $endpoints]);
     
         $options = [
             'http' => [
-                'header' => [
-                    "Authorization: Bearer $accessToken",
-                    "Content-Type: application/json"
-                ],
-                'method' => 'GET',
+                'header' => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
+                'method' => 'POST',
+                'content' => $postData,
                 'ignore_errors' => true
             ]
         ];
     
         $context = stream_context_create($options);
         $response = @file_get_contents($url, false, $context);
-    
-        $httpResponseHeader = $http_response_header ?? [];
-        $httpStatus = isset($httpResponseHeader[0]) ? $httpResponseHeader[0] : "Unbekannt";
-        $this->SendDebug('FetchVehicleData', "HTTP-Status: $httpStatus", 0);
     
         if ($response === false) {
             $this->SendDebug('FetchVehicleData', 'Fehler: Keine Antwort von der API!', 0);
@@ -327,14 +344,54 @@ class SMCAR extends IPSModule
         $data = json_decode($response, true);
         $this->SendDebug('FetchVehicleData', 'Antwort: ' . json_encode($data), 0);
     
-        if (isset($data['vehicles'][0])) {
-            $vehicleID = $data['vehicles'][0];
-            $this->SendDebug('FetchVehicleData', "Fahrzeug-ID erhalten: $vehicleID", 0);
-            $this->FetchVehicleDetails($vehicleID);
+        // Verarbeite die Antwort
+        if (isset($data['responses']) && is_array($data['responses'])) {
+            foreach ($data['responses'] as $response) {
+                if ($response['code'] === 200 && isset($response['body'])) {
+                    $this->ProcessResponse($response['path'], $response['body']);
+                } else {
+                    $this->SendDebug('FetchVehicleData', 'Fehlerhafte Antwort: ' . json_encode($response), 0);
+                }
+            }
         } else {
-            $this->SendDebug('FetchVehicleData', 'Keine Fahrzeugdetails gefunden!', 0);
+            $this->SendDebug('FetchVehicleData', 'Unerwartete Antwortstruktur: ' . json_encode($data), 0);
         }
     }
+    
+    // Hilfsfunktion zur Verarbeitung der Batch-Antwort
+    private function ProcessResponse(string $path, array $body)
+    {
+        switch ($path) {
+            case '/':
+                $this->SetValue('VehicleID', $body['id'] ?? '');
+                $this->SetValue('Make', $body['make'] ?? '');
+                $this->SetValue('Model', $body['model'] ?? '');
+                $this->SetValue('Year', $body['year'] ?? 0);
+                break;
+            case '/location':
+                $this->SetValue('Latitude', $body['latitude'] ?? 0.0);
+                $this->SetValue('Longitude', $body['longitude'] ?? 0.0);
+                break;
+            case '/tires/pressure':
+                $this->SetValue('TireFrontLeft', ($body['frontLeft'] ?? 0) / 100);
+                $this->SetValue('TireFrontRight', ($body['frontRight'] ?? 0) / 100);
+                $this->SetValue('TireBackLeft', ($body['backLeft'] ?? 0) / 100);
+                $this->SetValue('TireBackRight', ($body['backRight'] ?? 0) / 100);
+                break;
+            case '/odometer':
+                $this->SetValue('Odometer', $body['distance'] ?? 0.0);
+                break;
+            case '/battery':
+                $this->SetValue('BatteryRange', $body['range'] ?? 0.0);
+                $this->SetValue('BatteryLevel', $body['percent'] ?? 0.0);
+                break;
+            default:
+                $this->SendDebug('ProcessResponse', "Unbekannter Pfad: $path", 0);
+        }
+    }
+    
+    
+    
     
     private function FetchVehicleDetails(string $vehicleID)
     {
