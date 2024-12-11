@@ -289,7 +289,7 @@ class SMCAR extends IPSModule
         $vehicleID = $this->ReadAttributeString('VehicleID');
     
         if (empty($accessToken) || empty($vehicleID)) {
-            $this->SendDebug('FetchAllData', 'Access Token oder Fahrzeug-ID fehlt!', 0);
+            $this->SendDebug('FetchVehicleData', 'Access Token oder Fahrzeug-ID fehlt!', 0);
             return;
         }
     
