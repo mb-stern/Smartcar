@@ -386,7 +386,7 @@ class SMCAR extends IPSModule
                 break;
     
             case '/odometer':
-                $this->MaintainVariable('Odometer', 'Kilometerstand', VARIABLETYPE_FLOAT, '', 30, true);
+                $this->MaintainVariable('Odometer', 'Kilometerstand', VARIABLETYPE_FLOAT, 'SMCAR.Odometer', 30, true);
                 $this->SetValue('Odometer', $body['distance'] ?? 0);
                 break;
     
