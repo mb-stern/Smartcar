@@ -289,7 +289,7 @@ class SMCAR extends IPSModule
         $vehicleID = $this->ReadAttributeString('VehicleID');
     
         if (empty($accessToken) || empty($vehicleID)) {
-            $this->SendDebug('FetchVehicleData', 'Access Token oder Fahrzeug-ID fehlt!', 0);
+            $this->SendDebug('FetchAllData', 'Access Token oder Fahrzeug-ID fehlt!', 0);
             return;
         }
     
@@ -320,15 +320,10 @@ class SMCAR extends IPSModule
         $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID/batch";
         $postData = json_encode(["requests" => $endpoints]);
     
-        $headers = [
-            "Authorization: Bearer $accessToken",
-            "Content-Type: application/json"
-        ];
-    
         $options = [
             'http' => [
-                'header' => implode("\r\n", $headers),
-                'method' => 'POST',
+                'header'  => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
+                'method'  => 'POST',
                 'content' => $postData,
                 'ignore_errors' => true
             ]
@@ -338,23 +333,11 @@ class SMCAR extends IPSModule
         $response = @file_get_contents($url, false, $context);
     
         if ($response === false) {
-            $error = error_get_last();
-            $this->SendDebug('FetchVehicleData', 'Fehler bei der Anfrage: ' . $error['message'], 0);
-            return;
-        }
-    
-        $httpResponseHeader = $http_response_header ?? [];
-        if (isset($httpResponseHeader[0]) && strpos($httpResponseHeader[0], '200') === false) {
-            $this->SendDebug('FetchVehicleData', "HTTP-Fehler: {$httpResponseHeader[0]}", 0);
+            $this->SendDebug('FetchVehicleData', 'Fehler: Keine Antwort von der API!', 0);
             return;
         }
     
         $data = json_decode($response, true);
-        if (empty($data)) {
-            $this->SendDebug('FetchVehicleData', 'Leere Antwort von der API!', 0);
-            return;
-        }
-    
         $this->SendDebug('FetchVehicleData', 'Antwort: ' . json_encode($data), 0);
     
         // Verarbeite die Antwort
@@ -372,7 +355,7 @@ class SMCAR extends IPSModule
     }
     
 
-
+    
     // Neue Funktion zum Verarbeiten der Antworten
     private function ProcessResponse(string $path, array $body)
     {
