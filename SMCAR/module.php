@@ -365,7 +365,37 @@ class SMCAR extends IPSModule
         }
     }
     
-
+    private function GetVehicleID(string $accessToken): ?string
+    {
+        $url = "https://api.smartcar.com/v2.0/vehicles";
+    
+        $options = [
+            'http' => [
+                'header'  => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
+                'method'  => 'GET',
+                'ignore_errors' => true
+            ]
+        ];
+    
+        $context = stream_context_create($options);
+        $response = @file_get_contents($url, false, $context);
+    
+        if ($response === false) {
+            $this->SendDebug('GetVehicleID', 'Fehler: Keine Antwort von der API!', 0);
+            return null;
+        }
+    
+        $data = json_decode($response, true);
+        $this->SendDebug('GetVehicleID', 'Antwort: ' . json_encode($data), 0);
+    
+        if (isset($data['vehicles'][0])) {
+            return $data['vehicles'][0];
+        }
+    
+        $this->SendDebug('GetVehicleID', 'Keine Fahrzeug-ID gefunden!', 0);
+        return null;
+    }
+    
     
     // Neue Funktion zum Verarbeiten der Antworten
     private function ProcessResponse(string $path, array $body)
