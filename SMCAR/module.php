@@ -406,7 +406,6 @@ class SMCAR extends IPSModule
 private function CreateProfile()
 {
 
-
     if (!IPS_VariableProfileExists('SMCAR.Pressure')) {
         IPS_CreateVariableProfile('SMCAR.Pressure', VARIABLETYPE_FLOAT);
         IPS_SetVariableProfileText('SMCAR.Pressure', '', ' bar');
@@ -414,11 +413,12 @@ private function CreateProfile()
         IPS_SetVariableProfileValues('SMCAR.Pressure'e, 0, 10, 0.01);
         $this->SendDebug('CreateProfile', 'Profil erstellt: SMCAR.Pressure', 0);
     } 
+
     if (!IPS_VariableProfileExists('SMCAR.Odometer')) {
         IPS_CreateVariableProfile('SMCAR.Odometer', VARIABLETYPE_FLOAT);
         IPS_SetVariableProfileText('SMCAR.Odometer', '', ' km');
         IPS_SetVariableProfileDigits('SMCAR.Odometer', 0);
-        IPS_SetVariableProfileValues('SMCAR.Odometer', 0, 0, 0);
+        IPS_SetVariableProfileValues('SMCAR.Odometer', 0, 0, 1);
         $this->SendDebug('CreateProfile', 'Profil erstellt: SMCAR.Odometer', 0);
     } 
 
