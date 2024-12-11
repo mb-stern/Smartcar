@@ -283,7 +283,7 @@ class SMCAR extends IPSModule
     }
     
     
-    public function FetchAllData()
+    public function FetchVehicleData()
     {
         $accessToken = $this->ReadAttributeString('AccessToken');
         $vehicleID = $this->ReadAttributeString('VehicleID');
