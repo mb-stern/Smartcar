@@ -312,7 +312,7 @@ class SMCAR extends IPSModule
         }
     
         if (empty($endpoints)) {
-            $this->SendDebug('FetchAllData', 'Keine Scopes aktiviert!', 0);
+            $this->SendDebug('FetchVehicleData', 'Keine Scopes aktiviert!', 0);
             return;
         }
     
@@ -333,12 +333,12 @@ class SMCAR extends IPSModule
         $response = @file_get_contents($url, false, $context);
     
         if ($response === false) {
-            $this->SendDebug('FetchAllData', 'Fehler: Keine Antwort von der API!', 0);
+            $this->SendDebug('FetchVehicleData', 'Fehler: Keine Antwort von der API!', 0);
             return;
         }
     
         $data = json_decode($response, true);
-        $this->SendDebug('FetchAllData', 'Antwort: ' . json_encode($data), 0);
+        $this->SendDebug('FetchVehicleData', 'Antwort: ' . json_encode($data), 0);
     
         // Verarbeite die Antwort
         if (isset($data['responses']) && is_array($data['responses'])) {
@@ -346,13 +346,15 @@ class SMCAR extends IPSModule
                 if ($response['code'] === 200 && isset($response['body'])) {
                     $this->ProcessResponse($response['path'], $response['body']);
                 } else {
-                    $this->SendDebug('FetchAllData', "Fehlerhafte Antwort: " . json_encode($response), 0);
+                    $this->SendDebug('FetchVehicleData', "Fehlerhafte Antwort: " . json_encode($response), 0);
                 }
             }
         } else {
-            $this->SendDebug('FetchAllData', 'Unerwartete Antwortstruktur: ' . json_encode($data), 0);
+            $this->SendDebug('FetchVehicleData', 'Unerwartete Antwortstruktur: ' . json_encode($data), 0);
         }
     }
+    
+
     
     // Neue Funktion zum Verarbeiten der Antworten
     private function ProcessResponse(string $path, array $body)
@@ -386,7 +388,7 @@ class SMCAR extends IPSModule
                 break;
     
             case '/odometer':
-                $this->MaintainVariable('Odometer', 'Kilometerstand', VARIABLETYPE_FLOAT, '', 30, true);
+                $this->MaintainVariable('Odometer', 'Kilometerstand', VARIABLETYPE_FLOAT, 'SMCAR.Odometer', 30, true);
                 $this->SetValue('Odometer', $body['distance'] ?? 0);
                 break;
     
@@ -405,18 +407,23 @@ class SMCAR extends IPSModule
 
 private function CreateProfile()
 {
-    $profileName = 'SMCAR.Pressure';
 
-    // Profil nur erstellen, wenn es noch nicht existiert
-    if (!IPS_VariableProfileExists($profileName)) {
-        IPS_CreateVariableProfile($profileName, VARIABLETYPE_FLOAT);
-        IPS_SetVariableProfileText($profileName, '', ' bar');
+    if (!IPS_VariableProfileExists('SMCAR.Pressure')) {
+        IPS_CreateVariableProfile('SMCAR.Pressure', VARIABLETYPE_FLOAT);
+        IPS_SetVariableProfileText('SMCAR.Pressure', '', ' bar');
         IPS_SetVariableProfileDigits('SMCAR.Pressure', 2);
-        IPS_SetVariableProfileValues($profileName, 0, 10, 0.01);
-        $this->SendDebug('CreatePressureProfile', 'Profil erstellt: ' . $profileName, 0);
-    } else {
-        $this->SendDebug('CreatePressureProfile', 'Profil existiert bereits: ' . $profileName, 0);
-    }
+        IPS_SetVariableProfileValues('SMCAR.Pressure', 0, 10, 0.01);
+        $this->SendDebug('CreateProfile', 'Profil erstellt: SMCAR.Pressure', 0);
+    } 
+
+    if (!IPS_VariableProfileExists('SMCAR.Odometer')) {
+        IPS_CreateVariableProfile('SMCAR.Odometer', VARIABLETYPE_FLOAT);
+        IPS_SetVariableProfileText('SMCAR.Odometer', '', ' km');
+        IPS_SetVariableProfileDigits('SMCAR.Odometer', 0);
+        IPS_SetVariableProfileValues('SMCAR.Odometer', 0, 0, 1);
+        $this->SendDebug('CreateProfile', 'Profil erstellt: SMCAR.Odometer', 0);
+    } 
+
 }
 
 }
