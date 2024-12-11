@@ -405,18 +405,23 @@ class SMCAR extends IPSModule
 
 private function CreateProfile()
 {
-    $profileName = 'SMCAR.Pressure';
 
-    // Profil nur erstellen, wenn es noch nicht existiert
-    if (!IPS_VariableProfileExists($profileName)) {
-        IPS_CreateVariableProfile($profileName, VARIABLETYPE_FLOAT);
-        IPS_SetVariableProfileText($profileName, '', ' bar');
+
+    if (!IPS_VariableProfileExists('SMCAR.Pressure')) {
+        IPS_CreateVariableProfile('SMCAR.Pressure', VARIABLETYPE_FLOAT);
+        IPS_SetVariableProfileText('SMCAR.Pressure', '', ' bar');
         IPS_SetVariableProfileDigits('SMCAR.Pressure', 2);
-        IPS_SetVariableProfileValues($profileName, 0, 10, 0.01);
-        $this->SendDebug('CreatePressureProfile', 'Profil erstellt: ' . $profileName, 0);
-    } else {
-        $this->SendDebug('CreatePressureProfile', 'Profil existiert bereits: ' . $profileName, 0);
-    }
+        IPS_SetVariableProfileValues('SMCAR.Pressure'e, 0, 10, 0.01);
+        $this->SendDebug('CreateProfile', 'Profil erstellt: SMCAR.Pressure', 0);
+    } 
+    if (!IPS_VariableProfileExists('SMCAR.Odometer')) {
+        IPS_CreateVariableProfile('SMCAR.Odometer', VARIABLETYPE_FLOAT);
+        IPS_SetVariableProfileText('SMCAR.Odometer', '', ' km');
+        IPS_SetVariableProfileDigits('SMCAR.Odometer', 0);
+        IPS_SetVariableProfileValues('SMCAR.Odometer', 0, 0, 0);
+        $this->SendDebug('CreateProfile', 'Profil erstellt: SMCAR.Odometer', 0);
+    } 
+
 }
 
 }
