@@ -289,7 +289,7 @@ class SMCAR extends IPSModule
         $vehicleID = $this->ReadAttributeString('VehicleID');
     
         if (empty($accessToken) || empty($vehicleID)) {
-            $this->SendDebug('FetchAllData', 'Access Token oder Fahrzeug-ID fehlt!', 0);
+            $this->SendDebug('FetchVehicleData', 'Access Token oder Fahrzeug-ID fehlt!', 0);
             return;
         }
     
@@ -312,7 +312,7 @@ class SMCAR extends IPSModule
         }
     
         if (empty($endpoints)) {
-            $this->SendDebug('FetchAllData', 'Keine Scopes aktiviert!', 0);
+            $this->SendDebug('FetchVehicleData', 'Keine Scopes aktiviert!', 0);
             return;
         }
     
@@ -320,10 +320,15 @@ class SMCAR extends IPSModule
         $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID/batch";
         $postData = json_encode(["requests" => $endpoints]);
     
+        $headers = [
+            "Authorization: Bearer $accessToken",
+            "Content-Type: application/json"
+        ];
+    
         $options = [
             'http' => [
-                'header'  => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
-                'method'  => 'POST',
+                'header' => implode("\r\n", $headers),
+                'method' => 'POST',
                 'content' => $postData,
                 'ignore_errors' => true
             ]
@@ -333,12 +338,24 @@ class SMCAR extends IPSModule
         $response = @file_get_contents($url, false, $context);
     
         if ($response === false) {
-            $this->SendDebug('FetchAllData', 'Fehler: Keine Antwort von der API!', 0);
+            $error = error_get_last();
+            $this->SendDebug('FetchVehicleData', 'Fehler bei der Anfrage: ' . $error['message'], 0);
+            return;
+        }
+    
+        $httpResponseHeader = $http_response_header ?? [];
+        if (isset($httpResponseHeader[0]) && strpos($httpResponseHeader[0], '200') === false) {
+            $this->SendDebug('FetchVehicleData', "HTTP-Fehler: {$httpResponseHeader[0]}", 0);
             return;
         }
     
         $data = json_decode($response, true);
-        $this->SendDebug('FetchAllData', 'Antwort: ' . json_encode($data), 0);
+        if (empty($data)) {
+            $this->SendDebug('FetchVehicleData', 'Leere Antwort von der API!', 0);
+            return;
+        }
+    
+        $this->SendDebug('FetchVehicleData', 'Antwort: ' . json_encode($data), 0);
     
         // Verarbeite die Antwort
         if (isset($data['responses']) && is_array($data['responses'])) {
@@ -346,14 +363,16 @@ class SMCAR extends IPSModule
                 if ($response['code'] === 200 && isset($response['body'])) {
                     $this->ProcessResponse($response['path'], $response['body']);
                 } else {
-                    $this->SendDebug('FetchAllData', "Fehlerhafte Antwort: " . json_encode($response), 0);
+                    $this->SendDebug('FetchVehicleData', "Fehlerhafte Antwort: " . json_encode($response), 0);
                 }
             }
         } else {
-            $this->SendDebug('FetchAllData', 'Unerwartete Antwortstruktur: ' . json_encode($data), 0);
+            $this->SendDebug('FetchVehicleData', 'Unerwartete Antwortstruktur: ' . json_encode($data), 0);
         }
     }
     
+
+
     // Neue Funktion zum Verarbeiten der Antworten
     private function ProcessResponse(string $path, array $body)
     {
