@@ -424,8 +424,8 @@ class SMCAR extends IPSModule
                 break;
     
             case '/battery':
-                $this->MaintainVariable('BatteryRange', 'Reichweite', VARIABLETYPE_FLOAT, '', 40, true);
-                $this->MaintainVariable('BatteryLevel', 'Batterieladestand', VARIABLETYPE_FLOAT, '', 41, true);
+                $this->MaintainVariable('BatteryRange', 'Reichweite', VARIABLETYPE_FLOAT, 'SMCAR.Odometer', 40, true);
+                $this->MaintainVariable('BatteryLevel', 'Batterieladestand', VARIABLETYPE_FLOAT, '~Progress', 41, true);
                 $this->SetValue('BatteryRange', $body['range'] ?? 0);
                 $this->SetValue('BatteryLevel', $body['percent'] ?? 0);
                 break;
