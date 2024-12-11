@@ -283,21 +283,18 @@ class SMCAR extends IPSModule
     }
     
     
-    public function FetchVehicleData()
+    public function FetchAllData()
     {
-        // Access Token und Vehicle ID prüfen
         $accessToken = $this->ReadAttributeString('AccessToken');
         $vehicleID = $this->ReadAttributeString('VehicleID');
     
         if (empty($accessToken) || empty($vehicleID)) {
-            $this->SendDebug('FetchVehicleData', 'Access Token oder Fahrzeug-ID fehlt!', 0);
-            $this->LogMessage('Fahrzeugdaten konnten nicht abgerufen werden.', KL_ERROR);
+            $this->SendDebug('FetchAllData', 'Access Token oder Fahrzeug-ID fehlt!', 0);
             return;
         }
     
         // Sammle die aktivierten Endpunkte
         $endpoints = [];
-    
         if ($this->ReadPropertyBoolean('ScopeReadVehicleInfo')) {
             $endpoints[] = ["path" => "/"];
         }
@@ -315,7 +312,7 @@ class SMCAR extends IPSModule
         }
     
         if (empty($endpoints)) {
-            $this->SendDebug('FetchVehicleData', 'Keine Scopes aktiviert!', 0);
+            $this->SendDebug('FetchAllData', 'Keine Scopes aktiviert!', 0);
             return;
         }
     
@@ -325,8 +322,8 @@ class SMCAR extends IPSModule
     
         $options = [
             'http' => [
-                'header' => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
-                'method' => 'POST',
+                'header'  => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
+                'method'  => 'POST',
                 'content' => $postData,
                 'ignore_errors' => true
             ]
@@ -336,13 +333,12 @@ class SMCAR extends IPSModule
         $response = @file_get_contents($url, false, $context);
     
         if ($response === false) {
-            $this->SendDebug('FetchVehicleData', 'Fehler: Keine Antwort von der API!', 0);
-            $this->LogMessage('Fahrzeugdaten konnten nicht abgerufen werden.', KL_ERROR);
+            $this->SendDebug('FetchAllData', 'Fehler: Keine Antwort von der API!', 0);
             return;
         }
     
         $data = json_decode($response, true);
-        $this->SendDebug('FetchVehicleData', 'Antwort: ' . json_encode($data), 0);
+        $this->SendDebug('FetchAllData', 'Antwort: ' . json_encode($data), 0);
     
         // Verarbeite die Antwort
         if (isset($data['responses']) && is_array($data['responses'])) {
@@ -350,46 +346,61 @@ class SMCAR extends IPSModule
                 if ($response['code'] === 200 && isset($response['body'])) {
                     $this->ProcessResponse($response['path'], $response['body']);
                 } else {
-                    $this->SendDebug('FetchVehicleData', 'Fehlerhafte Antwort: ' . json_encode($response), 0);
+                    $this->SendDebug('FetchAllData', "Fehlerhafte Antwort: " . json_encode($response), 0);
                 }
             }
         } else {
-            $this->SendDebug('FetchVehicleData', 'Unerwartete Antwortstruktur: ' . json_encode($data), 0);
+            $this->SendDebug('FetchAllData', 'Unerwartete Antwortstruktur: ' . json_encode($data), 0);
         }
     }
     
-    // Hilfsfunktion zur Verarbeitung der Batch-Antwort
+    // Neue Funktion zum Verarbeiten der Antworten
     private function ProcessResponse(string $path, array $body)
     {
         switch ($path) {
             case '/':
-                $this->SetValue('VehicleID', $body['id'] ?? '');
-                $this->SetValue('Make', $body['make'] ?? '');
-                $this->SetValue('Model', $body['model'] ?? '');
-                $this->SetValue('Year', $body['year'] ?? 0);
+                $this->MaintainVariable('VehicleMake', 'Fahrzeug Hersteller', VARIABLETYPE_STRING, '', 1, true);
+                $this->MaintainVariable('VehicleModel', 'Fahrzeug Modell', VARIABLETYPE_STRING, '', 2, true);
+                $this->MaintainVariable('VehicleYear', 'Fahrzeug Baujahr', VARIABLETYPE_INTEGER, '', 3, true);
+                $this->SetValue('VehicleMake', $body['make'] ?? '');
+                $this->SetValue('VehicleModel', $body['model'] ?? '');
+                $this->SetValue('VehicleYear', $body['year'] ?? 0);
                 break;
+    
             case '/location':
+                $this->MaintainVariable('Latitude', 'Breitengrad', VARIABLETYPE_FLOAT, '', 10, true);
+                $this->MaintainVariable('Longitude', 'Längengrad', VARIABLETYPE_FLOAT, '', 11, true);
                 $this->SetValue('Latitude', $body['latitude'] ?? 0.0);
                 $this->SetValue('Longitude', $body['longitude'] ?? 0.0);
                 break;
+    
             case '/tires/pressure':
-                $this->SetValue('TireFrontLeft', ($body['frontLeft'] ?? 0) / 100);
-                $this->SetValue('TireFrontRight', ($body['frontRight'] ?? 0) / 100);
-                $this->SetValue('TireBackLeft', ($body['backLeft'] ?? 0) / 100);
-                $this->SetValue('TireBackRight', ($body['backRight'] ?? 0) / 100);
+                $this->MaintainVariable('TireFrontLeft', 'Reifendruck Vorderreifen Links', VARIABLETYPE_FLOAT, 'SMCAR.Pressure', 20, true);
+                $this->MaintainVariable('TireFrontRight', 'Reifendruck Vorderreifen Rechts', VARIABLETYPE_FLOAT, 'SMCAR.Pressure', 21, true);
+                $this->MaintainVariable('TireBackLeft', 'Reifendruck Hinterreifen Links', VARIABLETYPE_FLOAT, 'SMCAR.Pressure', 22, true);
+                $this->MaintainVariable('TireBackRight', 'Reifendruck Hinterreifen Rechts', VARIABLETYPE_FLOAT, 'SMCAR.Pressure', 23, true);
+                $this->SetValue('TireFrontLeft', $body['frontLeft'] ?? 0);
+                $this->SetValue('TireFrontRight', $body['frontRight'] ?? 0);
+                $this->SetValue('TireBackLeft', $body['backLeft'] ?? 0);
+                $this->SetValue('TireBackRight', $body['backRight'] ?? 0);
                 break;
+    
             case '/odometer':
-                $this->SetValue('Odometer', $body['distance'] ?? 0.0);
+                $this->MaintainVariable('Odometer', 'Kilometerstand', VARIABLETYPE_FLOAT, '', 30, true);
+                $this->SetValue('Odometer', $body['distance'] ?? 0);
                 break;
+    
             case '/battery':
-                $this->SetValue('BatteryRange', $body['range'] ?? 0.0);
-                $this->SetValue('BatteryLevel', $body['percent'] ?? 0.0);
+                $this->MaintainVariable('BatteryRange', 'Reichweite', VARIABLETYPE_FLOAT, '', 40, true);
+                $this->MaintainVariable('BatteryLevel', 'Batterieladestand', VARIABLETYPE_FLOAT, '', 41, true);
+                $this->SetValue('BatteryRange', $body['range'] ?? 0);
+                $this->SetValue('BatteryLevel', $body['percent'] ?? 0);
                 break;
+    
             default:
                 $this->SendDebug('ProcessResponse', "Unbekannter Pfad: $path", 0);
         }
     }
-    
     
 
 private function CreateProfile()
