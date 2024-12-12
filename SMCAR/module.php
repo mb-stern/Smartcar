@@ -88,7 +88,7 @@ class SMCAR extends IPSModule
     }
 
     if ($this->ReadPropertyBoolean('ScopeReadOdometer')) {
-        $this->RegisterVariableFloat('Odometer', 'Kilometerstand', 'SMCAR.Odometer', 40);
+        $this->RegisterVariableFloat('Odometer', 'Kilometerstand', 'SMCAR.Odometer', 30);
     } else {
         $this->UnregisterVariable('Odometer');
     }
