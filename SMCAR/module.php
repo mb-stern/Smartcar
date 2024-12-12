@@ -412,10 +412,10 @@ class SMCAR extends IPSModule
                 $this->MaintainVariable('TireFrontRight', 'Reifendruck Vorderreifen Rechts', VARIABLETYPE_FLOAT, 'SMCAR.Pressure', 21, true);
                 $this->MaintainVariable('TireBackLeft', 'Reifendruck Hinterreifen Links', VARIABLETYPE_FLOAT, 'SMCAR.Pressure', 22, true);
                 $this->MaintainVariable('TireBackRight', 'Reifendruck Hinterreifen Rechts', VARIABLETYPE_FLOAT, 'SMCAR.Pressure', 23, true);
-                $this->SetValue('TireFrontLeft', $body['frontLeft'] ?? 0);
-                $this->SetValue('TireFrontRight', $body['frontRight'] ?? 0);
-                $this->SetValue('TireBackLeft', $body['backLeft'] ?? 0);
-                $this->SetValue('TireBackRight', $body['backRight'] ?? 0);
+                $this->SetValue('TireFrontLeft', $body['frontLeft'] ?? 0 * 0.01);
+                $this->SetValue('TireFrontRight', $body['frontRight'] ?? 0 * 0.01;
+                $this->SetValue('TireBackLeft', $body['backLeft'] ?? 0 * 0.01);
+                $this->SetValue('TireBackRight', $body['backRight'] ?? 0 * 0.01);
                 break;
     
             case '/odometer':
@@ -427,7 +427,7 @@ class SMCAR extends IPSModule
                 $this->MaintainVariable('BatteryRange', 'Reichweite', VARIABLETYPE_FLOAT, 'SMCAR.Odometer', 40, true);
                 $this->MaintainVariable('BatteryLevel', 'Batterieladestand', VARIABLETYPE_FLOAT, '~Progress', 41, true);
                 $this->SetValue('BatteryRange', $body['range'] ?? 0);
-                $this->SetValue('BatteryLevel', $body['percent'] ?? 0);
+                $this->SetValue('BatteryLevel', $body['percent'] ?? 0 * 100);
                 break;
     
             default:
