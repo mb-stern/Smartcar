@@ -171,7 +171,7 @@ class SMCAR extends IPSModule
         if ($this->ReadPropertyBoolean('ScopeReadBattery')) {
             $scopes[] = 'read_battery';
         }
-        if ($this->ReadPropertyBoolean('ScopeControlCharge')) {
+        if ($this->ReadPropertyBoolean('SetChargeLimit')) {
             $scopes[] = 'control_charge';
         }
         if ($this->ReadPropertyBoolean('ScopeControlSecurity')) {
