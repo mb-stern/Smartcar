@@ -526,8 +526,11 @@ class SMCAR extends IPSModule
             return;
         }
     
+        // Konvertiere den Status in die erwarteten Werte
+        $action = $status ? "START" : "STOP";
+    
         $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID/charge";
-        $postData = json_encode(["status" => $status]);
+        $postData = json_encode(["action" => $action]);
     
         $options = [
             'http' => [
@@ -551,11 +554,11 @@ class SMCAR extends IPSModule
     
         if (isset($data['statusCode']) && $data['statusCode'] !== 200) {
             $this->SendDebug('SetChargeStartStop', "Fehler beim Setzen des Ladestatus: " . json_encode($data), 0);
+            $this->LogMessage("Fehler beim Setzen des Ladestatus: " . ($data['description'] ?? 'Unbekannter Fehler'), KL_ERROR);
         } else {
             $this->SendDebug('SetChargeStartStop', 'Ladestatus erfolgreich gesetzt.', 0);
         }
-    }    
-
+    }
     
 
 private function CreateProfile()
