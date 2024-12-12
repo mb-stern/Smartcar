@@ -58,19 +58,17 @@ class SMCAR extends IPSModule
 
                 // Ladelimit-Variable erstellen, wenn aktiviert
                 if ($this->ReadPropertyBoolean('SetChargeLimit')) {
-                    $this->MaintainVariable('ChargeLimit', 'Ladelimit (%)', VARIABLETYPE_FLOAT, 'SMCAR.Progress', 50, true);
+                    $this->RegisterVariableFloat('ChargeLimit', 'Ladelimit (%)', 'SMCAR.Progress', 50);
                     $this->EnableAction('ChargeLimit');
                 } else {
-                    $this->MaintainVariable('ChargeLimit', 'Ladelimit (%)', VARIABLETYPE_FLOAT, '', 0, false);
-                    $this->DisableAction('ChargeLimit');
+                    $this->UnregisterVariable('ChargeLimit');
                 }
 
                 if ($this->ReadPropertyBoolean('SetChargeStartStop')) {
-                    $this->MaintainVariable('ChargeStartStop', 'Laden aktiviert', VARIABLETYPE_BOOLEAN, '~Switch', 60, true);
+                    $this->RegisterVariableBool('ChargeStartStop', 'Laden aktiviert', '~Switch', 60);
                     $this->EnableAction('ChargeStartStop');
                 } else {
-                    $this->MaintainVariable('ChargeStartStop', 'Laden aktiviert', VARIABLETYPE_BOOLEAN, '', 0, false);
-                    $this->DisableAction('ChargeStartStop');
+                    $this->UnregisterVariable('ChargeStartStop');
                 }
     
         //Profile für erstellen
