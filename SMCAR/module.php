@@ -589,37 +589,6 @@ class SMCAR extends IPSModule
             $this->SendDebug('SetChargeStartStop', 'Ladestatus erfolgreich gesetzt.', 0);
         }
     }
-    
-
-private function CreateProfile()
-{
-
-    if (!IPS_VariableProfileExists('SMCAR.Pressure')) {
-        IPS_CreateVariableProfile('SMCAR.Pressure', VARIABLETYPE_FLOAT);
-        IPS_SetVariableProfileText('SMCAR.Pressure', '', ' bar');
-        IPS_SetVariableProfileDigits('SMCAR.Pressure', 1);
-        IPS_SetVariableProfileValues('SMCAR.Pressure', 0, 5, 0.1);
-        $this->SendDebug('CreateProfile', 'Profil erstellt: SMCAR.Pressure', 0);
-    } 
-
-    if (!IPS_VariableProfileExists('SMCAR.Odometer')) {
-        IPS_CreateVariableProfile('SMCAR.Odometer', VARIABLETYPE_FLOAT);
-        IPS_SetVariableProfileText('SMCAR.Odometer', '', ' km');
-        IPS_SetVariableProfileDigits('SMCAR.Odometer', 0);
-        IPS_SetVariableProfileValues('SMCAR.Odometer', 0, 0, 1);
-        $this->SendDebug('CreateProfile', 'Profil erstellt: SMCAR.Odometer', 0);
-    } 
-    if (!IPS_VariableProfileExists('SMCAR.Progress')) {
-        IPS_CreateVariableProfile('SMCAR.Progress', VARIABLETYPE_FLOAT);
-        IPS_SetVariableProfileText('SMCAR.Progress', '', ' %');
-        IPS_SetVariableProfileDigits('SMCAR.Progress', 0);
-        IPS_SetVariableProfileValues('SMCAR.Progress', 0, 100, 1);
-        $this->SendDebug('CreateProfile', 'Profil erstellt: SMCAR.Progress', 0);
-    } 
-
-}
-
-
 
 public function FetchVehicleInfo()
 {
@@ -645,7 +614,6 @@ public function FetchBattery()
 {
     $this->FetchSingleEndpoint('/battery'); // Batteriestatus
 }
-
 
 private function FetchSingleEndpoint(string $path)
 {
@@ -685,5 +653,32 @@ private function FetchSingleEndpoint(string $path)
     }
 }
 
+private function CreateProfile()
+{
+
+    if (!IPS_VariableProfileExists('SMCAR.Pressure')) {
+        IPS_CreateVariableProfile('SMCAR.Pressure', VARIABLETYPE_FLOAT);
+        IPS_SetVariableProfileText('SMCAR.Pressure', '', ' bar');
+        IPS_SetVariableProfileDigits('SMCAR.Pressure', 1);
+        IPS_SetVariableProfileValues('SMCAR.Pressure', 0, 5, 0.1);
+        $this->SendDebug('CreateProfile', 'Profil erstellt: SMCAR.Pressure', 0);
+    } 
+
+    if (!IPS_VariableProfileExists('SMCAR.Odometer')) {
+        IPS_CreateVariableProfile('SMCAR.Odometer', VARIABLETYPE_FLOAT);
+        IPS_SetVariableProfileText('SMCAR.Odometer', '', ' km');
+        IPS_SetVariableProfileDigits('SMCAR.Odometer', 0);
+        IPS_SetVariableProfileValues('SMCAR.Odometer', 0, 0, 1);
+        $this->SendDebug('CreateProfile', 'Profil erstellt: SMCAR.Odometer', 0);
+    } 
+    if (!IPS_VariableProfileExists('SMCAR.Progress')) {
+        IPS_CreateVariableProfile('SMCAR.Progress', VARIABLETYPE_FLOAT);
+        IPS_SetVariableProfileText('SMCAR.Progress', '', ' %');
+        IPS_SetVariableProfileDigits('SMCAR.Progress', 0);
+        IPS_SetVariableProfileValues('SMCAR.Progress', 0, 100, 1);
+        $this->SendDebug('CreateProfile', 'Profil erstellt: SMCAR.Progress', 0);
+    } 
+
+}
 
 }
