@@ -121,7 +121,7 @@ class SMCAR extends IPSModule
                 $this->SetValue($ident, $value);
                 break;
 
-            case 'ChargeStartStop':
+            case 'ChargeStatus':
                 $this->SetChargeStartStop($value);
                 $this->SetValue($ident, $value);
                 break;
