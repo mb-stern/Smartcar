@@ -443,7 +443,7 @@ private function CreateProfile()
         IPS_CreateVariableProfile('SMCAR.Pressure', VARIABLETYPE_FLOAT);
         IPS_SetVariableProfileText('SMCAR.Pressure', '', ' bar');
         IPS_SetVariableProfileDigits('SMCAR.Pressure', 1);
-        IPS_SetVariableProfileValues('SMCAR.Pressure', 0, 10, 0.1);
+        IPS_SetVariableProfileValues('SMCAR.Pressure', 0, 5, 0.1);
         $this->SendDebug('CreateProfile', 'Profil erstellt: SMCAR.Pressure', 0);
     } 
 
