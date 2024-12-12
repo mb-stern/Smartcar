@@ -619,4 +619,71 @@ private function CreateProfile()
 
 }
 
+
+
+public function FetchVehicleInfo()
+{
+    $this->FetchSingleEndpoint('/'); // Fahrzeugdetails
+}
+
+public function FetchLocation()
+{
+    $this->FetchSingleEndpoint('/location'); // Standort
+}
+
+public function FetchTires()
+{
+    $this->FetchSingleEndpoint('/tires/pressure'); // Reifendruck
+}
+
+public function FetchOdometer()
+{
+    $this->FetchSingleEndpoint('/odometer'); // Kilometerstand
+}
+
+public function FetchBattery()
+{
+    $this->FetchSingleEndpoint('/battery'); // Batteriestatus
+}
+
+
+private function FetchSingleEndpoint(string $path)
+{
+    $accessToken = $this->ReadAttributeString('AccessToken');
+    $vehicleID = $this->ReadAttributeString('VehicleID');
+
+    if (empty($accessToken) || empty($vehicleID)) {
+        $this->SendDebug('FetchSingleEndpoint', 'Access Token oder Fahrzeug-ID fehlt!', 0);
+        return;
+    }
+
+    $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID" . $path;
+
+    $options = [
+        'http' => [
+            'header' => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
+            'method' => 'GET',
+            'ignore_errors' => true
+        ]
+    ];
+
+    $context = stream_context_create($options);
+    $response = @file_get_contents($url, false, $context);
+
+    if ($response === false) {
+        $this->SendDebug('FetchSingleEndpoint', 'Fehler: Keine Antwort von der API!', 0);
+        return;
+    }
+
+    $data = json_decode($response, true);
+    $this->SendDebug('FetchSingleEndpoint', "Antwort für $path: " . json_encode($data), 0);
+
+    if (isset($data)) {
+        $this->ProcessResponse($path, $data);
+    } else {
+        $this->SendDebug('FetchSingleEndpoint', 'Keine gültige Antwortstruktur.', 0);
+    }
+}
+
+
 }
