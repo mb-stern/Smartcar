@@ -19,7 +19,6 @@ class SMCAR extends IPSModule
         $this->RegisterPropertyBoolean('ScopeReadBattery', false);
         $this->RegisterPropertyBoolean('ScopeControlCharge', false);
         $this->RegisterPropertyBoolean('ScopeControlSecurity', false);
-        $this->RegisterPropertyBoolean('ScopeControlCharge', false);
 
         $this->RegisterAttributeString("CurrentHook", "");
         $this->RegisterAttributeString('AccessToken', '');
