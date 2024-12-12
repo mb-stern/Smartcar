@@ -461,6 +461,10 @@ class SMCAR extends IPSModule
 
     public function SetChargeLimit(float $limit)
     {
+        $accessToken = $this->ReadAttributeString('AccessToken');
+        $vehicleID = $this->GetVehicleID($accessToken);
+        $this->WriteAttributeString('VehicleID', $vehicleID);
+        
         if ($limit < 0.5 || $limit > 1.0) {
             $this->SendDebug('SetChargeLimit', 'Ungültiges Limit. Es muss zwischen 0.5 und 1.0 liegen.', 0);
             return;
