@@ -442,8 +442,8 @@ private function CreateProfile()
     if (!IPS_VariableProfileExists('SMCAR.Pressure')) {
         IPS_CreateVariableProfile('SMCAR.Pressure', VARIABLETYPE_FLOAT);
         IPS_SetVariableProfileText('SMCAR.Pressure', '', ' bar');
-        IPS_SetVariableProfileDigits('SMCAR.Pressure', 2);
-        IPS_SetVariableProfileValues('SMCAR.Pressure', 0, 10, 0.01);
+        IPS_SetVariableProfileDigits('SMCAR.Pressure', 1);
+        IPS_SetVariableProfileValues('SMCAR.Pressure', 0, 10, 0.1);
         $this->SendDebug('CreateProfile', 'Profil erstellt: SMCAR.Pressure', 0);
     } 
 
