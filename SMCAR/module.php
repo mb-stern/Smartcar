@@ -66,10 +66,10 @@ class SMCAR extends IPSModule
                 }
 
                 if ($this->ReadPropertyBoolean('SetChargeStartStop')) {
-                    $this->MaintainVariable('ChargeStartStop', 'Laden aktiviert', VARIABLETYPE_BOOL, '~Switch', 60, true);
+                    $this->MaintainVariable('ChargeStartStop', 'Laden aktiviert', VARIABLETYPE_BOOLEAN, '~Switch', 60, true);
                     $this->EnableAction('ChargeStartStop');
                 } else {
-                    $this->MaintainVariable('ChargeStartStop', 'Laden aktiviert', VARIABLETYPE_BOOL, '', 0, false);
+                    $this->MaintainVariable('ChargeStartStop', 'Laden aktiviert', VARIABLETYPE_BOOLEAN, '', 0, false);
                     $this->DisableAction('ChargeStartStop');
                 }
     
