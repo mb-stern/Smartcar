@@ -87,6 +87,12 @@ class SMCAR extends IPSModule
         $this->UnregisterVariable('TireBackRight');
     }
 
+    if ($this->ReadPropertyBoolean('ScopeReadOdometer')) {
+        $this->RegisterVariableFloat('Odometer', 'Kilometerstand', 'SMCAR.Odometer', 40);
+    } else {
+        $this->UnregisterVariable('Odometer');
+    }
+
     if ($this->ReadPropertyBoolean('ScopeReadBattery')) {
         $this->RegisterVariableFloat('BatteryRange', 'Reichweite', 'SMCAR.Odometer', 40);
         $this->RegisterVariableFloat('BatteryLevel', 'Batterieladestand', 'SMCAR.Progress', 41);
