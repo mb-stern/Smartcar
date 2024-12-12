@@ -66,8 +66,8 @@
         },
         {
           "type": "CheckBox",
-          "name": "ScopeControlSecurity",
-          "caption": "Fahrzeugsteuerung (control_security)"
+          "name": "SetChargeStartStop",
+          "caption": "Laden Starten/Stopen (/charge)"
         }
       ]
     }

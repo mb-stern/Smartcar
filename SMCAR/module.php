@@ -18,8 +18,8 @@ class SMCAR extends IPSModule
         $this->RegisterPropertyBoolean('ScopeReadOdometer', false);
         $this->RegisterPropertyBoolean('ScopeReadBattery', false);
         $this->RegisterPropertyBoolean('ScopeControlCharge', false);
-        $this->RegisterPropertyBoolean('ScopeControlSecurity', false);
         $this->RegisterPropertyBoolean('SetChargeLimit', false);
+        $this->RegisterPropertyBoolean('SetChargeStartStop', false);
 
         $this->RegisterAttributeString("CurrentHook", "");
         $this->RegisterAttributeString('AccessToken', '');
@@ -64,6 +64,14 @@ class SMCAR extends IPSModule
                     $this->MaintainVariable('ChargeLimit', 'Ladelimit (%)', VARIABLETYPE_FLOAT, '', 0, false);
                     $this->DisableAction('ChargeLimit');
                 }
+
+                if ($this->ReadPropertyBoolean('SetChargeStartStop')) {
+                    $this->MaintainVariable('ChargeStartStop', 'Laden aktiviert', VARIABLETYPE_FLOAT, '~Switch', 60, true);
+                    $this->EnableAction('ChargeStartStop');
+                } else {
+                    $this->MaintainVariable('ChargeStartStop', 'Laden aktiviert', VARIABLETYPE_FLOAT, '', 0, false);
+                    $this->DisableAction('ChargeStartStop');
+                }
     
         //Profile für erstellen
         $this->CreateProfile();
@@ -75,6 +83,11 @@ class SMCAR extends IPSModule
         switch ($ident) {
             case 'ChargeLimit':
                 $this->SetChargeLimit($value / 100); // Konvertiere zu einem Wert zwischen 0.5 und 1.0
+                $this->SetValue($ident, $value);
+                break;
+
+            case 'ChargeStartStop':
+                $this->SetChargeStartStop($value);
                 $this->SetValue($ident, $value);
                 break;
 
@@ -470,9 +483,6 @@ class SMCAR extends IPSModule
             return;
         }
     
-        $accessToken = $this->ReadAttributeString('AccessToken');
-        $vehicleID = $this->ReadAttributeString('VehicleID');
-    
         if (empty($accessToken) || empty($vehicleID)) {
             $this->SendDebug('SetChargeLimit', 'Access Token oder Fahrzeug-ID fehlt!', 0);
             return;
@@ -505,6 +515,47 @@ class SMCAR extends IPSModule
             $this->SendDebug('SetChargeLimit', "Fehler beim Setzen des Ladelimits: " . json_encode($data), 0);
         } else {
             $this->SendDebug('SetChargeLimit', 'Ladelimit erfolgreich gesetzt.', 0);
+        }
+    }    
+
+    public function SetChargeStartStop(bool $status)
+    {
+        $accessToken = $this->ReadAttributeString('AccessToken');
+        $vehicleID = $this->GetVehicleID($accessToken);
+        $this->WriteAttributeString('VehicleID', $vehicleID);
+    
+        if (empty($accessToken) || empty($vehicleID)) {
+            $this->SendDebug('SetChargeStartStop', 'Access Token oder Fahrzeug-ID fehlt!', 0);
+            return;
+        }
+    
+        $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID/charge";
+        $postData = json_encode(["status" => $status]);
+    
+        $options = [
+            'http' => [
+                'header'  => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
+                'method'  => 'POST',
+                'content' => $postData,
+                'ignore_errors' => true
+            ]
+        ];
+    
+        $context = stream_context_create($options);
+        $response = @file_get_contents($url, false, $context);
+    
+        if ($response === false) {
+            $this->SendDebug('SetChargeStartStop', 'Fehler: Keine Antwort von der API!', 0);
+            return;
+        }
+    
+        $data = json_decode($response, true);
+        $this->SendDebug('SetChargeStartStop', 'Antwort: ' . json_encode($data), 0);
+    
+        if (isset($data['statusCode']) && $data['statusCode'] !== 200) {
+            $this->SendDebug('SetChargeStartStop', "Fehler beim Setzen des Ladestatus: " . json_encode($data), 0);
+        } else {
+            $this->SendDebug('SetChargeStartStop', 'Ladestatus erfolgreich gesetzt.', 0);
         }
     }    
 
