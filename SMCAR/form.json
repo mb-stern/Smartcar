@@ -42,27 +42,27 @@
         {
           "type": "CheckBox",
           "name": "ScopeReadLocation",
-          "caption": "Standort lesen (read_location)"
+          "caption": "Standort lesen (/location)"
         },
         {
           "type": "CheckBox",
           "name": "ScopeReadTires",
-          "caption": "Reifendruck lesen (read_tires)"
+          "caption": "Reifendruck lesen (/tires/pressure)"
         },
         {
           "type": "CheckBox",
           "name": "ScopeReadOdometer",
-          "caption": "Kilometerstand lesen (read_odometer)"
+          "caption": "Kilometerstand lesen (/odometer)"
         },
         {
           "type": "CheckBox",
           "name": "ScopeReadBattery",
-          "caption": "Batteriestatus lesen (read_battery)"
+          "caption": "Batteriestatus lesen (/battery)"
         },
         {
           "type": "CheckBox",
-          "name": "ScopeControlCharge",
-          "caption": "Laden steuern (control_charge)"
+          "name": "SetChargeLimit",
+          "caption": "Laden Limit (/charge/limit)"
         },
         {
           "type": "CheckBox",

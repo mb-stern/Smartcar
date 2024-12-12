@@ -19,6 +19,7 @@ class SMCAR extends IPSModule
         $this->RegisterPropertyBoolean('ScopeReadBattery', false);
         $this->RegisterPropertyBoolean('ScopeControlCharge', false);
         $this->RegisterPropertyBoolean('ScopeControlSecurity', false);
+        $this->RegisterPropertyBoolean('ScopeControlCharge', false);
 
         $this->RegisterAttributeString("CurrentHook", "");
         $this->RegisterAttributeString('AccessToken', '');
@@ -54,12 +55,33 @@ class SMCAR extends IPSModule
                 $this->SetTimerInterval('TokenRefreshTimer', 0); // Timer deaktivieren
                 $this->SendDebug('ApplyChanges', 'Token-Erneuerungs-Timer gestoppt.', 0);
             }
+
+                // Ladelimit-Variable erstellen, wenn aktiviert
+                if ($this->ReadPropertyBoolean('SetChargeLimit')) {
+                    $this->MaintainVariable('ChargeLimit', 'Ladelimit (%)', VARIABLETYPE_FLOAT, 'SMCAR.Progress', 50, true);
+                    $this->EnableAction('ChargeLimit');
+                } else {
+                    $this->MaintainVariable('ChargeLimit', 'Ladelimit (%)', VARIABLETYPE_FLOAT, '', 0, false);
+                    $this->DisableAction('ChargeLimit');
+                }
     
         //Profile für erstellen
         $this->CreateProfile();
  
     }
-    
+ 
+    public function RequestAction($ident, $value)
+    {
+        switch ($ident) {
+            case 'ChargeLimit':
+                $this->SetChargeLimit($value / 100); // Konvertiere zu einem Wert zwischen 0.5 und 1.0
+                $this->SetValue($ident, $value);
+                break;
+
+            default:
+                throw new Exception("Invalid ident");
+        }
+    }
     private function RegisterHook()
     {
 
@@ -118,6 +140,8 @@ class SMCAR extends IPSModule
         return json_encode($form);
     }
 
+    
+    //Hier kommen die Scopes rein für welche die Freigabe beantragt werden
     public function GenerateAuthURL()
     {
         $clientID = $this->ReadPropertyString('ClientID');
@@ -387,7 +411,7 @@ class SMCAR extends IPSModule
     }
     
     
-    // Neue Funktion zum Verarbeiten der Antworten
+    // Verarbeiten der Antworten
     private function ProcessResponse(string $path, array $body)
     {
         switch ($path) {
@@ -434,6 +458,52 @@ class SMCAR extends IPSModule
                 $this->SendDebug('ProcessResponse', "Unbekannter Pfad: $path", 0);
         }
     }
+
+    public function SetChargeLimit(float $limit)
+    {
+        if ($limit < 0.5 || $limit > 1.0) {
+            $this->SendDebug('SetChargeLimit', 'Ungültiges Limit. Es muss zwischen 0.5 und 1.0 liegen.', 0);
+            return;
+        }
+    
+        $accessToken = $this->ReadAttributeString('AccessToken');
+        $vehicleID = $this->ReadAttributeString('VehicleID');
+    
+        if (empty($accessToken) || empty($vehicleID)) {
+            $this->SendDebug('SetChargeLimit', 'Access Token oder Fahrzeug-ID fehlt!', 0);
+            return;
+        }
+    
+        $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID/charge/limit";
+        $postData = json_encode(["limit" => $limit]);
+    
+        $options = [
+            'http' => [
+                'header'  => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
+                'method'  => 'POST',
+                'content' => $postData,
+                'ignore_errors' => true
+            ]
+        ];
+    
+        $context = stream_context_create($options);
+        $response = @file_get_contents($url, false, $context);
+    
+        if ($response === false) {
+            $this->SendDebug('SetChargeLimit', 'Fehler: Keine Antwort von der API!', 0);
+            return;
+        }
+    
+        $data = json_decode($response, true);
+        $this->SendDebug('SetChargeLimit', 'Antwort: ' . json_encode($data), 0);
+    
+        if (isset($data['statusCode']) && $data['statusCode'] !== 200) {
+            $this->SendDebug('SetChargeLimit', "Fehler beim Setzen des Ladelimits: " . json_encode($data), 0);
+        } else {
+            $this->SendDebug('SetChargeLimit', 'Ladelimit erfolgreich gesetzt.', 0);
+        }
+    }    
+
     
 
 private function CreateProfile()
