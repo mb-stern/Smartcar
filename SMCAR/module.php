@@ -56,21 +56,58 @@ class SMCAR extends IPSModule
                 $this->SendDebug('ApplyChanges', 'Token-Erneuerungs-Timer gestoppt.', 0);
             }
 
-                // Ladelimit-Variable erstellen, wenn aktiviert
-                if ($this->ReadPropertyBoolean('SetChargeLimit')) {
-                    $this->RegisterVariableFloat('ChargeLimit', 'Ladelimit (%)', 'SMCAR.Progress', 50);
-                    $this->EnableAction('ChargeLimit');
-                } else {
-                    $this->UnregisterVariable('ChargeLimit');
-                }
+    // Variablen für Scopes anlegen oder löschen
+    if ($this->ReadPropertyBoolean('ScopeReadVehicleInfo')) {
+        $this->RegisterVariableString('VehicleMake', 'Fahrzeug Hersteller', '', 1);
+        $this->RegisterVariableString('VehicleModel', 'Fahrzeug Modell', '', 2);
+        $this->RegisterVariableInteger('VehicleYear', 'Fahrzeug Baujahr', '', 3);
+    } else {
+        $this->UnregisterVariable('VehicleMake');
+        $this->UnregisterVariable('VehicleModel');
+        $this->UnregisterVariable('VehicleYear');
+    }
 
-                if ($this->ReadPropertyBoolean('SetChargeStartStop')) {
-                    $this->RegisterVariableBoolean('ChargeStartStop', 'Laden aktiviert', '~Switch', 60);
-                    $this->EnableAction('ChargeStartStop');
-                } else {
-                    $this->UnregisterVariable('ChargeStartStop');
-                }
-    
+    if ($this->ReadPropertyBoolean('ScopeReadLocation')) {
+        $this->RegisterVariableFloat('Latitude', 'Breitengrad', '', 10);
+        $this->RegisterVariableFloat('Longitude', 'Längengrad', '', 11);
+    } else {
+        $this->UnregisterVariable('Latitude');
+        $this->UnregisterVariable('Longitude');
+    }
+
+    if ($this->ReadPropertyBoolean('ScopeReadTires')) {
+        $this->RegisterVariableFloat('TireFrontLeft', 'Reifendruck Vorderreifen Links', 'SMCAR.Pressure', 20);
+        $this->RegisterVariableFloat('TireFrontRight', 'Reifendruck Vorderreifen Rechts', 'SMCAR.Pressure', 21);
+        $this->RegisterVariableFloat('TireBackLeft', 'Reifendruck Hinterreifen Links', 'SMCAR.Pressure', 22);
+        $this->RegisterVariableFloat('TireBackRight', 'Reifendruck Hinterreifen Rechts', 'SMCAR.Pressure', 23);
+    } else {
+        $this->UnregisterVariable('TireFrontLeft');
+        $this->UnregisterVariable('TireFrontRight');
+        $this->UnregisterVariable('TireBackLeft');
+        $this->UnregisterVariable('TireBackRight');
+    }
+
+    if ($this->ReadPropertyBoolean('ScopeReadBattery')) {
+        $this->RegisterVariableFloat('BatteryRange', 'Reichweite', 'SMCAR.Odometer', 40);
+        $this->RegisterVariableFloat('BatteryLevel', 'Batterieladestand', 'SMCAR.Progress', 41);
+    } else {
+        $this->UnregisterVariable('BatteryRange');
+        $this->UnregisterVariable('BatteryLevel');
+    }
+
+    if ($this->ReadPropertyBoolean('SetChargeLimit')) {
+        $this->RegisterVariableFloat('ChargeLimit', 'Ladelimit (%)', 'SMCAR.Progress', 50);
+        $this->EnableAction('ChargeLimit');
+    } else {
+        $this->UnregisterVariable('ChargeLimit');
+    }
+
+    if ($this->ReadPropertyBoolean('SetChargeStartStop')) {
+        $this->RegisterVariableBoolean('ChargeStatus', 'Ladung starten/stoppen', '~Switch', 51);
+        $this->EnableAction('ChargeStatus');
+    } else {
+        $this->UnregisterVariable('ChargeStatus');
+    }
         //Profile für erstellen
         $this->CreateProfile();
  
@@ -424,69 +461,30 @@ class SMCAR extends IPSModule
     {
         switch ($path) {
             case '/':
-                if ($this->ReadPropertyBoolean('ScopeReadVehicleInfo')) {
-                    $this->RegisterVariableString('VehicleMake', 'Fahrzeug Hersteller', '', 1);
-                    $this->RegisterVariableString('VehicleModel', 'Fahrzeug Modell', '', 2);
-                    $this->RegisterVariableInteger('VehicleYear', 'Fahrzeug Baujahr', '', 3);
                     $this->SetValue('VehicleMake', $body['make'] ?? '');
                     $this->SetValue('VehicleModel', $body['model'] ?? '');
                     $this->SetValue('VehicleYear', $body['year'] ?? 0);
-                } else {
-                    $this->UnregisterVariable('VehicleMake');
-                    $this->UnregisterVariable('VehicleModel');
-                    $this->UnregisterVariable('VehicleYear');
-                }
                 break;
     
             case '/location':
-                if ($this->ReadPropertyBoolean('ScopeReadLocation')) {
-                    $this->RegisterVariableFloat('Latitude', 'Breitengrad', '', 10);
-                    $this->RegisterVariableFloat('Longitude', 'Längengrad', '', 11);
                     $this->SetValue('Latitude', $body['latitude'] ?? 0.0);
                     $this->SetValue('Longitude', $body['longitude'] ?? 0.0);
-                } else {
-                    $this->UnregisterVariable('Latitude');
-                    $this->UnregisterVariable('Longitude');
-                }
                 break;
     
             case '/tires/pressure':
-                if ($this->ReadPropertyBoolean('ScopeReadTires')) {
-                    $this->RegisterVariableFloat('TireFrontLeft', 'Reifendruck Vorderreifen Links', 'SMCAR.Pressure', 20);
-                    $this->RegisterVariableFloat('TireFrontRight', 'Reifendruck Vorderreifen Rechts', 'SMCAR.Pressure', 21);
-                    $this->RegisterVariableFloat('TireBackLeft', 'Reifendruck Hinterreifen Links', 'SMCAR.Pressure', 22);
-                    $this->RegisterVariableFloat('TireBackRight', 'Reifendruck Hinterreifen Rechts', 'SMCAR.Pressure', 23);
                     $this->SetValue('TireFrontLeft', ($body['frontLeft'] ?? 0) * 0.01);
                     $this->SetValue('TireFrontRight', ($body['frontRight'] ?? 0) * 0.01);
                     $this->SetValue('TireBackLeft', ($body['backLeft'] ?? 0) * 0.01);
                     $this->SetValue('TireBackRight', ($body['backRight'] ?? 0) * 0.01);
-                } else {
-                    $this->UnregisterVariable('TireFrontLeft');
-                    $this->UnregisterVariable('TireFrontRight');
-                    $this->UnregisterVariable('TireBackLeft');
-                    $this->UnregisterVariable('TireBackRight');
-                }
                 break;
     
             case '/odometer':
-                if ($this->ReadPropertyBoolean('ScopeReadOdometer')) {
-                    $this->RegisterVariableFloat('Odometer', 'Kilometerstand', 'SMCAR.Odometer', 30);
                     $this->SetValue('Odometer', $body['distance'] ?? 0);
-                } else {
-                    $this->UnregisterVariable('Odometer');
-                }
                 break;
     
             case '/battery':
-                if ($this->ReadPropertyBoolean('ScopeReadBattery')) {
-                    $this->RegisterVariableFloat('BatteryRange', 'Reichweite', 'SMCAR.Odometer', 40);
-                    $this->RegisterVariableFloat('BatteryLevel', 'Batterieladestand', 'SMCAR.Progress', 41);
                     $this->SetValue('BatteryRange', $body['range'] ?? 0);
                     $this->SetValue('BatteryLevel', ($body['percentRemaining'] ?? 0) * 100);
-                } else {
-                    $this->UnregisterVariable('BatteryRange');
-                    $this->UnregisterVariable('BatteryLevel');
-                }
                 break;
     
             default:
