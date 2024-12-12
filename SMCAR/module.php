@@ -425,7 +425,7 @@ class SMCAR extends IPSModule
     
             case '/battery':
                 $this->MaintainVariable('BatteryRange', 'Reichweite', VARIABLETYPE_FLOAT, 'SMCAR.Odometer', 40, true);
-                $this->MaintainVariable('BatteryLevel', 'Batterieladestand', VARIABLETYPE_FLOAT, '~Progress', 41, true);
+                $this->MaintainVariable('BatteryLevel', 'Batterieladestand', VARIABLETYPE_FLOAT, 'SMCAR.Progress', 41, true);
                 $this->SetValue('BatteryRange', $body['range'] ?? 0);
                 $this->SetValue('BatteryLevel', ($body['percent'] ?? 0) * 100);
                 break;
@@ -453,6 +453,13 @@ private function CreateProfile()
         IPS_SetVariableProfileDigits('SMCAR.Odometer', 0);
         IPS_SetVariableProfileValues('SMCAR.Odometer', 0, 0, 1);
         $this->SendDebug('CreateProfile', 'Profil erstellt: SMCAR.Odometer', 0);
+    } 
+    if (!IPS_VariableProfileExists('SMCAR.Progress')) {
+        IPS_CreateVariableProfile('SMCAR.Progress', VARIABLETYPE_FLOAT);
+        IPS_SetVariableProfileText('SMCAR.Progress', '', ' %');
+        IPS_SetVariableProfileDigits('SMCAR.Progress', 0);
+        IPS_SetVariableProfileValues('SMCAR.Progress', 0, 100, 1);
+        $this->SendDebug('CreateProfile', 'Profil erstellt: SMCAR.Progress', 0);
     } 
 
 }
