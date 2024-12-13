@@ -109,7 +109,7 @@ WPLUX_FetchBattery(12345);      |   Abfrage des Batterieladestand (SOC)
 WPLUX_FetchLocation(12345);     |   Abfragen der GPS-Koordinaten
 WPLUX_FetchOdometer(12345);     |   Abfragen des Kilomterstandes
 WPLUX_FetchTires(12345);        |   Abfrage des Reifendruckes
-WPLUX_FetchVehicleInfo(12345);  |   Alle im Modul aktiverten Scopes abfragen
+WPLUX_FetchVehicleData(12345);  |   Alle im Modul aktiverten Scopes abfragen
 
 ### 8. Versionen
 
