@@ -2,19 +2,21 @@
 Dieses Modul ermöglicht, Daten von Fahrzeugen über die Smartcar-Plattform abzufragen. 
 Erstelle ein Profil und verbinde dein Fahrezug oder ein Testfahrzeug (https://smartcar.com/de)
 Smartcar unterstützt aktuell 43 Fahrzeugmarken (https://smartcar.com/de/product/compatible-vehicles)
-In der aktuellen Version des Moduls ist nur ein Fahrzeug unterstützt.
+In der aktuellen Version dieses Moduls ist ein Fahrzeug unterstützt.
+In der kostenlosen Version von Smartcar kann sowieso nur ein Live-Fahrezug pro Benutzerprofil angelegt werden.
+Für mehrere Fahrezuge ist das Modul mehrmals anzulegen.
 
 # Wichtig zu wissen zur Konfiguration von Smartcar
 Das Modul verbindet sich über OAuth 2.0 mit der Smartcar API. 
-Daher ist es erforderlich, eine Redirect URI in der Konfiguration einzutragen. 
+Daher ist es erforderlich, eine Redirect URI in der Smartcar-Konfiguration einzutragen. 
 Die Redirect URI ist der Pfad zum Webhook, welchen das Modul automatisch anlegt. 
 Dieser Pfad setzt sich aus deiner Connenct-Adresse und dem Pfad des Webhook zusammen. 
-Der Pfad des Webhook siehst du oben im Konfigurationsformular. 
+Der Pfad des Webhook wird oben im Konfigurationsformular angezeigt. 
 Deine Connect Adresse findest du unter Kern Instanzen/Connect und trägst diese dann im Konfigurationsformular von Symcon ein. 
 Beides zusammen hinterlegst du dann in der Konfiguration von Smartcar unter 'REDIRECT URIS' Dies sieht zB so aus: https://hruw8ehwWERUOwehrWWoiuh.ipmagic.de/hook/smartcar_15583
 
 
-Aktuell sind folgende Scopes (Endpunkte) unterstützt:
+Aktuell sind folgende Scopes (Endpunkte) durch das Modul unterstützt:
 * "Fahrzeuginformationen lesen (/)"
 * "Standort lesen (/location)"
 * "Reifendruck lesen (/tires/pressure)"
