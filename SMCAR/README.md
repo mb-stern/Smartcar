@@ -14,6 +14,7 @@ Dieser Pfad setzt sich aus deiner Connenct-Adresse und dem Pfad des Webhook zusa
 Der Pfad des Webhook wird oben im Konfigurationsformular angezeigt. 
 Deine Connect Adresse findest du unter Kern Instanzen/Connect und trägst diese dann im Konfigurationsformular von Symcon ein. 
 Beides zusammen hinterlegst du dann in der Konfiguration von Smartcar unter 'REDIRECT URIS' Dies sieht zB so aus: https://hruw8ehwWERUOwehrWWoiuh.ipmagic.de/hook/smartcar_15583
+Wenn du im Konfigurationsformular die Berchtigungen gewählt oder geändert hast, ist dies erneut über den Button 'Verbindung starten' als URL auszugeben und im Browser bei Smartcar zu registrieren.
 
 
 Aktuell sind folgende Scopes (Endpunkte) durch das Modul unterstützt:
@@ -43,11 +44,11 @@ Aktuell sind folgende Ansteuerungen unterstützt
 
 ### 1. Funktionsumfang
 
-* Abfrage der verschiedener Fahrzeugdaten und ausführen verschiedener Ansteuerung am Fahrzeug.
+* Abfrage der ausgewählterFahrzeugdaten und ausführen verschiedener Ansteuerung am Fahrzeug.
 * Die kostenlose Version unterstützt ein Fahrzeug mit 500 API-Calls pro Monat.
 * Es gibt eine Bezahlversion für 2.99$ mit 1000 API-Calls pro Monat
 * Die Testfahrzeuge der Smartcar-Plattform sind unterstützt. Zum testen sollten diese Verwendet werden, um den API-Verbrauch des Live-Fahrzeuges zu schonen.
-* Vorsicht: Frag nur Endpunkte ab, die du wirklich brauchst, sonst ist das Guthaben schnell aufgebraucht. Lies dazu weiter unten die PHP-Befehlsreferenz
+* Vorsicht: Frag nur Endpunkte ab, die du wirklich brauchst, sonst ist das Guthaben schnell aufgebraucht. Lies dazu weiter unten die [PHP-Befehlsreferenz](#7-php-befehlsreferenz)
 
 ### 2. Voraussetzungen
 
@@ -73,7 +74,7 @@ Symcon Connect Adresse      |  Die Connect Adresse findest du in Symcon unter Ke
 Verbindungsmodus            |  Hier definierst du, ob es sich um ein Simmuliertes oder ein Live-Fahrzeug handelt. Die Fahrzeuge verwaltest du im Dashboard von Smartcar 
 Berchtigungen (Scopes)      |  Hier sind die aktuell vom Modul unterstützen Scopes zur Auswahl. Wichtig ist, dass alle angewählt werden, die später abgefragt werden, sonst werden hier keine Werte geliefert. Im Zweifelsfalle alle aktivieren. Die Variablen werden automatisch erstellt und beim Deaktivieren wieder gelöscht.
 Verbindung starten          |  Es erscheint ein Fenster mit einem URL. Diesen URL in eine Browserfenster kopieren und nun das Fahrezug mit dem Modul koppeln. Es erscheinen die unterstützen gewählten Scopes und die Berechtigungen wird erteilt. Am schluss erscheint eine Erfolgsmeldung. Das heisst, die Berchtigung wurde über die Redierct URI (Webhook) an das Modul erteilt
-Fahrzeugdaten abrufen       |  Hier rufst du alle aktivierten Scopes ab. Sei vorsichtig bei einem Live-Fahrezug. Fünf aktivierte Scopes ergeben 5 API-Calls 
+Fahrzeugdaten abrufen       |  Hier rufst du alle aktivierten Scopes ab. Sei vorsichtig bei einem Live-Fahrezug. Fünf aktivierte Scopes ergeben 5 API-Calls. Lies hier [PHP-Befehlsreferenz](#7-php-befehlsreferenz) wie du nur die gewünnschten Variablen aktualisierst.
 
 
 ### 5. Statusvariablen und Profile
@@ -98,17 +99,14 @@ Die Variablen zur Steuerung der Fahrezugfunktion können aus der Visualisierung 
 
 ### 7. PHP-Befehlsreferenz
 
-`boolean SMCAR_BeispielFunktion(integer $InstanzID);`
-Erklärung der Funktion.
-
-Beispiel:
-`WPLUX_FetchBattery(12345);`
-`WPLUX_FetchLocation(12345);`
-`WPLUX_FetchOdometer(12345);`
-`WPLUX_FetchTires(12345);`
-`WPLUX_FetchVehicleInfo(12345);`
-`WPLUX_SetChargeLimit(12345);`
-`WPLUX_SetChargeStartStop(12345);`
+Hier findest du die Info, wie geziehlt (zb über einen Ablaufplan) nur bestimmte Variablen (Scopes) abgefragt werden, um API-Calls zu sparen. 
+Ein Scenario wäre, dass der SOC nur bei aktiviertem Ladevorgang alle 15min über einen Ablaufplan aktualisiert wird.
+Beachte, dass nur im Konfigurationsformuler (Berechtigungen) freigegebene Scopes abgefragt werden können.
+WPLUX_FetchBattery(12345);      |   Abfrage des Batterieladestand (SOC)
+WPLUX_FetchLocation(12345);     |   Abfragen der GPS-Koordinaten
+WPLUX_FetchOdometer(12345);     |   Abfragen des Kilomterstandes
+WPLUX_FetchTires(12345);        |   Abfrage des Reifendruckes
+WPLUX_FetchVehicleInfo(12345);  |   Alle im Modul aktiverten Scopes abfragen
 
 ### 8. Versionen
 
