@@ -6,7 +6,7 @@ In der aktuellen Version dieses Moduls ist ein Fahrzeug unterstützt.
 In der kostenlosen Version von Smartcar kann sowieso nur ein Live-Fahrezug pro Benutzerprofil angelegt werden.
 Für mehrere Fahrezuge ist das Modul mehrmals anzulegen.
 
-# Wichtig zu wissen zur Konfiguration von Smartcar
+### Wichtig zu wissen zur Konfiguration von Smartcar
 Das Modul verbindet sich über OAuth 2.0 mit der Smartcar API. 
 Daher ist es erforderlich, eine Redirect URI in der Smartcar-Konfiguration einzutragen. 
 Die Redirect URI ist der Pfad zum Webhook, welchen das Modul automatisch anlegt. 
