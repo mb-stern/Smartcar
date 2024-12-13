@@ -102,6 +102,9 @@ Die Variablen zur Steuerung der Fahrezugfunktion können aus der Visualisierung 
 Hier findest du die Info, wie geziehlt (zb über einen Ablaufplan) nur bestimmte Variablen (Scopes) abgefragt werden, um API-Calls zu sparen. 
 Ein Scenario wäre, dass der SOC nur bei aktiviertem Ladevorgang alle 15min über einen Ablaufplan aktualisiert wird.
 Beachte, dass nur im Konfigurationsformuler (Berechtigungen) freigegebene Scopes abgefragt werden können.
+
+Befehl   | Beschreibung
+------ | -------
 WPLUX_FetchBattery(12345);      |   Abfrage des Batterieladestand (SOC)
 WPLUX_FetchLocation(12345);     |   Abfragen der GPS-Koordinaten
 WPLUX_FetchOdometer(12345);     |   Abfragen des Kilomterstandes
