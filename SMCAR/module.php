@@ -186,16 +186,11 @@ class SMCAR extends IPSModule
         $hookPath = $this->ReadAttributeString("CurrentHook");
         $webhookElement = [
             "type"    => "Label",
-            "caption" => "Webhook: " . $hookPath
-        ];
-
-        $connectAddress = [
-            "type"    => "Label",
-            "caption" => "Connect-Adresse: " . $connectAddress
+            "caption" => "Webhook: " . $connectAddress . $hookPath
         ];
     
         // Webhook-Pfad an den Anfang des Formulars setzen
-        array_splice($form['elements'], 0, 0, [$connectAddress, $webhookElement]);
+        array_splice($form['elements'], 0, 0, [$webhookElement]);
     
         return json_encode($form);
     }
