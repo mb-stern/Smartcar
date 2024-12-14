@@ -186,7 +186,7 @@ class SMCAR extends IPSModule
         $hookPath = $this->ReadAttributeString("CurrentHook");
         $webhookElement = [
             "type"    => "Label",
-            "caption" => "Webhook: " . $connectAddress . $hookPath
+            "caption" => "Redirect-URI: " . $connectAddress . $hookPath
         ];
     
         // Webhook-Pfad an den Anfang des Formulars setzen
