@@ -191,7 +191,7 @@ class SMCAR extends IPSModule
         $connectAddress = CC_GetUrl($ipsymconconnectid);
 
         // Webhook-Pfad an den Anfang des Formulars setzen
-        array_splice($form['elements'], 0, 0, [$connectAddress $webhookElement]);
+        array_splice($form['elements'], 0, 0, [$connectAddress, $webhookElement]);
     
         return json_encode($form);
     }
