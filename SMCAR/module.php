@@ -71,64 +71,64 @@ class SMCAR extends IPSModule
             $this->SendDebug('ApplyChanges', 'redirectURI wurde erfolgreich gespeichert.', 0);
         }           
 
-    // Variablen für Scopes anlegen oder löschen
-    if ($this->ReadPropertyBoolean('ScopeReadVehicleInfo')) {
-        $this->RegisterVariableString('VehicleMake', 'Fahrzeug Hersteller', '', 1);
-        $this->RegisterVariableString('VehicleModel', 'Fahrzeug Modell', '', 2);
-        $this->RegisterVariableInteger('VehicleYear', 'Fahrzeug Baujahr', '', 3);
-    } else {
-        $this->UnregisterVariable('VehicleMake');
-        $this->UnregisterVariable('VehicleModel');
-        $this->UnregisterVariable('VehicleYear');
-    }
+        // Variablen für Scopes anlegen oder löschen
+        if ($this->ReadPropertyBoolean('ScopeReadVehicleInfo')) {
+            $this->RegisterVariableString('VehicleMake', 'Fahrzeug Hersteller', '', 1);
+            $this->RegisterVariableString('VehicleModel', 'Fahrzeug Modell', '', 2);
+            $this->RegisterVariableInteger('VehicleYear', 'Fahrzeug Baujahr', '', 3);
+        } else {
+            $this->UnregisterVariable('VehicleMake');
+            $this->UnregisterVariable('VehicleModel');
+            $this->UnregisterVariable('VehicleYear');
+        }
 
-    if ($this->ReadPropertyBoolean('ScopeReadLocation')) {
-        $this->RegisterVariableFloat('Latitude', 'Breitengrad', '', 10);
-        $this->RegisterVariableFloat('Longitude', 'Längengrad', '', 11);
-    } else {
-        $this->UnregisterVariable('Latitude');
-        $this->UnregisterVariable('Longitude');
-    }
+        if ($this->ReadPropertyBoolean('ScopeReadLocation')) {
+            $this->RegisterVariableFloat('Latitude', 'Breitengrad', '', 10);
+            $this->RegisterVariableFloat('Longitude', 'Längengrad', '', 11);
+        } else {
+            $this->UnregisterVariable('Latitude');
+            $this->UnregisterVariable('Longitude');
+        }
 
-    if ($this->ReadPropertyBoolean('ScopeReadTires')) {
-        $this->RegisterVariableFloat('TireFrontLeft', 'Reifendruck Vorderreifen Links', 'SMCAR.Pressure', 20);
-        $this->RegisterVariableFloat('TireFrontRight', 'Reifendruck Vorderreifen Rechts', 'SMCAR.Pressure', 21);
-        $this->RegisterVariableFloat('TireBackLeft', 'Reifendruck Hinterreifen Links', 'SMCAR.Pressure', 22);
-        $this->RegisterVariableFloat('TireBackRight', 'Reifendruck Hinterreifen Rechts', 'SMCAR.Pressure', 23);
-    } else {
-        $this->UnregisterVariable('TireFrontLeft');
-        $this->UnregisterVariable('TireFrontRight');
-        $this->UnregisterVariable('TireBackLeft');
-        $this->UnregisterVariable('TireBackRight');
-    }
+        if ($this->ReadPropertyBoolean('ScopeReadTires')) {
+            $this->RegisterVariableFloat('TireFrontLeft', 'Reifendruck Vorderreifen Links', 'SMCAR.Pressure', 20);
+            $this->RegisterVariableFloat('TireFrontRight', 'Reifendruck Vorderreifen Rechts', 'SMCAR.Pressure', 21);
+            $this->RegisterVariableFloat('TireBackLeft', 'Reifendruck Hinterreifen Links', 'SMCAR.Pressure', 22);
+            $this->RegisterVariableFloat('TireBackRight', 'Reifendruck Hinterreifen Rechts', 'SMCAR.Pressure', 23);
+        } else {
+            $this->UnregisterVariable('TireFrontLeft');
+            $this->UnregisterVariable('TireFrontRight');
+            $this->UnregisterVariable('TireBackLeft');
+            $this->UnregisterVariable('TireBackRight');
+        }
 
-    if ($this->ReadPropertyBoolean('ScopeReadOdometer')) {
-        $this->RegisterVariableFloat('Odometer', 'Kilometerstand', 'SMCAR.Odometer', 30);
-    } else {
-        $this->UnregisterVariable('Odometer');
-    }
+        if ($this->ReadPropertyBoolean('ScopeReadOdometer')) {
+            $this->RegisterVariableFloat('Odometer', 'Kilometerstand', 'SMCAR.Odometer', 30);
+        } else {
+            $this->UnregisterVariable('Odometer');
+        }
 
-    if ($this->ReadPropertyBoolean('ScopeReadBattery')) {
-        $this->RegisterVariableFloat('BatteryRange', 'Reichweite', 'SMCAR.Odometer', 40);
-        $this->RegisterVariableFloat('BatteryLevel', 'Batterieladestand', 'SMCAR.Progress', 41);
-    } else {
-        $this->UnregisterVariable('BatteryRange');
-        $this->UnregisterVariable('BatteryLevel');
-    }
+        if ($this->ReadPropertyBoolean('ScopeReadBattery')) {
+            $this->RegisterVariableFloat('BatteryRange', 'Reichweite', 'SMCAR.Odometer', 40);
+            $this->RegisterVariableFloat('BatteryLevel', 'Batterieladestand', 'SMCAR.Progress', 41);
+        } else {
+            $this->UnregisterVariable('BatteryRange');
+            $this->UnregisterVariable('BatteryLevel');
+        }
 
-    if ($this->ReadPropertyBoolean('SetChargeLimit')) {
-        $this->RegisterVariableFloat('ChargeLimit', 'Ladelimit (%)', 'SMCAR.Progress', 50);
-        $this->EnableAction('ChargeLimit');
-    } else {
-        $this->UnregisterVariable('ChargeLimit');
-    }
+        if ($this->ReadPropertyBoolean('SetChargeLimit')) {
+            $this->RegisterVariableFloat('ChargeLimit', 'Ladelimit (%)', 'SMCAR.Progress', 50);
+            $this->EnableAction('ChargeLimit');
+        } else {
+            $this->UnregisterVariable('ChargeLimit');
+        }
 
-    if ($this->ReadPropertyBoolean('SetChargeStartStop')) {
-        $this->RegisterVariableBoolean('ChargeStatus', 'Ladung starten/stoppen', '~Switch', 51);
-        $this->EnableAction('ChargeStatus');
-    } else {
-        $this->UnregisterVariable('ChargeStatus');
-    }
+        if ($this->ReadPropertyBoolean('SetChargeStartStop')) {
+            $this->RegisterVariableBoolean('ChargeStatus', 'Ladung starten/stoppen', '~Switch', 51);
+            $this->EnableAction('ChargeStatus');
+        } else {
+            $this->UnregisterVariable('ChargeStatus');
+        }
         //Profile für erstellen
         $this->CreateProfile();
  
@@ -193,22 +193,22 @@ class SMCAR extends IPSModule
         return $hookPath;
     }
 
-public function GetConfigurationForm()
-{
-    $form = json_decode(file_get_contents(__DIR__ . '/form.json'), true);
-    $connectAddress = $this->ReadAttributeString('RedirectURI');
+    public function GetConfigurationForm()
+    {
+        $form = json_decode(file_get_contents(__DIR__ . '/form.json'), true);
+        $connectAddress = $this->ReadAttributeString('RedirectURI');
 
-    // Webhook-Pfad dynamisch einfügen
-    $webhookElement = [
-        "type"    => "Label",
-        "caption" => "Redirect-URI: " . $connectAddress
-    ];
+        // Webhook-Pfad dynamisch einfügen
+        $webhookElement = [
+            "type"    => "Label",
+            "caption" => "Redirect-URI: " . $connectAddress
+        ];
 
-    // Webhook-Pfad an den Anfang des Formulars setzen
-    array_splice($form['elements'], 0, 0, [$webhookElement]);
+        // Webhook-Pfad an den Anfang des Formulars setzen
+        array_splice($form['elements'], 0, 0, [$webhookElement]);
 
-    return json_encode($form);
-}
+        return json_encode($form);
+    }
     
     public function GenerateAuthURL()
     {
@@ -468,8 +468,6 @@ public function GetConfigurationForm()
         return null;
     }
     
-    
-    // Verarbeiten der Antworten
     private function ProcessResponse(string $path, array $body)
     {
         switch ($path) {
@@ -504,7 +502,6 @@ public function GetConfigurationForm()
                 $this->SendDebug('ProcessResponse', "Unbekannter Pfad: $path", 0);
         }
     }
-    
 
     public function SetChargeLimit(float $limit)
     {
@@ -597,95 +594,95 @@ public function GetConfigurationForm()
         }
     }
 
-public function FetchVehicleInfo()
-{
-    $this->FetchSingleEndpoint('/'); // Fahrzeugdetails
-}
-
-public function FetchLocation()
-{
-    $this->FetchSingleEndpoint('/location'); // Standort
-}
-
-public function FetchTires()
-{
-    $this->FetchSingleEndpoint('/tires/pressure'); // Reifendruck
-}
-
-public function FetchOdometer()
-{
-    $this->FetchSingleEndpoint('/odometer'); // Kilometerstand
-}
-
-public function FetchBattery()
-{
-    $this->FetchSingleEndpoint('/battery'); // Batteriestatus
-}
-
-private function FetchSingleEndpoint(string $path)
-{
-    $accessToken = $this->ReadAttributeString('AccessToken');
-    $vehicleID = $this->ReadAttributeString('VehicleID');
-
-    if (empty($accessToken) || empty($vehicleID)) {
-        $this->SendDebug('FetchSingleEndpoint', 'Access Token oder Fahrzeug-ID fehlt!', 0);
-        return;
+    public function FetchVehicleInfo()
+    {
+        $this->FetchSingleEndpoint('/'); // Fahrzeugdetails
     }
 
-    $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID" . $path;
-
-    $options = [
-        'http' => [
-            'header' => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
-            'method' => 'GET',
-            'ignore_errors' => true
-        ]
-    ];
-
-    $context = stream_context_create($options);
-    $response = @file_get_contents($url, false, $context);
-
-    if ($response === false) {
-        $this->SendDebug('FetchSingleEndpoint', 'Fehler: Keine Antwort von der API!', 0);
-        return;
+    public function FetchLocation()
+    {
+        $this->FetchSingleEndpoint('/location'); // Standort
     }
 
-    $data = json_decode($response, true);
-    $this->SendDebug('FetchSingleEndpoint', "Antwort für $path: " . json_encode($data), 0);
-
-    if (isset($data)) {
-        $this->ProcessResponse($path, $data);
-    } else {
-        $this->SendDebug('FetchSingleEndpoint', 'Keine gültige Antwortstruktur.', 0);
+    public function FetchTires()
+    {
+        $this->FetchSingleEndpoint('/tires/pressure'); // Reifendruck
     }
-}
 
-private function CreateProfile()
-{
+    public function FetchOdometer()
+    {
+        $this->FetchSingleEndpoint('/odometer'); // Kilometerstand
+    }
 
-    if (!IPS_VariableProfileExists('SMCAR.Pressure')) {
-        IPS_CreateVariableProfile('SMCAR.Pressure', VARIABLETYPE_FLOAT);
-        IPS_SetVariableProfileText('SMCAR.Pressure', '', ' bar');
-        IPS_SetVariableProfileDigits('SMCAR.Pressure', 1);
-        IPS_SetVariableProfileValues('SMCAR.Pressure', 0, 5, 0.1);
-        $this->SendDebug('CreateProfile', 'Profil erstellt: SMCAR.Pressure', 0);
-    } 
+    public function FetchBattery()
+    {
+        $this->FetchSingleEndpoint('/battery'); // Batteriestatus
+    }
 
-    if (!IPS_VariableProfileExists('SMCAR.Odometer')) {
-        IPS_CreateVariableProfile('SMCAR.Odometer', VARIABLETYPE_FLOAT);
-        IPS_SetVariableProfileText('SMCAR.Odometer', '', ' km');
-        IPS_SetVariableProfileDigits('SMCAR.Odometer', 0);
-        IPS_SetVariableProfileValues('SMCAR.Odometer', 0, 0, 1);
-        $this->SendDebug('CreateProfile', 'Profil erstellt: SMCAR.Odometer', 0);
-    } 
-    if (!IPS_VariableProfileExists('SMCAR.Progress')) {
-        IPS_CreateVariableProfile('SMCAR.Progress', VARIABLETYPE_FLOAT);
-        IPS_SetVariableProfileText('SMCAR.Progress', '', ' %');
-        IPS_SetVariableProfileDigits('SMCAR.Progress', 0);
-        IPS_SetVariableProfileValues('SMCAR.Progress', 0, 100, 1);
-        $this->SendDebug('CreateProfile', 'Profil erstellt: SMCAR.Progress', 0);
-    } 
+    private function FetchSingleEndpoint(string $path)
+    {
+        $accessToken = $this->ReadAttributeString('AccessToken');
+        $vehicleID = $this->ReadAttributeString('VehicleID');
 
-}
+        if (empty($accessToken) || empty($vehicleID)) {
+            $this->SendDebug('FetchSingleEndpoint', 'Access Token oder Fahrzeug-ID fehlt!', 0);
+            return;
+        }
+
+        $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID" . $path;
+
+        $options = [
+            'http' => [
+                'header' => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
+                'method' => 'GET',
+                'ignore_errors' => true
+            ]
+        ];
+
+        $context = stream_context_create($options);
+        $response = @file_get_contents($url, false, $context);
+
+        if ($response === false) {
+            $this->SendDebug('FetchSingleEndpoint', 'Fehler: Keine Antwort von der API!', 0);
+            return;
+        }
+
+        $data = json_decode($response, true);
+        $this->SendDebug('FetchSingleEndpoint', "Antwort für $path: " . json_encode($data), 0);
+
+        if (isset($data)) {
+            $this->ProcessResponse($path, $data);
+        } else {
+            $this->SendDebug('FetchSingleEndpoint', 'Keine gültige Antwortstruktur.', 0);
+        }
+    }
+
+    private function CreateProfile()
+    {
+
+        if (!IPS_VariableProfileExists('SMCAR.Pressure')) {
+            IPS_CreateVariableProfile('SMCAR.Pressure', VARIABLETYPE_FLOAT);
+            IPS_SetVariableProfileText('SMCAR.Pressure', '', ' bar');
+            IPS_SetVariableProfileDigits('SMCAR.Pressure', 1);
+            IPS_SetVariableProfileValues('SMCAR.Pressure', 0, 5, 0.1);
+            $this->SendDebug('CreateProfile', 'Profil erstellt: SMCAR.Pressure', 0);
+        } 
+
+        if (!IPS_VariableProfileExists('SMCAR.Odometer')) {
+            IPS_CreateVariableProfile('SMCAR.Odometer', VARIABLETYPE_FLOAT);
+            IPS_SetVariableProfileText('SMCAR.Odometer', '', ' km');
+            IPS_SetVariableProfileDigits('SMCAR.Odometer', 0);
+            IPS_SetVariableProfileValues('SMCAR.Odometer', 0, 0, 1);
+            $this->SendDebug('CreateProfile', 'Profil erstellt: SMCAR.Odometer', 0);
+        } 
+        if (!IPS_VariableProfileExists('SMCAR.Progress')) {
+            IPS_CreateVariableProfile('SMCAR.Progress', VARIABLETYPE_FLOAT);
+            IPS_SetVariableProfileText('SMCAR.Progress', '', ' %');
+            IPS_SetVariableProfileDigits('SMCAR.Progress', 0);
+            IPS_SetVariableProfileValues('SMCAR.Progress', 0, 100, 1);
+            $this->SendDebug('CreateProfile', 'Profil erstellt: SMCAR.Progress', 0);
+        } 
+
+    }
 
 }
