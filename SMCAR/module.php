@@ -65,11 +65,11 @@ class SMCAR extends IPSModule
         } else {
             // Füge den Webhook-Pfad hinzu, wenn Connect-Adresse gültig ist
             $hookPath = $this->ReadAttributeString("CurrentHook");
-            $connectAddress .= $hookPath;
+            $redirectURI = $connectAddress . $hookPath;
         }           
 
         //Redirect-URI in Attribut speichern
-        $this->WriteAttributeString('RedirectURI', $connectAddress);
+        $this->WriteAttributeString('RedirectURI', $redirectURI);
 
     // Variablen für Scopes anlegen oder löschen
     if ($this->ReadPropertyBoolean('ScopeReadVehicleInfo')) {
