@@ -253,7 +253,7 @@ class SMCAR extends IPSModule
             "&state=" . bin2hex(random_bytes(8)) .
             "&mode=$mode";
     
-        $this->SendDebug('GenerateAuthURL', "Generierte URL: $authURL", 0);
+        //$this->SendDebug('GenerateAuthURL', "Generierte URL: $authURL", 0);
         return $authURL;
     }
     
