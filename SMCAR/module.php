@@ -138,19 +138,22 @@ class SMCAR extends IPSModule
     {
         switch ($ident) {
             case 'ChargeLimit':
-                $this->SetChargeLimit($value / 100); // Konvertiere zu einem Wert zwischen 0.5 und 1.0
+                $this->SetChargeLimit($value / 100);
                 $this->SetValue($ident, $value);
+                $this->SendDebug('RequestAction', 'ChargeLimit gesetzt: '$value'.', 0);
                 break;
 
             case 'ChargeStatus':
                 $this->SetChargeStartStop($value);
                 $this->SetValue($ident, $value);
+                $this->SendDebug('RequestAction', 'ChargeStatus gesetzt: '$value'.', 0);
                 break;
 
             default:
                 throw new Exception("Invalid ident");
         }
     }
+
     private function RegisterHook()
     {
 
@@ -209,10 +212,10 @@ public function GetConfigurationForm()
     return json_encode($form);
 }
     
-    //Hier kommen die Scopes rein für welche die Freigabe beantragt werden
     public function GenerateAuthURL()
     {
         $clientID = $this->ReadPropertyString('ClientID');
+        $mode = $this->ReadPropertyString('Mode');
 
         if (empty($clientID)) {
             return "Fehler: Client ID nicht gesetzt!";
@@ -250,7 +253,7 @@ public function GetConfigurationForm()
             "&redirect_uri=" . urlencode($redirectURI) .
             "&scope=" . urlencode(implode(' ', $scopes)) .
             "&state=" . bin2hex(random_bytes(8)) .
-            "&mode=simulated";
+            "&mode=$mode";
     
         $this->SendDebug('GenerateAuthURL', "Generierte URL: $authURL", 0);
         return $authURL;
