@@ -241,10 +241,8 @@ public function GetConfigurationForm()
         if (empty($scopes)) {
             return "Fehler: Keine Scopes ausgewählt!";
         }
-
-        $connectAddress = $this->ReadAttributeString('ConnectAddress');
     
-        $redirectURI = rtrim($connectAddress, '/') . $this->ReadAttributeString("CurrentHook");
+        $redirectURI = $this->ReadAttributeString('ConnectAddress');
     
         $authURL = "https://connect.smartcar.com/oauth/authorize?" .
             "response_type=code" .
