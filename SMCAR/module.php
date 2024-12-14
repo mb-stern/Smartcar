@@ -662,8 +662,8 @@ class SMCAR extends IPSModule
             'url' => $url,
             'method' => $options['http']['method'],
             'header' => $options['http']['header']
-        ], JSON_PRETTY_PRINT), 0)
-        
+        ], JSON_PRETTY_PRINT), 0);
+    
         $context = stream_context_create($options);
         $response = @file_get_contents($url, false, $context);
     
@@ -682,6 +682,8 @@ class SMCAR extends IPSModule
             }
         }
     
+        $this->SendDebug('FetchSingleEndpoint', "HTTP-Statuscode: $statusCode", 0);
+    
         if ($statusCode !== 200) {
             $this->SendDebug('FetchSingleEndpoint', "Fehlerhafte HTTP-Antwort ($statusCode): " . $response, 0);
             return;
@@ -694,7 +696,7 @@ class SMCAR extends IPSModule
         }
     
         if (isset($data) && !empty($data)) {
-            $this->SendDebug('FetchSingleEndpoint', "Erfolgreiche Antwort für $path: " . json_encode($data), 0);
+            $this->SendDebug('FetchSingleEndpoint', "Erfolgreiche Antwort für $path: " . json_encode($data, JSON_PRETTY_PRINT), 0);
             $this->ProcessResponse($path, $data);
         } else {
             $this->SendDebug('FetchSingleEndpoint', 'Keine gültige Antwortstruktur.', 0);
