@@ -203,7 +203,7 @@ public function GetConfigurationForm()
     array_splice($form['elements'], 0, 0, [$webhookElement]);
 
     //Webhook-PFad in Variable speichern
-    $this->WriteAttributeString("ConnectAddress", $webhookElement);
+    $this->WriteAttributeString("ConnectAddress", $connectAddress);
 
     return json_encode($form);
 }
