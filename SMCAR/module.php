@@ -179,6 +179,8 @@ class SMCAR extends IPSModule
     public function GetConfigurationForm()
     {
         $form = json_decode(file_get_contents(__DIR__ . '/form.json'), true);
+        $ipsymconconnectid = IPS_GetInstanceListByModuleID("{9486D575-BE8C-4ED8-B5B5-20930E26DE6F}")[0];
+        $connectAddress = CC_GetUrl($ipsymconconnectid);
     
         // Webhook-Pfad dynamisch einfügen
         $hookPath = $this->ReadAttributeString("CurrentHook");
@@ -186,10 +188,12 @@ class SMCAR extends IPSModule
             "type"    => "Label",
             "caption" => "Webhook: " . $hookPath
         ];
-    
-        $ipsymconconnectid = IPS_GetInstanceListByModuleID("{9486D575-BE8C-4ED8-B5B5-20930E26DE6F}")[0];
-        $connectAddress = CC_GetUrl($ipsymconconnectid);
 
+        $connectAddress = [
+            "type"    => "Label",
+            "caption" => "Connect-Adresse: " . $connectAddress
+        ];
+    
         // Webhook-Pfad an den Anfang des Formulars setzen
         array_splice($form['elements'], 0, 0, [$connectAddress, $webhookElement]);
     
