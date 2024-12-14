@@ -535,7 +535,7 @@ class SMCAR extends IPSModule
                 break;
 
             case '/battery/capacity':
-                $this->SetValue('BatteryCapacity', $body['range'] ?? 0);
+                $this->SetValue('BatteryCapacity', $body['capacity'] ?? 0);
             break;
     
             default:
