@@ -61,13 +61,48 @@
         },
         {
           "type": "CheckBox",
+          "name": "ScopeReadEngineOil",
+          "caption": "Motoröl lesen (/engine/oil)"
+        },
+        {
+          "type": "CheckBox",
+          "name": "ScopeReadEngineState",
+          "caption": "Motorzustand lesen (/engine/state)"
+        },
+        {
+          "type": "CheckBox",
+          "name": "ScopeReadDoors",
+          "caption": "Türstatus lesen (/doors)"
+        },
+        {
+          "type": "CheckBox",
+          "name": "ScopeReadFuel",
+          "caption": "Kraftstoffstand lesen (/fuel)"
+        },
+        {
+          "type": "CheckBox",
+          "name": "ScopeReadSecurity",
+          "caption": "Sicherheitsstatus lesen (/security)"
+        },
+        {
+          "type": "CheckBox",
+          "name": "ScopeReadClimate",
+          "caption": "Klimaanlagendaten lesen (/climate)"
+        },
+        {
+          "type": "CheckBox",
+          "name": "ScopeReadMaintenance",
+          "caption": "Wartungsdaten lesen (/maintenance)"
+        },
+        {
+          "type": "CheckBox",
           "name": "SetChargeLimit",
-          "caption": "Laden Limit setzen (/charge/limit)"
+          "caption": "Ladelimit setzen (/charge/limit)"
         },
         {
           "type": "CheckBox",
           "name": "SetChargeStartStop",
-          "caption": "Laden Status setzen (/charge)"
+          "caption": "Ladestatus setzen (/charge)"
         }
       ]
     }
