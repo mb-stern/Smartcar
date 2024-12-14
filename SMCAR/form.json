@@ -62,12 +62,12 @@
         {
           "type": "CheckBox",
           "name": "SetChargeLimit",
-          "caption": "Laden Limit (/charge/limit)"
+          "caption": "Laden Limit setzen (/charge/limit)"
         },
         {
           "type": "CheckBox",
           "name": "SetChargeStartStop",
-          "caption": "Laden Starten/Stopen (/charge)"
+          "caption": "Laden Starten/Stopen setzen (/charge)"
         }
       ]
     }

@@ -179,7 +179,8 @@ class SMCAR extends IPSModule
 
     public function GetConfigurationForm()
     {
-        $form = json_decode(file_get_contents(__DIR__ . '/form.json'), true);
+        $ipsymconconnectid = IPS_GetInstanceListByModuleID("{9486D575-BE8C-4ED8-B5B5-20930E26DE6F}")[0];
+        $connectinfo = CC_GetUrl($ipsymconconnectid); 
     
         // Webhook-Pfad dynamisch einfügen
         $hookPath = $this->ReadAttributeString("CurrentHook");
@@ -189,7 +190,7 @@ class SMCAR extends IPSModule
         ];
     
         // Webhook-Pfad an den Anfang des Formulars setzen
-        array_splice($form['elements'], 0, 0, [$webhookElement]);
+        array_splice($connectinfo['elements'], 0, 0, [$webhookElement]);
     
         return json_encode($form);
     }
@@ -246,7 +247,7 @@ class SMCAR extends IPSModule
             "&state=" . bin2hex(random_bytes(8)) .
             "&mode=$mode";
     
-        $this->SendDebug('GenerateAuthURL', "Erstellte URL: $authURL", 0);
+        $this->SendDebug('GenerateAuthURL', "AuthURL erstellt", 0);
     
         echo "Bitte besuchen Sie die folgende URL, um Ihr Fahrzeug zu verbinden:\n$authURL";
     }
