@@ -140,13 +140,11 @@ class SMCAR extends IPSModule
             case 'ChargeLimit':
                 $this->SetChargeLimit($value / 100);
                 $this->SetValue($ident, $value);
-                $this->SendDebug('RequestAction', 'ChargeLimit gesetzt: '$value'.', 0);
                 break;
 
             case 'ChargeStatus':
                 $this->SetChargeStartStop($value);
                 $this->SetValue($ident, $value);
-                $this->SendDebug('RequestAction', 'ChargeStatus gesetzt: '$value'.', 0);
                 break;
 
             default:
