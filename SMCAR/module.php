@@ -24,6 +24,7 @@ class SMCAR extends IPSModule
         $this->RegisterAttributeString('AccessToken', '');
         $this->RegisterAttributeString('RefreshToken', '');
         $this->RegisterAttributeString('VehicleID', '');
+        $this->RegisterAttributString('ConnectAddress', '');
 
         $this->RegisterTimer('TokenRefreshTimer', 0, 'SMCAR_RefreshAccessToken(' . $this->InstanceID . ');');  
 
@@ -201,6 +202,9 @@ public function GetConfigurationForm()
     // Webhook-Pfad an den Anfang des Formulars setzen
     array_splice($form['elements'], 0, 0, [$webhookElement]);
 
+    //Webhook-PFad in Variable speichern
+    $this->WriteAttributeString("ConnectAddress", $webhookElement);
+
     return json_encode($form);
 }
     
@@ -285,7 +289,7 @@ public function GetConfigurationForm()
     {
         $clientID = $this->ReadPropertyString('ClientID');
         $clientSecret = $this->ReadPropertyString('ClientSecret');
-        $redirectURI = rtrim($this->ReadPropertyString('ConnectAddress'), '/') . $this->ReadAttributeString("CurrentHook");
+        $redirectURI = rtrim($this->ReadAttributString('ConnectAddress'), '/') . $this->ReadAttributeString("CurrentHook");
     
         $url = "https://auth.smartcar.com/oauth/token";
     
