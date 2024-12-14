@@ -289,7 +289,7 @@ public function GetConfigurationForm()
     {
         $clientID = $this->ReadPropertyString('ClientID');
         $clientSecret = $this->ReadPropertyString('ClientSecret');
-        $redirectURI = rtrim($this->ReadAttributString('ConnectAddress'), '/') . $this->ReadAttributeString("CurrentHook");
+        $redirectURI = rtrim($this->ReadAttributeString('ConnectAddress'), '/') . $this->ReadAttributeString("CurrentHook");
     
         $url = "https://auth.smartcar.com/oauth/token";
     
