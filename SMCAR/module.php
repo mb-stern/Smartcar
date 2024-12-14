@@ -24,7 +24,7 @@ class SMCAR extends IPSModule
         $this->RegisterAttributeString('AccessToken', '');
         $this->RegisterAttributeString('RefreshToken', '');
         $this->RegisterAttributeString('VehicleID', '');
-        $this->RegisterAttributeString('ConnectAddress', '');
+        $this->RegisterAttributeString('RedirectURI', '');
 
         $this->RegisterTimer('TokenRefreshTimer', 0, 'SMCAR_RefreshAccessToken(' . $this->InstanceID . ');');  
 
@@ -68,8 +68,8 @@ class SMCAR extends IPSModule
             $connectAddress .= $hookPath;
         }           
 
-        //Webhook-PFad in Attribut speichern
-        $this->WriteAttributeString("ConnectAddress", $connectAddress);
+        //Redirect-URI in Attribut speichern
+        $this->WriteAttributeString('RedirectURI', $connectAddress);
 
     // Variablen für Scopes anlegen oder löschen
     if ($this->ReadPropertyBoolean('ScopeReadVehicleInfo')) {
@@ -195,7 +195,7 @@ class SMCAR extends IPSModule
 public function GetConfigurationForm()
 {
     $form = json_decode(file_get_contents(__DIR__ . '/form.json'), true);
-    $connectAddress = $this->ReadAttributeString('ConnectAddress');
+    $connectAddress = $this->ReadAttributeString('RedirectURI');
 
     // Webhook-Pfad dynamisch einfügen
     $webhookElement = [
@@ -242,7 +242,7 @@ public function GetConfigurationForm()
             return "Fehler: Keine Scopes ausgewählt!";
         }
     
-        $redirectURI = $this->ReadAttributeString('ConnectAddress');
+        $redirectURI = $this->ReadAttributeString('RedirectURI');
     
         $authURL = "https://connect.smartcar.com/oauth/authorize?" .
             "response_type=code" .
@@ -281,7 +281,7 @@ public function GetConfigurationForm()
     {
         $clientID = $this->ReadPropertyString('ClientID');
         $clientSecret = $this->ReadPropertyString('ClientSecret');
-        $redirectURI = rtrim($this->ReadAttributeString('ConnectAddress'), '/') . $this->ReadAttributeString("CurrentHook");
+        $redirectURI = rtrim($this->ReadAttributeString('RedirectURI'), '/') . $this->ReadAttributeString("CurrentHook");
     
         $url = "https://auth.smartcar.com/oauth/token";
     
