@@ -67,7 +67,7 @@ __Konfigurationsseite__:
 
 Name     | Beschreibung
 -------- | ------------------
-Redirect-URI                |  Dieser Pfad gehört in die Konfiguration von Smartcar
+Redirect-URI                |  Das ist der Pfad zum Webhook. Dieser Pfad gehört in die Konfiguration von Smartcar unter REDIRECT URI.
 Client ID                   |  Entnimm diesen in der Konfiguration von Smartcar unter OAuth
 Client Secret               |  Entnimm diesen in der Konfiguration von Smartcar unter OAuth
 Symcon Connect Adresse      |  Die Connect Adresse findest du in Symcon unter Kern Instanzen/Connect
