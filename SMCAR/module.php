@@ -363,8 +363,7 @@ class SMCAR extends IPSModule
             $this->SendDebug('RefreshAccessToken', 'Token-Erneuerung fehlgeschlagen!', 0);
         }
     }
-    
-    
+     
     public function FetchVehicleData()
     {
         $accessToken = $this->ReadAttributeString('AccessToken');
@@ -470,6 +469,7 @@ class SMCAR extends IPSModule
     
         $context = stream_context_create($options);
         $response = @file_get_contents($url, false, $context);
+        $this->SendDebug('GetVehicleID', 'API-Abfrage: '$response'', 0);
     
         if ($response === false) {
             $this->SendDebug('GetVehicleID', 'Fehler: Keine Antwort von der API!', 0);
