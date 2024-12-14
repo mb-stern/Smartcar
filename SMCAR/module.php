@@ -210,18 +210,21 @@ public function GetConfigurationForm()
     public function GenerateAuthURL()
     {
         $clientID = $this->ReadPropertyString('ClientID');
-        $ipsymconconnectid = IPS_GetInstanceListByModuleID("{9486D575-BE8C-4ED8-B5B5-20930E26DE6F}")[0];
-        $connectAddress = CC_GetUrl($ipsymconconnectid);
-        $mode = $this->ReadPropertyString('Mode');
-    
-        if (empty($clientID) || empty($connectAddress)) {
-            echo "Fehler: Client ID oder Connect-Adresse nicht gesetzt!";
-            return;
+        $ipsymconconnectid = IPS_GetInstanceListByModuleID("{9486D575-BE8C-4ED8-B5B5-20930E26DE6F}");
+        if (count($ipsymconconnectid) === 0) {
+            return "Fehler: Connect-Instanz nicht gefunden!";
         }
     
-        // Scopes auslesen
-        $scopes = [];
+        $connectAddress = CC_GetUrl($ipsymconconnectid[0]);
+        if (empty($connectAddress)) {
+            return "Fehler: Connect-Adresse konnte nicht ermittelt werden!";
+        }
     
+        if (empty($clientID)) {
+            return "Fehler: Client ID nicht gesetzt!";
+        }
+    
+        $scopes = [];
         if ($this->ReadPropertyBoolean('ScopeReadVehicleInfo')) {
             $scopes[] = 'read_vehicle_info';
         }
@@ -242,26 +245,23 @@ public function GetConfigurationForm()
         }
     
         if (empty($scopes)) {
-            echo "Fehler: Keine Scopes ausgewählt!";
-            return;
+            return "Fehler: Keine Scopes ausgewählt!";
         }
     
-        // Redirect-URI zusammensetzen
         $redirectURI = rtrim($connectAddress, '/') . $this->ReadAttributeString("CurrentHook");
     
-        // URL generieren
         $authURL = "https://connect.smartcar.com/oauth/authorize?" .
             "response_type=code" .
-            "&client_id=$clientID" .
+            "&client_id=" . urlencode($clientID) .
             "&redirect_uri=" . urlencode($redirectURI) .
             "&scope=" . urlencode(implode(' ', $scopes)) .
             "&state=" . bin2hex(random_bytes(8)) .
-            "&mode=$mode";
+            "&mode=simulated";
     
-        $this->SendDebug('GenerateAuthURL', "AuthURL erstellt", 0);
-    
-        echo "Bitte besuchen Sie die folgende URL, um Ihr Fahrzeug zu verbinden:\n$authURL";
+        $this->SendDebug('GenerateAuthURL', "Generierte URL: $authURL", 0);
+        return $authURL;
     }
+    
     
     public function ProcessHookData()
     {
