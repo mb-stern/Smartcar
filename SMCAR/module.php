@@ -241,6 +241,8 @@ public function GetConfigurationForm()
         if (empty($scopes)) {
             return "Fehler: Keine Scopes ausgewählt!";
         }
+
+        $connectAddress = $this->ReadAttributeString('ConnectAddress');
     
         $redirectURI = rtrim($connectAddress, '/') . $this->ReadAttributeString("CurrentHook");
     
