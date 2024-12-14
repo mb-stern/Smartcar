@@ -56,6 +56,21 @@ class SMCAR extends IPSModule
                 $this->SendDebug('ApplyChanges', 'Token-Erneuerungs-Timer gestoppt.', 0);
             }
 
+     // Hole die Connect-Adresse
+     $ipsymconconnectid = IPS_GetInstanceListByModuleID("{9486D575-BE8C-4ED8-B5B5-20930E26DE6F}")[0];
+     $connectAddress = CC_GetUrl($ipsymconconnectid);
+ 
+     if ($connectAddress === false || empty($connectAddress)) {
+         $connectAddress = "Connect-Adresse konnte nicht ermittelt werden.";
+     } else {
+         // Füge den Webhook-Pfad hinzu, wenn Connect-Adresse gültig ist
+         $hookPath = $this->ReadAttributeString("CurrentHook");
+         $connectAddress .= $hookPath;
+     }           
+
+    //Webhook-PFad in Variable speichern
+    $this->WriteAttributeString("ConnectAddress", $connectAddress);
+
     // Variablen für Scopes anlegen oder löschen
     if ($this->ReadPropertyBoolean('ScopeReadVehicleInfo')) {
         $this->RegisterVariableString('VehicleMake', 'Fahrzeug Hersteller', '', 1);
@@ -181,18 +196,6 @@ public function GetConfigurationForm()
 {
     $form = json_decode(file_get_contents(__DIR__ . '/form.json'), true);
 
-    // Hole die Connect-Adresse
-    $ipsymconconnectid = IPS_GetInstanceListByModuleID("{9486D575-BE8C-4ED8-B5B5-20930E26DE6F}")[0];
-    $connectAddress = CC_GetUrl($ipsymconconnectid);
-
-    if ($connectAddress === false || empty($connectAddress)) {
-        $connectAddress = "Connect-Adresse konnte nicht ermittelt werden.";
-    } else {
-        // Füge den Webhook-Pfad hinzu, wenn Connect-Adresse gültig ist
-        $hookPath = $this->ReadAttributeString("CurrentHook");
-        $connectAddress .= $hookPath;
-    }
-
     // Webhook-Pfad dynamisch einfügen
     $webhookElement = [
         "type"    => "Label",
@@ -201,9 +204,6 @@ public function GetConfigurationForm()
 
     // Webhook-Pfad an den Anfang des Formulars setzen
     array_splice($form['elements'], 0, 0, [$webhookElement]);
-
-    //Webhook-PFad in Variable speichern
-    $this->WriteAttributeString("ConnectAddress", $connectAddress);
 
     return json_encode($form);
 }
