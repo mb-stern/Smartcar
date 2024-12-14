@@ -469,7 +469,7 @@ class SMCAR extends IPSModule
     
         $context = stream_context_create($options);
         $response = @file_get_contents($url, false, $context);
-        $this->SendDebug('GetVehicleID', 'API-Abfrage: '$response'', 0);
+        $this->SendDebug('GetVehicleID', 'API-Abfrage: ' . $response, 0);
     
         if ($response === false) {
             $this->SendDebug('GetVehicleID', 'Fehler: Keine Antwort von der API!', 0);
