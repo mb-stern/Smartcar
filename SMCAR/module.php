@@ -412,6 +412,14 @@ class SMCAR extends IPSModule
                 'ignore_errors' => true
             ]
         ];
+        
+        // Debug-Ausgabe für die API-Anfrage
+        $this->SendDebug('FetchVehicleData', 'API-Anfrage: ' . json_encode([
+            'url'    => $url,
+            'method' => $options['http']['method'],
+            'header' => $options['http']['header'],
+            'body'   => $options['http']['content']
+        ], JSON_PRETTY_PRINT), 0);
     
         $context = stream_context_create($options);
         $response = @file_get_contents($url, false, $context);
