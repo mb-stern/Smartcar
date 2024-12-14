@@ -260,6 +260,7 @@ class SMCAR extends IPSModule
     
         $this->SendDebug('GenerateAuthURL', "AuthURL erstellt", 0);
     
+        echo "<script>window.open('$authURL', '_blank');</script>";
         echo "Bitte besuchen Sie die folgende URL, um Ihr Fahrzeug zu verbinden:\n$authURL";
     }
     
