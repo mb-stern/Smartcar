@@ -179,14 +179,23 @@ class SMCAR extends IPSModule
     public function GetConfigurationForm()
     {
         $form = json_decode(file_get_contents(__DIR__ . '/form.json'), true);
+    
+        // Hole die Connect-Adresse
         $ipsymconconnectid = IPS_GetInstanceListByModuleID("{9486D575-BE8C-4ED8-B5B5-20930E26DE6F}")[0];
         $connectAddress = CC_GetUrl($ipsymconconnectid);
     
+        if ($connectAddress === false || empty($connectAddress)) {
+            $connectAddress = "Connect-Adresse konnte nicht ermittelt werden.";
+        } else {
+            // Füge den Webhook-Pfad hinzu, wenn Connect-Adresse gültig ist
+            $hookPath = $this->ReadAttributeString("CurrentHook");
+            $connectAddress .= $hookPath;
+        }
+    
         // Webhook-Pfad dynamisch einfügen
-        $hookPath = $this->ReadAttributeString("CurrentHook");
         $webhookElement = [
             "type"    => "Label",
-            "caption" => "Redirect-URI: " . $connectAddress . $hookPath
+            "caption" => "Redirect-URI: " . $connectAddress
         ];
     
         // Webhook-Pfad an den Anfang des Formulars setzen
@@ -194,6 +203,7 @@ class SMCAR extends IPSModule
     
         return json_encode($form);
     }
+    
 
     
     //Hier kommen die Scopes rein für welche die Freigabe beantragt werden
