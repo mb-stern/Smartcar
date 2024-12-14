@@ -15,7 +15,8 @@ class SMCAR extends IPSModule
         $this->RegisterPropertyBoolean('ScopeReadLocation', false);
         $this->RegisterPropertyBoolean('ScopeReadTires', false);
         $this->RegisterPropertyBoolean('ScopeReadOdometer', false);
-        $this->RegisterPropertyBoolean('ScopeReadBattery', false);
+        $this->RegisterPropertyBoolean('ScopeReadBatteryLevel', false);
+        $this->RegisterPropertyBoolean('ScopeReadBatteryCapacity', false);
         $this->RegisterPropertyBoolean('ScopeControlCharge', false);
         $this->RegisterPropertyBoolean('SetChargeLimit', false);
         $this->RegisterPropertyBoolean('SetChargeStartStop', false);
@@ -49,7 +50,6 @@ class SMCAR extends IPSModule
         
             if (!empty($accessToken) && !empty($refreshToken)) {
                 $this->SetTimerInterval('TokenRefreshTimer', 90 * 60 * 1000); // Alle 90 Minuten
-                //$this->SetTimerInterval('TokenRefreshTimer', 60 * 1000); // Alle Minuten
                 $this->SendDebug('ApplyChanges', 'Token-Erneuerungs-Timer gestartet.', 0);
             } else {
                 $this->SetTimerInterval('TokenRefreshTimer', 0); // Timer deaktivieren
@@ -64,7 +64,7 @@ class SMCAR extends IPSModule
             $connectAddress = "Connect-Adresse konnte nicht ermittelt werden.";
             $this->SendDebug('ApplyChanges', 'Connect-Adresse konnte nicht ermittelt werden.', 0);
         } else {
-            // Füge den Webhook-Pfad hinzu, wenn Connect-Adresse gültig ist
+            // Füge Connect-Adresse und Webhook-Pfad zusammen, um redirectURI zu erhalten
             $hookPath = $this->ReadAttributeString("CurrentHook");
             $redirectURI = $connectAddress . $hookPath;
             $this->WriteAttributeString('RedirectURI', $redirectURI);
@@ -108,7 +108,7 @@ class SMCAR extends IPSModule
             $this->UnregisterVariable('Odometer');
         }
 
-        if ($this->ReadPropertyBoolean('ScopeReadBattery')) {
+        if ($this->ReadPropertyBoolean('ScopeReadBatteryLevel')) {
             $this->RegisterVariableFloat('BatteryRange', 'Reichweite', 'SMCAR.Odometer', 40);
             $this->RegisterVariableFloat('BatteryLevel', 'Batterieladestand', 'SMCAR.Progress', 41);
         } else {
@@ -116,15 +116,21 @@ class SMCAR extends IPSModule
             $this->UnregisterVariable('BatteryLevel');
         }
 
+        if ($this->ReadPropertyBoolean('ScopeReadBatteryCapacity')) {
+            $this->RegisterVariableFloat('BatteryCapacity', 'Batteriekapazität', '~Electricity', 50);
+        } else {
+            $this->UnregisterVariable('BatteryCapacity');
+        }
+
         if ($this->ReadPropertyBoolean('SetChargeLimit')) {
-            $this->RegisterVariableFloat('ChargeLimit', 'Ladelimit (%)', 'SMCAR.Progress', 50);
+            $this->RegisterVariableFloat('ChargeLimit', 'Ladelimit (%)', 'SMCAR.Progress', 60);
             $this->EnableAction('ChargeLimit');
         } else {
             $this->UnregisterVariable('ChargeLimit');
         }
 
         if ($this->ReadPropertyBoolean('SetChargeStartStop')) {
-            $this->RegisterVariableBoolean('ChargeStatus', 'Ladung starten/stoppen', '~Switch', 51);
+            $this->RegisterVariableBoolean('ChargeStatus', 'Ladung starten/stoppen', '~Switch', 70);
             $this->EnableAction('ChargeStatus');
         } else {
             $this->UnregisterVariable('ChargeStatus');
@@ -232,7 +238,7 @@ class SMCAR extends IPSModule
         if ($this->ReadPropertyBoolean('ScopeReadOdometer')) {
             $scopes[] = 'read_odometer';
         }
-        if ($this->ReadPropertyBoolean('ScopeReadBattery')) {
+        if ($this->ReadPropertyBoolean('ScopeReadBatteryLevel') || $this->ReadPropertyBoolean('ScopeReadBatteryCapacity')) {
             $scopes[] = 'read_battery';
         }
         if ($this->ReadPropertyBoolean('SetChargeLimit') || $this->ReadPropertyBoolean('SetChargeStartStop')) {
@@ -389,8 +395,11 @@ class SMCAR extends IPSModule
         if ($this->ReadPropertyBoolean('ScopeReadOdometer')) {
             $endpoints[] = ["path" => "/odometer"];
         }
-        if ($this->ReadPropertyBoolean('ScopeReadBattery')) {
+        if ($this->ReadPropertyBoolean('ScopeReadBatteryLevel')) {
             $endpoints[] = ["path" => "/battery"];
+        }
+        if ($this->ReadPropertyBoolean('ScopeReadBatteryCapacity')) {
+            $endpoints[] = ["path" => "/battery/capacity"];
         }
     
         $endpoints = array_filter($endpoints, fn($endpoint) => !empty($endpoint['path'])); // Filtere leere Einträge
@@ -524,6 +533,10 @@ class SMCAR extends IPSModule
                     $this->SetValue('BatteryRange', $body['range'] ?? 0);
                     $this->SetValue('BatteryLevel', ($body['percentRemaining'] ?? 0) * 100);
                 break;
+
+            case '/battery/capacity':
+                $this->SetValue('BatteryCapacity', $body['range'] ?? 0);
+            break;
     
             default:
                 $this->SendDebug('ProcessResponse', "Unbekannter Pfad: $path", 0);
@@ -641,9 +654,13 @@ class SMCAR extends IPSModule
         $this->FetchSingleEndpoint('/odometer'); // Kilometerstand
     }
 
-    public function FetchBattery()
+    public function FetchBatteryLevel()
     {
-        $this->FetchSingleEndpoint('/battery'); // Batteriestatus
+        $this->FetchSingleEndpoint('/battery'); // Batterielevel
+    }
+    public function FetchBatteryCapacity()
+    {
+        $this->FetchSingleEndpoint('/battery/capacity'); // Batterieskapazität
     }
 
     private function FetchSingleEndpoint(string $path)
