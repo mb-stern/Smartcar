@@ -74,7 +74,7 @@ Symcon Connect Adresse      |  Die Connect Adresse findest du in Symcon unter Ke
 Verbindungsmodus            |  Hier definierst du, ob es sich um ein Simmuliertes oder ein Live-Fahrzeug handelt. Die Fahrzeuge verwaltest du im Dashboard von Smartcar. Es kann auch zwischen simmulierem und Live-Fahrezug gewechstelt werden, jedoch muss danach eine neue Verbindung gestartet und das Testfahrezug ausgewählt werden.
 Berchtigungen (Scopes)      |  Hier sind die aktuell vom Modul unterstützen Scopes zur Auswahl. Wichtig ist, dass alle angewählt werden, die später abgefragt werden, sonst werden hier keine Werte geliefert. Im Zweifelsfalle alle aktivieren. Die Variablen werden automatisch erstellt und beim Deaktivieren wieder gelöscht.
 Smartcar verbinden         |  Es öffnet siche ein Browserfenster, wo die gewählten Berechtigungen im Modul noch genemigt werden müssen. Am schluss erscheint eine Erfolgsmeldung. Das heisst, die Berchtigung wurde über die Redierct URI (Webhook) an das Modul erteilt
-Fahrzeugdaten abrufen       |  Hier rufst du alle aktivierten Scopes ab. Sei vorsichtig bei einem Live-Fahrezug. Fünf aktivierte Scopes ergeben 5 API-Calls. Lies hier [PHP-Befehlsreferenz](#7-php-befehlsreferenz) wie du nur die gewünnschten Variablen aktualisierst.
+Fahrzeugdaten abrufen       |  Hier rufst du alle aktivierten Scopes ab. Sei vorsichtig bei einem Live-Fahrezug. Fünf aktivierte Scopes ergeben 5 API-Calls. Lies hier [PHP-Befehlsreferenz](#7-php-befehlsreferenz) wie du exclusiv die gewünnschten Variablen aktualisierst.
 
 
 ### 5. Statusvariablen und Profile
