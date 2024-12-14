@@ -658,6 +658,12 @@ class SMCAR extends IPSModule
             ]
         ];
     
+        $this->SendDebug('FetchSingleEndpoint', 'API-Anfrage: ' . json_encode([
+            'url' => $url,
+            'method' => $options['http']['method'],
+            'header' => $options['http']['header']
+        ], JSON_PRETTY_PRINT), 0)
+        
         $context = stream_context_create($options);
         $response = @file_get_contents($url, false, $context);
     
