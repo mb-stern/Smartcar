@@ -282,7 +282,7 @@ class SMCAR extends IPSModule
     {
         $clientID = $this->ReadPropertyString('ClientID');
         $clientSecret = $this->ReadPropertyString('ClientSecret');
-        $redirectURI = rtrim($this->ReadAttributeString('RedirectURI'), '/') . $this->ReadAttributeString("CurrentHook");
+        $redirectURI = $this->ReadAttributeString('RedirectURI');
     
         $url = "https://auth.smartcar.com/oauth/token";
     
