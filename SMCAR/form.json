@@ -70,8 +70,8 @@
   "actions": [
     {
       "type": "Button",
-      "caption": "Verbindung starten",
-      "onClick": "SMCAR_GenerateAuthURL($id);"
+      "caption": "Smartcar verbinden",
+      "onClick": "echo '<a href=\"' . SMCAR_GenerateAuthURL($id) . '\" target=\"_blank\">Smartcar verbinden</a>';"
     },
     {
       "type": "Button",

@@ -210,18 +210,28 @@ class SMCAR extends IPSModule
     public function GenerateAuthURL()
     {
         $clientID = $this->ReadPropertyString('ClientID');
-        $ipsymconconnectid = IPS_GetInstanceListByModuleID("{9486D575-BE8C-4ED8-B5B5-20930E26DE6F}")[0];
-        $connectAddress = CC_GetUrl($ipsymconconnectid);
         $mode = $this->ReadPropertyString('Mode');
     
-        if (empty($clientID) || empty($connectAddress)) {
-            echo "Fehler: Client ID oder Connect-Adresse nicht gesetzt!";
-            return;
+        // Hole die Connect-Adresse
+        $ipsymconconnectid = IPS_GetInstanceListByModuleID("{9486D575-BE8C-4ED8-B5B5-20930E26DE6F}");
+        if (count($ipsymconconnectid) === 0) {
+            $this->SendDebug('GenerateAuthURL', 'Fehler: Connect-Instanz nicht gefunden.', 0);
+            return "Fehler: Connect-Instanz nicht gefunden!";
+        }
+    
+        $connectAddress = CC_GetUrl($ipsymconconnectid[0]);
+        if (empty($connectAddress)) {
+            $this->SendDebug('GenerateAuthURL', 'Fehler: Connect-Adresse konnte nicht ermittelt werden.', 0);
+            return "Fehler: Connect-Adresse konnte nicht ermittelt werden!";
+        }
+    
+        if (empty($clientID)) {
+            $this->SendDebug('GenerateAuthURL', 'Fehler: Client ID nicht gesetzt.', 0);
+            return "Fehler: Client ID nicht gesetzt!";
         }
     
         // Scopes auslesen
         $scopes = [];
-    
         if ($this->ReadPropertyBoolean('ScopeReadVehicleInfo')) {
             $scopes[] = 'read_vehicle_info';
         }
@@ -242,27 +252,28 @@ class SMCAR extends IPSModule
         }
     
         if (empty($scopes)) {
-            echo "Fehler: Keine Scopes ausgewählt!";
-            return;
+            $this->SendDebug('GenerateAuthURL', 'Fehler: Keine Scopes ausgewählt.', 0);
+            return "Fehler: Keine Scopes ausgewählt!";
         }
     
         // Redirect-URI zusammensetzen
         $redirectURI = rtrim($connectAddress, '/') . $this->ReadAttributeString("CurrentHook");
+        $this->SendDebug('GenerateAuthURL', "Redirect URI: $redirectURI", 0);
     
         // URL generieren
         $authURL = "https://connect.smartcar.com/oauth/authorize?" .
             "response_type=code" .
-            "&client_id=$clientID" .
+            "&client_id=" . urlencode($clientID) .
             "&redirect_uri=" . urlencode($redirectURI) .
             "&scope=" . urlencode(implode(' ', $scopes)) .
             "&state=" . bin2hex(random_bytes(8)) .
-            "&mode=$mode";
+            "&mode=" . urlencode($mode);
     
-        $this->SendDebug('GenerateAuthURL', "AuthURL erstellt", 0);
+        $this->SendDebug('GenerateAuthURL', "Generierte URL: $authURL", 0);
     
-        echo "<script>window.open('$authURL', '_blank');</script>";
-        echo "Bitte besuchen Sie die folgende URL, um Ihr Fahrzeug zu verbinden:\n$authURL";
+        return $authURL;
     }
+    
     
     public function ProcessHookData()
     {
