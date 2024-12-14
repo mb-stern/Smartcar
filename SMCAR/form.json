@@ -11,11 +11,6 @@
       "caption": "Client Secret"
     },
     {
-      "type": "ValidationTextBox",
-      "name": "ConnectAddress",
-      "caption": "Symcon Connect-Adresse (https://...)"
-    },
-    {
       "type": "Select",
       "name": "Mode",
       "caption": "Verbindungsmodus",

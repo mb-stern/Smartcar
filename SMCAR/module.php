@@ -9,7 +9,6 @@ class SMCAR extends IPSModule
         $this->RegisterPropertyString('ClientID', '');
         $this->RegisterPropertyString('ClientSecret', '');
         $this->RegisterPropertyString('VIN', '');
-        $this->RegisterPropertyString('ConnectAddress', '');
         $this->RegisterPropertyString('Mode', 'simulated');
 
         $this->RegisterPropertyBoolean('ScopeReadVehicleInfo', false);
