@@ -11,9 +11,8 @@ Das Modul verbindet sich über OAuth 2.0 mit der Smartcar API.
 Daher ist es erforderlich, eine Redirect URI in der Smartcar-Konfiguration einzutragen. 
 Die Redirect URI ist der Pfad zum Webhook, welchen das Modul automatisch anlegt. 
 Dieser Pfad setzt sich aus deiner Connenct-Adresse und dem Pfad des Webhook zusammen. 
-Der Pfad des Webhook wird oben im Konfigurationsformular angezeigt. 
-Deine Connect Adresse findest du unter Kern Instanzen/Connect und trägst diese dann im Konfigurationsformular von Symcon ein. 
-Beides zusammen hinterlegst du dann in der Konfiguration von Smartcar unter 'REDIRECT URIS' Dies sieht zB so aus: https://hruw8ehwWERUOwehrWWoiuh.ipmagic.de/hook/smartcar_15583
+Der Pfad der Redirect-URI wird oben im Konfigurationsformular angezeigt. 
+Diesen hinterlegst du dann in der Konfiguration von Smartcar unter 'REDIRECT URIS' Dies sieht zB so aus: https://hruw8ehwWERUOwehrWWoiuh.ipmagic.de/hook/smartcar_15583
 Wenn du im Konfigurationsformular die Berchtigungen gewählt oder geändert hast, ist dies erneut über den Button 'Verbindung starten' als URL auszugeben und im Browser bei Smartcar zu registrieren.
 
 
@@ -68,6 +67,7 @@ __Konfigurationsseite__:
 
 Name     | Beschreibung
 -------- | ------------------
+Redirect-URI                |  Dieser Pfad gehört in die Konfiguration von Smartcar
 Client ID                   |  Entnimm diesen in der Konfiguration von Smartcar unter OAuth
 Client Secret               |  Entnimm diesen in der Konfiguration von Smartcar unter OAuth
 Symcon Connect Adresse      |  Die Connect Adresse findest du in Symcon unter Kern Instanzen/Connect
