@@ -68,7 +68,7 @@ class SMCAR extends IPSModule
             $hookPath = $this->ReadAttributeString("CurrentHook");
             $redirectURI = $connectAddress . $hookPath;
             $this->WriteAttributeString('RedirectURI', $redirectURI);
-            $this->SendDebug('ApplyChanges', 'redirectURI wurde gespeichert.', 0);
+            $this->SendDebug('ApplyChanges', 'redirectURI gespeichert.', 0);
         }           
 
         // Variablen für Scopes anlegen oder löschen
