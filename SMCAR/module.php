@@ -369,11 +369,10 @@ class SMCAR extends IPSModule
     {
         $accessToken = $this->ReadAttributeString('AccessToken');
         $vehicleID = $this->GetVehicleID($accessToken);
-        $this->WriteAttributeString('VehicleID', $vehicleID);
-
+    
         if (empty($accessToken) || empty($vehicleID)) {
             $this->SendDebug('FetchVehicleData', 'Access Token oder Fahrzeug-ID fehlt!', 0);
-            return;
+            return false; // Fehlerstatus zurückgeben
         }
     
         // Sammle die aktivierten Endpunkte
@@ -394,9 +393,11 @@ class SMCAR extends IPSModule
             $endpoints[] = ["path" => "/battery"];
         }
     
+        $endpoints = array_filter($endpoints, fn($endpoint) => !empty($endpoint['path'])); // Filtere leere Einträge
+    
         if (empty($endpoints)) {
             $this->SendDebug('FetchVehicleData', 'Keine Scopes aktiviert!', 0);
-            return;
+            return false;
         }
     
         // Erstelle den Batch-Request
@@ -405,8 +406,8 @@ class SMCAR extends IPSModule
     
         $options = [
             'http' => [
-                'header'  => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
-                'method'  => 'POST',
+                'header' => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
+                'method' => 'POST',
                 'content' => $postData,
                 'ignore_errors' => true
             ]
@@ -417,7 +418,22 @@ class SMCAR extends IPSModule
     
         if ($response === false) {
             $this->SendDebug('FetchVehicleData', 'Fehler: Keine Antwort von der API!', 0);
-            return;
+            return false;
+        }
+    
+        // HTTP-Statuscode prüfen
+        $httpResponseHeader = $http_response_header ?? [];
+        $statusCode = 0;
+        foreach ($httpResponseHeader as $header) {
+            if (preg_match('#HTTP/\d+\.\d+\s+(\d+)#', $header, $matches)) {
+                $statusCode = (int)$matches[1];
+                break;
+            }
+        }
+    
+        if ($statusCode !== 200) {
+            $this->SendDebug('FetchVehicleData', "HTTP-Fehler: $statusCode", 0);
+            return false;
         }
     
         $data = json_decode($response, true);
@@ -427,15 +443,18 @@ class SMCAR extends IPSModule
         if (isset($data['responses']) && is_array($data['responses'])) {
             foreach ($data['responses'] as $response) {
                 if ($response['code'] === 200 && isset($response['body'])) {
+                    // Verarbeitung der erfolgreichen Antwort
                     $this->ProcessResponse($response['path'], $response['body']);
                 } else {
                     $this->SendDebug('FetchVehicleData', "Fehlerhafte Antwort: " . json_encode($response), 0);
                 }
             }
+            return true; // Erfolg
         } else {
             $this->SendDebug('FetchVehicleData', 'Unerwartete Antwortstruktur: ' . json_encode($data), 0);
+            return false;
         }
-    }
+    }    
     
     private function GetVehicleID(string $accessToken): ?string
     {
