@@ -414,8 +414,6 @@ class SMCAR extends IPSModule
     
         $context = stream_context_create($options);
         $response = @file_get_contents($url, false, $context);
-
-        $this->SendDebug('FetchVehicleData', 'API-Abfrage: ' . $context, 0);
     
         if ($response === false) {
             $this->SendDebug('FetchVehicleData', 'Fehler: Keine Antwort von der API!', 0);
@@ -661,6 +659,8 @@ class SMCAR extends IPSModule
     
         $context = stream_context_create($options);
         $response = @file_get_contents($url, false, $context);
+
+        $this->SendDebug('FetchSingleEndpoint', 'API-Abfrage: ' . $context, 0);
     
         if ($response === false) {
             $this->SendDebug('FetchSingleEndpoint', 'Fehler: Keine Antwort von der API!', 0);
