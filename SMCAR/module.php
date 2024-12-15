@@ -840,7 +840,7 @@ class SMCAR extends IPSModule
         // Konvertiere den Status in die erwarteten Werte
         $action = $status ? "LOCK" : "UNLOCK";
     
-        $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID/charge";
+        $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID/security";
         $postData = json_encode(["action" => $action]);
     
         $options = [
