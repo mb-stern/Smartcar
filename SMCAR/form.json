@@ -27,8 +27,12 @@
     },
     {
       "type": "ExpansionPanel",
-      "caption": "Berechtigungen (Scopes), Variablen werden automatisch erstellt bzw. gelöscht.",
+      "caption": "Berechtigungen (Scopes)",
       "items": [
+        {
+          "type": "Label",
+          "caption": "Variablen werden automatisch erstellt bzw. gelöscht."
+        },
         {
           "type": "CheckBox",
           "name": "ScopeReadVehicleInfo",
@@ -121,8 +125,8 @@
     {
       "type": "Label",
       "caption": "Sag danke und unterstütze den Modulentwickler:"
-  },
-  {
+    },
+    {
       "type": "RowLayout",
       "items": [
         {
