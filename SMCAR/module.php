@@ -200,7 +200,7 @@ class SMCAR extends IPSModule
         }
 
         if ($this->ReadPropertyBoolean('ScopeReadChargeStatus')) {
-            $this->RegisterVariableString('ChargeStatus', 'Ladestatus', '', 91);
+            $this->RegisterVariableString('ChargeStatus', 'Ladestatus', 'SMCAR.Charge', 91);
             $this->RegisterVariableBoolean('PluggedIn', 'Ladekabel eingesteckt', '~Switch', 92);
         } else {
             $this->UnregisterVariable('ChargeStatus');
@@ -968,6 +968,13 @@ class SMCAR extends IPSModule
             IPS_SetVariableProfileAssociation('SMCAR.Status', 'CLOSED', 'Geschlossen', '', -1);
             IPS_SetVariableProfileAssociation('SMCAR.Status', 'UNKNOWN', 'Unbekannt', '', -1);
             $this->SendDebug('CreateProfile', 'Profil erstellt: SMCAR.Status', 0);
+        }
+        if (!IPS_VariableProfileExists('SMCAR.Charge')) {
+            IPS_CreateVariableProfile('SMCAR.Charge', VARIABLETYPE_STRING);
+            IPS_SetVariableProfileAssociation('SMCAR.Charge', 'CHARGING', 'Laden', '', -1);
+            IPS_SetVariableProfileAssociation('SMCAR.Charge', 'FULLY_CHARGED', 'Voll geladen', '', -1);
+            IPS_SetVariableProfileAssociation('SMCAR.Charge', 'NOT_CHARGING', 'Lädt nicht', '', -1);
+            $this->SendDebug('CreateProfile', 'Profil erstellt: SMCAR.Charge', 0);
         }
         
 
