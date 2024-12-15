@@ -2,7 +2,7 @@
     "id": "{F0D3899F-F0FF-66C4-CC26-C8F72CC42B1B}",
     "name": "SMCAR",
     "author": "Stefan Künzli",
-    "url": "https://github.com/mb-stern/Smartcar",
+    "url": "https://github.com/mb-stern/Smartcar/tree/beta/SMCAR",
     "compatibility": {
         "version": "7.0"
     },
