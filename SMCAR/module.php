@@ -229,8 +229,6 @@ class SMCAR extends IPSModule
         } else {
             $this->UnregisterVariable('SetChargeStatus');
         }
-
-        */
     }
 
     public function RequestAction($ident, $value)
