@@ -74,11 +74,11 @@ class SMCAR extends IPSModule
             $this->SendDebug('ApplyChanges', 'Redirect-URI gespeichert.', 0);
         }
     
-        // Variablenregistrierung basierend auf aktivierten Scopes
-        $this->UpdateVariablesBasedOnScopes();
-        
         // Profile erstellen
         $this->CreateProfile();
+        
+        // Variablenregistrierung basierend auf aktivierten Scopes
+        $this->UpdateVariablesBasedOnScopes();
     }
 
     private function UpdateVariablesBasedOnScopes()
