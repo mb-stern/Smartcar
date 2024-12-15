@@ -675,44 +675,28 @@ class SMCAR extends IPSModule
                 $this->SetValue('DoorsLocked', $body['isLocked'] ?? false);
     
                 // Türen
-                if (isset($body['doors']) && is_array($body['doors'])) {
-                    foreach ($body['doors'] as $door) {
-                        $ident = ucfirst($door['type']) . 'Door'; // z.B. FrontLeftDoor
-                        if ($this->VariableExists($ident)) {
-                            $this->SetValue($ident, $door['status']);
-                        }
-                    }
+                foreach ($body['doors'] as $door) {
+                    $ident = ucfirst($door['type']) . 'Door'; // z.B. FrontLeftDoor
+                    $this->SetValue($ident, $door['status'] ?? 'UNKNOWN');
                 }
     
                 // Fenster
-                if (isset($body['windows']) && is_array($body['windows'])) {
-                    foreach ($body['windows'] as $window) {
-                        $ident = ucfirst($window['type']) . 'Window'; // z.B. FrontLeftWindow
-                        if ($this->VariableExists($ident)) {
-                            $this->SetValue($ident, $window['status']);
-                        }
-                    }
+                foreach ($body['windows'] as $window) {
+                    $ident = ucfirst($window['type']) . 'Window'; // z.B. FrontLeftWindow
+                    $this->SetValue($ident, $window['status'] ?? 'UNKNOWN');
                 }
     
                 // Schiebedach
-                if (isset($body['sunroof'][0]['status'])) {
-                    $this->SetValue('Sunroof', $body['sunroof'][0]['status']);
-                }
+                $this->SetValue('Sunroof', $body['sunroof'][0]['status'] ?? 'UNKNOWN');
     
                 // Stauraum
-                if (isset($body['storage']) && is_array($body['storage'])) {
-                    foreach ($body['storage'] as $storage) {
-                        $ident = ucfirst($storage['type']) . 'Storage'; // z.B. FrontStorage
-                        if ($this->VariableExists($ident)) {
-                            $this->SetValue($ident, $storage['status']);
-                        }
-                    }
+                foreach ($body['storage'] as $storage) {
+                    $ident = ucfirst($storage['type']) . 'Storage'; // z.B. FrontStorage
+                    $this->SetValue($ident, $storage['status'] ?? 'UNKNOWN');
                 }
     
                 // Ladeanschluss
-                if (isset($body['chargingPort'][0]['status'])) {
-                    $this->SetValue('ChargingPort', $body['chargingPort'][0]['status']);
-                }
+                $this->SetValue('ChargingPort', $body['chargingPort'][0]['status'] ?? 'UNKNOWN');
                 break;
     
             case '/charge/limit':
@@ -728,6 +712,7 @@ class SMCAR extends IPSModule
                 $this->SendDebug('ProcessResponse', "Unbekannter Pfad: $path", 0);
         }
     }
+    
     
     public function SetChargeLimit(float $limit)
     {
