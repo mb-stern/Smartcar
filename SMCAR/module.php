@@ -157,29 +157,29 @@ class SMCAR extends IPSModule
         // Sicherheitsstatus
         if ($this->ReadPropertyBoolean('ScopeReadSecurity')) {
             // Fahrzeug verriegelt
-            $this->RegisterVariableBoolean('DoorsLocked', 'Fahrzeug verriegelt', '~Lock', 120);
+            $this->RegisterVariableBoolean('DoorsLocked', 'Fahrzeug verriegelt', '~Door', 120);
 
             // Türen
-            $this->RegisterVariableBoolean('FrontLeftDoor', 'Vordertür links', '~Lock', 121);
-            $this->RegisterVariableBoolean('FrontRightDoor', 'Vordertür rechts', '~Lock', 122);
-            $this->RegisterVariableBoolean('BackLeftDoor', 'Hintentür links', '~Lock', 123);
-            $this->RegisterVariableBoolean('BackRightDoor', 'Hintentür rechts', '~Lock', 124);
+            $this->RegisterVariableBoolean('FrontLeftDoor', 'Vordertür links', '~Door', 121);
+            $this->RegisterVariableBoolean('FrontRightDoor', 'Vordertür rechts', '~Door', 122);
+            $this->RegisterVariableBoolean('BackLeftDoor', 'Hintentür links', '~Door', 123);
+            $this->RegisterVariableBoolean('BackRightDoor', 'Hintentür rechts', '~Door', 124);
 
             // Fenster
-            $this->RegisterVariableBoolean('FrontLeftWindow', 'Vorderfenster links', '~Lock', 125);
-            $this->RegisterVariableBoolean('FrontRightWindow', 'Vorderfenster rechts', '~Lock', 126);
-            $this->RegisterVariableBoolean('BackLeftWindow', 'Hinterfenster links', '~Lock', 127);
-            $this->RegisterVariableBoolean('BackRightWindow', 'Hinterfenster rechts', '~Lock', 128);
+            $this->RegisterVariableBoolean('FrontLeftWindow', 'Vorderfenster links', '~Door', 125);
+            $this->RegisterVariableBoolean('FrontRightWindow', 'Vorderfenster rechts', '~Door', 126);
+            $this->RegisterVariableBoolean('BackLeftWindow', 'Hinterfenster links', '~Door', 127);
+            $this->RegisterVariableBoolean('BackRightWindow', 'Hinterfenster rechts', '~Door', 128);
 
             // Schiebedach
-            $this->RegisterVariableBoolean('Sunroof', 'Schiebedach', '~Lock', 129);
+            $this->RegisterVariableBoolean('Sunroof', 'Schiebedach', '~Door', 129);
 
             // Stauraum
-            $this->RegisterVariableBoolean('RearStorage', 'Stauraum hinten', '~Lock', 130);
-            $this->RegisterVariableBoolean('FrontStorage', 'Stauraum vorne', '~Lock', 131);
+            $this->RegisterVariableBoolean('RearStorage', 'Stauraum hinten', '~Door', 130);
+            $this->RegisterVariableBoolean('FrontStorage', 'Stauraum vorne', '~Door', 131);
 
             // Ladeanschluss
-            $this->RegisterVariableBoolean('ChargingPort', 'Ladeanschluss', '~Lock', 132);
+            $this->RegisterVariableBoolean('ChargingPort', 'Ladeanschluss', '~Door', 132);
         } else {
             $this->UnregisterVariable('DoorsLocked');
             $this->UnregisterVariable('FrontLeftDoor');
