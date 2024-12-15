@@ -648,11 +648,11 @@ class SMCAR extends IPSModule
                 $this->SetValue('ChargeLimit', $body['limit'] ?? 0.0);
                 break;
     
-            case '/charge/status':
+            case '/charge':
                 $this->SetValue('ChargeStatus', $body['isCharging'] ?? false);
                 break;
     
-            case '/oil':
+            case '/engine/oil':
                 $this->SetValue('OilLife', $body['lifeRemaining'] ?? 0.0);
                 break;
     
