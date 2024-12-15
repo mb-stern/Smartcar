@@ -31,8 +31,9 @@ Aktuell sind folgende Scopes (Endpunkte) durch das Modul unterstützt:
 * "Ladestatus lesen (/charge)"
 
 Aktuell sind folgende Ansteuerungen unterstützt
-* "Laden Limit (/charge/limit)"
-* "Laden Starten/Stopen (/charge)"
+* "Ladelimit setzen (/charge/limit)"
+* "Ladestatus setzen (/charge)"
+* "Zentralverriegelung setzen (/security)"
 
 ![alt text](image.png)
 
