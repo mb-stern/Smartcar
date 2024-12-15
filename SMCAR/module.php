@@ -132,23 +132,23 @@ class SMCAR extends IPSModule
 
         // Batterie
         if ($this->ReadPropertyBoolean('ScopeReadBattery')) {
-            $this->RegisterVariableFloat('BatteryRange', 'Reichweite (km)', 'SMCAR.Odometer', 40);
-            $this->RegisterVariableFloat('BatteryLevel', 'Batterieladestand (%)', 'SMCAR.Progress', 41);
+            $this->RegisterVariableFloat('BatteryRange', 'Reichweite', 'SMCAR.Odometer', 40);
+            $this->RegisterVariableFloat('BatteryLevel', 'Batterieladestand', 'SMCAR.Progress', 41);
         } else {
             $this->UnregisterVariable('BatteryRange');
             $this->UnregisterVariable('BatteryLevel');
         }
 
         if ($this->ReadPropertyBoolean('ScopeReadBatteryCapacity')) {
-            $this->RegisterVariableFloat('BatteryCapacity', 'Batteriekapazität (kWh)', '~Electricity', 50);
+            $this->RegisterVariableFloat('BatteryCapacity', 'Batteriekapazität', '~Electricity', 50);
         } else {
             $this->UnregisterVariable('BatteryCapacity');
         }
 
         // Tank
         if ($this->ReadPropertyBoolean('ScopeReadFuel')) {
-            $this->RegisterVariableFloat('FuelLevel', 'Tankfüllstand (%)', 'SMCAR.Progress', 60);
-            $this->RegisterVariableFloat('FuelRange', 'Reichweite (km)', 'SMCAR.Odometer', 61);
+            $this->RegisterVariableFloat('FuelLevel', 'Tankfüllstand', 'SMCAR.Progress', 60);
+            $this->RegisterVariableFloat('FuelRange', 'Reichweite', 'SMCAR.Odometer', 61);
         } else {
             $this->UnregisterVariable('FuelLevel');
             $this->UnregisterVariable('FuelRange');
@@ -163,7 +163,7 @@ class SMCAR extends IPSModule
 
         // Ladeinformationen
         if ($this->ReadPropertyBoolean('ScopeReadChargeLimit')) {
-            $this->RegisterVariableFloat('ChargeLimit', 'Aktuelles Ladelimit (%)', 'SMCAR.Progress', 90);
+            $this->RegisterVariableFloat('ChargeLimit', 'Aktuelles Ladelimit', 'SMCAR.Progress', 90);
         } else {
             $this->UnregisterVariable('ChargeLimit');
         }
@@ -176,14 +176,14 @@ class SMCAR extends IPSModule
 
         // Ölstatus
         if ($this->ReadPropertyBoolean('ScopeReadOilLife')) {
-            $this->RegisterVariableFloat('OilLife', 'Verbleibende Öl-Lebensdauer (%)', 'SMCAR.Progress', 80);
+            $this->RegisterVariableFloat('OilLife', 'Verbleibende Öl-Lebensdauer', 'SMCAR.Progress', 80);
         } else {
             $this->UnregisterVariable('OilLife');
         }
 
         // Ladelimit
         if ($this->ReadPropertyBoolean('SetChargeLimit')) {
-            $this->RegisterVariableFloat('ChargeLimit', 'Ladelimit (%)', 'SMCAR.Progress', 60);
+            $this->RegisterVariableFloat('ChargeLimit', 'Ladelimit', 'SMCAR.Progress', 60);
             $this->EnableAction('ChargeLimit');
         } else {
             $this->UnregisterVariable('ChargeLimit');
