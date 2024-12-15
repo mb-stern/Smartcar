@@ -1,7 +1,7 @@
 # Modul für Smartcar für IP-Symcon
 Dieses Modul ermöglicht, Daten von Fahrzeugen über die Smartcar-Plattform abzufragen. 
 Erstelle ein Profil und verbinde dein Fahrezug oder ein Testfahrzeug (https://smartcar.com/de)
-Smartcar unterstützt aktuell 43 Fahrzeugmarken (https://smartcar.com/de/product/compatible-vehicles)
+Smartcar unterstützt aktuell 43 Fahrzeugmarken. Prüfe hier welche Endpunkte dein Fahrezug unterstützt. (https://smartcar.com/de/product/compatible-vehicles)
 In der aktuellen Version dieses Moduls ist ein Fahrzeug unterstützt.
 In der kostenlosen Version von Smartcar kann sowieso nur ein Live-Fahrezug pro Benutzerprofil angelegt werden.
 Für mehrere Fahrezuge ist das Modul mehrmals anzulegen.
