@@ -83,7 +83,7 @@ Die Statusvariablen/Kategorien werden automatisch angelegt. Das Löschen einzeln
 
 #### Statusvariablen
 
-Es werden Variablen/Typen je nach Wahl der ID's erstellt. Pro ID wird eine Variable erstellt.
+Es werden Variablen/Typen je nach Wahl der Scopes erstellt. Es können pro Scope mehrere Variablen erstellt werden.
 
 #### Profile
 
@@ -92,6 +92,8 @@ Name   | Typ
 SMCAR.Odometer   |  Float  
 SMCAR.Pressure   |  Float   
 SMCAR.Progress   |  Float  
+SMCAR.Status     |  String   
+SMCAR.Charge     |  String
 
 ### 6. WebFront
 
@@ -105,11 +107,18 @@ Beachte, dass nur im Konfigurationsformuler (Berechtigungen) freigegebene Scopes
 
 Befehl   | Beschreibung
 ------ | -------
-WPLUX_FetchBattery(12345);      |   Abfrage des Batterieladestand (SOC)
-WPLUX_FetchLocation(12345);     |   Abfragen der GPS-Koordinaten
-WPLUX_FetchOdometer(12345);     |   Abfragen des Kilomterstandes
-WPLUX_FetchTires(12345);        |   Abfrage des Reifendruckes
-WPLUX_FetchVehicleData(12345);  |   Alle im Modul aktiverten Scopes abfragen
+WPLUX_FetchBatteryCapacity(12345);  |   Abfrage der Batteriekapazität
+WPLUX_FetchBatteryLevel(12345);     |   Abfrage des Batterieladestand (SOC)
+WPLUX_FetchChargeLimit(12345);      |   Abfrage des Ladelimits
+WPLUX_FetchChargeStatus(12345);     |   Abfrage des Ladestatus
+WPLUX_FetchEngineOil(12345);        |   Abfrage der restliche Oellebensdauer
+WPLUX_FetchFuel(12345);             |   Abfrage des Tankvolumens    
+WPLUX_FetchLocation(12345);         |   Abfragen der GPS-Koordinaten
+WPLUX_FetchOdometer(12345);         |   Abfragen des Kilomterstandes
+WPLUX_FetchCSecurity(12345);        |   Abfrage des Verriegelungsstatus der Türen, Klappen und Fenster
+WPLUX_FetchTires(12345);            |   Abfrage des Reifendruckes
+WPLUX_FetchVIN(12345);              |   Abfrage der Fahrgestellnummer
+WPLUX_FetchVehicleData(12345);      |   Alle im Modul aktiverten Scopes abfragen
 
 ### 8. Versionen
 
