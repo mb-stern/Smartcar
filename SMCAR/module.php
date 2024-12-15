@@ -156,29 +156,30 @@ class SMCAR extends IPSModule
 
         // Sicherheitsstatus
         if ($this->ReadPropertyBoolean('ScopeReadSecurity')) {
+            // Fahrzeug verriegelt
             $this->RegisterVariableBoolean('DoorsLocked', 'Fahrzeug verriegelt', '~Lock', 120);
-        
+
             // Türen
-            $this->RegisterVariableString('FrontLeftDoor', 'Vordertür links', '', 121);
-            $this->RegisterVariableString('FrontRightDoor', 'Vordertür rechts', '', 122);
-            $this->RegisterVariableString('BackLeftDoor', 'Hintentür links', '', 123);
-            $this->RegisterVariableString('BackRightDoor', 'Hintentür rechts', '', 124);
-        
+            $this->RegisterVariableBoolean('FrontLeftDoor', 'Vordertür links', '~Lock', 121);
+            $this->RegisterVariableBoolean('FrontRightDoor', 'Vordertür rechts', '~Lock', 122);
+            $this->RegisterVariableBoolean('BackLeftDoor', 'Hintentür links', '~Lock', 123);
+            $this->RegisterVariableBoolean('BackRightDoor', 'Hintentür rechts', '~Lock', 124);
+
             // Fenster
-            $this->RegisterVariableString('FrontLeftWindow', 'Vorderfenster links', '', 125);
-            $this->RegisterVariableString('FrontRightWindow', 'Vorderfenster rechts', '', 126);
-            $this->RegisterVariableString('BackLeftWindow', 'Hinterfenster links', '', 127);
-            $this->RegisterVariableString('BackRightWindow', 'Hinterfenster rechts', '', 128);
-        
+            $this->RegisterVariableBoolean('FrontLeftWindow', 'Vorderfenster links', '~Lock', 125);
+            $this->RegisterVariableBoolean('FrontRightWindow', 'Vorderfenster rechts', '~Lock', 126);
+            $this->RegisterVariableBoolean('BackLeftWindow', 'Hinterfenster links', '~Lock', 127);
+            $this->RegisterVariableBoolean('BackRightWindow', 'Hinterfenster rechts', '~Lock', 128);
+
             // Schiebedach
-            $this->RegisterVariableString('Sunroof', 'Schiebedach', '', 129);
-        
+            $this->RegisterVariableBoolean('Sunroof', 'Schiebedach', '~Lock', 129);
+
             // Stauraum
-            $this->RegisterVariableString('RearStorage', 'Stauraum hinten', '', 130);
-            $this->RegisterVariableString('FrontStorage', 'Stauraum vorne', '', 131);
-        
+            $this->RegisterVariableBoolean('RearStorage', 'Stauraum hinten', '~Lock', 130);
+            $this->RegisterVariableBoolean('FrontStorage', 'Stauraum vorne', '~Lock', 131);
+
             // Ladeanschluss
-            $this->RegisterVariableString('ChargingPort', 'Ladeanschluss', '', 132);
+            $this->RegisterVariableBoolean('ChargingPort', 'Ladeanschluss', '~Lock', 132);
         } else {
             $this->UnregisterVariable('DoorsLocked');
             $this->UnregisterVariable('FrontLeftDoor');
@@ -675,71 +676,47 @@ class SMCAR extends IPSModule
                 break;
                 
                 case '/security':
-                    // Verriegelungsstatus
+                    // Fahrzeugverriegelung
                     $this->SetValue('DoorsLocked', $body['isLocked'] ?? false);
                 
                     // Türen
                     foreach ($body['doors'] as $door) {
-                        switch ($door['type']) {
-                            case 'frontLeft':
-                                $this->SetValue('FrontLeftDoor', $door['status'] ?? 'UNKNOWN');
-                                break;
-                            case 'frontRight':
-                                $this->SetValue('FrontRightDoor', $door['status'] ?? 'UNKNOWN');
-                                break;
-                            case 'backLeft':
-                                $this->SetValue('BackLeftDoor', $door['status'] ?? 'UNKNOWN');
-                                break;
-                            case 'backRight':
-                                $this->SetValue('BackRightDoor', $door['status'] ?? 'UNKNOWN');
-                                break;
-                        }
+                        $status = isset($door['status']) && $door['status'] === 'CLOSED';
+                        $this->SetValue('FrontLeftDoor', $door['type'] === 'frontLeft' ? $status : null);
+                        $this->SetValue('FrontRightDoor', $door['type'] === 'frontRight' ? $status : null);
+                        $this->SetValue('BackLeftDoor', $door['type'] === 'backLeft' ? $status : null);
+                        $this->SetValue('BackRightDoor', $door['type'] === 'backRight' ? $status : null);
                     }
                 
                     // Fenster
                     foreach ($body['windows'] as $window) {
-                        switch ($window['type']) {
-                            case 'frontLeft':
-                                $this->SetValue('FrontLeftWindow', $window['status'] ?? 'UNKNOWN');
-                                break;
-                            case 'frontRight':
-                                $this->SetValue('FrontRightWindow', $window['status'] ?? 'UNKNOWN');
-                                break;
-                            case 'backLeft':
-                                $this->SetValue('BackLeftWindow', $window['status'] ?? 'UNKNOWN');
-                                break;
-                            case 'backRight':
-                                $this->SetValue('BackRightWindow', $window['status'] ?? 'UNKNOWN');
-                                break;
-                        }
+                        $status = isset($window['status']) && $window['status'] === 'CLOSED';
+                        $this->SetValue('FrontLeftWindow', $window['type'] === 'frontLeft' ? $status : null);
+                        $this->SetValue('FrontRightWindow', $window['type'] === 'frontRight' ? $status : null);
+                        $this->SetValue('BackLeftWindow', $window['type'] === 'backLeft' ? $status : null);
+                        $this->SetValue('BackRightWindow', $window['type'] === 'backRight' ? $status : null);
                     }
                 
                     // Schiebedach
                     foreach ($body['sunroof'] as $roof) {
-                        if ($roof['type'] === 'sunroof') {
-                            $this->SetValue('Sunroof', $roof['status'] ?? 'UNKNOWN');
-                        }
+                        $status = isset($roof['status']) && $roof['status'] === 'CLOSED';
+                        $this->SetValue('Sunroof', $roof['type'] === 'sunroof' ? $status : null);
                     }
                 
                     // Stauraum
                     foreach ($body['storage'] as $storage) {
-                        switch ($storage['type']) {
-                            case 'rear':
-                                $this->SetValue('RearStorage', $storage['status'] ?? 'UNKNOWN');
-                                break;
-                            case 'front':
-                                $this->SetValue('FrontStorage', $storage['status'] ?? 'UNKNOWN');
-                                break;
-                        }
+                        $status = isset($storage['status']) && $storage['status'] === 'CLOSED';
+                        $this->SetValue('RearStorage', $storage['type'] === 'rear' ? $status : null);
+                        $this->SetValue('FrontStorage', $storage['type'] === 'front' ? $status : null);
                     }
                 
                     // Ladeanschluss
                     foreach ($body['chargingPort'] as $port) {
-                        if ($port['type'] === 'chargingPort') {
-                            $this->SetValue('ChargingPort', $port['status'] ?? 'UNKNOWN');
-                        }
+                        $status = isset($port['status']) && $port['status'] === 'CLOSED';
+                        $this->SetValue('ChargingPort', $port['type'] === 'chargingPort' ? $status : null);
                     }
                     break;
+                
     
             case '/charge/limit':
                 $this->SetValue('ChargeLimit', $body['limit'] ?? 0.0);
