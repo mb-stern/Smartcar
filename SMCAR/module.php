@@ -163,20 +163,20 @@ class SMCAR extends IPSModule
 
         // Ladeinformationen
         if ($this->ReadPropertyBoolean('ScopeReadChargeLimit')) {
-            $this->RegisterVariableFloat('ChargeLimit', 'Aktuelles Ladelimit (%)', 'SMCAR.Progress', 80);
+            $this->RegisterVariableFloat('ChargeLimit', 'Aktuelles Ladelimit (%)', 'SMCAR.Progress', 90);
         } else {
             $this->UnregisterVariable('ChargeLimit');
         }
 
         if ($this->ReadPropertyBoolean('ScopeReadChargeStatus')) {
-            $this->RegisterVariableBoolean('ChargeStatus', 'Ladestatus aktiv', '~Switch', 81);
+            $this->RegisterVariableBoolean('ChargeStatus', 'Ladestatus aktiv', '~Switch', 91);
         } else {
             $this->UnregisterVariable('ChargeStatus');
         }
 
         // Ölstatus
         if ($this->ReadPropertyBoolean('ScopeReadOilLife')) {
-            $this->RegisterVariableFloat('OilLife', 'Verbleibende Öl-Lebensdauer (%)', 'SMCAR.Progress', 90);
+            $this->RegisterVariableFloat('OilLife', 'Verbleibende Öl-Lebensdauer (%)', 'SMCAR.Progress', 80);
         } else {
             $this->UnregisterVariable('OilLife');
         }
