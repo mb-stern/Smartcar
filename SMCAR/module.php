@@ -364,7 +364,13 @@ class SMCAR extends IPSModule
         if ($this->ReadPropertyBoolean('ScopeReadOilLife')) {
             $scopes[] = 'read_engine_oil';
         }
-    
+        if ($this->ReadPropertyBoolean('SetChargeLimit') || $this->ReadPropertyBoolean('SetChargeStatus')) {
+            $scopes[] = 'control_charge';
+        }
+        if ($this->ReadPropertyBoolean('SetLockStatus')) {
+            $scopes[] = 'control_security';
+        }
+
         if (empty($scopes)) {
             $this->SendDebug('GenerateAuthURL', 'Fehler: Keine Scopes ausgewählt!', 0);
             return "Fehler: Keine Scopes ausgewählt!";
