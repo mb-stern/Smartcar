@@ -491,7 +491,7 @@ class SMCAR extends IPSModule
             $endpoints[] = ["path" => "/charge"];
         }
         if ($this->ReadPropertyBoolean('ScopeReadOilLife')) {
-            $endpoints[] = ["path" => "/oil"];
+            $endpoints[] = ["path" => "/engine/oil"];
         }
     
         // Filtere leere Einträge
