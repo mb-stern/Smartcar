@@ -96,7 +96,7 @@
         },
         {
           "type": "CheckBox",
-          "name": "SetChargeStartStop",
+          "name": "SetChargeStatus",
           "caption": "Ladestatus setzen (/charge)"
         }
       ]

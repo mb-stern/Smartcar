@@ -27,7 +27,7 @@ class SMCAR extends IPSModule
     
         // Vorhandene Ladeaktionen (POST-Endpunkte)
         $this->RegisterPropertyBoolean('SetChargeLimit', false);
-        $this->RegisterPropertyBoolean('SetChargeStartStop', false);
+        $this->RegisterPropertyBoolean('SetChargeStatus', false);
     
         // Attribute für interne Nutzung
         $this->RegisterAttributeString("CurrentHook", "");
@@ -214,22 +214,20 @@ class SMCAR extends IPSModule
             $this->UnregisterVariable('OilLife');
         }
 
-        
-        /*
-        // Ladelimit
+        // Ladelimit setzen
         if ($this->ReadPropertyBoolean('SetChargeLimit')) {
-            $this->RegisterVariableFloat('ChargeLimit', 'Ladelimit', 'SMCAR.Progress', 60);
-            $this->EnableAction('ChargeLimit');
+            $this->RegisterVariableFloat('SetChargeLimit', 'Ladelimit setzen', 'SMCAR.Progress', 60);
+            $this->EnableAction('SetChargeLimit');
         } else {
-            $this->UnregisterVariable('ChargeLimit');
+            $this->UnregisterVariable('SetChargeLimit');
         }
 
-        // Ladestatus
-        if ($this->ReadPropertyBoolean('SetChargeStartStop')) {
-            $this->RegisterVariableBoolean('ChargeStatus', 'Ladung starten/stoppen', '~Switch', 70);
-            $this->EnableAction('ChargeStatus');
+        // Ladestatus setzen
+        if ($this->ReadPropertyBoolean('SetChargeStatus')) {
+            $this->RegisterVariableBoolean('SetChargeStatus', 'Ladestatus setzen', '~Switch', 70);
+            $this->EnableAction('SetChargeStatus');
         } else {
-            $this->UnregisterVariable('ChargeStatus');
+            $this->UnregisterVariable('SetChargeStatus');
         }
 
         */
@@ -238,13 +236,13 @@ class SMCAR extends IPSModule
     public function RequestAction($ident, $value)
     {
         switch ($ident) {
-            case 'ChargeLimit':
+            case 'SetChargeLimit':
                 $this->SetChargeLimit($value / 100);
                 $this->SetValue($ident, $value);
                 break;
 
-            case 'ChargeStatus':
-                $this->SetChargeStartStop($value);
+            case 'SetChargeStatus':
+                $this->SetChargeStatus($value);
                 $this->SetValue($ident, $value);
                 break;
 
@@ -766,14 +764,14 @@ class SMCAR extends IPSModule
         }
     }    
 
-    public function SetChargeStartStop(bool $status)
+    public function SetChargeStatus(bool $status)
     {
         $accessToken = $this->ReadAttributeString('AccessToken');
         $vehicleID = $this->GetVehicleID($accessToken);
         $this->WriteAttributeString('VehicleID', $vehicleID);
     
         if (empty($accessToken) || empty($vehicleID)) {
-            $this->SendDebug('SetChargeStartStop', 'Access Token oder Fahrzeug-ID fehlt!', 0);
+            $this->SendDebug('SetChargeStatus', 'Access Token oder Fahrzeug-ID fehlt!', 0);
             return;
         }
     
@@ -796,18 +794,18 @@ class SMCAR extends IPSModule
         $response = @file_get_contents($url, false, $context);
     
         if ($response === false) {
-            $this->SendDebug('SetChargeStartStop', 'Fehler: Keine Antwort von der API!', 0);
+            $this->SendDebug('SetChargeStatus', 'Fehler: Keine Antwort von der API!', 0);
             return;
         }
     
         $data = json_decode($response, true);
-        $this->SendDebug('SetChargeStartStop', 'Antwort: ' . json_encode($data), 0);
+        $this->SendDebug('SetChargeStatus', 'Antwort: ' . json_encode($data), 0);
     
         if (isset($data['statusCode']) && $data['statusCode'] !== 200) {
-            $this->SendDebug('SetChargeStartStop', "Fehler beim Setzen des Ladestatus: " . json_encode($data), 0);
+            $this->SendDebug('SetChargeStatus', "Fehler beim Setzen des Ladestatus: " . json_encode($data), 0);
             $this->LogMessage("Fehler beim Setzen des Ladestatus: " . ($data['description'] ?? 'Unbekannter Fehler'), KL_ERROR);
         } else {
-            $this->SendDebug('SetChargeStartStop', 'Ladestatus erfolgreich gesetzt.', 0);
+            $this->SendDebug('SetChargeStatus', 'Ladestatus erfolgreich gesetzt.', 0);
         }
     }
 
