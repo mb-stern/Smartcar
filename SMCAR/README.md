@@ -78,7 +78,6 @@ Name     | Beschreibung
 Redirect-URI                |  Das ist der Pfad zum Webhook. Dieser Pfad gehört in die Konfiguration von Smartcar unter REDIRECT URIS.
 Client ID                   |  Entnimm diesen in der Konfiguration von Smartcar unter OAuth
 Client Secret               |  Entnimm diesen in der Konfiguration von Smartcar unter OAuth
-Symcon Connect Adresse      |  Die Connect Adresse findest du in Symcon unter Kern Instanzen/Connect
 Verbindungsmodus            |  Hier definierst du, ob es sich um ein Simmuliertes oder ein Live-Fahrzeug handelt. Die Fahrzeuge verwaltest du im Dashboard von Smartcar. Es kann auch zwischen simmulierem und Live-Fahrezug gewechstelt werden, jedoch muss danach 'Smartcar verbinden' erneut gewählt werden.
 Berchtigungen (Scopes)      |  Hier sind die aktuell vom Modul unterstützen Scopes zur Auswahl. Wichtig ist, dass alle angewählt werden, die später abgefragt werden, sonst werden hier keine Werte geliefert. Im Zweifelsfalle vor der Abfrage alle aktivieren. Die Variablen werden automatisch erstellt und beim Deaktivieren wieder gelöscht. Die Berechtigungen bleiben aber.
 Smartcar verbinden         |  Es öffnet siche ein Browserfenster, wo die gewählten Berechtigungen im Modul noch genemigt werden müssen. Am schluss erscheint eine Erfolgsmeldung. Das heisst, die Berchtigung wurde über die Redierct URI (Webhook) an das Modul erteilt
