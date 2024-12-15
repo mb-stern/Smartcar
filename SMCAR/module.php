@@ -200,7 +200,7 @@ class SMCAR extends IPSModule
         }
 
         if ($this->ReadPropertyBoolean('ScopeReadChargeStatus')) {
-            $this->RegisterVariableBoolean('ChargeStatus', 'Ladestatus aktiv', '~Switch', 91);
+            $this->RegisterVariableString('ChargeStatus', 'Ladestatus', '', 91);
             $this->RegisterVariableBoolean('PluggedIn', 'Ladekabel eingesteckt', '~Switch', 92);
         } else {
             $this->UnregisterVariable('ChargeStatus');
