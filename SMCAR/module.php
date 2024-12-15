@@ -237,6 +237,7 @@ class SMCAR extends IPSModule
             $this->EnableAction('SetLockStatus');
         } else {
             $this->UnregisterVariable('SetLockStatus');
+        }
     }
 
     public function RequestAction($ident, $value)
