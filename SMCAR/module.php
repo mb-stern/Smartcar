@@ -214,6 +214,8 @@ class SMCAR extends IPSModule
             $this->UnregisterVariable('OilLife');
         }
 
+        
+        /*
         // Ladelimit
         if ($this->ReadPropertyBoolean('SetChargeLimit')) {
             $this->RegisterVariableFloat('ChargeLimit', 'Ladelimit', 'SMCAR.Progress', 60);
@@ -229,6 +231,8 @@ class SMCAR extends IPSModule
         } else {
             $this->UnregisterVariable('ChargeStatus');
         }
+
+        */
     }
 
     public function RequestAction($ident, $value)
