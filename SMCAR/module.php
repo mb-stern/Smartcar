@@ -28,6 +28,7 @@ class SMCAR extends IPSModule
         // Vorhandene Ladeaktionen (POST-Endpunkte)
         $this->RegisterPropertyBoolean('SetChargeLimit', false);
         $this->RegisterPropertyBoolean('SetChargeStatus', false);
+        $this->RegisterPropertyBoolean('SetLockStatus', false);
     
         // Attribute für interne Nutzung
         $this->RegisterAttributeString("CurrentHook", "");
@@ -229,6 +230,13 @@ class SMCAR extends IPSModule
         } else {
             $this->UnregisterVariable('SetChargeStatus');
         }
+
+        // Zentralverriegelung setzen
+        if ($this->ReadPropertyBoolean('SetLockStatus')) {
+            $this->RegisterVariableBoolean('SetLockStatus', 'Zentralverriegelung', '~Switch', 130);
+            $this->EnableAction('SetLockStatus');
+        } else {
+            $this->UnregisterVariable('SetLockStatus');
     }
 
     public function RequestAction($ident, $value)
@@ -241,6 +249,11 @@ class SMCAR extends IPSModule
 
             case 'SetChargeStatus':
                 $this->SetChargeStatus($value);
+                $this->SetValue($ident, $value);
+                break;
+                
+            case 'SetLockStatus':
+                $this->SetLockStatus($value);
                 $this->SetValue($ident, $value);
                 break;
 
@@ -714,8 +727,7 @@ class SMCAR extends IPSModule
                 $this->SendDebug('ProcessResponse', "Unbekannter Pfad: $path", 0);
         }
     }
-    
-    
+
     public function SetChargeLimit(float $limit)
     {
         $accessToken = $this->ReadAttributeString('AccessToken');
@@ -804,6 +816,51 @@ class SMCAR extends IPSModule
             $this->LogMessage("Fehler beim Setzen des Ladestatus: " . ($data['description'] ?? 'Unbekannter Fehler'), KL_ERROR);
         } else {
             $this->SendDebug('SetChargeStatus', 'Ladestatus erfolgreich gesetzt.', 0);
+        }
+    }
+
+    public function SetLockStatus(bool $status)
+    {
+        $accessToken = $this->ReadAttributeString('AccessToken');
+        $vehicleID = $this->GetVehicleID($accessToken);
+        $this->WriteAttributeString('VehicleID', $vehicleID);
+    
+        if (empty($accessToken) || empty($vehicleID)) {
+            $this->SendDebug('SetLockStatus', 'Access Token oder Fahrzeug-ID fehlt!', 0);
+            return;
+        }
+    
+        // Konvertiere den Status in die erwarteten Werte
+        $action = $status ? "LOCK" : "UNLOCK";
+    
+        $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID/charge";
+        $postData = json_encode(["action" => $action]);
+    
+        $options = [
+            'http' => [
+                'header'  => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
+                'method'  => 'POST',
+                'content' => $postData,
+                'ignore_errors' => true
+            ]
+        ];
+    
+        $context = stream_context_create($options);
+        $response = @file_get_contents($url, false, $context);
+    
+        if ($response === false) {
+            $this->SendDebug('SetLockStatus', 'Fehler: Keine Antwort von der API!', 0);
+            return;
+        }
+    
+        $data = json_decode($response, true);
+        $this->SendDebug('SetLockStatus', 'Antwort: ' . json_encode($data), 0);
+    
+        if (isset($data['statusCode']) && $data['statusCode'] !== 200) {
+            $this->SendDebug('SetLockStatus', "Fehler beim Setzen der Zentralverriegelung: " . json_encode($data), 0);
+            $this->LogMessage("Fehler beim Setzen der Zentralverriegelung: " . ($data['description'] ?? 'Unbekannter Fehler'), KL_ERROR);
+        } else {
+            $this->SendDebug('SetLockStatus', 'Zentralverriegelung erfolgreich gesetzt.', 0);
         }
     }
 

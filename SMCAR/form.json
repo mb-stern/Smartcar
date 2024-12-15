@@ -98,6 +98,11 @@
           "type": "CheckBox",
           "name": "SetChargeStatus",
           "caption": "Ladestatus setzen (/charge)"
+        },
+        {
+          "type": "CheckBox",
+          "name": "SetLockStatus",
+          "caption": "Zentralverreigelung setzen (/security)"
         }
       ]
     }
