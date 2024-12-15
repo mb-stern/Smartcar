@@ -18,10 +18,17 @@ Wenn du im Konfigurationsformular die Berchtigungen gewählt oder geändert hast
 
 Aktuell sind folgende Scopes (Endpunkte) durch das Modul unterstützt:
 * "Fahrzeuginformationen lesen (/)"
+* "VIN lesen (/vin)"
 * "Standort lesen (/location)"
 * "Reifendruck lesen (/tires/pressure)"
 * "Kilometerstand lesen (/odometer)"
-* "Batteriestatus lesen (/battery)"
+* "Batteriestlevel lesen (/battery)"
+* "Batterieststatus lesen (/battery/capacity)"
+* "Motoröl lesen (/oil)"
+* "Kraftstoffstand lesen (/fuel)"
+* "Sicherheitsstatus lesen (/security)"
+* "Ladelimit lesen (/charge/limit)"
+* "Ladestatus lesen (/charge)"
 
 Aktuell sind folgende Ansteuerungen unterstützt
 * "Laden Limit (/charge/limit)"
