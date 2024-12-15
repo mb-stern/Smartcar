@@ -155,27 +155,27 @@ class SMCAR extends IPSModule
         }
 
         if ($this->ReadPropertyBoolean('ScopeReadSecurity')) {
-            $this->RegisterVariableBoolean('DoorsLocked', 'Fahrzeug verriegelt', '~Lock', 120);
+            $this->RegisterVariableBoolean('DoorsLocked', 'Fahrzeug verriegelt', '~Lock', 70);
             
             // Türen
-            $this->RegisterVariableString('FrontLeftDoor', 'Vordertür links', 'SMCAR.Status', 121);
-            $this->RegisterVariableString('FrontRightDoor', 'Vordertür rechts', 'SMCAR.Status', 122);
-            $this->RegisterVariableString('BackLeftDoor', 'Hintentür links', 'SMCAR.Status', 123);
-            $this->RegisterVariableString('BackRightDoor', 'Hintentür rechts', 'SMCAR.Status', 124);
+            $this->RegisterVariableString('FrontLeftDoor', 'Vordertür links', 'SMCAR.Status', 71);
+            $this->RegisterVariableString('FrontRightDoor', 'Vordertür rechts', 'SMCAR.Status', 72);
+            $this->RegisterVariableString('BackLeftDoor', 'Hintentür links', 'SMCAR.Status', 73);
+            $this->RegisterVariableString('BackRightDoor', 'Hintentür rechts', 'SMCAR.Status', 74);
         
             // Fenster
-            $this->RegisterVariableString('FrontLeftWindow', 'Vorderfenster links', 'SMCAR.Status', 125);
-            $this->RegisterVariableString('FrontRightWindow', 'Vorderfenster rechts', 'SMCAR.Status', 126);
+            $this->RegisterVariableString('FrontLeftWindow', 'Vorderfenster links', 'SMCAR.Status', 75);
+            $this->RegisterVariableString('FrontRightWindow', 'Vorderfenster rechts', 'SMCAR.Status', 76);
         
             // Schiebedach
-            $this->RegisterVariableString('Sunroof', 'Schiebedach', 'SMCAR.Status', 129);
+            $this->RegisterVariableString('Sunroof', 'Schiebedach', 'SMCAR.Status', 79);
         
             // Stauraum
-            $this->RegisterVariableString('RearStorage', 'Stauraum hinten', 'SMCAR.Status', 130);
-            $this->RegisterVariableString('FrontStorage', 'Stauraum vorne', 'SMCAR.Status', 131);
+            $this->RegisterVariableString('RearStorage', 'Stauraum hinten', 'SMCAR.Status', 70);
+            $this->RegisterVariableString('FrontStorage', 'Stauraum vorne', 'SMCAR.Status', 71);
         
             // Ladeanschluss
-            $this->RegisterVariableString('ChargingPort', 'Ladeanschluss', 'SMCAR.Status', 132);        
+            $this->RegisterVariableString('ChargingPort', 'Ladeanschluss', 'SMCAR.Status', 72);        
         } else {
             $this->UnregisterVariable('DoorsLocked');
             $this->UnregisterVariable('FrontLeftDoor');
@@ -194,14 +194,14 @@ class SMCAR extends IPSModule
         
         // Ladeinformationen
         if ($this->ReadPropertyBoolean('ScopeReadChargeLimit')) {
-            $this->RegisterVariableFloat('ChargeLimit', 'Aktuelles Ladelimit', 'SMCAR.Progress', 90);
+            $this->RegisterVariableFloat('ChargeLimit', 'Aktuelles Ladelimit', 'SMCAR.Progress', 80);
         } else {
             $this->UnregisterVariable('ChargeLimit');
         }
 
         if ($this->ReadPropertyBoolean('ScopeReadChargeStatus')) {
-            $this->RegisterVariableString('ChargeStatus', 'Ladestatus', 'SMCAR.Charge', 91);
-            $this->RegisterVariableBoolean('PluggedIn', 'Ladekabel eingesteckt', '~Switch', 92);
+            $this->RegisterVariableString('ChargeStatus', 'Ladestatus', 'SMCAR.Charge', 81);
+            $this->RegisterVariableBoolean('PluggedIn', 'Ladekabel eingesteckt', '~Switch', 82);
         } else {
             $this->UnregisterVariable('ChargeStatus');
             $this->UnregisterVariable('PluggedIn');
@@ -209,14 +209,14 @@ class SMCAR extends IPSModule
 
         // Ölstatus
         if ($this->ReadPropertyBoolean('ScopeReadOilLife')) {
-            $this->RegisterVariableFloat('OilLife', 'Verbleibende Öl-Lebensdauer', 'SMCAR.Progress', 80);
+            $this->RegisterVariableFloat('OilLife', 'Verbleibende Öl-Lebensdauer', 'SMCAR.Progress', 90);
         } else {
             $this->UnregisterVariable('OilLife');
         }
 
         // Ladelimit setzen
         if ($this->ReadPropertyBoolean('SetChargeLimit')) {
-            $this->RegisterVariableFloat('SetChargeLimit', 'Ladelimit setzen', 'SMCAR.Progress', 60);
+            $this->RegisterVariableFloat('SetChargeLimit', 'Ladelimit setzen', 'SMCAR.Progress', 100);
             $this->EnableAction('SetChargeLimit');
         } else {
             $this->UnregisterVariable('SetChargeLimit');
@@ -224,7 +224,7 @@ class SMCAR extends IPSModule
 
         // Ladestatus setzen
         if ($this->ReadPropertyBoolean('SetChargeStatus')) {
-            $this->RegisterVariableBoolean('SetChargeStatus', 'Ladestatus setzen', '~Switch', 70);
+            $this->RegisterVariableBoolean('SetChargeStatus', 'Ladestatus setzen', '~Switch', 110);
             $this->EnableAction('SetChargeStatus');
         } else {
             $this->UnregisterVariable('SetChargeStatus');
