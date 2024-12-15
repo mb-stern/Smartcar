@@ -61,26 +61,6 @@
         },
         {
           "type": "CheckBox",
-          "name": "ScopeReadEngineOil",
-          "caption": "Motoröl lesen (/engine/oil)"
-        },
-        {
-          "type": "CheckBox",
-          "name": "ScopeReadFuel",
-          "caption": "Kraftstoffstand lesen (/fuel)"
-        },
-        {
-          "type": "CheckBox",
-          "name": "ScopeReadSecurity",
-          "caption": "Sicherheitsstatus lesen (/security)"
-        },
-        {
-          "type": "CheckBox",
-          "name": "ScopeReadClimate",
-          "caption": "Klimaanlagendaten lesen (/climate)"
-        },
-        {
-          "type": "CheckBox",
           "name": "SetChargeLimit",
           "caption": "Ladelimit setzen (/charge/limit)"
         },
