@@ -35,6 +35,8 @@ class SMCAR extends IPSModule
         $this->RegisterAttributeString('RefreshToken', '');
         $this->RegisterAttributeString('VehicleID', '');
         $this->RegisterAttributeString('RedirectURI', '');
+
+        $this->RegisterTimer('TokenRefreshTimer', 0, 'SMCAR_RefreshAccessToken(' . $this->InstanceID . ');'); 
     }
     
     public function ApplyChanges()
