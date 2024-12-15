@@ -66,16 +66,6 @@
         },
         {
           "type": "CheckBox",
-          "name": "ScopeReadEngineState",
-          "caption": "Motorzustand lesen (/engine/state)"
-        },
-        {
-          "type": "CheckBox",
-          "name": "ScopeReadDoors",
-          "caption": "Türstatus lesen (/doors)"
-        },
-        {
-          "type": "CheckBox",
           "name": "ScopeReadFuel",
           "caption": "Kraftstoffstand lesen (/fuel)"
         },
@@ -88,11 +78,6 @@
           "type": "CheckBox",
           "name": "ScopeReadClimate",
           "caption": "Klimaanlagendaten lesen (/climate)"
-        },
-        {
-          "type": "CheckBox",
-          "name": "ScopeReadMaintenance",
-          "caption": "Wartungsdaten lesen (/maintenance)"
         },
         {
           "type": "CheckBox",

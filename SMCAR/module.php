@@ -20,12 +20,9 @@ class SMCAR extends IPSModule
         $this->RegisterPropertyBoolean('ScopeReadBatteryLevel', false);
         $this->RegisterPropertyBoolean('ScopeReadBatteryCapacity', false);
         $this->RegisterPropertyBoolean('ScopeReadEngineOil', false);
-        $this->RegisterPropertyBoolean('ScopeReadEngineState', false);
-        $this->RegisterPropertyBoolean('ScopeReadDoors', false);
         $this->RegisterPropertyBoolean('ScopeReadFuel', false);
         $this->RegisterPropertyBoolean('ScopeReadSecurity', false);
         $this->RegisterPropertyBoolean('ScopeReadClimate', false);
-        $this->RegisterPropertyBoolean('ScopeReadMaintenance', false);
         $this->RegisterPropertyBoolean('ScopeControlCharge', false);
         $this->RegisterPropertyBoolean('SetChargeLimit', false);
         $this->RegisterPropertyBoolean('SetChargeStartStop', false);
@@ -128,29 +125,10 @@ class SMCAR extends IPSModule
             $this->UnregisterVariable('BatteryCapacity');
         }
     
-        // Neue Endpunkte hinzufügen
         if ($this->ReadPropertyBoolean('ScopeReadEngineOil')) {
             $this->RegisterVariableFloat('EngineOilLevel', 'Ölstand', '~Humidity', 80);
         } else {
             $this->UnregisterVariable('EngineOilLevel');
-        }
-    
-        if ($this->ReadPropertyBoolean('ScopeReadEngineState')) {
-            $this->RegisterVariableBoolean('EngineState', 'Motorzustand', '~Switch', 90);
-        } else {
-            $this->UnregisterVariable('EngineState');
-        }
-    
-        if ($this->ReadPropertyBoolean('ScopeReadDoors')) {
-            $this->RegisterVariableBoolean('FrontLeftDoor', 'Tür vorne links', '', 100);
-            $this->RegisterVariableBoolean('FrontRightDoor', 'Tür vorne rechts', '', 101);
-            $this->RegisterVariableBoolean('BackLeftDoor', 'Tür hinten links', '', 102);
-            $this->RegisterVariableBoolean('BackRightDoor', 'Tür hinten rechts', '', 103);
-        } else {
-            $this->UnregisterVariable('FrontLeftDoor');
-            $this->UnregisterVariable('FrontRightDoor');
-            $this->UnregisterVariable('BackLeftDoor');
-            $this->UnregisterVariable('BackRightDoor');
         }
     
         if ($this->ReadPropertyBoolean('ScopeReadFuel')) {
@@ -173,14 +151,6 @@ class SMCAR extends IPSModule
         } else {
             $this->UnregisterVariable('InteriorTemperature');
             $this->UnregisterVariable('ClimateState');
-        }
-    
-        if ($this->ReadPropertyBoolean('ScopeReadMaintenance')) {
-            $this->RegisterVariableBoolean('MaintenanceDue', 'Wartung fällig', '~Alert', 140);
-            $this->RegisterVariableString('MaintenanceDetails', 'Wartungsdetails', '', 141);
-        } else {
-            $this->UnregisterVariable('MaintenanceDue');
-            $this->UnregisterVariable('MaintenanceDetails');
         }
     
         // Variablen für Ladeaktionen
@@ -309,12 +279,6 @@ class SMCAR extends IPSModule
         if ($this->ReadPropertyBoolean('ScopeReadEngineOil')) {
             $scopes[] = 'read_engine_oil';
         }
-        if ($this->ReadPropertyBoolean('ScopeReadEngineState')) {
-            $scopes[] = 'read_engine_state';
-        }
-        if ($this->ReadPropertyBoolean('ScopeReadDoors')) {
-            $scopes[] = 'read_doors';
-        }
         if ($this->ReadPropertyBoolean('ScopeReadFuel')) {
             $scopes[] = 'read_fuel';
         }
@@ -323,9 +287,6 @@ class SMCAR extends IPSModule
         }
         if ($this->ReadPropertyBoolean('ScopeReadClimate')) {
             $scopes[] = 'read_climate';
-        }
-        if ($this->ReadPropertyBoolean('ScopeReadMaintenance')) {
-            $scopes[] = 'read_maintenance';
         }
         if ($this->ReadPropertyBoolean('SetChargeLimit') || $this->ReadPropertyBoolean('SetChargeStartStop')) {
             $scopes[] = 'control_charge';
@@ -490,12 +451,6 @@ class SMCAR extends IPSModule
         if ($this->ReadPropertyBoolean('ScopeReadEngineOil')) {
             $endpoints[] = ["path" => "/engine/oil"];
         }
-        if ($this->ReadPropertyBoolean('ScopeReadEngineState')) {
-            $endpoints[] = ["path" => "/engine/state"];
-        }
-        if ($this->ReadPropertyBoolean('ScopeReadDoors')) {
-            $endpoints[] = ["path" => "/vehicle/doors"];
-        }
         if ($this->ReadPropertyBoolean('ScopeReadFuel')) {
             $endpoints[] = ["path" => "/vehicle/fuel"];
         }
@@ -504,9 +459,6 @@ class SMCAR extends IPSModule
         }
         if ($this->ReadPropertyBoolean('ScopeReadClimate')) {
             $endpoints[] = ["path" => "/climate"];
-        }
-        if ($this->ReadPropertyBoolean('ScopeReadMaintenance')) {
-            $endpoints[] = ["path" => "/maintenance"];
         }
         
         $endpoints = array_filter($endpoints, fn($endpoint) => !empty($endpoint['path'])); // Filtere leere Einträge
@@ -649,17 +601,6 @@ class SMCAR extends IPSModule
                 $this->SetValue('EngineOilLevel', $body['oilLevel'] ?? 0.0);
                 break;
             
-            case '/engine/state':
-                $this->SetValue('EngineState', $body['engineRunning'] ?? false);
-                break;
-            
-            case '/vehicle/doors':
-                $this->SetValue('FrontLeftDoor', $body['frontLeft'] ?? false);
-                $this->SetValue('FrontRightDoor', $body['frontRight'] ?? false);
-                $this->SetValue('BackLeftDoor', $body['backLeft'] ?? false);
-                $this->SetValue('BackRightDoor', $body['backRight'] ?? false);
-                break;
-            
             case '/vehicle/fuel':
                 $this->SetValue('FuelLevel', $body['percentRemaining'] ?? 0.0);
                 $this->SetValue('FuelRange', $body['range'] ?? 0.0);
@@ -672,11 +613,6 @@ class SMCAR extends IPSModule
             case '/climate':
                 $this->SetValue('InteriorTemperature', $body['temperature'] ?? 0.0);
                 $this->SetValue('ClimateState', $body['isClimateOn'] ?? false);
-                break;
-            
-            case '/maintenance':
-                $this->SetValue('MaintenanceDue', $body['isMaintenanceRequired'] ?? false);
-                $this->SetValue('MaintenanceDetails', json_encode($body));
                 break;
             
             default:
@@ -799,18 +735,15 @@ class SMCAR extends IPSModule
     {
         $this->FetchSingleEndpoint('/battery'); // Batterielevel
     }
+    
     public function FetchBatteryCapacity()
     {
         $this->FetchSingleEndpoint('/battery/capacity'); // Batterieskapazität
     }
+    
     public function FetchEngineOil()
     {
         $this->FetchSingleEndpoint('/engine/oil');
-    }
-
-    public function FetchEngineState()
-    {
-        $this->FetchSingleEndpoint('/engine/state');
     }
 
     public function FetchFuel()
@@ -821,11 +754,6 @@ class SMCAR extends IPSModule
     public function FetchSecurity()
     {
         $this->FetchSingleEndpoint('/security');
-    }
-
-    public function FetchMaintenance()
-    {
-        $this->FetchSingleEndpoint('/maintenance');
     }
 
     public function FetchClimate()
