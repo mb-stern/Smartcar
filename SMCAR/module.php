@@ -5,73 +5,83 @@ class SMCAR extends IPSModule
     public function Create()
     {
         parent::Create();
-
+    
+        // Allgemeine Eigenschaften
         $this->RegisterPropertyString('ClientID', '');
         $this->RegisterPropertyString('ClientSecret', '');
-        $this->RegisterPropertyString('VIN', '');
         $this->RegisterPropertyString('Mode', 'simulated');
-
+    
+        // Scopes für API-Endpunkte
         $this->RegisterPropertyBoolean('ScopeReadVehicleInfo', false);
         $this->RegisterPropertyBoolean('ScopeReadLocation', false);
-        $this->RegisterPropertyBoolean('ScopeReadTires', false);
         $this->RegisterPropertyBoolean('ScopeReadOdometer', false);
-        $this->RegisterPropertyBoolean('ScopeReadBatteryLevel', false);
+        $this->RegisterPropertyBoolean('ScopeReadTires', false);
+        $this->RegisterPropertyBoolean('ScopeReadBattery', false);
         $this->RegisterPropertyBoolean('ScopeReadBatteryCapacity', false);
-        $this->RegisterPropertyBoolean('ScopeControlCharge', false);
+        $this->RegisterPropertyBoolean('ScopeReadFuel', false);
+        $this->RegisterPropertyBoolean('ScopeReadSecurity', false);
+        $this->RegisterPropertyBoolean('ScopeReadChargeLimit', false);
+        $this->RegisterPropertyBoolean('ScopeReadChargeStatus', false);
+        $this->RegisterPropertyBoolean('ScopeReadVIN', false);
+        $this->RegisterPropertyBoolean('ScopeReadOilLife', false);
+    
+        // Vorhandene Ladeaktionen (POST-Endpunkte)
         $this->RegisterPropertyBoolean('SetChargeLimit', false);
         $this->RegisterPropertyBoolean('SetChargeStartStop', false);
-
+    
+        // Attribute für interne Nutzung
         $this->RegisterAttributeString("CurrentHook", "");
         $this->RegisterAttributeString('AccessToken', '');
         $this->RegisterAttributeString('RefreshToken', '');
         $this->RegisterAttributeString('VehicleID', '');
         $this->RegisterAttributeString('RedirectURI', '');
-
-        $this->RegisterTimer('TokenRefreshTimer', 0, 'SMCAR_RefreshAccessToken(' . $this->InstanceID . ');');  
-
     }
-
+    
     public function ApplyChanges()
     {
         parent::ApplyChanges();
     
-        // Sicherstellen, dass der Hook existiert
+        // Hook initialisieren
         $hookPath = $this->ReadAttributeString("CurrentHook");
-    
-        // Wenn der Hook-Pfad leer ist, initialisiere ihn
         if ($hookPath === "") {
             $hookPath = $this->RegisterHook();
             $this->SendDebug('ApplyChanges', "Die Initialisierung des Hook-Pfades '$hookPath' gestartet.", 0);
         }
-
-            // Timer nur starten, wenn der Access Token vorhanden ist
-            $accessToken = $this->ReadAttributeString('AccessToken');
-            $refreshToken = $this->ReadAttributeString('RefreshToken');
-        
-            if (!empty($accessToken) && !empty($refreshToken)) {
-                $this->SetTimerInterval('TokenRefreshTimer', 90 * 60 * 1000); // Alle 90 Minuten
-                $this->SendDebug('ApplyChanges', 'Token-Erneuerungs-Timer gestartet.', 0);
-            } else {
-                $this->SetTimerInterval('TokenRefreshTimer', 0); // Timer deaktivieren
-                $this->SendDebug('ApplyChanges', 'Token-Erneuerungs-Timer gestoppt.', 0);
-            }
-
-        // Hole die Connect-Adresse
+    
+        // Timer für Token-Erneuerung
+        $accessToken = $this->ReadAttributeString('AccessToken');
+        $refreshToken = $this->ReadAttributeString('RefreshToken');
+        if (!empty($accessToken) && !empty($refreshToken)) {
+            $this->SetTimerInterval('TokenRefreshTimer', 90 * 60 * 1000); // Alle 90 Minuten
+            $this->SendDebug('ApplyChanges', 'Token-Erneuerungs-Timer gestartet.', 0);
+        } else {
+            $this->SetTimerInterval('TokenRefreshTimer', 0); // Timer deaktivieren
+            $this->SendDebug('ApplyChanges', 'Token-Erneuerungs-Timer gestoppt.', 0);
+        }
+    
+        // Connect-Adresse ermitteln
         $ipsymconconnectid = IPS_GetInstanceListByModuleID("{9486D575-BE8C-4ED8-B5B5-20930E26DE6F}")[0];
         $connectAddress = CC_GetUrl($ipsymconconnectid);
- 
         if ($connectAddress === false || empty($connectAddress)) {
             $connectAddress = "Connect-Adresse konnte nicht ermittelt werden.";
             $this->SendDebug('ApplyChanges', 'Connect-Adresse konnte nicht ermittelt werden.', 0);
         } else {
-            // Füge Connect-Adresse und Webhook-Pfad zusammen, um redirectURI zu erhalten
             $hookPath = $this->ReadAttributeString("CurrentHook");
             $redirectURI = $connectAddress . $hookPath;
             $this->WriteAttributeString('RedirectURI', $redirectURI);
-            $this->SendDebug('ApplyChanges', 'redirectURI gespeichert.', 0);
-        }           
+            $this->SendDebug('ApplyChanges', 'Redirect-URI gespeichert.', 0);
+        }
+    
+        // Variablenregistrierung basierend auf aktivierten Scopes
+        $this->UpdateVariablesBasedOnScopes();
+        
+        // Profile erstellen
+        $this->CreateProfile();
+    }
 
-        // Variablen für Scopes anlegen oder löschen
+    private function UpdateVariablesBasedOnScopes()
+    {
+        // Fahrzeugdetails
         if ($this->ReadPropertyBoolean('ScopeReadVehicleInfo')) {
             $this->RegisterVariableString('VehicleMake', 'Fahrzeug Hersteller', '', 1);
             $this->RegisterVariableString('VehicleModel', 'Fahrzeug Modell', '', 2);
@@ -82,6 +92,14 @@ class SMCAR extends IPSModule
             $this->UnregisterVariable('VehicleYear');
         }
 
+        // VIN
+        if ($this->ReadPropertyBoolean('ScopeReadVIN')) {
+            $this->RegisterVariableString('VIN', 'Fahrgestellnummer (VIN)', '', 4);
+        } else {
+            $this->UnregisterVariable('VIN');
+        }
+
+        // Standort
         if ($this->ReadPropertyBoolean('ScopeReadLocation')) {
             $this->RegisterVariableFloat('Latitude', 'Breitengrad', '', 10);
             $this->RegisterVariableFloat('Longitude', 'Längengrad', '', 11);
@@ -90,11 +108,19 @@ class SMCAR extends IPSModule
             $this->UnregisterVariable('Longitude');
         }
 
+        // Kilometerstand
+        if ($this->ReadPropertyBoolean('ScopeReadOdometer')) {
+            $this->RegisterVariableFloat('Odometer', 'Kilometerstand', 'SMCAR.Odometer', 20);
+        } else {
+            $this->UnregisterVariable('Odometer');
+        }
+
+        // Reifendruck
         if ($this->ReadPropertyBoolean('ScopeReadTires')) {
-            $this->RegisterVariableFloat('TireFrontLeft', 'Reifendruck Vorderreifen Links', 'SMCAR.Pressure', 20);
-            $this->RegisterVariableFloat('TireFrontRight', 'Reifendruck Vorderreifen Rechts', 'SMCAR.Pressure', 21);
-            $this->RegisterVariableFloat('TireBackLeft', 'Reifendruck Hinterreifen Links', 'SMCAR.Pressure', 22);
-            $this->RegisterVariableFloat('TireBackRight', 'Reifendruck Hinterreifen Rechts', 'SMCAR.Pressure', 23);
+            $this->RegisterVariableFloat('TireFrontLeft', 'Reifendruck Vorderreifen Links', 'SMCAR.Pressure', 30);
+            $this->RegisterVariableFloat('TireFrontRight', 'Reifendruck Vorderreifen Rechts', 'SMCAR.Pressure', 31);
+            $this->RegisterVariableFloat('TireBackLeft', 'Reifendruck Hinterreifen Links', 'SMCAR.Pressure', 32);
+            $this->RegisterVariableFloat('TireBackRight', 'Reifendruck Hinterreifen Rechts', 'SMCAR.Pressure', 33);
         } else {
             $this->UnregisterVariable('TireFrontLeft');
             $this->UnregisterVariable('TireFrontRight');
@@ -102,26 +128,58 @@ class SMCAR extends IPSModule
             $this->UnregisterVariable('TireBackRight');
         }
 
-        if ($this->ReadPropertyBoolean('ScopeReadOdometer')) {
-            $this->RegisterVariableFloat('Odometer', 'Kilometerstand', 'SMCAR.Odometer', 30);
-        } else {
-            $this->UnregisterVariable('Odometer');
-        }
-
-        if ($this->ReadPropertyBoolean('ScopeReadBatteryLevel')) {
-            $this->RegisterVariableFloat('BatteryRange', 'Reichweite', 'SMCAR.Odometer', 40);
-            $this->RegisterVariableFloat('BatteryLevel', 'Batterieladestand', 'SMCAR.Progress', 41);
+        // Batterie
+        if ($this->ReadPropertyBoolean('ScopeReadBattery')) {
+            $this->RegisterVariableFloat('BatteryRange', 'Reichweite (km)', 'SMCAR.Odometer', 40);
+            $this->RegisterVariableFloat('BatteryLevel', 'Batterieladestand (%)', 'SMCAR.Progress', 41);
         } else {
             $this->UnregisterVariable('BatteryRange');
             $this->UnregisterVariable('BatteryLevel');
         }
 
         if ($this->ReadPropertyBoolean('ScopeReadBatteryCapacity')) {
-            $this->RegisterVariableFloat('BatteryCapacity', 'Batteriekapazität', '~Electricity', 50);
+            $this->RegisterVariableFloat('BatteryCapacity', 'Batteriekapazität (kWh)', '~Electricity', 50);
         } else {
             $this->UnregisterVariable('BatteryCapacity');
         }
 
+        // Tank
+        if ($this->ReadPropertyBoolean('ScopeReadFuel')) {
+            $this->RegisterVariableFloat('FuelLevel', 'Tankfüllstand (%)', 'SMCAR.Progress', 60);
+            $this->RegisterVariableFloat('FuelRange', 'Reichweite (km)', 'SMCAR.Odometer', 61);
+        } else {
+            $this->UnregisterVariable('FuelLevel');
+            $this->UnregisterVariable('FuelRange');
+        }
+
+        // Sicherheitsstatus
+        if ($this->ReadPropertyBoolean('ScopeReadSecurity')) {
+            $this->RegisterVariableBoolean('DoorsLocked', 'Fahrzeug verriegelt', '~Lock', 70);
+        } else {
+            $this->UnregisterVariable('DoorsLocked');
+        }
+
+        // Ladeinformationen
+        if ($this->ReadPropertyBoolean('ScopeReadChargeLimit')) {
+            $this->RegisterVariableFloat('ChargeLimit', 'Aktuelles Ladelimit (%)', 'SMCAR.Progress', 80);
+        } else {
+            $this->UnregisterVariable('ChargeLimit');
+        }
+
+        if ($this->ReadPropertyBoolean('ScopeReadChargeStatus')) {
+            $this->RegisterVariableBoolean('ChargeStatus', 'Ladestatus aktiv', '~Switch', 81);
+        } else {
+            $this->UnregisterVariable('ChargeStatus');
+        }
+
+        // Ölstatus
+        if ($this->ReadPropertyBoolean('ScopeReadOilLife')) {
+            $this->RegisterVariableFloat('OilLife', 'Verbleibende Öl-Lebensdauer (%)', 'SMCAR.Progress', 90);
+        } else {
+            $this->UnregisterVariable('OilLife');
+        }
+
+        // Ladelimit
         if ($this->ReadPropertyBoolean('SetChargeLimit')) {
             $this->RegisterVariableFloat('ChargeLimit', 'Ladelimit (%)', 'SMCAR.Progress', 60);
             $this->EnableAction('ChargeLimit');
@@ -129,17 +187,15 @@ class SMCAR extends IPSModule
             $this->UnregisterVariable('ChargeLimit');
         }
 
+        // Ladestatus
         if ($this->ReadPropertyBoolean('SetChargeStartStop')) {
             $this->RegisterVariableBoolean('ChargeStatus', 'Ladung starten/stoppen', '~Switch', 70);
             $this->EnableAction('ChargeStatus');
         } else {
             $this->UnregisterVariable('ChargeStatus');
         }
-        //Profile für erstellen
-        $this->CreateProfile();
- 
     }
- 
+
     public function RequestAction($ident, $value)
     {
         switch ($ident) {
@@ -220,11 +276,14 @@ class SMCAR extends IPSModule
     {
         $clientID = $this->ReadPropertyString('ClientID');
         $mode = $this->ReadPropertyString('Mode');
-
-        if (empty($clientID)) {
-            return "Fehler: Client ID nicht gesetzt!";
+        $redirectURI = $this->ReadAttributeString('RedirectURI');
+    
+        if (empty($clientID) || empty($redirectURI)) {
+            $this->SendDebug('GenerateAuthURL', 'Fehler: Client ID oder Redirect-URI ist nicht gesetzt!', 0);
+            return "Fehler: Client ID oder Redirect-URI ist nicht gesetzt!";
         }
     
+        // Scopes dynamisch basierend auf aktivierten Endpunkten zusammenstellen
         $scopes = [];
         if ($this->ReadPropertyBoolean('ScopeReadVehicleInfo')) {
             $scopes[] = 'read_vehicle_info';
@@ -232,34 +291,47 @@ class SMCAR extends IPSModule
         if ($this->ReadPropertyBoolean('ScopeReadLocation')) {
             $scopes[] = 'read_location';
         }
-        if ($this->ReadPropertyBoolean('ScopeReadTires')) {
-            $scopes[] = 'read_tires';
-        }
         if ($this->ReadPropertyBoolean('ScopeReadOdometer')) {
             $scopes[] = 'read_odometer';
         }
-        if ($this->ReadPropertyBoolean('ScopeReadBatteryLevel') || $this->ReadPropertyBoolean('ScopeReadBatteryCapacity')) {
+        if ($this->ReadPropertyBoolean('ScopeReadTires')) {
+            $scopes[] = 'read_tires';
+        }
+        if ($this->ReadPropertyBoolean('ScopeReadBattery') || $this->ReadPropertyBoolean('ScopeReadBatteryCapacity')) {
             $scopes[] = 'read_battery';
         }
-        if ($this->ReadPropertyBoolean('SetChargeLimit') || $this->ReadPropertyBoolean('SetChargeStartStop')) {
-            $scopes[] = 'control_charge';
+        if ($this->ReadPropertyBoolean('ScopeReadFuel')) {
+            $scopes[] = 'read_fuel';
+        }
+        if ($this->ReadPropertyBoolean('ScopeReadSecurity')) {
+            $scopes[] = 'read_security';
+        }
+        if ($this->ReadPropertyBoolean('ScopeReadChargeLimit') || this->ReadPropertyBoolean('ScopeReadChargeStatus')) {
+            $scopes[] = 'read_charge';
+        }
+        if ($this->ReadPropertyBoolean('ScopeReadVIN')) {
+            $scopes[] = 'read_vin';
+        }
+        if ($this->ReadPropertyBoolean('ScopeReadOilLife')) {
+            $scopes[] = 'read_engine_oil';
         }
     
         if (empty($scopes)) {
+            $this->SendDebug('GenerateAuthURL', 'Fehler: Keine Scopes ausgewählt!', 0);
             return "Fehler: Keine Scopes ausgewählt!";
         }
     
-        $redirectURI = $this->ReadAttributeString('RedirectURI');
-    
+        // Generiere die Authentifizierungs-URL
         $authURL = "https://connect.smartcar.com/oauth/authorize?" .
             "response_type=code" .
             "&client_id=" . urlencode($clientID) .
             "&redirect_uri=" . urlencode($redirectURI) .
             "&scope=" . urlencode(implode(' ', $scopes)) .
             "&state=" . bin2hex(random_bytes(8)) .
-            "&mode=$mode";
+            "&mode=" . urlencode($mode);
     
-        //$this->SendDebug('GenerateAuthURL', "Generierte URL: $authURL", 0);
+        $this->SendDebug('GenerateAuthURL', "Generierte Authentifizierungs-URL: $authURL", 0);
+    
         return $authURL;
     }
     
@@ -386,6 +458,9 @@ class SMCAR extends IPSModule
         if ($this->ReadPropertyBoolean('ScopeReadVehicleInfo')) {
             $endpoints[] = ["path" => "/"];
         }
+        if ($this->ReadPropertyBoolean('ScopeReadVIN')) {
+            $endpoints[] = ["path" => "/vin"];
+        }
         if ($this->ReadPropertyBoolean('ScopeReadLocation')) {
             $endpoints[] = ["path" => "/location"];
         }
@@ -395,14 +470,30 @@ class SMCAR extends IPSModule
         if ($this->ReadPropertyBoolean('ScopeReadOdometer')) {
             $endpoints[] = ["path" => "/odometer"];
         }
-        if ($this->ReadPropertyBoolean('ScopeReadBatteryLevel')) {
+        if ($this->ReadPropertyBoolean('ScopeReadBattery')) {
             $endpoints[] = ["path" => "/battery"];
         }
         if ($this->ReadPropertyBoolean('ScopeReadBatteryCapacity')) {
             $endpoints[] = ["path" => "/battery/capacity"];
         }
+        if ($this->ReadPropertyBoolean('ScopeReadFuel')) {
+            $endpoints[] = ["path" => "/fuel"];
+        }
+        if ($this->ReadPropertyBoolean('ScopeReadSecurity')) {
+            $endpoints[] = ["path" => "/security"];
+        }
+        if ($this->ReadPropertyBoolean('ScopeReadChargeLimit')) {
+            $endpoints[] = ["path" => "/charge/limit"];
+        }
+        if ($this->ReadPropertyBoolean('ScopeReadChargeStatus')) {
+            $endpoints[] = ["path" => "/charge/status"];
+        }
+        if ($this->ReadPropertyBoolean('ScopeReadOilLife')) {
+            $endpoints[] = ["path" => "/oil"];
+        }
     
-        $endpoints = array_filter($endpoints, fn($endpoint) => !empty($endpoint['path'])); // Filtere leere Einträge
+        // Filtere leere Einträge
+        $endpoints = array_filter($endpoints, fn($endpoint) => !empty($endpoint['path']));
     
         if (empty($endpoints)) {
             $this->SendDebug('FetchVehicleData', 'Keine Scopes aktiviert!', 0);
@@ -421,7 +512,7 @@ class SMCAR extends IPSModule
                 'ignore_errors' => true
             ]
         ];
-
+    
         // Debug-Ausgabe für die API-Anfrage
         $this->SendDebug('FetchVehicleData', 'API-Anfrage: ' . json_encode([
             'url'    => $url,
@@ -471,7 +562,7 @@ class SMCAR extends IPSModule
             $this->SendDebug('FetchVehicleData', 'Unerwartete Antwortstruktur: ' . json_encode($data), 0);
             return false;
         }
-    }    
+    }
     
     private function GetVehicleID(string $accessToken): ?string
     {
@@ -508,40 +599,66 @@ class SMCAR extends IPSModule
     {
         switch ($path) {
             case '/':
-                    $this->SetValue('VehicleMake', $body['make'] ?? '');
-                    $this->SetValue('VehicleModel', $body['model'] ?? '');
-                    $this->SetValue('VehicleYear', $body['year'] ?? 0);
+                $this->SetValue('VehicleMake', $body['make'] ?? '');
+                $this->SetValue('VehicleModel', $body['model'] ?? '');
+                $this->SetValue('VehicleYear', $body['year'] ?? 0);
+                break;
+    
+            case '/vin':
+                $this->SetValue('VIN', $body['vin'] ?? '');
                 break;
     
             case '/location':
-                    $this->SetValue('Latitude', $body['latitude'] ?? 0.0);
-                    $this->SetValue('Longitude', $body['longitude'] ?? 0.0);
+                $this->SetValue('Latitude', $body['latitude'] ?? 0.0);
+                $this->SetValue('Longitude', $body['longitude'] ?? 0.0);
                 break;
     
             case '/tires/pressure':
-                    $this->SetValue('TireFrontLeft', ($body['frontLeft'] ?? 0) * 0.01);
-                    $this->SetValue('TireFrontRight', ($body['frontRight'] ?? 0) * 0.01);
-                    $this->SetValue('TireBackLeft', ($body['backLeft'] ?? 0) * 0.01);
-                    $this->SetValue('TireBackRight', ($body['backRight'] ?? 0) * 0.01);
+                $this->SetValue('TireFrontLeft', ($body['frontLeft'] ?? 0) * 0.01);
+                $this->SetValue('TireFrontRight', ($body['frontRight'] ?? 0) * 0.01);
+                $this->SetValue('TireBackLeft', ($body['backLeft'] ?? 0) * 0.01);
+                $this->SetValue('TireBackRight', ($body['backRight'] ?? 0) * 0.01);
                 break;
     
             case '/odometer':
-                    $this->SetValue('Odometer', $body['distance'] ?? 0);
+                $this->SetValue('Odometer', $body['distance'] ?? 0);
                 break;
     
             case '/battery':
-                    $this->SetValue('BatteryRange', $body['range'] ?? 0);
-                    $this->SetValue('BatteryLevel', ($body['percentRemaining'] ?? 0) * 100);
+                $this->SetValue('BatteryRange', $body['range'] ?? 0);
+                $this->SetValue('BatteryLevel', ($body['percentRemaining'] ?? 0) * 100);
                 break;
-
+    
             case '/battery/capacity':
                 $this->SetValue('BatteryCapacity', $body['capacity'] ?? 0);
-            break;
+                break;
+    
+            case '/fuel':
+                $this->SetValue('FuelLevel', $body['percentRemaining'] ?? 0.0);
+                $this->SetValue('FuelRange', $body['range'] ?? 0.0);
+                break;
+    
+            case '/security':
+                $this->SetValue('DoorsLocked', $body['locked'] ?? false);
+                break;
+    
+            case '/charge/limit':
+                $this->SetValue('ChargeLimit', $body['limit'] ?? 0.0);
+                break;
+    
+            case '/charge/status':
+                $this->SetValue('ChargeStatus', $body['isCharging'] ?? false);
+                break;
+    
+            case '/oil':
+                $this->SetValue('OilLife', $body['lifeRemaining'] ?? 0.0);
+                break;
     
             default:
                 $this->SendDebug('ProcessResponse', "Unbekannter Pfad: $path", 0);
         }
     }
+    
 
     public function SetChargeLimit(float $limit)
     {
@@ -638,30 +755,61 @@ class SMCAR extends IPSModule
     {
         $this->FetchSingleEndpoint('/'); // Fahrzeugdetails
     }
-
+    
+    public function FetchVIN()
+    {
+        $this->FetchSingleEndpoint('/vin'); // Fahrzeug-Identifikationsnummer (VIN)
+    }
+    
     public function FetchLocation()
     {
         $this->FetchSingleEndpoint('/location'); // Standort
     }
-
+    
     public function FetchTires()
     {
         $this->FetchSingleEndpoint('/tires/pressure'); // Reifendruck
     }
-
+    
     public function FetchOdometer()
     {
         $this->FetchSingleEndpoint('/odometer'); // Kilometerstand
     }
-
+    
     public function FetchBatteryLevel()
     {
-        $this->FetchSingleEndpoint('/battery'); // Batterielevel
+        $this->FetchSingleEndpoint('/battery'); // Batterielevel und Reichweite
     }
+    
     public function FetchBatteryCapacity()
     {
         $this->FetchSingleEndpoint('/battery/capacity'); // Batterieskapazität
     }
+    
+    public function FetchEngineOil()
+    {
+        $this->FetchSingleEndpoint('/oil'); // Motorölstatus
+    }
+    
+    public function FetchFuel()
+    {
+        $this->FetchSingleEndpoint('/fuel'); // Tankfüllstand und Reichweite
+    }
+    
+    public function FetchSecurity()
+    {
+        $this->FetchSingleEndpoint('/security'); // Sicherheitsstatus (z. B. verriegelt)
+    }
+    
+    public function FetchChargeLimit()
+    {
+        $this->FetchSingleEndpoint('/charge/limit'); // Aktuelles Ladeziel
+    }
+    
+    public function FetchChargeStatus()
+    {
+        $this->FetchSingleEndpoint('/charge/status'); // Ladestatus
+    }    
 
     private function FetchSingleEndpoint(string $path)
     {

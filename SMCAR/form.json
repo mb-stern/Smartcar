@@ -36,6 +36,11 @@
         },
         {
           "type": "CheckBox",
+          "name": "ScopeReadVIN",
+          "caption": "VIN lesen (/vin)"
+        },
+        {
+          "type": "CheckBox",
           "name": "ScopeReadLocation",
           "caption": "Standort lesen (/location)"
         },
@@ -58,6 +63,31 @@
           "type": "CheckBox",
           "name": "ScopeReadBatteryCapacity",
           "caption": "Batteriekapazität lesen (/battery/capacity)"
+        },
+        {
+          "type": "CheckBox",
+          "name": "ScopeReadEngineOil",
+          "caption": "Motoröl lesen (/oil)"
+        },
+        {
+          "type": "CheckBox",
+          "name": "ScopeReadFuel",
+          "caption": "Kraftstoffstand lesen (/fuel)"
+        },
+        {
+          "type": "CheckBox",
+          "name": "ScopeReadSecurity",
+          "caption": "Sicherheitsstatus lesen (/security)"
+        },
+        {
+          "type": "CheckBox",
+          "name": "ScopeReadChargeLimit",
+          "caption": "Ladelimit lesen (/charge/limit)"
+        },
+        {
+          "type": "CheckBox",
+          "name": "ScopeReadChargeStatus",
+          "caption": "Ladestatus lesen (/charge/status)"
         },
         {
           "type": "CheckBox",
