@@ -81,7 +81,7 @@ Client Secret               |  Entnimm diesen in der Konfiguration von Smartcar 
 Verbindungsmodus            |  Hier definierst du, ob es sich um ein Simmuliertes oder ein Live-Fahrzeug handelt. Die Fahrzeuge verwaltest du im Dashboard von Smartcar. Es kann auch zwischen simmulierem und Live-Fahrezug gewechstelt werden, jedoch muss danach 'Smartcar verbinden' erneut gewählt werden.
 Berchtigungen (Scopes)      |  Hier sind die aktuell vom Modul unterstützen Scopes zur Auswahl. Wichtig ist, dass alle angewählt werden, die später abgefragt werden, sonst werden hier keine Werte geliefert. Im Zweifelsfalle vor der Abfrage alle aktivieren. Die Variablen werden automatisch erstellt und beim Deaktivieren wieder gelöscht. Die Berechtigungen bleiben aber.
 Smartcar verbinden         |  Es öffnet siche ein Browserfenster, wo du dich mit deinen Zugangsdaten vom Fahrzeughersteller anmeldest und die gewählten Berechtigungen bei Smartcar noch genemigst. Am Anschluss erscheint eine Erfolgsmeldung und die Zugriff-Token werden über die Redirect-URI an das Modul übertragen.
-Fahrzeugdaten abrufen       |  Hier rufst du alle aktivierten Scopes ab. Sei vorsichtig bei einem Live-Fahrezug. Fünf aktivierte Scopes ergeben 5 API-Calls. Lies hier [PHP-Befehlsreferenz](#7-php-befehlsreferenz) wie du exclusiv die gewünnschten Variablen aktualisierst.
+Fahrzeugdaten abrufen       |  Hier rufst du alle aktivierten Scopes ab. Sei vorsichtig bei einem Live-Fahrzeug. Fünf aktivierte Scopes ergeben 5 API-Calls. Lies hier [PHP-Befehlsreferenz](#7-php-befehlsreferenz) wie du exclusiv die gewünnschten Variablen aktualisierst.
 
 
 ### 5. Statusvariablen und Profile
@@ -90,7 +90,7 @@ Die Statusvariablen/Kategorien werden automatisch angelegt. Das Löschen einzeln
 
 #### Statusvariablen
 
-Es werden Variablen/Typen je nach Wahl der Scopes erstellt. Es können pro Scope mehrere Variablen erstellt werden.
+Es werden Variablen/Typen je nach Wahl der Scopes erstellt. Es können pro Scope mehrere Variablen erstellt werden. Beim Deaktivieren des jeweiligen Scope werden die Variablen wieder gelöscht.
 
 #### Profile
 

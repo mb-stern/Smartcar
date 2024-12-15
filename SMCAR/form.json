@@ -27,7 +27,7 @@
     },
     {
       "type": "ExpansionPanel",
-      "caption": "Berechtigungen (Scopes)",
+      "caption": "Berechtigungen (Scopes), Variablen werden automatisch erstellt bzw. gelöscht.",
       "items": [
         {
           "type": "CheckBox",
