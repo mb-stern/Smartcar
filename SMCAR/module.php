@@ -156,11 +156,45 @@ class SMCAR extends IPSModule
 
         // Sicherheitsstatus
         if ($this->ReadPropertyBoolean('ScopeReadSecurity')) {
-            $this->RegisterVariableBoolean('DoorsLocked', 'Fahrzeug verriegelt', '~Lock', 70);
+            $this->RegisterVariableBoolean('DoorsLocked', 'Fahrzeug verriegelt', '~Lock', 120);
+        
+            // Türen
+            $this->RegisterVariableString('FrontLeftDoor', 'Vordertür links', '', 121);
+            $this->RegisterVariableString('FrontRightDoor', 'Vordertür rechts', '', 122);
+            $this->RegisterVariableString('BackLeftDoor', 'Hintentür links', '', 123);
+            $this->RegisterVariableString('BackRightDoor', 'Hintentür rechts', '', 124);
+        
+            // Fenster
+            $this->RegisterVariableString('FrontLeftWindow', 'Vorderfenster links', '', 125);
+            $this->RegisterVariableString('FrontRightWindow', 'Vorderfenster rechts', '', 126);
+            $this->RegisterVariableString('BackLeftWindow', 'Hinterfenster links', '', 127);
+            $this->RegisterVariableString('BackRightWindow', 'Hinterfenster rechts', '', 128);
+        
+            // Schiebedach
+            $this->RegisterVariableString('Sunroof', 'Schiebedach', '', 129);
+        
+            // Stauraum
+            $this->RegisterVariableString('RearStorage', 'Stauraum hinten', '', 130);
+            $this->RegisterVariableString('FrontStorage', 'Stauraum vorne', '', 131);
+        
+            // Ladeanschluss
+            $this->RegisterVariableString('ChargingPort', 'Ladeanschluss', '', 132);
         } else {
             $this->UnregisterVariable('DoorsLocked');
+            $this->UnregisterVariable('FrontLeftDoor');
+            $this->UnregisterVariable('FrontRightDoor');
+            $this->UnregisterVariable('BackLeftDoor');
+            $this->UnregisterVariable('BackRightDoor');
+            $this->UnregisterVariable('FrontLeftWindow');
+            $this->UnregisterVariable('FrontRightWindow');
+            $this->UnregisterVariable('BackLeftWindow');
+            $this->UnregisterVariable('BackRightWindow');
+            $this->UnregisterVariable('Sunroof');
+            $this->UnregisterVariable('RearStorage');
+            $this->UnregisterVariable('FrontStorage');
+            $this->UnregisterVariable('ChargingPort');
         }
-
+        
         // Ladeinformationen
         if ($this->ReadPropertyBoolean('ScopeReadChargeLimit')) {
             $this->RegisterVariableFloat('ChargeLimit', 'Aktuelles Ladelimit', 'SMCAR.Progress', 90);
@@ -639,10 +673,73 @@ class SMCAR extends IPSModule
                 $this->SetValue('FuelLevel', $body['percentRemaining'] ?? 0.0);
                 $this->SetValue('FuelRange', $body['range'] ?? 0.0);
                 break;
-    
-            case '/security':
-                $this->SetValue('DoorsLocked', $body['locked'] ?? false);
-                break;
+                
+                case '/security':
+                    // Verriegelungsstatus
+                    $this->SetValue('DoorsLocked', $body['isLocked'] ?? false);
+                
+                    // Türen
+                    foreach ($body['doors'] as $door) {
+                        switch ($door['type']) {
+                            case 'frontLeft':
+                                $this->SetValue('FrontLeftDoor', $door['status'] ?? 'UNKNOWN');
+                                break;
+                            case 'frontRight':
+                                $this->SetValue('FrontRightDoor', $door['status'] ?? 'UNKNOWN');
+                                break;
+                            case 'backLeft':
+                                $this->SetValue('BackLeftDoor', $door['status'] ?? 'UNKNOWN');
+                                break;
+                            case 'backRight':
+                                $this->SetValue('BackRightDoor', $door['status'] ?? 'UNKNOWN');
+                                break;
+                        }
+                    }
+                
+                    // Fenster
+                    foreach ($body['windows'] as $window) {
+                        switch ($window['type']) {
+                            case 'frontLeft':
+                                $this->SetValue('FrontLeftWindow', $window['status'] ?? 'UNKNOWN');
+                                break;
+                            case 'frontRight':
+                                $this->SetValue('FrontRightWindow', $window['status'] ?? 'UNKNOWN');
+                                break;
+                            case 'backLeft':
+                                $this->SetValue('BackLeftWindow', $window['status'] ?? 'UNKNOWN');
+                                break;
+                            case 'backRight':
+                                $this->SetValue('BackRightWindow', $window['status'] ?? 'UNKNOWN');
+                                break;
+                        }
+                    }
+                
+                    // Schiebedach
+                    foreach ($body['sunroof'] as $roof) {
+                        if ($roof['type'] === 'sunroof') {
+                            $this->SetValue('Sunroof', $roof['status'] ?? 'UNKNOWN');
+                        }
+                    }
+                
+                    // Stauraum
+                    foreach ($body['storage'] as $storage) {
+                        switch ($storage['type']) {
+                            case 'rear':
+                                $this->SetValue('RearStorage', $storage['status'] ?? 'UNKNOWN');
+                                break;
+                            case 'front':
+                                $this->SetValue('FrontStorage', $storage['status'] ?? 'UNKNOWN');
+                                break;
+                        }
+                    }
+                
+                    // Ladeanschluss
+                    foreach ($body['chargingPort'] as $port) {
+                        if ($port['type'] === 'chargingPort') {
+                            $this->SetValue('ChargingPort', $port['status'] ?? 'UNKNOWN');
+                        }
+                    }
+                    break;
     
             case '/charge/limit':
                 $this->SetValue('ChargeLimit', $body['limit'] ?? 0.0);
