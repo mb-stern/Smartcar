@@ -667,58 +667,61 @@ class SMCAR extends IPSModule
                 break;
     
             case '/fuel':
-                $this->SetValue('FuelLevel', $body['percentRemaining'] ?? 0.0);
-                $this->SetValue('FuelRange', $body['range'] ?? 0.0);
+                $this->SetValue('FuelLevel', ($body['percentRemaining'] ?? 0) * 100);
+                $this->SetValue('FuelRange', $body['range'] ?? 0);
                 break;
-                
-                case '/security':
-                    $this->SetValue('DoorsLocked', $body['isLocked'] ?? false);
-                
-                    // Türen
+    
+            case '/security':
+                $this->SetValue('DoorsLocked', $body['isLocked'] ?? false);
+    
+                // Türen
+                if (isset($body['doors']) && is_array($body['doors'])) {
                     foreach ($body['doors'] as $door) {
-                        $type = ucfirst($door['type']) . 'Door'; // z. B. FrontLeftDoor
-                        if ($this->VariableExists($type)) {
-                            $this->SetValue($type, $door['status']);
+                        $ident = ucfirst($door['type']) . 'Door'; // z.B. FrontLeftDoor
+                        if ($this->VariableExists($ident)) {
+                            $this->SetValue($ident, $door['status']);
                         }
                     }
-                
-                    // Fenster
+                }
+    
+                // Fenster
+                if (isset($body['windows']) && is_array($body['windows'])) {
                     foreach ($body['windows'] as $window) {
-                        $type = ucfirst($window['type']) . 'Window'; // z. B. FrontLeftWindow
-                        if ($this->VariableExists($type)) {
-                            $this->SetValue($type, $window['status']);
+                        $ident = ucfirst($window['type']) . 'Window'; // z.B. FrontLeftWindow
+                        if ($this->VariableExists($ident)) {
+                            $this->SetValue($ident, $window['status']);
                         }
                     }
-                
-                    // Schiebedach
-                    if (!empty($body['sunroof'][0]['status'])) {
-                        $this->SetValue('Sunroof', $body['sunroof'][0]['status']);
-                    }
-                
-                    // Stauraum
+                }
+    
+                // Schiebedach
+                if (isset($body['sunroof'][0]['status'])) {
+                    $this->SetValue('Sunroof', $body['sunroof'][0]['status']);
+                }
+    
+                // Stauraum
+                if (isset($body['storage']) && is_array($body['storage'])) {
                     foreach ($body['storage'] as $storage) {
-                        $type = ucfirst($storage['type']) . 'Storage'; // z. B. FrontStorage
-                        if ($this->VariableExists($type)) {
-                            $this->SetValue($type, $storage['status']);
+                        $ident = ucfirst($storage['type']) . 'Storage'; // z.B. FrontStorage
+                        if ($this->VariableExists($ident)) {
+                            $this->SetValue($ident, $storage['status']);
                         }
                     }
-                
-                    // Ladeanschluss
-                    if (!empty($body['chargingPort'][0]['status'])) {
-                        $this->SetValue('ChargingPort', $body['chargingPort'][0]['status']);
-                    }
-                    break;
-                
+                }
+    
+                // Ladeanschluss
+                if (isset($body['chargingPort'][0]['status'])) {
+                    $this->SetValue('ChargingPort', $body['chargingPort'][0]['status']);
+                }
+                break;
+    
             case '/charge/limit':
-                $this->SetValue('ChargeLimit', $body['limit'] ?? 0.0);
+                $this->SetValue('ChargeLimit', ($body['limit'] ?? 0) * 100);
                 break;
     
             case '/charge':
-                $this->SetValue('ChargeStatus', $body['isCharging'] ?? false);
-                break;
-    
-            case '/engine/oil':
-                $this->SetValue('OilLife', $body['lifeRemaining'] ?? 0.0);
+                $this->SetValue('ChargeStatus', $body['state'] ?? 'UNKNOWN');
+                $this->SetValue('PluggedIn', $body['isPluggedIn'] ?? false);
                 break;
     
             default:
@@ -726,7 +729,6 @@ class SMCAR extends IPSModule
         }
     }
     
-
     public function SetChargeLimit(float $limit)
     {
         $accessToken = $this->ReadAttributeString('AccessToken');
