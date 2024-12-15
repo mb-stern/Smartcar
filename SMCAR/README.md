@@ -118,7 +118,7 @@ WPLUX_FetchOdometer(12345);         |   Abfragen des Kilomterstandes
 WPLUX_FetchCSecurity(12345);        |   Abfrage des Verriegelungsstatus der Türen, Klappen und Fenster
 WPLUX_FetchTires(12345);            |   Abfrage des Reifendruckes
 WPLUX_FetchVIN(12345);              |   Abfrage der Fahrgestellnummer
-WPLUX_FetchVehicleData(12345);      |   Alle im Modul aktiverten Scopes abfragen
+WPLUX_FetchVehicleData(12345);      |   Alle im Modul aktiverten Scopes abfragen. Vorsicht, es könnten sehr viele API-Calls verbraucht werden
 
 ### 8. Versionen
 
