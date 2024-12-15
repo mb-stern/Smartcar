@@ -154,32 +154,28 @@ class SMCAR extends IPSModule
             $this->UnregisterVariable('FuelRange');
         }
 
-        // Sicherheitsstatus
         if ($this->ReadPropertyBoolean('ScopeReadSecurity')) {
-            // Fahrzeug verriegelt
-            $this->RegisterVariableBoolean('DoorsLocked', 'Fahrzeug verriegelt', '~Door', 120);
-
+            $this->RegisterVariableBoolean('DoorsLocked', 'Fahrzeug verriegelt', '~Lock', 120);
+            
             // Türen
-            $this->RegisterVariableBoolean('FrontLeftDoor', 'Vordertür links', '~Door', 121);
-            $this->RegisterVariableBoolean('FrontRightDoor', 'Vordertür rechts', '~Door', 122);
-            $this->RegisterVariableBoolean('BackLeftDoor', 'Hintentür links', '~Door', 123);
-            $this->RegisterVariableBoolean('BackRightDoor', 'Hintentür rechts', '~Door', 124);
-
+            $this->RegisterVariableString('FrontLeftDoor', 'Vordertür links', 'SMCAR.Status', 121);
+            $this->RegisterVariableString('FrontRightDoor', 'Vordertür rechts', 'SMCAR.Status', 122);
+            $this->RegisterVariableString('BackLeftDoor', 'Hintentür links', 'SMCAR.Status', 123);
+            $this->RegisterVariableString('BackRightDoor', 'Hintentür rechts', 'SMCAR.Status', 124);
+        
             // Fenster
-            $this->RegisterVariableBoolean('FrontLeftWindow', 'Vorderfenster links', '~Door', 125);
-            $this->RegisterVariableBoolean('FrontRightWindow', 'Vorderfenster rechts', '~Door', 126);
-            $this->RegisterVariableBoolean('BackLeftWindow', 'Hinterfenster links', '~Door', 127);
-            $this->RegisterVariableBoolean('BackRightWindow', 'Hinterfenster rechts', '~Door', 128);
-
+            $this->RegisterVariableString('FrontLeftWindow', 'Vorderfenster links', 'SMCAR.Status', 125);
+            $this->RegisterVariableString('FrontRightWindow', 'Vorderfenster rechts', 'SMCAR.Status', 126);
+        
             // Schiebedach
-            $this->RegisterVariableBoolean('Sunroof', 'Schiebedach', '~Door', 129);
-
+            $this->RegisterVariableString('Sunroof', 'Schiebedach', 'SMCAR.Status', 129);
+        
             // Stauraum
-            $this->RegisterVariableBoolean('RearStorage', 'Stauraum hinten', '~Door', 130);
-            $this->RegisterVariableBoolean('FrontStorage', 'Stauraum vorne', '~Door', 131);
-
+            $this->RegisterVariableString('RearStorage', 'Stauraum hinten', 'SMCAR.Status', 130);
+            $this->RegisterVariableString('FrontStorage', 'Stauraum vorne', 'SMCAR.Status', 131);
+        
             // Ladeanschluss
-            $this->RegisterVariableBoolean('ChargingPort', 'Ladeanschluss', '~Door', 132);
+            $this->RegisterVariableString('ChargingPort', 'Ladeanschluss', 'SMCAR.Status', 132);        
         } else {
             $this->UnregisterVariable('DoorsLocked');
             $this->UnregisterVariable('FrontLeftDoor');
@@ -676,48 +672,43 @@ class SMCAR extends IPSModule
                 break;
                 
                 case '/security':
-                    // Fahrzeugverriegelung
                     $this->SetValue('DoorsLocked', $body['isLocked'] ?? false);
                 
                     // Türen
                     foreach ($body['doors'] as $door) {
-                        $status = isset($door['status']) && $door['status'] === 'CLOSED';
-                        $this->SetValue('FrontLeftDoor', $door['type'] === 'frontLeft' ? $status : null);
-                        $this->SetValue('FrontRightDoor', $door['type'] === 'frontRight' ? $status : null);
-                        $this->SetValue('BackLeftDoor', $door['type'] === 'backLeft' ? $status : null);
-                        $this->SetValue('BackRightDoor', $door['type'] === 'backRight' ? $status : null);
+                        $type = ucfirst($door['type']) . 'Door'; // z. B. FrontLeftDoor
+                        if ($this->VariableExists($type)) {
+                            $this->SetValue($type, $door['status']);
+                        }
                     }
                 
                     // Fenster
                     foreach ($body['windows'] as $window) {
-                        $status = isset($window['status']) && $window['status'] === 'CLOSED';
-                        $this->SetValue('FrontLeftWindow', $window['type'] === 'frontLeft' ? $status : null);
-                        $this->SetValue('FrontRightWindow', $window['type'] === 'frontRight' ? $status : null);
-                        $this->SetValue('BackLeftWindow', $window['type'] === 'backLeft' ? $status : null);
-                        $this->SetValue('BackRightWindow', $window['type'] === 'backRight' ? $status : null);
+                        $type = ucfirst($window['type']) . 'Window'; // z. B. FrontLeftWindow
+                        if ($this->VariableExists($type)) {
+                            $this->SetValue($type, $window['status']);
+                        }
                     }
                 
                     // Schiebedach
-                    foreach ($body['sunroof'] as $roof) {
-                        $status = isset($roof['status']) && $roof['status'] === 'CLOSED';
-                        $this->SetValue('Sunroof', $roof['type'] === 'sunroof' ? $status : null);
+                    if (!empty($body['sunroof'][0]['status'])) {
+                        $this->SetValue('Sunroof', $body['sunroof'][0]['status']);
                     }
                 
                     // Stauraum
                     foreach ($body['storage'] as $storage) {
-                        $status = isset($storage['status']) && $storage['status'] === 'CLOSED';
-                        $this->SetValue('RearStorage', $storage['type'] === 'rear' ? $status : null);
-                        $this->SetValue('FrontStorage', $storage['type'] === 'front' ? $status : null);
+                        $type = ucfirst($storage['type']) . 'Storage'; // z. B. FrontStorage
+                        if ($this->VariableExists($type)) {
+                            $this->SetValue($type, $storage['status']);
+                        }
                     }
                 
                     // Ladeanschluss
-                    foreach ($body['chargingPort'] as $port) {
-                        $status = isset($port['status']) && $port['status'] === 'CLOSED';
-                        $this->SetValue('ChargingPort', $port['type'] === 'chargingPort' ? $status : null);
+                    if (!empty($body['chargingPort'][0]['status'])) {
+                        $this->SetValue('ChargingPort', $body['chargingPort'][0]['status']);
                     }
                     break;
                 
-    
             case '/charge/limit':
                 $this->SetValue('ChargeLimit', $body['limit'] ?? 0.0);
                 break;
@@ -978,6 +969,14 @@ class SMCAR extends IPSModule
             IPS_SetVariableProfileValues('SMCAR.Progress', 0, 100, 1);
             $this->SendDebug('CreateProfile', 'Profil erstellt: SMCAR.Progress', 0);
         } 
+        if (!IPS_VariableProfileExists('SMCAR.Status')) {
+            IPS_CreateVariableProfile('SMCAR.Status', VARIABLETYPE_STRING);
+            IPS_SetVariableProfileAssociation('SMCAR.Status', 'OPEN', 'Offen', '', -1);
+            IPS_SetVariableProfileAssociation('SMCAR.Status', 'CLOSED', 'Geschlossen', '', -1);
+            IPS_SetVariableProfileAssociation('SMCAR.Status', 'UNKNOWN', 'Unbekannt', '', -1);
+            $this->SendDebug('CreateProfile', 'Profil erstellt: SMCAR.Status', 0);
+        }
+        
 
     }
 
