@@ -102,7 +102,7 @@
         {
           "type": "CheckBox",
           "name": "SetLockStatus",
-          "caption": "Zentralverreigelung setzen (/security)"
+          "caption": "Zentralverriegelung setzen (/security)"
         }
       ]
     }
