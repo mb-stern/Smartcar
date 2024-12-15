@@ -31,7 +31,7 @@
       "items": [
         {
           "type": "Label",
-          "caption": "Variablen werden automatisch erstellt bzw. gelöscht."
+          "caption": "Zugehörige Variablen werden automatisch erstellt bzw. gelöscht."
         },
         {
           "type": "CheckBox",
