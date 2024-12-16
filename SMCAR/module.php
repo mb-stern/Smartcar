@@ -328,8 +328,8 @@ class SMCAR extends IPSModule
         $clientSecret = $this->ReadPropertyString('ClientSecret');
     
         if (empty($clientID) || empty($clientSecret)) {
-            $this->SendDebug('GenerateAuthURL', 'Fehler: Client ID oder Client-Secret ist nicht gesetzt!', 0);
-            return "Fehler: Client ID oder Client-Secret ist nicht gesetzt!";
+            $this->SendDebug('GenerateAuthURL', 'Fehler: Client ID oder Client Secret ist nicht gesetzt!', 0);
+            return "Fehler: Client ID oder Client Secret ist nicht gesetzt!";
         }
     
         // Scopes dynamisch basierend auf aktivierten Endpunkten zusammenstellen
