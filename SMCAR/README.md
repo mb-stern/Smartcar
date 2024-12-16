@@ -4,7 +4,7 @@ Erstelle ein Profil und verbinde dein Fahrzeug oder ein Testfahrzeug (https://sm
 Smartcar unterstützt aktuell 43 Fahrzeugmarken. Prüfe hier welche Endpunkte dein Fahrezug unterstützt. (https://smartcar.com/de/product/compatible-vehicles)
 In der aktuellen Version dieses Moduls ist ein Fahrzeug unterstützt.
 In der kostenlosen Version von Smartcar kann sowieso nur ein Live-Fahrezug pro Benutzerprofil angelegt werden.
-Für mehrere Fahrzeuge ist das Modul (und natürlich der Smartcar-Account) mehrmals anzulegen.
+Für mehrere Fahrzeuge ist das Modul (und natürlich das Smartcar-Profil) mehrmals anzulegen.
 
 ### Wichtig zu wissen zur Konfiguration von Smartcar
 Das Modul verbindet sich über OAuth 2.0 mit der Smartcar API. 
