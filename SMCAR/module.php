@@ -25,7 +25,7 @@ class SMCAR extends IPSModule
         $this->RegisterPropertyBoolean('ScopeReadVIN', false);
         $this->RegisterPropertyBoolean('ScopeReadOilLife', false);
     
-        // Vorhandene Ladeaktionen (POST-Endpunkte)
+        // Vorhandene Ansteuerungen (POST-Endpunkte)
         $this->RegisterPropertyBoolean('SetChargeLimit', false);
         $this->RegisterPropertyBoolean('SetChargeStatus', false);
         $this->RegisterPropertyBoolean('SetLockStatus', false);
@@ -155,6 +155,7 @@ class SMCAR extends IPSModule
             $this->UnregisterVariable('FuelRange');
         }
 
+        // Security
         if ($this->ReadPropertyBoolean('ScopeReadSecurity')) {
             $this->RegisterVariableBoolean('DoorsLocked', 'Fahrzeug verriegelt', '~Lock', 70);
             
@@ -389,7 +390,6 @@ class SMCAR extends IPSModule
     
         return $authURL;
     }
-    
     
     public function ProcessHookData()
     {
