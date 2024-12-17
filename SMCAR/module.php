@@ -25,7 +25,7 @@ class SMCAR extends IPSModule
         $this->RegisterPropertyBoolean('ScopeReadVIN', false);
         $this->RegisterPropertyBoolean('ScopeReadOilLife', false);
     
-        // Vorhandene Ladeaktionen (POST-Endpunkte)
+        // Vorhandene Ansteuerungen (POST-Endpunkte)
         $this->RegisterPropertyBoolean('SetChargeLimit', false);
         $this->RegisterPropertyBoolean('SetChargeStatus', false);
         $this->RegisterPropertyBoolean('SetLockStatus', false);
@@ -155,6 +155,7 @@ class SMCAR extends IPSModule
             $this->UnregisterVariable('FuelRange');
         }
 
+        // Security
         if ($this->ReadPropertyBoolean('ScopeReadSecurity')) {
             $this->RegisterVariableBoolean('DoorsLocked', 'Fahrzeug verriegelt', '~Lock', 70);
             
@@ -167,9 +168,11 @@ class SMCAR extends IPSModule
             // Fenster
             $this->RegisterVariableString('FrontLeftWindow', 'Vorderfenster links', 'SMCAR.Status', 75);
             $this->RegisterVariableString('FrontRightWindow', 'Vorderfenster rechts', 'SMCAR.Status', 76);
+            $this->RegisterVariableString('BackLeftWindow', 'Hinterfenster links', 'SMCAR.Status', 77);
+            $this->RegisterVariableString('BackRightWindow', 'Hinterfenster rechts', 'SMCAR.Status', 78);
         
             // Schiebedach
-            $this->RegisterVariableString('Sunroof', 'Schiebedach', 'SMCAR.Status', 77);
+            $this->RegisterVariableString('Sunroof', 'Schiebedach', 'SMCAR.Status', 79);
         
             // Stauraum
             $this->RegisterVariableString('RearStorage', 'Stauraum hinten', 'SMCAR.Status', 80);
@@ -325,11 +328,11 @@ class SMCAR extends IPSModule
     {
         $clientID = $this->ReadPropertyString('ClientID');
         $mode = $this->ReadPropertyString('Mode');
-        $redirectURI = $this->ReadAttributeString('RedirectURI');
+        $clientSecret = $this->ReadPropertyString('ClientSecret');
     
-        if (empty($clientID) || empty($redirectURI)) {
-            $this->SendDebug('GenerateAuthURL', 'Fehler: Client ID oder Redirect-URI ist nicht gesetzt!', 0);
-            return "Fehler: Client ID oder Redirect-URI ist nicht gesetzt!";
+        if (empty($clientID) || empty($clientSecret)) {
+            $this->SendDebug('GenerateAuthURL', 'Fehler: Client ID oder Client Secret ist nicht gesetzt!', 0);
+            return "Fehler: Client ID oder Client Secret ist nicht gesetzt!";
         }
     
         // Scopes dynamisch basierend auf aktivierten Endpunkten zusammenstellen
@@ -389,7 +392,6 @@ class SMCAR extends IPSModule
     
         return $authURL;
     }
-    
     
     public function ProcessHookData()
     {

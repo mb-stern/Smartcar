@@ -1,10 +1,10 @@
 # Modul für Smartcar für IP-Symcon
 Dieses Modul ermöglicht, Daten von Fahrzeugen über die Smartcar-Plattform abzufragen. 
-Erstelle ein Profil und verbinde dein Fahrezug oder ein Testfahrzeug (https://smartcar.com/de)
+Erstelle ein Profil und verbinde dein Fahrzeug oder ein Testfahrzeug (https://smartcar.com/de)
 Smartcar unterstützt aktuell 43 Fahrzeugmarken. Prüfe hier welche Endpunkte dein Fahrezug unterstützt. (https://smartcar.com/de/product/compatible-vehicles)
 In der aktuellen Version dieses Moduls ist ein Fahrzeug unterstützt.
 In der kostenlosen Version von Smartcar kann sowieso nur ein Live-Fahrezug pro Benutzerprofil angelegt werden.
-Für mehrere Fahrezuge ist das Modul mehrmals anzulegen.
+Für mehrere Fahrzeuge ist das Modul (und natürlich das Smartcar-Profil) mehrmals anzulegen.
 
 ### Wichtig zu wissen zur Konfiguration von Smartcar
 Das Modul verbindet sich über OAuth 2.0 mit der Smartcar API. 
@@ -13,7 +13,7 @@ Die Redirect URI ist der Pfad zum Webhook, welchen das Modul automatisch anlegt.
 Dieser Pfad setzt sich aus deiner Connenct-Adresse und dem Pfad des Webhook zusammen. 
 Der Pfad der Redirect-URI wird oben im Konfigurationsformular angezeigt. 
 Diesen hinterlegst du dann in der Konfiguration von Smartcar unter 'REDIRECT URIS' Dies sieht zB so aus: https://hruw8ehwWERUOwehrWWoiuh.ipmagic.de/hook/smartcar_15583
-Wenn du im Konfigurationsformular die Berchtigungen gewählt oder geändert hast, ist dies erneut über den Button 'Verbindung starten' als URL auszugeben und im Browser bei Smartcar zu registrieren.
+Wenn du im Konfigurationsformular die Scopes gewählt oder geändert hast, sind diese erneut über den Button 'Smartcar verbinden' bei Smartcar zu registrieren.
 
 
 Aktuell sind folgende Scopes (Endpunkte) durch das Modul unterstützt:
@@ -81,7 +81,7 @@ Client Secret               |  Entnimm diesen in der Konfiguration von Smartcar 
 Verbindungsmodus            |  Hier definierst du, ob es sich um ein Simmuliertes oder ein Live-Fahrzeug handelt. Die Fahrzeuge verwaltest du im Dashboard von Smartcar. Es kann auch zwischen simmulierem und Live-Fahrezug gewechstelt werden, jedoch muss danach 'Smartcar verbinden' erneut gewählt werden.
 Berchtigungen (Scopes)      |  Hier sind die aktuell vom Modul unterstützen Scopes zur Auswahl. Wichtig ist, dass alle angewählt werden, die später abgefragt werden, sonst werden hier keine Werte geliefert. Im Zweifelsfalle vor der Abfrage alle aktivieren. Die Variablen werden automatisch erstellt und beim Deaktivieren wieder gelöscht. Die Berechtigungen bleiben aber.
 Smartcar verbinden         |  Es öffnet siche ein Browserfenster, wo du dich mit deinen Zugangsdaten vom Fahrzeughersteller anmeldest und die gewählten Berechtigungen bei Smartcar noch genemigst. Am Anschluss erscheint eine Erfolgsmeldung und die Zugriff-Token werden über die Redirect-URI an das Modul übertragen.
-Fahrzeugdaten abrufen       |  Hier rufst du alle aktivierten Scopes ab. Sei vorsichtig bei einem Live-Fahrzeug. Fünf aktivierte Scopes ergeben 5 API-Calls. Lies hier [PHP-Befehlsreferenz](#7-php-befehlsreferenz) wie du exclusiv die gewünnschten Variablen aktualisierst.
+Fahrzeugdaten abrufen       |  Hier rufst du alle aktivierten Scopes ab. Sei vorsichtig bei einem Live-Fahrzeug. Fünf aktivierte Scopes ergeben 5 API-Calls. Lies hier [PHP-Befehlsreferenz](#7-php-befehlsreferenz) wie du exklusiv die gewünschten Variablen aktualisierst.
 
 
 ### 5. Statusvariablen und Profile
@@ -114,21 +114,23 @@ Beachte, dass nur im Konfigurationsformuler (Berechtigungen) freigegebene Scopes
 
 Befehl   | Beschreibung
 ------ | -------
-WPLUX_FetchBatteryCapacity(12345);  |   Abfrage der Batteriekapazität
-WPLUX_FetchBatteryLevel(12345);     |   Abfrage des Batterieladestand (SOC)
-WPLUX_FetchChargeLimit(12345);      |   Abfrage des Ladelimits
-WPLUX_FetchChargeStatus(12345);     |   Abfrage des Ladestatus
-WPLUX_FetchEngineOil(12345);        |   Abfrage der restliche Oellebensdauer
-WPLUX_FetchFuel(12345);             |   Abfrage des Tankvolumens    
-WPLUX_FetchLocation(12345);         |   Abfragen der GPS-Koordinaten
-WPLUX_FetchOdometer(12345);         |   Abfragen des Kilomterstandes
-WPLUX_FetchCSecurity(12345);        |   Abfrage des Verriegelungsstatus der Türen, Klappen und Fenster
-WPLUX_FetchTires(12345);            |   Abfrage des Reifendruckes
-WPLUX_FetchVIN(12345);              |   Abfrage der Fahrgestellnummer
-WPLUX_FetchVehicleData(12345);      |   Alle im Modul aktiverten Scopes abfragen. Vorsicht, es könnten sehr viele API-Calls verbraucht werden
+SMCAR_FetchBatteryCapacity(12345);  |   Abfrage der Batteriekapazität
+SMCAR_FetchBatteryLevel(12345);     |   Abfrage des Batterieladestand (SOC)
+SMCAR_FetchChargeLimit(12345);      |   Abfrage des Ladelimits
+SMCAR_FetchChargeStatus(12345);     |   Abfrage des Ladestatus
+SMCAR_FetchEngineOil(12345);        |   Abfrage der restliche Oellebensdauer
+SMCAR_FetchFuel(12345);             |   Abfrage des Tankvolumens    
+SMCAR_FetchLocation(12345);         |   Abfragen der GPS-Koordinaten
+SMCAR_FetchOdometer(12345);         |   Abfragen des Kilomterstandes
+SMCAR_FetchCSecurity(12345);        |   Abfrage des Verriegelungsstatus der Türen, Klappen und Fenster
+SMCAR_FetchTires(12345);            |   Abfrage des Reifendruckes
+SMCAR_FetchVIN(12345);              |   Abfrage der Fahrgestellnummer
+SMCAR_FetchVehicleData(12345);      |   Alle im Modul aktiverten Scopes abfragen. Vorsicht, es könnten sehr viele API-Calls verbraucht werden
 
 ### 8. Versionen
 
-Version 1.0 (04.02.2024)
+Version 1.1 (17.12.2024)
+- Fehlermeldung BackLeftWindow und BackRightWindow behoben, Variablen hinugefügt
 
+Version 1.0 (15.12.2024)
 - Initiale Version
