@@ -168,9 +168,11 @@ class SMCAR extends IPSModule
             // Fenster
             $this->RegisterVariableString('FrontLeftWindow', 'Vorderfenster links', 'SMCAR.Status', 75);
             $this->RegisterVariableString('FrontRightWindow', 'Vorderfenster rechts', 'SMCAR.Status', 76);
+            $this->RegisterVariableString('BackLeftWindow', 'Hinterfenster links', 'SMCAR.Status', 77);
+            $this->RegisterVariableString('BackRightWindow', 'Hinterfenster rechts', 'SMCAR.Status', 78);
         
             // Schiebedach
-            $this->RegisterVariableString('Sunroof', 'Schiebedach', 'SMCAR.Status', 77);
+            $this->RegisterVariableString('Sunroof', 'Schiebedach', 'SMCAR.Status', 79);
         
             // Stauraum
             $this->RegisterVariableString('RearStorage', 'Stauraum hinten', 'SMCAR.Status', 80);
