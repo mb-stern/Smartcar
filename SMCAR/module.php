@@ -329,6 +329,7 @@ class SMCAR extends IPSModule
         $clientID = $this->ReadPropertyString('ClientID');
         $mode = $this->ReadPropertyString('Mode');
         $clientSecret = $this->ReadPropertyString('ClientSecret');
+        $redirectURI = $this->ReadAttributeString('RedirectURI');
     
         if (empty($clientID) || empty($clientSecret)) {
             $this->SendDebug('GenerateAuthURL', 'Fehler: Client ID oder Client Secret ist nicht gesetzt!', 0);
