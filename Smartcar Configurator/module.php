@@ -253,7 +253,6 @@ class SmartcarConfigurator extends IPSModule
     public function FetchVehicles()
     {
         $accessToken = $this->ReadAttributeString('AccessToken');
-    
         if (empty($accessToken)) {
             $this->SendDebug('FetchVehicles', 'Fehler: Kein Access Token vorhanden!', 0);
             echo "Fehler: Kein Access Token vorhanden!";
@@ -261,46 +260,37 @@ class SmartcarConfigurator extends IPSModule
         }
     
         $url = "https://api.smartcar.com/v2.0/vehicles";
-    
         $options = [
             'http' => [
-                'header' => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
-                'method' => 'GET',
+                'header'  => "Authorization: Bearer $accessToken\r\n",
+                'method'  => 'GET',
                 'ignore_errors' => true
             ]
         ];
     
         $context = stream_context_create($options);
-        $response = @file_get_contents($url, false, $context);
-    
-        if ($response === false) {
-            $this->SendDebug('FetchVehicles', 'Fehler: Keine Antwort von der API!', 0);
-            echo "Fehler: Keine Antwort von der API!";
-            return;
-        }
-    
+        $response = file_get_contents($url, false, $context);
         $data = json_decode($response, true);
-        $this->SendDebug('FetchVehicles', 'API-Antwort: ' . json_encode($data), 0);
     
-        if (!isset($data['vehicles']) || !is_array($data['vehicles'])) {
+        if (!isset($data['vehicles'])) {
             $this->SendDebug('FetchVehicles', 'Fehler: Keine Fahrzeuge gefunden!', 0);
             echo "Fehler: Keine Fahrzeuge gefunden!";
             return;
         }
     
-        // Fahrzeug-IDs in der Liste anzeigen
-        $vehicleList = [];
+        $vehicles = [];
         foreach ($data['vehicles'] as $vehicleID) {
-            $vehicleList[] = [
-                'id' => $vehicleID
+            $vehicles[] = [
+                'id' => $vehicleID,
+                'make' => 'Unbekannt', // Details können später ergänzt werden
+                'model' => 'Unbekannt',
+                'year' => 0
             ];
         }
     
-        // Fahrzeugdaten in die Konfigurationsliste einfügen
-        $this->UpdateFormField('Vehicles', 'values', json_encode($vehicleList));
-        echo "Fahrzeuge erfolgreich abgerufen!";
+        $this->UpdateFormField('Vehicles', 'values', json_encode($vehicles));
     }
-       
+    
 
 private function GetRedirectURI(): string
 {
@@ -322,13 +312,17 @@ private function GetRedirectURI(): string
     return $redirectURI;
 }
 
-public function CreateVehicleInstance(int $instanceID, string $vehicleID)
+public function CreateVehicleInstance(int $instanceID, string $vehicleData)
 {
-    if (empty($vehicleID)) {
-        $this->SendDebug('CreateVehicleInstance', 'Fehler: Fahrzeug-ID ist leer!', 0);
-        echo "Fehler: Fahrzeug-ID ist leer!";
+    $vehicle = json_decode($vehicleData, true);
+
+    if (empty($vehicle) || !isset($vehicle['id'])) {
+        $this->SendDebug('CreateVehicleInstance', 'Fehler: Fahrzeugdaten sind leer oder ungültig!', 0);
+        echo "Fehler: Fahrzeugdaten sind leer oder ungültig!";
         return;
     }
+
+    $vehicleID = $vehicle['id'];
 
     // Prüfen, ob die Instanz bereits existiert
     $existingInstances = IPS_GetInstanceListByModuleID('{F0D3899F-F0FF-66C4-CC26-C8F72CC42B1B}'); // GUID der Fahrzeug-Instanz
