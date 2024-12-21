@@ -201,4 +201,35 @@ class SmartcarConfigurator extends IPSModule
 
         return json_decode($response, true);
     }
+
+    public function FetchVehicles()
+{
+    $accessToken = $this->ReadAttributeString('AccessToken');
+    if (empty($accessToken)) {
+        echo "Fehler: Kein gültiges Access Token verfügbar!";
+        $this->SendDebug('FetchVehicles', 'Access Token ist nicht vorhanden!', 0);
+        return;
+    }
+
+    $url = "https://api.smartcar.com/v2.0/vehicles";
+    $response = $this->SendHTTPRequest($url, 'GET', '', ["Authorization: Bearer $accessToken"]);
+
+    if (isset($response['vehicles']) && is_array($response['vehicles'])) {
+        $vehicles = [];
+        foreach ($response['vehicles'] as $vehicleID) {
+            $vehicles[] = [
+                'id' => $vehicleID,
+                'make' => 'Unbekannt', // Weitere Details können separat abgerufen werden
+                'model' => 'Unbekannt',
+                'year' => 'Unbekannt'
+            ];
+        }
+        $this->UpdateFormField('Vehicles', 'values', json_encode($vehicles));
+        echo "Fahrzeuge erfolgreich abgerufen!";
+    } else {
+        echo "Fehler: Keine Fahrzeuge gefunden oder ungültige Antwort von der API!";
+        $this->SendDebug('FetchVehicles', 'Ungültige API-Antwort: ' . json_encode($response), 0);
+    }
+}
+
 }
