@@ -108,23 +108,26 @@ class SmartcarConfigurator extends IPSModule
 
     public function RefreshAccessToken()
     {
+        $this->SendDebug('RefreshAccessToken', 'Timer ausgelöst.', 0);
+
         $clientID = $this->ReadPropertyString('ClientID');
         $clientSecret = $this->ReadPropertyString('ClientSecret');
         $refreshToken = $this->ReadAttributeString('RefreshToken');
-    
-        if (empty($refreshToken)) {
-            $this->SendDebug('RefreshAccessToken', 'Kein Refresh Token vorhanden.', 0);
+
+        if (empty($clientID) || empty($clientSecret) || empty($refreshToken)) {
+            $this->SendDebug('RefreshAccessToken', 'Fehler: Fehlende Zugangsdaten!', 0);
             return;
         }
-    
+
         $url = "https://auth.smartcar.com/oauth/token";
+
         $postData = http_build_query([
             'grant_type' => 'refresh_token',
             'refresh_token' => $refreshToken,
             'client_id' => $clientID,
             'client_secret' => $clientSecret
         ]);
-    
+
         $options = [
             'http' => [
                 'header' => "Content-Type: application/x-www-form-urlencoded\r\n",
@@ -133,20 +136,19 @@ class SmartcarConfigurator extends IPSModule
                 'ignore_errors' => true
             ]
         ];
-    
+
         $context = stream_context_create($options);
         $response = file_get_contents($url, false, $context);
         $responseData = json_decode($response, true);
-    
-        if (isset($responseData['access_token'])) {
+
+        if (isset($responseData['access_token'], $responseData['refresh_token'])) {
             $this->WriteAttributeString('AccessToken', $responseData['access_token']);
             $this->WriteAttributeString('RefreshToken', $responseData['refresh_token']);
             $this->SendDebug('RefreshAccessToken', 'Token erfolgreich erneuert.', 0);
         } else {
-            $this->SendDebug('RefreshAccessToken', 'Fehler beim Erneuern des Tokens.', 0);
+            $this->SendDebug('RefreshAccessToken', 'Token-Erneuerung fehlgeschlagen!', 0);
         }
     }
-    
 
     private function RegisterHook()
     {
@@ -193,7 +195,7 @@ class SmartcarConfigurator extends IPSModule
         $connectID = $connectInstances[0];
         return CC_GetUrl($connectID);
     }
-
+    
     public function FetchVehicles()
 {
     $accessToken = $this->ReadAttributeString('AccessToken');
