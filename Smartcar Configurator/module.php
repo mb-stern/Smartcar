@@ -6,112 +6,117 @@ class SmartcarConfigurator extends IPSModule
     {
         parent::Create();
 
-        // Keine weiteren Eigenschaften notwendig
+        // Eigenschaften für API-Zugang
+        $this->RegisterPropertyString('ClientID', '');
+        $this->RegisterPropertyString('ClientSecret', '');
         $this->RegisterPropertyString('AccessToken', '');
+        $this->RegisterAttributeString('FetchedVehicles', '[]');
     }
 
     public function ApplyChanges()
     {
         parent::ApplyChanges();
-
-        // Keine speziellen Änderungen bei ApplyChanges erforderlich
     }
 
     public function GetConfigurationForm()
     {
-        $form = [
-            'elements' => [],
-            'actions'  => []
-        ];
-
-        // Prüfe, ob ein Access Token vorhanden ist
-        $accessToken = $this->ReadPropertyString('AccessToken');
-
-        if (empty($accessToken)) {
-            $form['elements'][] = [
-                'type'    => 'Label',
-                'caption' => 'Bitte verbinden Sie Ihr Smartcar-Konto, um Fahrzeuge anzuzeigen.'
-            ];
-
-            $form['actions'][] = [
-                'type'    => 'Button',
-                'caption' => 'Smartcar verbinden',
-                'onClick' => 'echo SMCAR_GenerateAuthURL($id);'
-            ];
-            return json_encode($form);
-        }
-
-        // Fahrzeuge abrufen
-        $vehicles = $this->FetchVehicles($accessToken);
-
-        if (empty($vehicles)) {
-            $form['elements'][] = [
-                'type'    => 'Label',
-                'caption' => 'Keine Fahrzeuge gefunden. Bitte stellen Sie sicher, dass Ihr Konto Fahrzeuge enthält.'
-            ];
-            return json_encode($form);
-        }
-
-        // Fahrzeugliste anzeigen
+        $form = json_decode(file_get_contents(__DIR__ . '/form.json'), true);
+        
+        // Fahrzeuge aus Attribut laden und zur Liste hinzufügen
+        $vehicles = json_decode($this->ReadAttributeString('FetchedVehicles'), true);
         foreach ($vehicles as $vehicle) {
-            $form['elements'][] = [
-                'type'    => 'ExpansionPanel',
-                'caption' => $vehicle['make'] . ' ' . $vehicle['model'] . ' (' . $vehicle['year'] . ')',
-                'items'   => [
-                    [
-                        'type'    => 'Label',
-                        'caption' => 'Fahrgestellnummer (VIN): ' . $vehicle['vin']
-                    ],
-                    [
-                        'type'    => 'Button',
-                        'caption' => 'Instanz erstellen',
-                        'onClick' => "SMCARConfigurator_CreateVehicleInstance(\$id, '{$vehicle['id']}', '{$vehicle['vin']}', '{$vehicle['make']}', '{$vehicle['model']}', {$vehicle['year']});"
-                    ]
-                ]
+            $form['elements'][4]['values'][] = [
+                'id' => $vehicle['id'],
+                'make' => $vehicle['make'],
+                'model' => $vehicle['model'],
+                'year' => $vehicle['year']
             ];
         }
 
         return json_encode($form);
     }
 
-    private function FetchVehicles(string $accessToken): array
+    public function FetchVehicles()
     {
-        $url = 'https://api.smartcar.com/v2.0/vehicles';
+        $clientID = $this->ReadPropertyString('ClientID');
+        $clientSecret = $this->ReadPropertyString('ClientSecret');
+        $accessToken = $this->ReadPropertyString('AccessToken');
+
+        if (empty($clientID) || empty($clientSecret) || empty($accessToken)) {
+            $this->LogMessage('Client ID, Client Secret oder Access Token fehlt.', KL_ERROR);
+            return;
+        }
+
+        $url = "https://api.smartcar.com/v2.0/vehicles";
         $options = [
             'http' => [
-                'header'        => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
-                'method'        => 'GET',
+                'header'  => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
+                'method'  => 'GET',
                 'ignore_errors' => true
             ]
         ];
 
-        $context  = stream_context_create($options);
-        $response = file_get_contents($url, false, $context);
+        $context = stream_context_create($options);
+        $response = @file_get_contents($url, false, $context);
 
         if ($response === false) {
             $this->SendDebug('FetchVehicles', 'Fehler: Keine Antwort von der API!', 0);
-            return [];
+            $this->LogMessage('Fehler beim Abrufen der Fahrzeuge.', KL_ERROR);
+            return;
         }
 
         $data = json_decode($response, true);
-        if (isset($data['vehicles']) && is_array($data['vehicles'])) {
-            return $data['vehicles'];
+
+        if (!isset($data['vehicles']) || empty($data['vehicles'])) {
+            $this->SendDebug('FetchVehicles', 'Keine Fahrzeuge gefunden.', 0);
+            $this->LogMessage('Keine Fahrzeuge gefunden.', KL_WARNING);
+            return;
         }
 
-        $this->SendDebug('FetchVehicles', 'Unerwartete Antwortstruktur: ' . json_encode($data), 0);
-        return [];
+        // Fahrzeuge speichern
+        $this->WriteAttributeString('FetchedVehicles', json_encode($data['vehicles']));
+        $this->SendDebug('FetchVehicles', 'Gefundene Fahrzeuge: ' . json_encode($data['vehicles']), 0);
+
+        // Formular aktualisieren
+        $this->ReloadForm();
     }
 
-    public function CreateVehicleInstance(string $vehicleID, string $vin, string $make, string $model, int $year)
+    public function CreateVehicleInstance()
     {
-        $instanceID = IPS_CreateInstance('{F0D3899F-F0FF-66C4-CC26-C8F72CC42B1B}'); // Ersetze mit der Modul-ID deines Fahrzeugmoduls
+        $vehicles = json_decode($this->ReadAttributeString('FetchedVehicles'), true);
+        $selectedVehicle = $this->GetSelectedVehicle();
 
-        IPS_SetProperty($instanceID, 'VehicleID', $vehicleID);
-        IPS_SetProperty($instanceID, 'VIN', $vin);
-        IPS_SetName($instanceID, "$make $model ($year)");
+        if ($selectedVehicle === null) {
+            $this->LogMessage('Kein Fahrzeug ausgewählt.', KL_WARNING);
+            return;
+        }
 
+        // Instanz erstellen
+        $instanceID = IPS_CreateInstance('{GUID_SMARTCAR_VEHICLE}');
+        IPS_SetName($instanceID, $selectedVehicle['make'] . ' ' . $selectedVehicle['model']);
+        IPS_SetProperty($instanceID, 'VehicleID', $selectedVehicle['id']);
         IPS_ApplyChanges($instanceID);
 
-        $this->SendDebug('CreateVehicleInstance', "Instanz erstellt: ID=$instanceID, Fahrzeug=$make $model ($year)", 0);
+        $this->LogMessage('Fahrzeug-Instanz erstellt: ' . $selectedVehicle['make'] . ' ' . $selectedVehicle['model'], KL_NOTIFY);
+    }
+
+    private function GetSelectedVehicle()
+    {
+        $vehicles = json_decode($this->ReadAttributeString('FetchedVehicles'), true);
+
+        // Fahrzeug aus der Liste ermitteln (falls ein spezifischer Mechanismus zur Auswahl existiert)
+        foreach ($vehicles as $vehicle) {
+            if ($vehicle['selected'] ?? false) {
+                return $vehicle;
+            }
+        }
+
+        return null;
+    }
+
+    private function ReloadForm()
+    {
+        IPS_SetProperty($this->InstanceID, 'Form', $this->GetConfigurationForm());
+        IPS_ApplyChanges($this->InstanceID);
     }
 }
