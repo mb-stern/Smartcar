@@ -1,0 +1,67 @@
+{
+    "elements": [
+      {
+        "type": "Label",
+        "caption": "Smartcar Konfigurator"
+      },
+      {
+        "type": "ValidationTextBox",
+        "name": "ClientID",
+        "caption": "Client ID"
+      },
+      {
+        "type": "ValidationTextBox",
+        "name": "ClientSecret",
+        "caption": "Client Secret"
+      },
+      {
+        "type": "ValidationTextBox",
+        "name": "AccessToken",
+        "caption": "Access Token"
+      },
+      {
+        "type": "Button",
+        "caption": "Fahrzeuge abrufen",
+        "onClick": "SC_Configurator_FetchVehicles($id);"
+      },
+      {
+        "type": "List",
+        "name": "Vehicles",
+        "caption": "Gefundene Fahrzeuge",
+        "rowCount": 5,
+        "add": false,
+        "delete": false,
+        "columns": [
+          {
+            "caption": "Fahrzeug ID",
+            "name": "id",
+            "width": "200px"
+          },
+          {
+            "caption": "Marke",
+            "name": "make",
+            "width": "150px"
+          },
+          {
+            "caption": "Modell",
+            "name": "model",
+            "width": "150px"
+          },
+          {
+            "caption": "Baujahr",
+            "name": "year",
+            "width": "100px"
+          }
+        ],
+        "values": []
+      }
+    ],
+    "actions": [
+      {
+        "type": "Button",
+        "caption": "Instanz für ausgewähltes Fahrzeug erstellen",
+        "onClick": "SC_Configurator_CreateVehicleInstance($id, $Vehicles);"
+      }
+    ]
+  }
+  
