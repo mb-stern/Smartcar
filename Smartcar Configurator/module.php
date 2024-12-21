@@ -221,7 +221,8 @@ class SmartcarConfigurator extends IPSModule
         }
     
         $connectID = $connectInstances[0];
-        $connectURL = CC_GetUrl($connectID);
+        //$connectURL = CC_GetUrl($connectID); für Test ausgeschaltet
+        $connectURL = 'https://traccar.sk-net.ch:3777'; //für Testinstanz
     
         if ($connectURL === false || empty($connectURL)) {
             $this->SendDebug('GetConnectURL', 'Connect-Adresse konnte nicht ermittelt werden.', 0);
