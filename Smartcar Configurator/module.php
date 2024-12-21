@@ -295,33 +295,41 @@ class SmartcarConfigurator extends IPSModule
         $this->UpdateFormField('Vehicles', 'values', json_encode($vehicles));
     }
 
-    public function CreateVehicleInstance(int $instanceID, string $vehicleListJSON, string $vehicleID)
+    public function CreateVehicleInstance(int $instanceID, string $vehicleListJSON, string $vehicleID, string $make = 'Unbekannt')
+    {
+        $vehicles = json_decode($vehicleListJSON, true);
+    
+        if (empty($vehicles) || !isset($vehicleID)) {
+            $this->SendDebug('CreateVehicleInstance', 'Fehler: Ungültige Fahrzeugdaten!', 0);
+            echo "Fehler: Ungültige Fahrzeugdaten!";
+            return;
+        }
+    
+        $selectedVehicle = array_filter($vehicles, fn($v) => $v['id'] === $vehicleID);
+        if (empty($selectedVehicle)) {
+            $this->SendDebug('CreateVehicleInstance', "Fahrzeug-ID $vehicleID nicht gefunden!", 0);
+            echo "Fehler: Fahrzeug-ID $vehicleID nicht gefunden!";
+            return;
+        }
+    
+        $newInstanceID = IPS_CreateInstance('{GUID_FUER_SMARTCAR_VEHICLE}');
+        IPS_SetName($newInstanceID, "Smartcar Fahrzeug: $vehicleID");
+        IPS_SetProperty($newInstanceID, 'VehicleID', $vehicleID);
+        IPS_SetProperty($newInstanceID, 'Make', $make); // Optional
+        IPS_ApplyChanges($newInstanceID);
+    
+        $this->SendDebug('CreateVehicleInstance', "Instanz für Fahrzeug $vehicleID erstellt (ID: $newInstanceID)", 0);
+        echo "Instanz für Fahrzeug $vehicleID erfolgreich erstellt!";
+    }
+    
+private function GetSelectedVehicleID()
 {
-    // Fahrzeugliste dekodieren
-    $vehicles = json_decode($vehicleListJSON, true);
+    $formValues = json_decode($this->GetConfigurationForm(), true);
+    $vehicles = $formValues['elements']['Vehicles']['values'] ?? [];
 
-    if (empty($vehicles) || !isset($vehicleID)) {
-        $this->SendDebug('CreateVehicleInstance', 'Fehler: Ungültige Fahrzeugdaten!', 0);
-        echo "Fehler: Ungültige Fahrzeugdaten!";
-        return;
-    }
-
-    // Prüfen, ob die Fahrzeug-ID in der Liste enthalten ist
-    $selectedVehicle = array_filter($vehicles, fn($v) => $v['id'] === $vehicleID);
-    if (empty($selectedVehicle)) {
-        $this->SendDebug('CreateVehicleInstance', "Fahrzeug-ID $vehicleID nicht gefunden!", 0);
-        echo "Fehler: Fahrzeug-ID $vehicleID nicht gefunden!";
-        return;
-    }
-
-    // Neue Fahrzeuginstanz erstellen
-    $newInstanceID = IPS_CreateInstance('{GUID_FUER_SMARTCAR_VEHICLE}');
-    IPS_SetName($newInstanceID, "Smartcar Fahrzeug: $vehicleID");
-    IPS_SetProperty($newInstanceID, 'VehicleID', $vehicleID);
-    IPS_ApplyChanges($newInstanceID);
-
-    $this->SendDebug('CreateVehicleInstance', "Instanz für Fahrzeug $vehicleID erstellt (ID: $newInstanceID)", 0);
-    echo "Instanz für Fahrzeug $vehicleID erfolgreich erstellt!";
+    // Füge hier Logik hinzu, um die ausgewählte Fahrzeug-ID zu ermitteln
+    // Beispiel: Rückgabe der ersten ID (muss angepasst werden)
+    return $vehicles[0]['id'] ?? null;
 }
 
 }

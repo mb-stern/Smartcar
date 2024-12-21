@@ -50,8 +50,8 @@
     {
       "type": "Button",
       "caption": "Instanz für ausgewähltes Fahrzeug erstellen",
-      "onClick": "SMCAR_CreateVehicleInstance($id, json_encode($Vehicles), $Vehicles[0]['id']);"
-    },
+      "onClick": "SMCAR_CreateVehicleInstance($id, json_encode($this->GetValue('Vehicles')), $this->GetSelectedVehicleID());"
+  },
     {
       "type": "Label",
       "caption": "Hinweis: Wählen Sie ein Fahrzeug aus der Liste aus, bevor Sie eine Instanz erstellen."
