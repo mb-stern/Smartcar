@@ -12,6 +12,7 @@ class SmartcarConfigurator extends IPSModule
         $this->RegisterAttributeString('AccessToken', '');
         $this->RegisterAttributeString('RefreshToken', '');
         $this->RegisterAttributeString('CurrentHook', '');
+        $this->RegisterAttributeString('Vehicles', '[]');
         $this->RegisterTimer('TokenRefreshTimer', 0, 'SmartcarConfigurator_RefreshAccessToken($id);');
     }
 
