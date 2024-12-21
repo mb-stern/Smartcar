@@ -6,112 +6,124 @@ class SmartcarConfigurator extends IPSModule
     {
         parent::Create();
 
-        // Allgemeine Eigenschaften
+        // Eigenschaften und Attribute
         $this->RegisterPropertyString('ClientID', '');
         $this->RegisterPropertyString('ClientSecret', '');
         $this->RegisterAttributeString('AccessToken', '');
         $this->RegisterAttributeString('RefreshToken', '');
         $this->RegisterAttributeString('CurrentHook', '');
-        $this->RegisterAttributeString('Vehicles', '[]');
-        $this->RegisterTimer('TokenRefreshTimer', 0, 'SMCAR_RefreshAccessToken($id);');
+
+        // Timer für die Token-Erneuerung
+        $this->RegisterTimer('TokenRefreshTimer', 0, 'SMCAR_Configurator_RefreshAccessToken($id);');
     }
 
     public function ApplyChanges()
     {
         parent::ApplyChanges();
 
-        // Webhook einrichten
+        // Webhook registrieren
         $hookPath = $this->RegisterHook();
         $this->WriteAttributeString('CurrentHook', $hookPath);
 
-        // Token-Erneuerung aktivieren, falls Token vorhanden
-        if (!empty($this->ReadAttributeString('AccessToken')) && !empty($this->ReadAttributeString('RefreshToken'))) {
-            $this->SetTimerInterval('TokenRefreshTimer', 90 * 60 * 1000); // Alle 90 Minuten
+        // Timer für Token-Erneuerung aktivieren, falls Tokens vorhanden sind
+        if ($this->ReadAttributeString('AccessToken') && $this->ReadAttributeString('RefreshToken')) {
+            $this->SetTimerInterval('TokenRefreshTimer', 90 * 60 * 1000); // 90 Minuten
         } else {
             $this->SetTimerInterval('TokenRefreshTimer', 0);
         }
     }
 
-    public function FetchVehicles()
+    public function GetConfigurationForm()
     {
-        $accessToken = $this->GetAccessToken();
-        if (!$accessToken) {
-            echo 'Fehler: Kein gültiges Access Token verfügbar!';
-            return;
-        }
+        $form = json_decode(file_get_contents(__DIR__ . '/form.json'), true);
 
-        $url = "https://api.smartcar.com/v2.0/vehicles";
-        $response = $this->SendHTTPRequest($url, 'GET', '', ["Authorization: Bearer $accessToken"]);
-
-        if (empty($response['vehicles'])) {
-            echo 'Fehler: Keine Fahrzeuge gefunden!';
-            return;
-        }
-
-        $vehicleData = [];
-        foreach ($response['vehicles'] as $vehicleID) {
-            $details = $this->FetchVehicleDetails($vehicleID);
-            if ($details) {
-                $vehicleData[] = $details;
-            }
-        }
-
-        $this->WriteAttributeString('Vehicles', json_encode($vehicleData));
-        $this->ReloadForm();
-        echo 'Fahrzeuge erfolgreich abgerufen!';
-    }
-
-    private function FetchVehicleDetails($vehicleID)
-    {
-        $accessToken = $this->GetAccessToken();
-        if (!$accessToken) {
-            return null;
-        }
-
-        $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID";
-        $response = $this->SendHTTPRequest($url, 'GET', '', ["Authorization: Bearer $accessToken"]);
-
-        return [
-            'id' => $vehicleID,
-            'make' => $response['make'] ?? 'Unbekannt',
-            'model' => $response['model'] ?? 'Unbekannt',
-            'year' => $response['year'] ?? 0
+        // Redirect-URI dynamisch einfügen
+        $hookPath = $this->ReadAttributeString('CurrentHook');
+        $connectAddress = $this->GetConnectURL();
+        $form['elements'][] = [
+            'type' => 'Label',
+            'caption' => 'Redirect URI: ' . $connectAddress . $hookPath
         ];
+
+        return json_encode($form);
     }
 
-    public function CreateVehicleInstance($vehicleID)
+    public function GenerateAuthURL()
     {
-        $instanceID = IPS_CreateInstance('{GUID_FUER_SMARTCAR_VEHICLE}'); // GUID der Fahrzeug-Klasse
-        IPS_SetName($instanceID, "Smartcar Vehicle: $vehicleID");
-        IPS_SetProperty($instanceID, 'VehicleID', $vehicleID);
-
-        // Access Token an Fahrzeuginstanz übergeben
-        IPS_SetProperty($instanceID, 'AccessToken', $this->ReadAttributeString('AccessToken'));
-        IPS_ApplyChanges($instanceID);
-    }
-
-    private function GetAccessToken()
-    {
-        $accessToken = $this->ReadAttributeString('AccessToken');
-        if (empty($accessToken)) {
-            // Versuche, das Token mit dem Refresh Token zu erneuern
-            $this->RefreshAccessToken();
-            $accessToken = $this->ReadAttributeString('AccessToken');
-        }
-        return $accessToken;
-    }
-
-    private function RefreshAccessToken()
-    {
-        $refreshToken = $this->ReadAttributeString('RefreshToken');
-        if (!$refreshToken) {
-            return;
-        }
-
         $clientID = $this->ReadPropertyString('ClientID');
         $clientSecret = $this->ReadPropertyString('ClientSecret');
+        $hookPath = $this->ReadAttributeString('CurrentHook');
+        $redirectURI = $this->GetConnectURL() . $hookPath;
 
-        $url = "https://auth.smartcar.com/oauth/token";
+        if (empty($clientID) || empty($clientSecret)) {
+            echo 'Client ID oder Client Secret ist nicht gesetzt!';
+            return;
+        }
+
+        $scopes = ['read_vehicle_info'];
+        $authURL = 'https://connect.smartcar.com/oauth/authorize?' . http_build_query([
+            'response_type' => 'code',
+            'client_id' => $clientID,
+            'redirect_uri' => $redirectURI,
+            'scope' => implode(' ', $scopes),
+            'state' => bin2hex(random_bytes(8)),
+            'mode' => 'live'
+        ]);
+
+        echo $authURL;
+    }
+
+    public function ProcessHookData()
+    {
+        if (!isset($_GET['code'])) {
+            echo 'Fehler: Kein Autorisierungscode erhalten.';
+            return;
+        }
+
+        $authCode = $_GET['code'];
+        $this->RequestAccessToken($authCode);
+        echo 'Smartcar erfolgreich verbunden!';
+    }
+
+    private function RequestAccessToken(string $authCode)
+    {
+        $clientID = $this->ReadPropertyString('ClientID');
+        $clientSecret = $this->ReadPropertyString('ClientSecret');
+        $redirectURI = $this->GetConnectURL() . $this->ReadAttributeString('CurrentHook');
+
+        $url = 'https://auth.smartcar.com/oauth/token';
+        $postData = http_build_query([
+            'grant_type' => 'authorization_code',
+            'code' => $authCode,
+            'redirect_uri' => $redirectURI,
+            'client_id' => $clientID,
+            'client_secret' => $clientSecret
+        ]);
+
+        $response = $this->SendHTTPRequest($url, 'POST', $postData);
+
+        if (isset($response['access_token'], $response['refresh_token'])) {
+            $this->WriteAttributeString('AccessToken', $response['access_token']);
+            $this->WriteAttributeString('RefreshToken', $response['refresh_token']);
+            $this->SetTimerInterval('TokenRefreshTimer', 90 * 60 * 1000);
+        } else {
+            $this->SetTimerInterval('TokenRefreshTimer', 0);
+            $this->SendDebug('RequestAccessToken', 'Token-Austausch fehlgeschlagen!', 0);
+        }
+    }
+
+    public function RefreshAccessToken()
+    {
+        $clientID = $this->ReadPropertyString('ClientID');
+        $clientSecret = $this->ReadPropertyString('ClientSecret');
+        $refreshToken = $this->ReadAttributeString('RefreshToken');
+
+        if (empty($clientID) || empty($clientSecret) || empty($refreshToken)) {
+            $this->SendDebug('RefreshAccessToken', 'Fehler: Fehlende Zugangsdaten!', 0);
+            return;
+        }
+
+        $url = 'https://auth.smartcar.com/oauth/token';
         $postData = http_build_query([
             'grant_type' => 'refresh_token',
             'refresh_token' => $refreshToken,
@@ -121,10 +133,56 @@ class SmartcarConfigurator extends IPSModule
 
         $response = $this->SendHTTPRequest($url, 'POST', $postData);
 
-        if (!empty($response['access_token']) && !empty($response['refresh_token'])) {
+        if (isset($response['access_token'], $response['refresh_token'])) {
             $this->WriteAttributeString('AccessToken', $response['access_token']);
             $this->WriteAttributeString('RefreshToken', $response['refresh_token']);
+        } else {
+            $this->SendDebug('RefreshAccessToken', 'Token-Erneuerung fehlgeschlagen!', 0);
         }
+    }
+
+    private function RegisterHook()
+    {
+        $hookBase = '/hook/smartcar_configurator';
+        $hookPath = $hookBase . $this->InstanceID;
+
+        $webhookInstances = IPS_GetInstanceListByModuleID('{015A6EB8-D6E5-4B93-B496-0D3F77AE9FE1}');
+        if (count($webhookInstances) === 0) {
+            $this->SendDebug('RegisterHook', 'Keine WebHook-Control-Instanz gefunden.', 0);
+            return '';
+        }
+
+        $webhookID = $webhookInstances[0];
+        $hooks = json_decode(IPS_GetProperty($webhookID, 'Hooks'), true);
+
+        if (!is_array($hooks)) {
+            $hooks = [];
+        }
+
+        foreach ($hooks as $hook) {
+            if ($hook['Hook'] === $hookPath) {
+                return $hookPath;
+            }
+        }
+
+        $hooks[] = ['Hook' => $hookPath, 'TargetID' => $this->InstanceID];
+        IPS_SetProperty($webhookID, 'Hooks', json_encode($hooks));
+        IPS_ApplyChanges($webhookID);
+
+        return $hookPath;
+    }
+
+    private function GetConnectURL()
+    {
+        $connectInstances = IPS_GetInstanceListByModuleID('{9486D575-BE8C-4ED8-B5B5-20930E26DE6F}');
+        if (count($connectInstances) === 0) {
+            return '';
+        }
+
+        $connectID = $connectInstances[0];
+        $connectURL = CC_GetUrl($connectID);
+
+        return $connectURL ?: '';
     }
 
     private function SendHTTPRequest($url, $method, $data = '', $headers = [])
@@ -142,45 +200,5 @@ class SmartcarConfigurator extends IPSModule
         $response = file_get_contents($url, false, $context);
 
         return json_decode($response, true);
-    }
-
-    private function RegisterHook()
-    {
-        $hookBase = '/hook/smartcar_configurator';
-        $hookPath = $hookBase . $this->InstanceID;
-
-        $webhookInstances = IPS_GetInstanceListByModuleID('{015A6EB8-D6E5-4B93-B496-0D3F77AE9FE1}');
-        if (count($webhookInstances) === 0) {
-            return false;
-        }
-
-        $webhookID = $webhookInstances[0];
-        $hooks = json_decode(IPS_GetProperty($webhookID, 'Hooks'), true);
-
-        foreach ($hooks as $hook) {
-            if ($hook['Hook'] === $hookPath) {
-                return $hookPath;
-            }
-        }
-
-        $hooks[] = [
-            'Hook' => $hookPath,
-            'TargetID' => $this->InstanceID
-        ];
-
-        IPS_SetProperty($webhookID, 'Hooks', json_encode($hooks));
-        IPS_ApplyChanges($webhookID);
-
-        return $hookPath;
-    }
-
-    private function GetConnectURL()
-    {
-        $connectInstances = IPS_GetInstanceListByModuleID('{9486D575-BE8C-4ED8-B5B5-20930E26DE6F}');
-        if (count($connectInstances) === 0) {
-            return false;
-        }
-
-        return CC_GetUrl($connectInstances[0]);
     }
 }
