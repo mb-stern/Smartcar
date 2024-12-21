@@ -236,7 +236,7 @@ class SmartcarConfigurator extends IPSModule
         }
     
         $connectID = $connectInstances[0];
-        $connectURL = CC_GetUrl($connectID); für Test ausgeschaltet
+        $connectURL = CC_GetUrl($connectID);
     
         if ($connectURL === false || empty($connectURL)) {
             $this->SendDebug('GetConnectURL', 'Connect-Adresse konnte nicht ermittelt werden.', 0);
