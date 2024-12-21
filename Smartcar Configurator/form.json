@@ -1,60 +1,82 @@
 {
   "elements": [
-      {
-          "type": "Label",
-          "caption": "Smartcar Konfigurator"
-      },
-      {
-          "type": "ValidationTextBox",
-          "name": "ClientID",
-          "caption": "Client ID"
-      },
-      {
-          "type": "ValidationTextBox",
-          "name": "ClientSecret",
-          "caption": "Client Secret"
-      },
-      {
-          "type": "ValidationTextBox",
-          "name": "AccessToken",
-          "caption": "Access Token",
-          "visible": false
-      },
-      {
-          "type": "Button",
-          "caption": "Fahrzeuge abrufen",
-          "onClick": "SMCAR_FetchVehicles($id);"
-      },
-      {
-          "type": "List",
-          "name": "Vehicles",
-          "caption": "Gefundene Fahrzeuge",
-          "rowCount": 5,
-          "add": false,
-          "delete": false,
-          "columns": [
-              {
-                  "caption": "Fahrzeug ID",
-                  "name": "id",
-                  "width": "200px"
-              },
-              {
-                  "caption": "Marke",
-                  "name": "make",
-                  "width": "150px"
-              },
-              {
-                  "caption": "Modell",
-                  "name": "model",
-                  "width": "150px"
-              },
-              {
-                  "caption": "Baujahr",
-                  "name": "year",
-                  "width": "100px"
-              }
-          ],
-          "values": []
-      }
+    {
+      "type": "Label",
+      "caption": "Smartcar Konfigurator"
+    },
+    {
+      "type": "ValidationTextBox",
+      "name": "ClientID",
+      "caption": "Client ID"
+    },
+    {
+      "type": "ValidationTextBox",
+      "name": "ClientSecret",
+      "caption": "Client Secret"
+    },
+    {
+      "type": "Label",
+      "caption": "1. Verbindung zu Smartcar herstellen:"
+    },
+    {
+      "type": "Button",
+      "caption": "Smartcar verbinden",
+      "onClick": "SmartcarConfigurator_GenerateAuthURL($id);"
+    },
+    {
+      "type": "Label",
+      "caption": "Nach der Authentifizierung wird der Code automatisch verarbeitet."
+    },
+    {
+      "type": "Label",
+      "caption": "2. Gefundene Fahrzeuge:"
+    },
+    {
+      "type": "Button",
+      "caption": "Fahrzeuge abrufen",
+      "onClick": "SmartcarConfigurator_FetchVehicles($id);"
+    },
+    {
+      "type": "List",
+      "name": "Vehicles",
+      "caption": "Gefundene Fahrzeuge",
+      "rowCount": 5,
+      "add": false,
+      "delete": false,
+      "columns": [
+        {
+          "caption": "Fahrzeug ID",
+          "name": "id",
+          "width": "200px"
+        },
+        {
+          "caption": "Marke",
+          "name": "make",
+          "width": "150px"
+        },
+        {
+          "caption": "Modell",
+          "name": "model",
+          "width": "150px"
+        },
+        {
+          "caption": "Baujahr",
+          "name": "year",
+          "width": "100px"
+        }
+      ],
+      "values": []
+    }
+  ],
+  "actions": [
+    {
+      "type": "Button",
+      "caption": "Instanz für ausgewähltes Fahrzeug erstellen",
+      "onClick": "SmartcarConfigurator_CreateVehicleInstance($id);"
+    },
+    {
+      "type": "Label",
+      "caption": "Hinweis: Wählen Sie ein Fahrzeug aus der Liste aus, bevor Sie eine Instanz erstellen."
+    }
   ]
 }
