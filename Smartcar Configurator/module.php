@@ -300,40 +300,7 @@ class SmartcarConfigurator extends IPSModule
         $this->UpdateFormField('Vehicles', 'values', json_encode($vehicleList));
         echo "Fahrzeuge erfolgreich abgerufen!";
     }
-    
-    public function CreateVehicleInstance(int $instanceID, string $vehicleData)
-    {
-        $vehicle = json_decode($vehicleData, true);
-    
-        if (empty($vehicle) || !isset($vehicle['id'])) {
-            $this->SendDebug('CreateVehicleInstance', 'Fehler: Fahrzeugdaten sind leer oder ungültig!', 0);
-            echo "Fehler: Fahrzeugdaten sind leer oder ungültig!";
-            return;
-        }
-    
-        $vehicleID = $vehicle['id'];
-    
-        // Prüfen, ob die Instanz bereits existiert
-        $existingInstances = IPS_GetInstanceListByModuleID('{F0D3899F-F0FF-66C4-CC26-C8F72CC42B1B}'); // GUID der Fahrzeug-Instanz
-        foreach ($existingInstances as $id) {
-            if (IPS_GetProperty($id, 'VehicleID') === $vehicleID) {
-                $this->SendDebug('CreateVehicleInstance', "Instanz für Fahrzeug $vehicleID existiert bereits: ID $id", 0);
-                echo "Instanz für Fahrzeug $vehicleID existiert bereits!";
-                return;
-            }
-        }
-    
-        // Neue Fahrzeug-Instanz erstellen
-        $newInstanceID = IPS_CreateInstance('{F0D3899F-F0FF-66C4-CC26-C8F72CC42B1B}'); // GUID der Fahrzeug-Instanz
-        IPS_SetName($newInstanceID, "Smartcar Fahrzeug: $vehicleID");
-        IPS_SetProperty($newInstanceID, 'VehicleID', $vehicleID);
-        IPS_SetProperty($newInstanceID, 'AccessToken', $this->ReadAttributeString('AccessToken'));
-        IPS_ApplyChanges($newInstanceID);
-    
-        $this->SendDebug('CreateVehicleInstance', "Instanz für Fahrzeug $vehicleID erstellt: ID $newInstanceID", 0);
-        echo "Instanz für Fahrzeug $vehicleID erfolgreich erstellt!";
-    }
-    
+       
 
 private function GetRedirectURI(): string
 {
