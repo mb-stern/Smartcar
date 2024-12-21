@@ -25,8 +25,8 @@
     },
     {
       "type": "Button",
-      "caption": "Verbindung zu Smartcar",
-      "onClick": "SMCAR_GenerateAuthURL($id);"
+      "caption": "Fahrzeuge abrufen",
+      "onClick": "SMCAR_FetchVehicles($id);"
     },
     {
       "type": "List",
@@ -36,7 +36,10 @@
       "add": false,
       "delete": false,
       "columns": [
-        { "caption": "Fahrzeug ID", "name": "id", "width": "300px" }
+        { "caption": "Fahrzeug ID", "name": "id", "width": "200px" },
+        { "caption": "Marke", "name": "make", "width": "150px" },
+        { "caption": "Modell", "name": "model", "width": "150px" },
+        { "caption": "Baujahr", "name": "year", "width": "100px" }
       ],
       "values": []
     }
