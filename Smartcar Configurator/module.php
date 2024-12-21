@@ -42,6 +42,24 @@ class SmartcarConfigurator extends IPSModule
         }
     }
 
+    public function RequestAction($ident, $value)
+    {
+        switch ($ident) {
+            case 'CreateVehicleInstance':
+                $data = json_decode($value, true);
+                if (isset($data['vehicleID'])) {
+                    $this->CreateVehicleInstance($this->InstanceID, json_encode($this->ReadAttributeString('Vehicles')), $data['vehicleID']);
+                } else {
+                    $this->SendDebug('RequestAction', 'Fehler: Keine Fahrzeug-ID angegeben.', 0);
+                }
+                break;
+
+            default:
+                throw new Exception('Invalid ident');
+        }
+    }
+
+
     public function GetConfigurationForm()
     {
         $form = json_decode(file_get_contents(__DIR__ . '/form.json'), true);
@@ -295,7 +313,7 @@ class SmartcarConfigurator extends IPSModule
         $this->UpdateFormField('Vehicles', 'values', json_encode($vehicles));
     }
 
-    public function CreateVehicleInstance(int $instanceID, string $vehicleListJSON, string $vehicleID, string $make = 'Unbekannt')
+    public function CreateVehicleInstance(int $instanceID, string $vehicleListJSON, string $vehicleID)
     {
         $vehicles = json_decode($vehicleListJSON, true);
     
@@ -315,7 +333,6 @@ class SmartcarConfigurator extends IPSModule
         $newInstanceID = IPS_CreateInstance('{GUID_FUER_SMARTCAR_VEHICLE}');
         IPS_SetName($newInstanceID, "Smartcar Fahrzeug: $vehicleID");
         IPS_SetProperty($newInstanceID, 'VehicleID', $vehicleID);
-        IPS_SetProperty($newInstanceID, 'Make', $make); // Optional
         IPS_ApplyChanges($newInstanceID);
     
         $this->SendDebug('CreateVehicleInstance', "Instanz für Fahrzeug $vehicleID erstellt (ID: $newInstanceID)", 0);
