@@ -332,7 +332,7 @@ public function CreateVehicleInstance(int $instanceID, string $vehicleListJSON, 
     }
 
     // Neue Fahrzeuginstanz erstellen
-    $newInstanceID = IPS_CreateInstance('{GUID_FUER_SMARTCAR_VEHICLE}');
+    $newInstanceID = IPS_CreateInstance('{F0D3899F-F0FF-66C4-CC26-C8F72CC42B1B}');
     IPS_SetName($newInstanceID, "Smartcar Fahrzeug: $vehicleID");
     IPS_SetProperty($newInstanceID, 'VehicleID', $vehicleID);
     IPS_ApplyChanges($newInstanceID);
