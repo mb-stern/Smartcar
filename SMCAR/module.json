@@ -1,10 +1,10 @@
 {
     "id": "{F0D3899F-F0FF-66C4-CC26-C8F72CC42B1B}",
-    "name": "SMCAR",
+    "name": "Smartcar Vehicle",
     "type": 3,
     "vendor": "",
     "aliases": [
-        "Smartcar"
+        "Smartcar Vehicle"
     ],
     "parentRequirements": [],
     "childRequirements": [],

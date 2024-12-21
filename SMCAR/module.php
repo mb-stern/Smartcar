@@ -1,6 +1,6 @@
 <?php
 
-class SMCAR extends IPSModule
+class SmartcarVehicle extends IPSModule
 {
     public function Create()
     {
