@@ -210,17 +210,25 @@ class SmartcarConfigurator extends IPSModule
         echo $authURL;
     }
     
-    private function GetConnectURL()
+    private function GetConnectURL(): string
     {
-        $connectInstances = IPS_GetInstanceListByModuleID('{9486D575-BE8C-4ED8-B5B5-20930E26DE6F}');
+        $connectInstances = IPS_GetInstanceListByModuleID('{9486D575-BE8C-4ED8-B5B5-20930E26DE6F}'); // GUID der Symcon-Connect-Instanz
         if (count($connectInstances) === 0) {
-            return false;
+            $this->SendDebug('GetConnectURL', 'Keine Symcon-Connect-Instanz gefunden.', 0);
+            return '';
         }
-
+    
         $connectID = $connectInstances[0];
-        return CC_GetUrl($connectID);
+        $connectURL = CC_GetUrl($connectID);
+    
+        if ($connectURL === false || empty($connectURL)) {
+            $this->SendDebug('GetConnectURL', 'Connect-Adresse konnte nicht ermittelt werden.', 0);
+            return '';
+        }
+    
+        return $connectURL;
     }
-
+    
     public function FetchVehicles()
 {
     $accessToken = $this->ReadAttributeString('AccessToken');
