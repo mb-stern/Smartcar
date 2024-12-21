@@ -50,7 +50,7 @@
     {
       "type": "Button",
       "caption": "Instanz für ausgewähltes Fahrzeug erstellen",
-      "onClick": "IPS_RequestAction($id, 'CreateVehicleInstance', json_encode(['vehicleID' => $Vehicles[0]['id']]));"
+      "onClick": "IPS_RequestAction($id, 'CreateVehicleInstance', json_encode(['vehicleID' => $id]));"
   },
     {
       "type": "Label",
