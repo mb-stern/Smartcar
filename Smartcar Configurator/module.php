@@ -312,20 +312,26 @@ private function GetRedirectURI(): string
     return $redirectURI;
 }
 
-public function CreateVehicleInstance(int $instanceID, string $vehicleData)
+public function CreateVehicleInstance(int $instanceID, string $vehicleListJSON, string $vehicleID)
 {
-    $vehicle = json_decode($vehicleData, true);
+    $vehicles = json_decode($vehicleListJSON, true);
 
-    if (empty($vehicle) || !isset($vehicle['id'])) {
-        $this->SendDebug('CreateVehicleInstance', 'Fehler: Fahrzeugdaten sind leer oder ungültig!', 0);
-        echo "Fehler: Fahrzeugdaten sind leer oder ungültig!";
+    if (empty($vehicles) || !isset($vehicleID)) {
+        $this->SendDebug('CreateVehicleInstance', 'Fehler: Ungültige Fahrzeugdaten!', 0);
+        echo "Fehler: Ungültige Fahrzeugdaten!";
         return;
     }
 
-    $vehicleID = $vehicle['id'];
+    // Prüfen, ob die Fahrzeug-ID in der Liste existiert
+    $selectedVehicle = array_filter($vehicles, fn($v) => $v['id'] === $vehicleID);
+    if (empty($selectedVehicle)) {
+        $this->SendDebug('CreateVehicleInstance', 'Fahrzeug-ID nicht in der Liste gefunden!', 0);
+        echo "Fehler: Fahrzeug-ID nicht in der Liste gefunden!";
+        return;
+    }
 
     // Prüfen, ob die Instanz bereits existiert
-    $existingInstances = IPS_GetInstanceListByModuleID('{F0D3899F-F0FF-66C4-CC26-C8F72CC42B1B}'); // GUID der Fahrzeug-Instanz
+    $existingInstances = IPS_GetInstanceListByModuleID('{GUID_FUER_SMARTCAR_VEHICLE}');
     foreach ($existingInstances as $id) {
         if (IPS_GetProperty($id, 'VehicleID') === $vehicleID) {
             $this->SendDebug('CreateVehicleInstance', "Instanz für Fahrzeug $vehicleID existiert bereits: ID $id", 0);
@@ -334,8 +340,8 @@ public function CreateVehicleInstance(int $instanceID, string $vehicleData)
         }
     }
 
-    // Neue Fahrzeug-Instanz erstellen
-    $newInstanceID = IPS_CreateInstance('{F0D3899F-F0FF-66C4-CC26-C8F72CC42B1B}'); // GUID der Fahrzeug-Instanz
+    // Neue Instanz erstellen
+    $newInstanceID = IPS_CreateInstance('{GUID_FUER_SMARTCAR_VEHICLE}');
     IPS_SetName($newInstanceID, "Smartcar Fahrzeug: $vehicleID");
     IPS_SetProperty($newInstanceID, 'VehicleID', $vehicleID);
     IPS_SetProperty($newInstanceID, 'AccessToken', $this->ReadAttributeString('AccessToken'));
