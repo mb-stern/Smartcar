@@ -185,24 +185,63 @@ class SmartcarConfigurator extends IPSModule
 
     private function RegisterHook()
     {
-        $hookPath = '/hook/smartcar_' . $this->InstanceID;
-        $this->WriteAttributeString('CurrentHook', $hookPath);
-
-        $ids = IPS_GetInstanceListByModuleID('{MODULE_ID_VON_WEBHOOK_CONTROL}');
-        if (count($ids) > 0) {
-            $webhookID = $ids[0];
-            $hooks = json_decode(IPS_GetProperty($webhookID, 'Hooks'), true);
-            $hooks[] = ['Hook' => $hookPath, 'TargetID' => $this->InstanceID];
-            IPS_SetProperty($webhookID, 'Hooks', json_encode($hooks));
-            IPS_ApplyChanges($webhookID);
+        $hookBase = '/hook/smartcar_';
+        $hookPath = $this->ReadAttributeString("CurrentHook");
+    
+        // Wenn kein Hook registriert ist, einen neuen erstellen
+        if ($hookPath === "") {
+            $hookPath = $hookBase . $this->InstanceID;
+            $this->WriteAttributeString("CurrentHook", $hookPath);
         }
-
+    
+        $ids = IPS_GetInstanceListByModuleID('{9486D575-BE8C-4ED8-B5B5-20930E26DE6F}'); // GUID der WebHook-Control-Instanz
+        if (count($ids) === 0) {
+            $this->SendDebug('RegisterHook', 'Keine WebHook-Control-Instanz gefunden.', 0);
+            return $hookPath;
+        }
+    
+        $hookInstanceID = $ids[0];
+        $hooks = json_decode(IPS_GetProperty($hookInstanceID, 'Hooks'), true);
+    
+        if (!is_array($hooks)) {
+            $hooks = [];
+        }
+    
+        // Prüfen, ob der Hook bereits existiert
+        foreach ($hooks as $hook) {
+            if ($hook['Hook'] === $hookPath && $hook['TargetID'] === $this->InstanceID) {
+                $this->SendDebug('RegisterHook', "Hook '$hookPath' ist bereits registriert.", 0);
+                return $hookPath;
+            }
+        }
+    
+        // Neuen Hook hinzufügen
+        $hooks[] = ['Hook' => $hookPath, 'TargetID' => $this->InstanceID];
+        IPS_SetProperty($hookInstanceID, 'Hooks', json_encode($hooks));
+        IPS_ApplyChanges($hookInstanceID);
+        $this->SendDebug('RegisterHook', "Hook '$hookPath' wurde registriert.", 0);
         return $hookPath;
     }
+    
 
     private function GetConnectURL()
     {
-        $connectID = IPS_GetInstanceListByModuleID('{GUID_VON_SYMCON_CONNECT}')[0];
-        return CC_GetUrl($connectID);
+        $connectInstances = IPS_GetInstanceListByModuleID('{9486D575-BE8C-4ED8-B5B5-20930E26DE6F}'); // GUID der Symcon-Connect-Instanz
+        if (count($connectInstances) === 0) {
+            $this->SendDebug('GetConnectURL', 'Keine Symcon-Connect-Instanz gefunden.', 0);
+            return false;
+        }
+    
+        $connectID = $connectInstances[0];
+        $connectURL = CC_GetUrl($connectID);
+    
+        if ($connectURL === false || empty($connectURL)) {
+            $this->SendDebug('GetConnectURL', 'Connect-Adresse konnte nicht ermittelt werden.', 0);
+            return false;
+        }
+    
+        $this->SendDebug('GetConnectURL', "Ermittelte Connect-Adresse: $connectURL", 0);
+        return $connectURL;
     }
+    
 }
