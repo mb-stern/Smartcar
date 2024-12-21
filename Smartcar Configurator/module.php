@@ -278,13 +278,12 @@ class SmartcarConfigurator extends IPSModule
         $data = json_decode($response, true);
         $this->SendDebug('FetchVehicles', 'API-Antwort: ' . json_encode($data), 0);
     
-        if (!isset($data['vehicles']) || !is_array($data['vehicles'])) {
-            $this->SendDebug('FetchVehicles', 'Fehler: Keine Fahrzeuge gefunden!', 0);
-            echo "Fehler: Keine Fahrzeuge gefunden!";
+        if (!isset($data['vehicles']) || !is_array($data['vehicles']) || count($data['vehicles']) === 0) {
+            $this->SendDebug('FetchVehicles', 'Keine Fahrzeuge gefunden oder leere Liste.', 0);
+            echo "Keine Fahrzeuge gefunden!";
             return;
         }
     
-        // Fahrzeuge und Paging-Daten aufbereiten
         $vehicleList = [];
         foreach ($data['vehicles'] as $vehicleID) {
             $vehicleList[] = [
@@ -295,10 +294,11 @@ class SmartcarConfigurator extends IPSModule
             ];
         }
     
-        // Fahrzeugdaten in die Konfiguration einfügen
+        $this->SendDebug('FetchVehicles', 'Gefundene Fahrzeuge: ' . json_encode($vehicleList), 0);
         $this->UpdateFormField('Vehicles', 'values', json_encode($vehicleList));
         echo "Fahrzeuge erfolgreich abgerufen!";
     }
+    
     
 
 private function GetRedirectURI(): string
