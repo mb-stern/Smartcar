@@ -153,36 +153,38 @@ class SmartcarConfigurator extends IPSModule
     {
         $hookBase = '/hook/smartcar_configurator';
         $hookPath = $hookBase . $this->InstanceID;
-
-        $webhookInstances = IPS_GetInstanceListByModuleID('{015A6EB8-D6E5-4B93-B496-0D3F77AE9FE1}');
+    
+        $webhookInstances = IPS_GetInstanceListByModuleID('{015A6EB8-D6E5-4B93-B496-0D3F77AE9FE1}'); // WebHook-Control GUID
         if (count($webhookInstances) === 0) {
             $this->SendDebug('RegisterHook', 'Keine WebHook-Control-Instanz gefunden.', 0);
-            return false;
+            return '';
         }
-
+    
         $webhookID = $webhookInstances[0];
         $hooks = json_decode(IPS_GetProperty($webhookID, 'Hooks'), true);
-
+    
         if (!is_array($hooks)) {
             $hooks = [];
         }
-
+    
         foreach ($hooks as $hook) {
             if ($hook['Hook'] === $hookPath) {
+                $this->SendDebug('RegisterHook', "Hook '$hookPath' ist bereits registriert.", 0);
                 return $hookPath;
             }
         }
-
+    
         $hooks[] = [
             'Hook' => $hookPath,
             'TargetID' => $this->InstanceID
         ];
-
+    
         IPS_SetProperty($webhookID, 'Hooks', json_encode($hooks));
         IPS_ApplyChanges($webhookID);
-
+        $this->SendDebug('RegisterHook', "Hook '$hookPath' erfolgreich registriert.", 0);
         return $hookPath;
     }
+    
 
     public function GenerateAuthURL()
     {
@@ -286,13 +288,18 @@ private function GetRedirectURI(): string
     $hookPath = $this->ReadAttributeString('CurrentHook');
     $connectURL = $this->GetConnectURL();
 
-    if (empty($hookPath) || empty($connectURL)) {
-        $this->SendDebug('GetRedirectURI', 'Fehler: Hook oder Connect-Adresse ist nicht verfügbar.', 0);
+    if (empty($hookPath)) {
+        $this->SendDebug('GetRedirectURI', 'Hook-Pfad fehlt.', 0);
         return '';
     }
 
-    return $connectURL . $hookPath;
+    if (empty($connectURL)) {
+        $this->SendDebug('GetRedirectURI', 'Connect-URL fehlt.', 0);
+        return '';
+    }
+
+    $redirectURI = $connectURL . $hookPath;
+    $this->SendDebug('GetRedirectURI', "Ermittelte Redirect URI: $redirectURI", 0);
+    return $redirectURI;
 }
-
-
 }
