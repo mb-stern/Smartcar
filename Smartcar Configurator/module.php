@@ -8,10 +8,11 @@ class SmartcarConfigurator extends IPSModule
 
         $this->RegisterPropertyString('ClientID', '');
         $this->RegisterPropertyString('ClientSecret', '');
-        $this->RegisterPropertyString('Mode', 'simulated'); // Standardmodus ist "simuliert"
         $this->RegisterAttributeString('AccessToken', '');
         $this->RegisterAttributeString('RefreshToken', '');
+        $this->RegisterAttributeString('RedirectURI', '');
         $this->RegisterAttributeString('CurrentHook', '');
+        $this->RegisterPropertyString('Mode', 'simulated');
 
         $this->RegisterTimer('TokenRefreshTimer', 0, 'SC_RefreshAccessToken($id);');
     }
@@ -40,7 +41,6 @@ class SmartcarConfigurator extends IPSModule
             $this->SendDebug('ApplyChanges', 'Aktueller Modus: ' . $this->ReadPropertyString('Mode'), 0);
             $this->RegisterHook();
         }
-
     }
 
     public function GetConfigurationForm()
