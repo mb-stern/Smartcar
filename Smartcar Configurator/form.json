@@ -26,7 +26,7 @@
     {
       "type": "Button",
       "caption": "Smartcar verbinden",
-      "onClick": "SmartcarConfigurator_GenerateAuthURL($id);"
+      "onClick": "SMCAR_GenerateAuthURL($id);"
     },
     {
       "type": "List",
@@ -48,7 +48,7 @@
     {
       "type": "Button",
       "caption": "Instanz für ausgewähltes Fahrzeug erstellen",
-      "onClick": "SmartcarConfigurator_CreateVehicleInstance($id);"
+      "onClick": "SMCAR_CreateVehicleInstance($id);"
     },
     {
       "type": "Label",
