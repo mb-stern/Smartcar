@@ -331,7 +331,7 @@ public function CreateVehicleInstance(int $instanceID, string $vehicleID)
     }
 
     // Prüfen, ob die Instanz bereits existiert
-    $existingInstances = IPS_GetInstanceListByModuleID('{GUID_FUER_SMARTCAR_VEHICLE}'); // GUID der Fahrzeug-Instanz
+    $existingInstances = IPS_GetInstanceListByModuleID('{F0D3899F-F0FF-66C4-CC26-C8F72CC42B1B}'); // GUID der Fahrzeug-Instanz
     foreach ($existingInstances as $id) {
         if (IPS_GetProperty($id, 'VehicleID') === $vehicleID) {
             $this->SendDebug('CreateVehicleInstance', "Instanz für Fahrzeug $vehicleID existiert bereits: ID $id", 0);
@@ -341,7 +341,7 @@ public function CreateVehicleInstance(int $instanceID, string $vehicleID)
     }
 
     // Neue Fahrzeug-Instanz erstellen
-    $newInstanceID = IPS_CreateInstance('{GUID_FUER_SMARTCAR_VEHICLE}'); // GUID der Fahrzeug-Instanz
+    $newInstanceID = IPS_CreateInstance('{F0D3899F-F0FF-66C4-CC26-C8F72CC42B1B}'); // GUID der Fahrzeug-Instanz
     IPS_SetName($newInstanceID, "Smartcar Fahrzeug: $vehicleID");
     IPS_SetProperty($newInstanceID, 'VehicleID', $vehicleID);
     IPS_SetProperty($newInstanceID, 'AccessToken', $this->ReadAttributeString('AccessToken'));
