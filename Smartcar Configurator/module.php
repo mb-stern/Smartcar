@@ -114,7 +114,7 @@ class SmartcarConfigurator extends IPSModule
         return null;
     }
 
-    private function ReloadForm()
+    protected function ReloadForm()
     {
         IPS_SetProperty($this->InstanceID, 'Form', $this->GetConfigurationForm());
         IPS_ApplyChanges($this->InstanceID);
