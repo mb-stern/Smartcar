@@ -15,6 +15,10 @@ class SmartcarConfigurator extends IPSModule
         $this->RegisterPropertyString('Mode', 'simulated');
 
         $this->RegisterTimer('TokenRefreshTimer', 0, 'SC_RefreshAccessToken($id);');
+
+        // Registriere die öffentliche Funktion
+        $this->RegisterMessage($this->InstanceID, IPS_KERNELMESSAGE);
+        $this->RegisterScript('CreateVehicleInstance', 'SMCAR_CreateVehicleInstance', 'CreateVehicleInstance');
     }
 
     public function ApplyChanges()
@@ -325,4 +329,34 @@ private function GetRedirectURI(): string
     $this->SendDebug('GetRedirectURI', "Ermittelte Redirect URI: $redirectURI", 0);
     return $redirectURI;
 }
+
+public function CreateVehicleInstance(string $vehicleID)
+{
+    if (empty($vehicleID)) {
+        $this->SendDebug('CreateVehicleInstance', 'Fehler: Fahrzeug-ID ist leer!', 0);
+        echo "Fehler: Fahrzeug-ID ist leer!";
+        return;
+    }
+
+    // Prüfen, ob die Instanz bereits existiert
+    $existingInstances = IPS_GetInstanceListByModuleID('{GUID_FUER_SMARTCAR_VEHICLE}'); // GUID der Fahrzeug-Instanz
+    foreach ($existingInstances as $instanceID) {
+        if (IPS_GetProperty($instanceID, 'VehicleID') === $vehicleID) {
+            $this->SendDebug('CreateVehicleInstance', "Instanz für Fahrzeug $vehicleID existiert bereits: ID $instanceID", 0);
+            echo "Instanz für Fahrzeug $vehicleID existiert bereits!";
+            return;
+        }
+    }
+
+    // Neue Fahrzeug-Instanz erstellen
+    $instanceID = IPS_CreateInstance('{GUID_FUER_SMARTCAR_VEHICLE}'); // GUID der Fahrzeug-Instanz
+    IPS_SetName($instanceID, "Smartcar Fahrzeug: $vehicleID");
+    IPS_SetProperty($instanceID, 'VehicleID', $vehicleID);
+    IPS_SetProperty($instanceID, 'AccessToken', $this->ReadAttributeString('AccessToken'));
+    IPS_ApplyChanges($instanceID);
+
+    $this->SendDebug('CreateVehicleInstance', "Instanz für Fahrzeug $vehicleID erstellt: ID $instanceID", 0);
+    echo "Instanz für Fahrzeug $vehicleID erfolgreich erstellt!";
+}
+
 }
