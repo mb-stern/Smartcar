@@ -52,59 +52,58 @@ class SmartcarConfigurator extends IPSModule
     {
         if (!isset($_GET['code'])) {
             $this->SendDebug('ProcessHookData', 'Kein Autorisierungscode erhalten.', 0);
-            http_response_code(400);
-            echo "Fehler: Kein Code erhalten.";
+            echo "Fehler: Kein Code erhalten!";
             return;
         }
-
+    
         $authCode = $_GET['code'];
-        $state = $_GET['state'] ?? '';
-
-        $this->SendDebug('ProcessHookData', "Autorisierungscode erhalten: $authCode, State: $state", 0);
-
+        $this->SendDebug('ProcessHookData', "Autorisierten Code erhalten: $authCode", 0);
+    
+        // Tausche den Authorization Code gegen Access Token
         $this->RequestAccessToken($authCode);
-        echo "Fahrzeug erfolgreich verbunden!";
+    
+        echo "Erfolgreich mit Smartcar verbunden!";
     }
+    
 
     private function RequestAccessToken(string $authCode)
     {
         $clientID = $this->ReadPropertyString('ClientID');
         $clientSecret = $this->ReadPropertyString('ClientSecret');
-        $redirectURI = $this->ReadAttributeString('RedirectURI');
-
+        $redirectURI = $this->GetRedirectURI();
+    
         $url = "https://auth.smartcar.com/oauth/token";
-
-        $postData = http_build_query([
+    
+        $postData = [
             'grant_type' => 'authorization_code',
             'code' => $authCode,
             'redirect_uri' => $redirectURI,
             'client_id' => $clientID,
             'client_secret' => $clientSecret
-        ]);
-
+        ];
+    
         $options = [
             'http' => [
                 'header' => "Content-Type: application/x-www-form-urlencoded\r\n",
                 'method' => 'POST',
-                'content' => $postData,
+                'content' => http_build_query($postData),
                 'ignore_errors' => true
             ]
         ];
-
+    
         $context = stream_context_create($options);
         $response = file_get_contents($url, false, $context);
         $responseData = json_decode($response, true);
-
-        if (isset($responseData['access_token'], $responseData['refresh_token'])) {
+    
+        if (isset($responseData['access_token'])) {
             $this->WriteAttributeString('AccessToken', $responseData['access_token']);
             $this->WriteAttributeString('RefreshToken', $responseData['refresh_token']);
-            $this->SendDebug('RequestAccessToken', 'Access und Refresh Token gespeichert!', 0);
-            $this->ApplyChanges();
+            $this->SendDebug('RequestAccessToken', 'Access und Refresh Token erfolgreich erhalten.', 0);
         } else {
-            $this->SendDebug('RequestAccessToken', 'Token-Austausch fehlgeschlagen!', 0);
-            $this->LogMessage('Token-Austausch fehlgeschlagen.', KL_ERROR);
+            $this->SendDebug('RequestAccessToken', 'Fehler beim Abrufen des Tokens: ' . $response, 0);
         }
     }
+    
 
     public function RefreshAccessToken()
     {
@@ -185,6 +184,27 @@ class SmartcarConfigurator extends IPSModule
         return $hookPath;
     }
 
+    public function GenerateAuthURL()
+{
+    $clientID = $this->ReadPropertyString('ClientID');
+    $redirectURI = $this->GetRedirectURI(); // Dynamische Redirect URI
+    $scopes = ['read_vehicle_info', 'read_odometer']; // Beispiel-Scopes
+    $state = bin2hex(random_bytes(8)); // Sicherheitswert
+
+    $authURL = "https://connect.smartcar.com/oauth/authorize?" . http_build_query([
+        'response_type' => 'code',
+        'client_id' => $clientID,
+        'redirect_uri' => $redirectURI,
+        'scope' => implode(' ', $scopes),
+        'state' => $state,
+        'mode' => 'live'
+    ]);
+
+    $this->SendDebug('GenerateAuthURL', "Auth URL: $authURL", 0);
+    return $authURL;
+}
+
+
     private function GetConnectURL()
     {
         $connectInstances = IPS_GetInstanceListByModuleID('{9486D575-BE8C-4ED8-B5B5-20930E26DE6F}');
@@ -195,7 +215,7 @@ class SmartcarConfigurator extends IPSModule
         $connectID = $connectInstances[0];
         return CC_GetUrl($connectID);
     }
-    
+
     public function FetchVehicles()
 {
     $accessToken = $this->ReadAttributeString('AccessToken');
