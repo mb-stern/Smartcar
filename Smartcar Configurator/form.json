@@ -34,7 +34,7 @@
     {
       "type": "Button",
       "caption": "Fahrzeuge abrufen",
-      "onClick": "SmartcarConfigurator_FetchVehicles($id);"
+      "onClick": "SMCAR_FetchVehicles($id);"
     },
     {
       "type": "List",
@@ -72,7 +72,7 @@
     {
       "type": "Button",
       "caption": "Instanz für ausgewähltes Fahrzeug erstellen",
-      "onClick": "SmartcarConfigurator_CreateVehicleInstance($id);"
+      "onClick": "SMCAR_CreateVehicleInstance($id);"
     },
     {
       "type": "Label",
