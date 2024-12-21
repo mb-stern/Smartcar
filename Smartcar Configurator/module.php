@@ -8,9 +8,9 @@ class SmartcarConfigurator extends IPSModule
 
         $this->RegisterPropertyString('ClientID', '');
         $this->RegisterPropertyString('ClientSecret', '');
+        $this->RegisterPropertyString('Mode', 'simulated'); // Standardmodus ist "simuliert"
         $this->RegisterAttributeString('AccessToken', '');
         $this->RegisterAttributeString('RefreshToken', '');
-        $this->RegisterAttributeString('RedirectURI', '');
         $this->RegisterAttributeString('CurrentHook', '');
 
         $this->RegisterTimer('TokenRefreshTimer', 0, 'SC_RefreshAccessToken($id);');
@@ -34,6 +34,13 @@ class SmartcarConfigurator extends IPSModule
         } else {
             $this->SetTimerInterval('TokenRefreshTimer', 0);
         }
+
+        {
+            parent::ApplyChanges();
+            $this->SendDebug('ApplyChanges', 'Aktueller Modus: ' . $this->ReadPropertyString('Mode'), 0);
+            $this->RegisterHook();
+        }
+
     }
 
     public function GetConfigurationForm()
@@ -190,14 +197,21 @@ class SmartcarConfigurator extends IPSModule
     {
         $clientID = $this->ReadPropertyString('ClientID');
         $redirectURI = $this->GetRedirectURI();
+        $mode = $this->ReadPropertyString('Mode');
     
         if (empty($clientID) || empty($redirectURI)) {
-            echo 'Fehler: Client ID oder Redirect URI ist nicht gesetzt!';
+            echo "Fehler: Client ID oder Redirect URI ist nicht gesetzt!";
             return;
         }
     
         $scopes = [
-            'read_vehicle_info'
+            'read_vehicle_info',
+            'read_location',
+            'read_odometer',
+            'read_battery',
+            'read_charge',
+            'control_charge',
+            'control_security'
         ];
     
         $authURL = 'https://connect.smartcar.com/oauth/authorize?' . http_build_query([
@@ -206,9 +220,10 @@ class SmartcarConfigurator extends IPSModule
             'redirect_uri' => $redirectURI,
             'scope' => implode(' ', $scopes),
             'state' => bin2hex(random_bytes(8)),
-            'mode' => 'live'
+            'mode' => $mode
         ]);
     
+        $this->SendDebug('GenerateAuthURL', "Generierte Authentifizierungs-URL: $authURL", 0);
         echo $authURL;
     }
     

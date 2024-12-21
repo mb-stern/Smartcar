@@ -15,26 +15,18 @@
       "caption": "Client Secret"
     },
     {
-      "type": "Label",
-      "caption": "1. Verbindung zu Smartcar herstellen:"
+      "type": "Select",
+      "name": "Mode",
+      "caption": "Betriebsmodus",
+      "options": [
+        { "caption": "Simuliert", "value": "simulated" },
+        { "caption": "Live", "value": "live" }
+      ]
     },
     {
       "type": "Button",
       "caption": "Smartcar verbinden",
-      "onClick": "SMCAR_GenerateAuthURL($id);"
-    },
-    {
-      "type": "Label",
-      "caption": "Nach der Authentifizierung wird der Code automatisch verarbeitet."
-    },
-    {
-      "type": "Label",
-      "caption": "2. Gefundene Fahrzeuge:"
-    },
-    {
-      "type": "Button",
-      "caption": "Fahrzeuge abrufen",
-      "onClick": "SMCAR_FetchVehicles($id);"
+      "onClick": "SmartcarConfigurator_GenerateAuthURL($id);"
     },
     {
       "type": "List",
@@ -44,26 +36,10 @@
       "add": false,
       "delete": false,
       "columns": [
-        {
-          "caption": "Fahrzeug ID",
-          "name": "id",
-          "width": "200px"
-        },
-        {
-          "caption": "Marke",
-          "name": "make",
-          "width": "150px"
-        },
-        {
-          "caption": "Modell",
-          "name": "model",
-          "width": "150px"
-        },
-        {
-          "caption": "Baujahr",
-          "name": "year",
-          "width": "100px"
-        }
+        { "caption": "Fahrzeug ID", "name": "id", "width": "200px" },
+        { "caption": "Marke", "name": "make", "width": "150px" },
+        { "caption": "Modell", "name": "model", "width": "150px" },
+        { "caption": "Baujahr", "name": "year", "width": "100px" }
       ],
       "values": []
     }
@@ -72,7 +48,7 @@
     {
       "type": "Button",
       "caption": "Instanz für ausgewähltes Fahrzeug erstellen",
-      "onClick": "SMCAR_CreateVehicleInstance($id);"
+      "onClick": "SmartcarConfigurator_CreateVehicleInstance($id);"
     },
     {
       "type": "Label",
