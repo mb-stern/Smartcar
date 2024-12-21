@@ -330,7 +330,7 @@ private function GetRedirectURI(): string
     return $redirectURI;
 }
 
-public function CreateVehicleInstance(string $vehicleID)
+public function CreateVehicleInstance(int $instanceID, string $vehicleID)
 {
     if (empty($vehicleID)) {
         $this->SendDebug('CreateVehicleInstance', 'Fehler: Fahrzeug-ID ist leer!', 0);
@@ -340,22 +340,22 @@ public function CreateVehicleInstance(string $vehicleID)
 
     // Prüfen, ob die Instanz bereits existiert
     $existingInstances = IPS_GetInstanceListByModuleID('{GUID_FUER_SMARTCAR_VEHICLE}'); // GUID der Fahrzeug-Instanz
-    foreach ($existingInstances as $instanceID) {
-        if (IPS_GetProperty($instanceID, 'VehicleID') === $vehicleID) {
-            $this->SendDebug('CreateVehicleInstance', "Instanz für Fahrzeug $vehicleID existiert bereits: ID $instanceID", 0);
+    foreach ($existingInstances as $id) {
+        if (IPS_GetProperty($id, 'VehicleID') === $vehicleID) {
+            $this->SendDebug('CreateVehicleInstance', "Instanz für Fahrzeug $vehicleID existiert bereits: ID $id", 0);
             echo "Instanz für Fahrzeug $vehicleID existiert bereits!";
             return;
         }
     }
 
     // Neue Fahrzeug-Instanz erstellen
-    $instanceID = IPS_CreateInstance('{GUID_FUER_SMARTCAR_VEHICLE}'); // GUID der Fahrzeug-Instanz
-    IPS_SetName($instanceID, "Smartcar Fahrzeug: $vehicleID");
-    IPS_SetProperty($instanceID, 'VehicleID', $vehicleID);
-    IPS_SetProperty($instanceID, 'AccessToken', $this->ReadAttributeString('AccessToken'));
-    IPS_ApplyChanges($instanceID);
+    $newInstanceID = IPS_CreateInstance('{GUID_FUER_SMARTCAR_VEHICLE}'); // GUID der Fahrzeug-Instanz
+    IPS_SetName($newInstanceID, "Smartcar Fahrzeug: $vehicleID");
+    IPS_SetProperty($newInstanceID, 'VehicleID', $vehicleID);
+    IPS_SetProperty($newInstanceID, 'AccessToken', $this->ReadAttributeString('AccessToken'));
+    IPS_ApplyChanges($newInstanceID);
 
-    $this->SendDebug('CreateVehicleInstance', "Instanz für Fahrzeug $vehicleID erstellt: ID $instanceID", 0);
+    $this->SendDebug('CreateVehicleInstance', "Instanz für Fahrzeug $vehicleID erstellt: ID $newInstanceID", 0);
     echo "Instanz für Fahrzeug $vehicleID erfolgreich erstellt!";
 }
 
