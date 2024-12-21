@@ -195,4 +195,57 @@ class SmartcarConfigurator extends IPSModule
         $connectID = $connectInstances[0];
         return CC_GetUrl($connectID);
     }
+
+    public function FetchVehicles()
+{
+    $accessToken = $this->ReadAttributeString('AccessToken');
+    
+    if (empty($accessToken)) {
+        $this->SendDebug('FetchVehicles', 'Access Token ist leer!', 0);
+        echo "Fehler: Kein Access Token vorhanden!";
+        return;
+    }
+    
+    $url = "https://api.smartcar.com/v2.0/vehicles";
+
+    $options = [
+        'http' => [
+            'header' => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
+            'method' => 'GET',
+            'ignore_errors' => true
+        ]
+    ];
+
+    $context = stream_context_create($options);
+    $response = @file_get_contents($url, false, $context);
+
+    if ($response === false) {
+        $this->SendDebug('FetchVehicles', 'Fehler: Keine Antwort von der API!', 0);
+        echo "Fehler: Keine Antwort von der API!";
+        return;
+    }
+
+    $data = json_decode($response, true);
+    $this->SendDebug('FetchVehicles', 'API-Antwort: ' . json_encode($data), 0);
+
+    if (!isset($data['vehicles']) || !is_array($data['vehicles'])) {
+        $this->SendDebug('FetchVehicles', 'Fehler: Keine Fahrzeuge gefunden!', 0);
+        echo "Fehler: Keine Fahrzeuge gefunden!";
+        return;
+    }
+
+    $vehicles = [];
+    foreach ($data['vehicles'] as $vehicleID) {
+        $vehicles[] = [
+            'id'    => $vehicleID,
+            'make'  => 'Unbekannt',
+            'model' => 'Unbekannt',
+            'year'  => 0
+        ];
+    }
+
+    $this->UpdateFormField('Vehicles', 'values', json_encode($vehicles));
+    echo "Fahrzeuge erfolgreich abgerufen!";
+}
+
 }
