@@ -248,6 +248,7 @@ class SmartcarConfigurator extends IPSModule
     
     public function FetchVehicles()
     {
+        // Access Token aus den Attributen lesen
         $accessToken = $this->ReadAttributeString('AccessToken');
     
         if (empty($accessToken)) {
@@ -256,8 +257,10 @@ class SmartcarConfigurator extends IPSModule
             return;
         }
     
+        // API-Endpunkt für die Fahrzeugabfrage
         $url = "https://api.smartcar.com/v2.0/vehicles";
     
+        // HTTP-Optionen mit Authorization Header
         $options = [
             'http' => [
                 'header' => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
@@ -266,24 +269,29 @@ class SmartcarConfigurator extends IPSModule
             ]
         ];
     
+        // Anfrage an die API senden
         $context = stream_context_create($options);
         $response = @file_get_contents($url, false, $context);
     
+        // Fehlerbehandlung bei fehlgeschlagener API-Anfrage
         if ($response === false) {
             $this->SendDebug('FetchVehicles', 'Fehler: Keine Antwort von der API!', 0);
             echo "Fehler: Keine Antwort von der API!";
             return;
         }
     
+        // JSON-Antwort dekodieren
         $data = json_decode($response, true);
         $this->SendDebug('FetchVehicles', 'API-Antwort: ' . json_encode($data), 0);
     
+        // Prüfen, ob Fahrzeuge zurückgegeben wurden
         if (!isset($data['vehicles']) || !is_array($data['vehicles']) || count($data['vehicles']) === 0) {
             $this->SendDebug('FetchVehicles', 'Keine Fahrzeuge gefunden oder leere Liste.', 0);
             echo "Keine Fahrzeuge gefunden!";
             return;
         }
     
+        // Fahrzeuge in die Liste aufnehmen
         $vehicleList = [];
         foreach ($data['vehicles'] as $vehicleID) {
             $vehicleList[] = [
@@ -294,11 +302,13 @@ class SmartcarConfigurator extends IPSModule
             ];
         }
     
+        // Debug-Ausgabe der gefundenen Fahrzeuge
         $this->SendDebug('FetchVehicles', 'Gefundene Fahrzeuge: ' . json_encode($vehicleList), 0);
+    
+        // Fahrzeugliste im Formular aktualisieren
         $this->UpdateFormField('Vehicles', 'values', json_encode($vehicleList));
         echo "Fahrzeuge erfolgreich abgerufen!";
     }
-    
     
 
 private function GetRedirectURI(): string
