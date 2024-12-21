@@ -1,17 +1,16 @@
 {
-    "id": "{E3F5A7C9-4F2B-4E5B-A7C8-77E3D4C9C5E6}",
-    "name": "Smartcar Configurator",
-    "type": 4,
-    "vendor": "",
-    "aliases": [
+  "id": "{E3F5A7C9-4F2B-4E5B-A7C8-77E3D4C9C5E6}",
+  "name": "Smartcar Configurator",
+  "type": 4,
+  "vendor": "",
+  "aliases": [
       "Smartcar Configurator"
-    ],
-    "parentRequirements": [],
-    "childRequirements": [
+  ],
+  "parentRequirements": [],
+  "childRequirements": [
       "{F0D3899F-F0FF-66C4-CC26-C8F72CC42B1B}"
-    ],
-    "implemented": [],
-    "prefix": "SMCAR",
-    "url": "https://github.com/your-repo/smartcar-configurator"
-  }
-  
+  ],
+  "implemented": [],
+  "prefix": "SMCAR",
+  "url": "https://github.com/your-repo/smartcar-configurator"
+}
