@@ -117,28 +117,58 @@ class SmartcarConfigurator extends IPSModule
 
     public function FetchVehicles()
     {
-        $accessToken = $this->ReadAttributeString('AccessToken');
-        if (!$accessToken) {
-            echo 'Access Token fehlt!';
+        $accessToken = $this->ReadPropertyString('AccessToken');
+    
+        if (empty($accessToken)) {
+            $this->SendDebug('FetchVehicles', 'Access Token ist leer!', 0);
+            echo "Fehler: Kein Access Token vorhanden!";
             return;
         }
-
-        $url = 'https://api.smartcar.com/v2.0/vehicles';
-        $response = $this->SendHTTPRequest($url, 'GET', '', ["Authorization: Bearer $accessToken"]);
-
-        if (isset($response['vehicles']) && is_array($response['vehicles'])) {
-            $vehicles = [];
-            foreach ($response['vehicles'] as $vehicleID) {
-                $details = $this->FetchVehicleDetails($vehicleID);
-                if ($details) {
-                    $vehicles[] = $details;
-                }
-            }
-            $this->UpdateFormField('Vehicles', 'values', json_encode($vehicles));
-        } else {
-            echo 'Keine Fahrzeuge gefunden.';
+    
+        $url = "https://api.smartcar.com/v2.0/vehicles";
+    
+        $options = [
+            'http' => [
+                'header'  => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
+                'method'  => 'GET',
+                'ignore_errors' => true
+            ]
+        ];
+    
+        $context = stream_context_create($options);
+        $response = @file_get_contents($url, false, $context);
+    
+        if ($response === false) {
+            $this->SendDebug('FetchVehicles', 'Fehler: Keine Antwort von der API!', 0);
+            echo "Fehler: Keine Antwort von der API!";
+            return;
         }
+    
+        $data = json_decode($response, true);
+        $this->SendDebug('FetchVehicles', 'API-Antwort: ' . json_encode($data), 0);
+    
+        if (!isset($data['vehicles']) || !is_array($data['vehicles'])) {
+            $this->SendDebug('FetchVehicles', 'Fehler: Keine Fahrzeuge gefunden!', 0);
+            echo "Fehler: Keine Fahrzeuge gefunden!";
+            return;
+        }
+    
+        // Fahrzeugdaten aufbereiten
+        $vehicleData = [];
+        foreach ($data['vehicles'] as $vehicleID) {
+            $vehicleData[] = [
+                'id'    => $vehicleID,
+                'make'  => 'Unbekannt', // Wird später ersetzt
+                'model' => 'Unbekannt', // Wird später ersetzt
+                'year'  => 0            // Wird später ersetzt
+            ];
+        }
+    
+        // Fahrzeugdaten in die Liste schreiben
+        $this->UpdateFormField('Vehicles', 'values', json_encode($vehicleData));
+        echo "Fahrzeuge erfolgreich abgerufen!";
     }
+    
 
     public function CreateVehicleInstance($vehicleID)
     {
