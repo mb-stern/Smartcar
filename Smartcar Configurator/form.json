@@ -41,7 +41,7 @@
       "add": false,
       "delete": false,
       "columns": [
-        { "caption": "Fahrzeug ID", "name": "id", "width": "200px" }
+        { "caption": "Fahrzeug ID", "name": "id", "width": "400px" }
       ],
       "values": []
     }
