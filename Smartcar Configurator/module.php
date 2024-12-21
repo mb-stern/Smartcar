@@ -14,6 +14,9 @@ class SmartcarConfigurator extends IPSModule
         $this->RegisterAttributeString('RedirectURI', '');
         $this->RegisterAttributeString('CurrentHook', '');
 
+        $this->RegisterMessage($this->InstanceID, IPS_KERNELMESSAGE);
+
+
         // Timer für Token-Refresh
         $this->RegisterTimer('TokenRefreshTimer', 0, 'SMCAR_RefreshAccessToken($id);');
     }
