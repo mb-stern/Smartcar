@@ -185,26 +185,31 @@ class SmartcarConfigurator extends IPSModule
     }
 
     public function GenerateAuthURL()
-{
-    $clientID = $this->ReadPropertyString('ClientID');
-    $redirectURI = $this->GetRedirectURI(); // Dynamische Redirect URI
-    $scopes = ['read_vehicle_info', 'read_odometer']; // Beispiel-Scopes
-    $state = bin2hex(random_bytes(8)); // Sicherheitswert
-
-    $authURL = "https://connect.smartcar.com/oauth/authorize?" . http_build_query([
-        'response_type' => 'code',
-        'client_id' => $clientID,
-        'redirect_uri' => $redirectURI,
-        'scope' => implode(' ', $scopes),
-        'state' => $state,
-        'mode' => 'live'
-    ]);
-
-    $this->SendDebug('GenerateAuthURL', "Auth URL: $authURL", 0);
-    return $authURL;
-}
-
-
+    {
+        $clientID = $this->ReadPropertyString('ClientID');
+        $redirectURI = $this->GetRedirectURI();
+    
+        if (empty($clientID) || empty($redirectURI)) {
+            echo 'Fehler: Client ID oder Redirect URI ist nicht gesetzt!';
+            return;
+        }
+    
+        $scopes = [
+            'read_vehicle_info'
+        ];
+    
+        $authURL = 'https://connect.smartcar.com/oauth/authorize?' . http_build_query([
+            'response_type' => 'code',
+            'client_id' => $clientID,
+            'redirect_uri' => $redirectURI,
+            'scope' => implode(' ', $scopes),
+            'state' => bin2hex(random_bytes(8)),
+            'mode' => 'live'
+        ]);
+    
+        echo $authURL;
+    }
+    
     private function GetConnectURL()
     {
         $connectInstances = IPS_GetInstanceListByModuleID('{9486D575-BE8C-4ED8-B5B5-20930E26DE6F}');
@@ -267,5 +272,19 @@ class SmartcarConfigurator extends IPSModule
     $this->UpdateFormField('Vehicles', 'values', json_encode($vehicles));
     echo "Fahrzeuge erfolgreich abgerufen!";
 }
+
+private function GetRedirectURI(): string
+{
+    $hookPath = $this->ReadAttributeString('CurrentHook');
+    $connectURL = $this->GetConnectURL();
+
+    if (empty($hookPath) || empty($connectURL)) {
+        $this->SendDebug('GetRedirectURI', 'Fehler: Hook oder Connect-Adresse ist nicht verfügbar.', 0);
+        return '';
+    }
+
+    return $connectURL . $hookPath;
+}
+
 
 }
