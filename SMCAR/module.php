@@ -82,6 +82,29 @@ class Smartcar extends IPSModule
         $this->UpdateVariablesBasedOnScopes();
     }
 
+    public function RequestAction($ident, $value)
+    {
+        switch ($ident) {
+            case 'SetChargeLimit':
+                $this->SetChargeLimit($value / 100);
+                $this->SetValue($ident, $value);
+                break;
+
+            case 'SetChargeStatus':
+                $this->SetChargeStatus($value);
+                $this->SetValue($ident, $value);
+                break;
+                
+            case 'SetLockStatus':
+                $this->SetLockStatus($value);
+                $this->SetValue($ident, $value);
+                break;
+
+            default:
+                throw new Exception("Invalid ident");
+        }
+    }
+
     private function UpdateVariablesBasedOnScopes()
     {
         // Fahrzeugdetails
@@ -240,29 +263,6 @@ class Smartcar extends IPSModule
             $this->EnableAction('SetLockStatus');
         } else {
             $this->UnregisterVariable('SetLockStatus');
-        }
-    }
-
-    public function RequestAction($ident, $value)
-    {
-        switch ($ident) {
-            case 'SetChargeLimit':
-                $this->SetChargeLimit($value / 100);
-                $this->SetValue($ident, $value);
-                break;
-
-            case 'SetChargeStatus':
-                $this->SetChargeStatus($value);
-                $this->SetValue($ident, $value);
-                break;
-                
-            case 'SetLockStatus':
-                $this->SetLockStatus($value);
-                $this->SetValue($ident, $value);
-                break;
-
-            default:
-                throw new Exception("Invalid ident");
         }
     }
 
@@ -838,7 +838,7 @@ class Smartcar extends IPSModule
     public function SetLockStatus(bool $status)
     {
         $accessToken = $this->ReadAttributeString('AccessToken');
-        $vehicleID = $this->GetVehicleID($accessToken);
+        $vehicleID = $this->ReadAttributeString('VehicleID');
         $this->WriteAttributeString('VehicleID', $vehicleID);
     
         if (empty($accessToken) || empty($vehicleID)) {
