@@ -134,7 +134,7 @@ Version 1.2 (22.12.2024)
 - Anpassungen einiger Variablennamen
 - Anpassung des Readme
 - Anpassung Modulname
-- ANpassung Konfigurationsformular
+- Anpassung Konfigurationsformular
 
 Version 1.1 (17.12.2024)
 - Fehlermeldung BackLeftWindow und BackRightWindow behoben, Variablen hinzugefügt
