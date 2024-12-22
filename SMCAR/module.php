@@ -316,11 +316,7 @@ class Smartcar extends IPSModule
         $webhookElements = [
             [
                 "type"    => "Label",
-                "caption" => "Redirect-URI (gehört in die Konfiguration von Smartcar):"
-            ],
-            [
-                "type"    => "Label",
-                "caption" => $connectAddress
+                "caption" => "Redirect-URI:" .$connectAddress
             ],
             [
                 "type"    => "Label",
