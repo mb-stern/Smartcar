@@ -131,7 +131,8 @@ SMCAR_FetchVehicleData(12345);      |   Alle im Modul aktiverten Scopes abfragen
 ### 8. Versionen
 
 Version 1.2 (22.12.2024)
-- Anpassungen an den Variablennamen
+- Anpassungen einiger Variablennamen
+- Anpassung des Readme
 
 Version 1.1 (17.12.2024)
 - Fehlermeldung BackLeftWindow und BackRightWindow behoben, Variablen hinzugefügt
