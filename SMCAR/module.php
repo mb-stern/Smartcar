@@ -156,8 +156,8 @@ class Smartcar extends IPSModule
 
         // Batterie
         if ($this->ReadPropertyBoolean('ScopeReadBattery')) {
-            $this->RegisterVariableFloat('BatteryRange', 'Reichweite Batterie', 'SMCAR.Odometer', 40);
-            $this->RegisterVariableFloat('BatteryLevel', 'Batterieladestand', 'SMCAR.Progress', 41);
+            $this->RegisterVariableFloat('BatteryLevel', 'Batterieladestand', 'SMCAR.Progress', 40);
+            $this->RegisterVariableFloat('BatteryRange', 'Reichweite Batterie', 'SMCAR.Odometer', 41);
         } else {
             $this->UnregisterVariable('BatteryRange');
             $this->UnregisterVariable('BatteryLevel');
