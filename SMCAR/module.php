@@ -259,7 +259,7 @@ class Smartcar extends IPSModule
 
         // Zentralverriegelung setzen
         if ($this->ReadPropertyBoolean('SetLockStatus')) {
-            $this->RegisterVariableBoolean('SetLockStatus', 'Zentralverriegelung', '~Switch', 130);
+            $this->RegisterVariableBoolean('SetLockStatus', 'Zentralverriegelung', '~Lock', 130);
             $this->EnableAction('SetLockStatus');
         } else {
             $this->UnregisterVariable('SetLockStatus');
