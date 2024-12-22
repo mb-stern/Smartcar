@@ -311,12 +311,12 @@ class Smartcar extends IPSModule
     {
         $form = json_decode(file_get_contents(__DIR__ . '/form.json'), true);
         $connectAddress = $this->ReadAttributeString('RedirectURI');
-
+    
         // Webhook-Pfad dynamisch einfügen
-        $webhookElement = [
+        $webhookElements = [
             [
                 "type"    => "Label",
-                "caption" => "Redirect-URI:"
+                "caption" => "Redirect-URI (gehört in die Konfiguration von Smartcar):"
             ],
             [
                 "type"    => "Label",
@@ -327,10 +327,10 @@ class Smartcar extends IPSModule
                 "caption" => "Bitte kopieren Sie diese URI in die Smartcar-Konfiguration."
             ]
         ];
-
+    
         // Webhook-Pfad an den Anfang des Formulars setzen
-        array_splice($form['elements'], 0, 0, [$webhookElement]);
-
+        array_splice($form['elements'], 0, 0, $webhookElements);
+    
         return json_encode($form);
     }
     
