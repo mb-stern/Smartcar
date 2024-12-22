@@ -116,11 +116,11 @@ Beachte, dass nur im Konfigurationsformuler (Berechtigungen) freigegebene Scopes
 Befehl   | Beschreibung
 ------ | -------
 SMCAR_FetchBatteryCapacity(12345);  |   Abfrage der Batteriekapazität
-SMCAR_FetchBatteryLevel(12345);     |   Abfrage des Batterieladestand (SOC)
+SMCAR_FetchBatteryLevel(12345);     |   Abfrage des Batterieladestand (SOC) und der Reichweite Batterie
 SMCAR_FetchChargeLimit(12345);      |   Abfrage des Ladelimits
 SMCAR_FetchChargeStatus(12345);     |   Abfrage des Ladestatus
 SMCAR_FetchEngineOil(12345);        |   Abfrage der restliche Oellebensdauer
-SMCAR_FetchFuel(12345);             |   Abfrage des Tankvolumens    
+SMCAR_FetchFuel(12345);             |   Abfrage des Tankvolumens und der Reichweite Tank    
 SMCAR_FetchLocation(12345);         |   Abfragen der GPS-Koordinaten
 SMCAR_FetchOdometer(12345);         |   Abfragen des Kilomterstandes
 SMCAR_FetchCSecurity(12345);        |   Abfrage des Verriegelungsstatus der Türen, Klappen und Fenster
