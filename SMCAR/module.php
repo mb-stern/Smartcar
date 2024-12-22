@@ -748,7 +748,6 @@ class Smartcar extends IPSModule
     {
         $accessToken = $this->ReadAttributeString('AccessToken');
         $vehicleID = $this->GetVehicleID($accessToken);
-        $this->WriteAttributeString('VehicleID', $vehicleID);
         
         if ($limit < 0.5 || $limit > 1.0) {
             $this->SendDebug('SetChargeLimit', 'Ungültiges Limit. Es muss zwischen 0.5 und 1.0 liegen.', 0);
@@ -794,7 +793,6 @@ class Smartcar extends IPSModule
     {
         $accessToken = $this->ReadAttributeString('AccessToken');
         $vehicleID = $this->GetVehicleID($accessToken);
-        $this->WriteAttributeString('VehicleID', $vehicleID);
     
         if (empty($accessToken) || empty($vehicleID)) {
             $this->SendDebug('SetChargeStatus', 'Access Token oder Fahrzeug-ID fehlt!', 0);
@@ -838,8 +836,7 @@ class Smartcar extends IPSModule
     public function SetLockStatus(bool $status)
     {
         $accessToken = $this->ReadAttributeString('AccessToken');
-        $vehicleID = $this->ReadAttributeString('VehicleID');
-        $this->WriteAttributeString('VehicleID', $vehicleID);
+        $vehicleID = $this->GetVehicleID($accessToken);
     
         if (empty($accessToken) || empty($vehicleID)) {
             $this->SendDebug('SetLockStatus', 'Access Token oder Fahrzeug-ID fehlt!', 0);
@@ -943,7 +940,7 @@ class Smartcar extends IPSModule
     private function FetchSingleEndpoint(string $path)
     {
         $accessToken = $this->ReadAttributeString('AccessToken');
-        $vehicleID = $this->ReadAttributeString('VehicleID');
+        $vehicleID = $this->GetVehicleID($accessToken);
     
         if (empty($accessToken) || empty($vehicleID)) {
             $this->SendDebug('FetchSingleEndpoint', 'Access Token oder Fahrzeug-ID fehlt!', 0);
