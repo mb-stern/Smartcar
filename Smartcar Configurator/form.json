@@ -50,8 +50,8 @@
     {
       "type": "Button",
       "caption": "Instanz für ausgewähltes Fahrzeug erstellen",
-      "onClick": "IPS_RequestAction($id, 'CreateVehicleInstance', json_encode(['vehicleID' => $id]));"
-  },
+      "onClick": "SMCAR_CreateVehicleInstance($id);"
+    },
     {
       "type": "Label",
       "caption": "Hinweis: Wählen Sie ein Fahrzeug aus der Liste aus, bevor Sie eine Instanz erstellen."
