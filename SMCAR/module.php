@@ -1,6 +1,6 @@
 <?php
 
-class SmartcarVehicle extends IPSModule
+class SMCAR extends IPSModule
 {
     public function Create()
     {
@@ -133,7 +133,7 @@ class SmartcarVehicle extends IPSModule
 
         // Batterie
         if ($this->ReadPropertyBoolean('ScopeReadBattery')) {
-            $this->RegisterVariableFloat('BatteryRange', 'Reichweite Batterie', 'SMCAR.Odometer', 40);
+            $this->RegisterVariableFloat('BatteryRange', 'Reichweite', 'SMCAR.Odometer', 40);
             $this->RegisterVariableFloat('BatteryLevel', 'Batterieladestand', 'SMCAR.Progress', 41);
         } else {
             $this->UnregisterVariable('BatteryRange');
@@ -149,7 +149,7 @@ class SmartcarVehicle extends IPSModule
         // Tank
         if ($this->ReadPropertyBoolean('ScopeReadFuel')) {
             $this->RegisterVariableFloat('FuelLevel', 'Tankfüllstand', 'SMCAR.Progress', 60);
-            $this->RegisterVariableFloat('FuelRange', 'Reichweite Tank', 'SMCAR.Odometer', 61);
+            $this->RegisterVariableFloat('FuelRange', 'Reichweite', 'SMCAR.Odometer', 61);
         } else {
             $this->UnregisterVariable('FuelLevel');
             $this->UnregisterVariable('FuelRange');
