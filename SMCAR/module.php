@@ -314,8 +314,18 @@ class Smartcar extends IPSModule
 
         // Webhook-Pfad dynamisch einfügen
         $webhookElement = [
-            "type"    => "Label",
-            "caption" => "Redirect-URI (gehört in die Konfiguration von Smartcar): " . $connectAddress
+            [
+                "type"    => "Label",
+                "caption" => "Redirect-URI:"
+            ],
+            [
+                "type"    => "Label",
+                "caption" => $connectAddress
+            ],
+            [
+                "type"    => "Label",
+                "caption" => "Bitte kopieren Sie diese URI in die Smartcar-Konfiguration."
+            ]
         ];
 
         // Webhook-Pfad an den Anfang des Formulars setzen
