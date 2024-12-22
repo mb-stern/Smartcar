@@ -54,10 +54,9 @@ Aktuell sind folgende Ansteuerungen unterstützt
 * Es gibt eine Bezahlversion für 2.99$ mit 1000 API-Calls pro Monat
 * Die Testfahrzeuge der Smartcar-Plattform sind unterstützt. Zum testen sollten diese Verwendet werden, um den API-Verbrauch des Live-Fahrzeuges zu schonen.
 * Vorsicht: Frag nur Endpunkte ab, die du wirklich brauchst, sonst ist das Guthaben schnell aufgebraucht. Lies dazu weiter unten die [PHP-Befehlsreferenz](#7-php-befehlsreferenz)
-* In der aktuellen Version dieses Moduls ist ein Fahrzeug unterstützt.
-* Für mehrere Fahrzeuge/Profile ist das Modul mehrmals anzulegen.
+* In der aktuellen Version dieses Moduls ist ein Fahrzeug unterstützt, für mehrere Fahrzeuge/Profile ist das Modul mehrmals anzulegen.
 * Im Smartcar-Profil können mehrere Redirct-URI's angelegt werden, womit auch mehrere Module mit Zugriff auf dasselbe Smartcar-Konto unterstützt sind.
-* Nicht unterstützt ist ein Benutzerprofil bei einem Fahrzeug-Hersteller, wo mehrere Fahrzeuge verknüpft sind. Dies ist aber nur ein Thema wenn mehrere Fahrezuge desselben Herstellers gehalten werden. Hier muss in dem Fall jedes Fahrzeug auf ein anderes Profil lauten
+* Nicht unterstützt ist ein Benutzerprofil bei einem Fahrzeug-Hersteller, wo mehrere Fahrzeuge verknüpft sind. Dies ist aber nur ein Thema, wenn mehrere Fahrezuge desselben Herstellers gehalten werden. Hier muss dann jedes Fahrzeug auf ein anderes Profil lauten
 
 ### 2. Voraussetzungen
 
