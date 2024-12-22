@@ -82,6 +82,29 @@ class Smartcar extends IPSModule
         $this->UpdateVariablesBasedOnScopes();
     }
 
+    public function RequestAction($ident, $value)
+    {
+        switch ($ident) {
+            case 'SetChargeLimit':
+                $this->SetChargeLimit($value / 100);
+                $this->SetValue($ident, $value);
+                break;
+
+            case 'SetChargeStatus':
+                $this->SetChargeStatus($value);
+                $this->SetValue($ident, $value);
+                break;
+                
+            case 'SetLockStatus':
+                $this->SetLockStatus($value);
+                $this->SetValue($ident, $value);
+                break;
+
+            default:
+                throw new Exception("Invalid ident");
+        }
+    }
+
     private function UpdateVariablesBasedOnScopes()
     {
         // Fahrzeugdetails
@@ -236,33 +259,10 @@ class Smartcar extends IPSModule
 
         // Zentralverriegelung setzen
         if ($this->ReadPropertyBoolean('SetLockStatus')) {
-            $this->RegisterVariableBoolean('SetLockStatus', 'Zentralverriegelung', '~Switch', 130);
+            $this->RegisterVariableBoolean('SetLockStatus', 'Zentralverriegelung', '~Lock', 130);
             $this->EnableAction('SetLockStatus');
         } else {
             $this->UnregisterVariable('SetLockStatus');
-        }
-    }
-
-    public function RequestAction($ident, $value)
-    {
-        switch ($ident) {
-            case 'SetChargeLimit':
-                $this->SetChargeLimit($value / 100);
-                $this->SetValue($ident, $value);
-                break;
-
-            case 'SetChargeStatus':
-                $this->SetChargeStatus($value);
-                $this->SetValue($ident, $value);
-                break;
-                
-            case 'SetLockStatus':
-                $this->SetLockStatus($value);
-                $this->SetValue($ident, $value);
-                break;
-
-            default:
-                throw new Exception("Invalid ident");
         }
     }
 
@@ -311,16 +311,22 @@ class Smartcar extends IPSModule
     {
         $form = json_decode(file_get_contents(__DIR__ . '/form.json'), true);
         $connectAddress = $this->ReadAttributeString('RedirectURI');
-
+    
         // Webhook-Pfad dynamisch einfügen
-        $webhookElement = [
-            "type"    => "Label",
-            "caption" => "Redirect-URI: " . $connectAddress
+        $webhookElements = [
+            [
+                "type"    => "Label",
+                "caption" => "Redirect-URI: " .$connectAddress
+            ],
+            [
+                "type"    => "Label",
+                "caption" => "Diese URI gehört in die Smartcar-Konfiguration."
+            ]
         ];
-
+    
         // Webhook-Pfad an den Anfang des Formulars setzen
-        array_splice($form['elements'], 0, 0, [$webhookElement]);
-
+        array_splice($form['elements'], 0, 0, $webhookElements);
+    
         return json_encode($form);
     }
     
@@ -742,7 +748,6 @@ class Smartcar extends IPSModule
     {
         $accessToken = $this->ReadAttributeString('AccessToken');
         $vehicleID = $this->GetVehicleID($accessToken);
-        $this->WriteAttributeString('VehicleID', $vehicleID);
         
         if ($limit < 0.5 || $limit > 1.0) {
             $this->SendDebug('SetChargeLimit', 'Ungültiges Limit. Es muss zwischen 0.5 und 1.0 liegen.', 0);
@@ -788,7 +793,6 @@ class Smartcar extends IPSModule
     {
         $accessToken = $this->ReadAttributeString('AccessToken');
         $vehicleID = $this->GetVehicleID($accessToken);
-        $this->WriteAttributeString('VehicleID', $vehicleID);
     
         if (empty($accessToken) || empty($vehicleID)) {
             $this->SendDebug('SetChargeStatus', 'Access Token oder Fahrzeug-ID fehlt!', 0);
@@ -833,7 +837,6 @@ class Smartcar extends IPSModule
     {
         $accessToken = $this->ReadAttributeString('AccessToken');
         $vehicleID = $this->GetVehicleID($accessToken);
-        $this->WriteAttributeString('VehicleID', $vehicleID);
     
         if (empty($accessToken) || empty($vehicleID)) {
             $this->SendDebug('SetLockStatus', 'Access Token oder Fahrzeug-ID fehlt!', 0);
@@ -937,7 +940,7 @@ class Smartcar extends IPSModule
     private function FetchSingleEndpoint(string $path)
     {
         $accessToken = $this->ReadAttributeString('AccessToken');
-        $vehicleID = $this->ReadAttributeString('VehicleID');
+        $vehicleID = $this->GetVehicleID($accessToken);
     
         if (empty($accessToken) || empty($vehicleID)) {
             $this->SendDebug('FetchSingleEndpoint', 'Access Token oder Fahrzeug-ID fehlt!', 0);
