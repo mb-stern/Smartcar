@@ -506,7 +506,6 @@ class Smartcar extends IPSModule
         }
     }
     
-    
     public function FetchVehicleData()
     {
         $accessToken = $this->ReadAttributeString('AccessToken');
@@ -1042,8 +1041,5 @@ class Smartcar extends IPSModule
             IPS_SetVariableProfileAssociation('SMCAR.Charge', 'NOT_CHARGING', 'Lädt nicht', '', -1);
             $this->SendDebug('CreateProfile', 'Profil erstellt: SMCAR.Charge', 0);
         }
-        
-
     }
-
 }
