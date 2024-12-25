@@ -643,6 +643,26 @@ class Smartcar extends IPSModule
         $data = json_decode($response, true);
         $this->SendDebug('GetVehicleID', 'Antwort: ' . json_encode($data), 0);
     
+        // Überprüfen auf 401-Fehler
+        if (isset($data['statusCode']) && $data['statusCode'] === 401) {
+            $this->SendDebug('GetVehicleID', 'Fehler 401: Access Token ungültig. Versuche, den Token zu erneuern.', 0);
+    
+            // Token erneuern
+            $this->RefreshAccessToken();
+    
+            // Access Token erneut lesen
+            $newAccessToken = $this->ReadAttributeString('AccessToken');
+            if (!empty($newAccessToken)) {
+                $this->SendDebug('GetVehicleID', 'Erneuter Versuch mit aktualisiertem Access Token.', 0);
+    
+                // Anfrage erneut senden
+                return $this->GetVehicleID($newAccessToken);
+            }
+    
+            $this->SendDebug('GetVehicleID', 'Fehler: Token konnte nicht erneuert werden.', 0);
+            return null;
+        }
+    
         if (isset($data['vehicles'][0])) {
             return $data['vehicles'][0];
         }
