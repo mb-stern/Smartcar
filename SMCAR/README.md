@@ -130,6 +130,9 @@ SMCAR_FetchVehicleData(12345);      |   Alle im Modul aktiverten Scopes abfragen
 
 ### 8. Versionen
 
+Version 1.3 (26.12.2024)
+- Timer für Token-Erneuerung auf 90 min fixiert
+
 Version 1.2 (22.12.2024)
 - Anpassungen einiger Variablennamen
 - Anpassung des Readme
