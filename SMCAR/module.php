@@ -50,6 +50,9 @@ class Smartcar extends IPSModule
             $hookPath = $this->RegisterHook();
             $this->SendDebug('ApplyChanges', "Die Initialisierung des Hook-Pfades '$hookPath' gestartet.", 0);
         }
+
+        $accessToken = $this->ReadAttributeString('AccessToken');
+        $refreshToken = $this->ReadAttributeString('RefreshToken');
     
         // Timer für Token-Erneuerung (dynamisch)
         if (!empty($accessToken) && !empty($refreshToken)) {
@@ -57,7 +60,7 @@ class Smartcar extends IPSModule
             $this->SendDebug('ApplyChanges', 'Token-Erneuerungs-Timer auf 90 Minuten eingestellt.', 0);
         } else {
             $this->SetTimerInterval('TokenRefreshTimer', 10 * 60 * 1000); // Alle 10 Minuten versuchen, Tokens zu holen
-            $this->SendDebug('ApplyChanges', 'Token-Erneuerungs-Timer auf 10 Minutens gesetzt (weil Access- oder Refresh-Token fehlt).', 0);
+            $this->SendDebug('ApplyChanges', 'Token-Erneuerung-Timer auf 10 Minutens gesetzt (weil Access- oder Refresh-Token fehlt).', 0);
         }
 
         // Connect-Adresse ermitteln
