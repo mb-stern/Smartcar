@@ -60,7 +60,7 @@ class Smartcar extends IPSModule
             $this->SendDebug('ApplyChanges', 'Token-Erneuerungs-Timer auf 90 Minuten eingestellt.', 0);
         } else {
             $this->SetTimerInterval('TokenRefreshTimer', 10 * 60 * 1000); // Alle 10 Minuten versuchen, Tokens zu holen
-            $this->SendDebug('ApplyChanges', 'Token-Erneuerung-Timer auf 10 Minutens gesetzt (weil Access- oder Refresh-Token fehlt).', 0);
+            $this->SendDebug('ApplyChanges', 'Token-Erneuerung-Timer auf 10 Minuten gesetzt (weil Access- oder Refresh-Token fehlt).', 0);
         }
 
         // Connect-Adresse ermitteln
