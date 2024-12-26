@@ -52,6 +52,7 @@ class Smartcar extends IPSModule
         }
     
         // Timer für Token-Erneuerung
+        $this->RefreshAccessToken();
         $this->SetTimerInterval('TokenRefreshTimer', 90 * 60 * 1000); // Alle 90 Minuten
         $this->SendDebug('ApplyChanges', 'Token-Erneuerungs-Timer von 90 min gestartet.', 0);
     
