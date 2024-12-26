@@ -458,7 +458,7 @@ class Smartcar extends IPSModule
     
     public function RefreshAccessToken()
     {
-        $this->SendDebug('RefreshAccessToken', 'Timer ausgelöst.', 0);
+        $this->SendDebug('RefreshAccessToken', 'Token-Erneuerung gestartet!', 0);
     
         $clientID = $this->ReadPropertyString('ClientID');
         $clientSecret = $this->ReadPropertyString('ClientSecret');
