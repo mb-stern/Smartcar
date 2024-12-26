@@ -62,6 +62,7 @@ class Smartcar extends IPSModule
         if ($connectAddress === false || empty($connectAddress)) {
             $connectAddress = "Connect-Adresse konnte nicht ermittelt werden.";
             $this->SendDebug('ApplyChanges', 'Connect-Adresse konnte nicht ermittelt werden.', 0);
+            $this->LogMessage('ApplyChanges - Connect-Adresse konnte nicht ermittelt werden.', KL_ERROR);
         } else {
             $hookPath = $this->ReadAttributeString("CurrentHook");
             $redirectURI = $connectAddress . $hookPath;
@@ -275,6 +276,7 @@ class Smartcar extends IPSModule
         $ids = IPS_GetInstanceListByModuleID('{015A6EB8-D6E5-4B93-B496-0D3F77AE9FE1}');
         if (count($ids) === 0) {
             $this->SendDebug('RegisterHook', 'Keine WebHook-Control-Instanz gefunden.', 0);
+            $this->LogMessage('RegisterHook - Keine WebHook-Control-Instanz gefunden.', KL_ERROR);
             return $hookPath;
         }
     
@@ -452,7 +454,7 @@ class Smartcar extends IPSModule
             $this->ApplyChanges(); 
         } else {
             $this->SendDebug('RequestAccessToken', 'Token-Austausch fehlgeschlagen!', 0);
-            $this->LogMessage('Token-Austausch fehlgeschlagen.', KL_ERROR);
+            $this->LogMessage('RequestAccessToken - Token-Austausch fehlgeschlagen.', KL_ERROR);
         }
     }
     
@@ -466,7 +468,7 @@ class Smartcar extends IPSModule
     
         if (empty($clientID) || empty($clientSecret) || empty($refreshToken)) {
             $this->SendDebug('RefreshAccessToken', 'Fehler: Fehlende Zugangsdaten!', 0);
-            $this->LogMessage('Fehlende Zugangsdaten!', KL_ERROR);
+            $this->LogMessage('RefreshAccessToken - Fehlende Zugangsdaten!', KL_ERROR);
             return;
         }
     
@@ -498,7 +500,7 @@ class Smartcar extends IPSModule
             $this->SendDebug('RefreshAccessToken', 'Token erfolgreich erneuert.', 0);
         } else {
             $this->SendDebug('RefreshAccessToken', 'Token-Erneuerung fehlgeschlagen!', 0);
-            $this->LogMessage('Token-Erneuerung fehlgeschlagen!', KL_ERROR);
+            $this->LogMessage('FetchVehicleData - Token-Erneuerung fehlgeschlagen!', KL_ERROR);
         }
     }
     
@@ -509,7 +511,7 @@ class Smartcar extends IPSModule
     
         if (empty($accessToken) || empty($vehicleID)) {
             $this->SendDebug('FetchVehicleData', 'Access Token oder Fahrzeug-ID fehlt!', 0);
-            $this->LogMessage('Access Token oder Fahrzeug-ID fehlt!', KL_ERROR);
+            $this->LogMessage('FetchVehicleData - Access Token oder Fahrzeug-ID fehlt!', KL_ERROR);
             return false; // Fehlerstatus zurückgeben
         }
     
@@ -557,6 +559,7 @@ class Smartcar extends IPSModule
     
         if (empty($endpoints)) {
             $this->SendDebug('FetchVehicleData', 'Keine Scopes aktiviert!', 0);
+            $this->LogMessage('FetchVehicleData - Keine Scopes aktiviert!', KL_WARNING);
             return false;
         }
     
@@ -586,7 +589,7 @@ class Smartcar extends IPSModule
     
         if ($response === false) {
             $this->SendDebug('FetchVehicleData', 'Fehler: Keine Antwort von der API!', 0);
-            $this->LogMessage('Keine Antwort von der API!', KL_ERROR);
+            $this->LogMessage('FetchVehicleData - Keine Antwort von der API!', KL_ERROR);
             return false;
         }
     
@@ -602,6 +605,7 @@ class Smartcar extends IPSModule
     
         if ($statusCode !== 200) {
             $this->SendDebug('FetchVehicleData', "HTTP-Fehler: $statusCode", 0);
+            $this->LogMessage('FetchVehicleData - HTTP-Fehler', KL_ERROR);
             return false;
         }
     
@@ -621,7 +625,7 @@ class Smartcar extends IPSModule
             return true; // Erfolg
         } else {
             $this->SendDebug('FetchVehicleData', 'Unerwartete Antwortstruktur: ' . json_encode($data), 0);
-            $this->LogMessage('Unerwartete Antwortstruktur', KL_ERROR);
+            $this->LogMessage('FetchVehicleData - Unerwartete Antwortstruktur', KL_ERROR);
             return false;
         }
     }
@@ -632,7 +636,7 @@ class Smartcar extends IPSModule
     
         if ($retryCount > $maxRetries) {
             $this->SendDebug('GetVehicleID', 'Maximale Anzahl von Wiederholungen erreicht. Anfrage abgebrochen.', 0);
-            $this->LogMessage('Maximale Anzahl von Wiederholungen erreicht. Anfrage abgebrochen.', KL_ERROR);
+            $this->LogMessage('GetVehicleID - Maximale Anzahl von Wiederholungen erreicht. Anfrage abgebrochen.', KL_ERROR);
             return null;
         }
     
@@ -651,7 +655,7 @@ class Smartcar extends IPSModule
     
         if ($response === false) {
             $this->SendDebug('GetVehicleID', 'Fehler: Keine Antwort von der API!', 0);
-            $this->LogMessage('Keine Antwort von der API!', KL_ERROR);
+            $this->LogMessage('GetVehicleID - Keine Antwort von der API!', KL_ERROR);
             return null;
         }
     
@@ -675,7 +679,7 @@ class Smartcar extends IPSModule
             }
     
             $this->SendDebug('GetVehicleID', 'Fehler: Token konnte nicht erneuert werden!', 0);
-            $this->LogMessage('Token konnte nicht erneuert werden!', KL_ERROR);
+            $this->LogMessage('GetVehicleID - Token konnte nicht erneuert werden!', KL_ERROR);
             return null;
         }
     
@@ -684,7 +688,7 @@ class Smartcar extends IPSModule
         }
     
         $this->SendDebug('GetVehicleID', 'Keine Fahrzeug-ID gefunden!', 0);
-        $this->LogMessage('Keine Fahrzeug-ID gefunden!', KL_ERROR);
+        $this->LogMessage('GetVehicleID - Keine Fahrzeug-ID gefunden!', KL_ERROR);
         return null;
     }
     
@@ -770,7 +774,7 @@ class Smartcar extends IPSModule
     
             default:
                 $this->SendDebug('ProcessResponse', "Unbekannter Scope: $path", 0);
-                $this->LogMessage('Unbekannter Scope!', KL_ERROR);
+                $this->LogMessage('ProcessResponse - Unbekannter Scope!', KL_ERROR);
         }
     }
 
@@ -781,11 +785,13 @@ class Smartcar extends IPSModule
         
         if ($limit < 0.5 || $limit > 1.0) {
             $this->SendDebug('SetChargeLimit', 'Ungültiges Limit. Es muss zwischen 0.5 und 1.0 liegen.', 0);
+            $this->LogMessage('SetChargeLimit - Ungültiges Limit. Es muss zwischen 0.5 und 1.0 liegen!', KL_WARNING);
             return;
         }
     
         if (empty($accessToken) || empty($vehicleID)) {
             $this->SendDebug('SetChargeLimit', 'Access Token oder Fahrzeug-ID fehlt!', 0);
+            $this->LogMessage('SetChargeLimit - Access Token oder Fahrzeug-ID fehlt!', KL_ERROR);
             return;
         }
     
@@ -806,7 +812,7 @@ class Smartcar extends IPSModule
     
         if ($response === false) {
             $this->SendDebug('SetChargeLimit', 'Fehler: Keine Antwort von der API!', 0);
-            $this->LogMessage('Keine Antwort von der API!', KL_ERROR);
+            $this->LogMessage('SetChargeLimit - Keine Antwort von der API!', KL_ERROR);
             return;
         }
     
@@ -815,6 +821,7 @@ class Smartcar extends IPSModule
     
         if (isset($data['statusCode']) && $data['statusCode'] !== 200) {
             $this->SendDebug('SetChargeLimit', "Fehler beim Setzen des Ladelimits: " . json_encode($data), 0);
+            $this->LogMessage("Fehler beim Setzen des Ladestatus: " . ($data['description'] ?? 'Unbekannter Fehler'), KL_ERROR);
         } else {
             $this->SendDebug('SetChargeLimit', 'Ladelimit erfolgreich gesetzt.', 0);
         }
@@ -827,7 +834,7 @@ class Smartcar extends IPSModule
     
         if (empty($accessToken) || empty($vehicleID)) {
             $this->SendDebug('SetChargeStatus', 'Access Token oder Fahrzeug-ID fehlt!', 0);
-            $this->LogMessage('Access Token oder Fahrzeug-ID fehlt!', KL_ERROR);
+            $this->LogMessage('SetChargeStatus - Access Token oder Fahrzeug-ID fehlt!', KL_ERROR);
             return;
         }
     
@@ -851,7 +858,7 @@ class Smartcar extends IPSModule
     
         if ($response === false) {
             $this->SendDebug('SetChargeStatus', 'Fehler: Keine Antwort von der API!', 0);
-            $this->LogMessage('Keine Antwort von der API!', KL_ERROR);
+            $this->LogMessage('SetChargeStatus - Keine Antwort von der API!', KL_ERROR);
             return;
         }
     
@@ -873,6 +880,7 @@ class Smartcar extends IPSModule
     
         if (empty($accessToken) || empty($vehicleID)) {
             $this->SendDebug('SetLockStatus', 'Access Token oder Fahrzeug-ID fehlt!', 0);
+            $this->LogMessage('SetLockStatus - Access Token oder Fahrzeug-ID fehlt!', KL_ERROR);
             return;
         }
     
@@ -896,7 +904,7 @@ class Smartcar extends IPSModule
     
         if ($response === false) {
             $this->SendDebug('SetLockStatus', 'Fehler: Keine Antwort von der API!', 0);
-            $this->LogMessage('Keine Antwort von der API!', KL_ERROR);
+            $this->LogMessage('SetLockStatus - Keine Antwort von der API!', KL_ERROR);
             return;
         }
     
@@ -978,7 +986,7 @@ class Smartcar extends IPSModule
     
         if (empty($accessToken) || empty($vehicleID)) {
             $this->SendDebug('FetchSingleEndpoint', 'Access Token oder Fahrzeug-ID fehlt!', 0);
-            $this->LogMessage('Access Token oder Fahrzeug-ID fehlt!', KL_ERROR);
+            $this->LogMessage('FetchSingleEndpoint - Access Token oder Fahrzeug-ID fehlt!', KL_ERROR);
             return;
         }
     
@@ -1004,7 +1012,7 @@ class Smartcar extends IPSModule
     
         if ($response === false) {
             $this->SendDebug('FetchSingleEndpoint', 'Fehler: Keine Antwort von der API!', 0);
-            $this->LogMessage('Keine Antwort von der API!', KL_ERROR);
+            $this->LogMessage('FetchSingleEndpoint - Keine Antwort von der API!', KL_ERROR);
             return;
         }
     
@@ -1022,14 +1030,14 @@ class Smartcar extends IPSModule
     
         if ($statusCode !== 200) {
             $this->SendDebug('FetchSingleEndpoint', "Fehlerhafte HTTP-Antwort ($statusCode): " . $response, 0);
-            $this->LogMessage('Fehlerhafte HTTP-Antwort!', KL_ERROR);
+            $this->LogMessage('FetchSingleEndpoint - Fehlerhafte HTTP-Antwort!', KL_ERROR);
             return;
         }
     
         $data = json_decode($response, true);
         if (isset($data['statusCode']) && $data['statusCode'] !== 200) {
             $this->SendDebug('FetchSingleEndpoint', "API-Fehler: " . json_encode($data), 0);
-            $this->LogMessage('API-Fehler!', KL_ERROR);
+            $this->LogMessage('FetchSingleEndpoint - API-Fehler!', KL_ERROR);
             return;
         }
     
@@ -1038,7 +1046,7 @@ class Smartcar extends IPSModule
             $this->ProcessResponse($path, $data);
         } else {
             $this->SendDebug('FetchSingleEndpoint', 'Keine gültige Antwortstruktur.', 0);
-            $this->LogMessage('Keine gültige Antwortstruktur!', KL_ERROR);
+            $this->LogMessage('FetchSingleEndpoint - Keine gültige Antwortstruktur!', KL_ERROR);
         }
     }
     
