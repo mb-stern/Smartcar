@@ -131,7 +131,8 @@ SMCAR_FetchVehicleData(12345);      |   Alle im Modul aktiverten Scopes abfragen
 ### 8. Versionen
 
 Version 1.3 (26.12.2024)
-- Timer für Token-Erneuerung auf 90 min fixiert
+- Timer für Token-Erneuerung auf 90 min fixiert.
+- Abhandlung bei 401-Fehler (Authentication) hinzugefügt, so dass der Access-Token erneuert wird
 
 Version 1.2 (22.12.2024)
 - Anpassungen einiger Variablennamen
