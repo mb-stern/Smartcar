@@ -664,8 +664,8 @@ class Smartcar extends IPSModule
     
         // Überprüfen auf 401-Fehler (Authentifizierungsfehler)
         if (isset($data['statusCode']) && $data['statusCode'] === 401) {
-            $this->SendDebug('GetVehicleID', 'Fehler 401: Access Token ungültig. Versuche, den Token zu erneuern.', 0);
-            $this->LogMessage('GetVehicleID - Fehler 401: Access Token ungültig. Versuche, den Token zu erneuern', KL_WARNING);
+            $this->SendDebug('GetVehicleID', 'Fehler 401: Access Token ungültig oder fehlt. Versuche, den Token zu erneuern.', 0);
+            $this->LogMessage('GetVehicleID - Fehler 401: Access Token ungültig oder fehlt. Versuche, den Token zu erneuern', KL_WARNING);
     
             // Token erneuern
             $this->RefreshAccessToken();
