@@ -632,7 +632,7 @@ class Smartcar extends IPSModule
     
     private function GetVehicleID(string $accessToken, int $retryCount = 0): ?string
     {
-        $maxRetries = 2; // Maximal zwei Wiederholungen (eine für den ursprünglichen Versuch und eine für die erneute Anfrage)
+        $maxRetries = 2; // Maximal zwei Wiederholungen (eine für den ursprünglichen Versuch und eine für die erneute Anfrage falls der Token abgelaufen ist)
     
         if ($retryCount > $maxRetries) {
             $this->SendDebug('GetVehicleID', 'Maximale Anzahl von Wiederholungen erreicht. Anfrage abgebrochen.', 0);
@@ -662,9 +662,10 @@ class Smartcar extends IPSModule
         $data = json_decode($response, true);
         $this->SendDebug('GetVehicleID', 'Antwort: ' . json_encode($data), 0);
     
-        // Überprüfen auf 401-Fehler
+        // Überprüfen auf 401-Fehler (Authentifizierungsfehler)
         if (isset($data['statusCode']) && $data['statusCode'] === 401) {
             $this->SendDebug('GetVehicleID', 'Fehler 401: Access Token ungültig. Versuche, den Token zu erneuern.', 0);
+            $this->LogMessage('GetVehicleID - Fehler 401: Access Token ungültig. Versuche, den Token zu erneuern', KL_WARNING);
     
             // Token erneuern
             $this->RefreshAccessToken();
@@ -672,7 +673,8 @@ class Smartcar extends IPSModule
             // Access Token erneut lesen
             $AccessToken = $this->ReadAttributeString('AccessToken');
             if (!empty($AccessToken)) {
-                $this->SendDebug('GetVehicleID', 'Erneuter Versuch mit aktualisiertem Access Token.', 0);
+                $this->SendDebug('GetVehicleID', 'Token-Erneuerung fehlgeschlagen, versuche erneut....', 0);
+                $this->LogMessage('GetVehicleID - Token-Erneuerung fehlgeschlagen, versuche erneut....', KL_WARNING);
     
                 // Anfrage erneut senden, dabei Retry-Count erhöhen
                 return $this->GetVehicleID($AccessToken, $retryCount + 1);
@@ -785,7 +787,7 @@ class Smartcar extends IPSModule
         
         if ($limit < 0.5 || $limit > 1.0) {
             $this->SendDebug('SetChargeLimit', 'Ungültiges Limit. Es muss zwischen 0.5 und 1.0 liegen.', 0);
-            $this->LogMessage('SetChargeLimit - Ungültiges Limit. Es muss zwischen 0.5 und 1.0 liegen!', KL_WARNING);
+            $this->LogMessage('SetChargeLimit - Ungültiges Limit. Es muss zwischen 0.5 und 1.0 liegen!', KL_ERROR);
             return;
         }
     
