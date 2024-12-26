@@ -9,7 +9,7 @@ class Smartcar extends IPSModule
         // Allgemeine Eigenschaften
         $this->RegisterPropertyString('ClientID', '');
         $this->RegisterPropertyString('ClientSecret', '');
-        $this->RegisterPropertyString('Mode', 'simulated');
+        $this->RegisterPropertyString('Mode', 'live');
     
         // Scopes für API-Endpunkte
         $this->RegisterPropertyBoolean('ScopeReadVehicleInfo', false);
