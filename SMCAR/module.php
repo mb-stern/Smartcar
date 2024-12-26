@@ -643,7 +643,7 @@ class Smartcar extends IPSModule
         $data = json_decode($response, true);
         $this->SendDebug('GetVehicleID', 'Antwort: ' . json_encode($data), 0);
     
-        // Überprüfen auf 401-Fehler
+        // Überprüfen auf 401-Fehler (Fehlerhafte Authentifikation)
         if (isset($data['statusCode']) && $data['statusCode'] === 401) {
             $this->SendDebug('GetVehicleID', 'Fehler 401: Access Token ungültig. Versuche, den Token zu erneuern.', 0);
     
