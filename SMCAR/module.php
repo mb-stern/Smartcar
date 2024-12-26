@@ -466,6 +466,7 @@ class Smartcar extends IPSModule
     
         if (empty($clientID) || empty($clientSecret) || empty($refreshToken)) {
             $this->SendDebug('RefreshAccessToken', 'Fehler: Fehlende Zugangsdaten!', 0);
+            $this->LogMessage('Fehlende Zugangsdaten!', KL_ERROR);
             return;
         }
     
@@ -497,6 +498,7 @@ class Smartcar extends IPSModule
             $this->SendDebug('RefreshAccessToken', 'Token erfolgreich erneuert.', 0);
         } else {
             $this->SendDebug('RefreshAccessToken', 'Token-Erneuerung fehlgeschlagen!', 0);
+            $this->LogMessage('Token-Erneuerung fehlgeschlagen!', KL_ERROR);
         }
     }
     
@@ -507,6 +509,7 @@ class Smartcar extends IPSModule
     
         if (empty($accessToken) || empty($vehicleID)) {
             $this->SendDebug('FetchVehicleData', 'Access Token oder Fahrzeug-ID fehlt!', 0);
+            $this->LogMessage('Access Token oder Fahrzeug-ID fehlt!', KL_ERROR);
             return false; // Fehlerstatus zurückgeben
         }
     
@@ -583,6 +586,7 @@ class Smartcar extends IPSModule
     
         if ($response === false) {
             $this->SendDebug('FetchVehicleData', 'Fehler: Keine Antwort von der API!', 0);
+            $this->LogMessage('Keine Antwort von der API!', KL_ERROR);
             return false;
         }
     
@@ -617,12 +621,21 @@ class Smartcar extends IPSModule
             return true; // Erfolg
         } else {
             $this->SendDebug('FetchVehicleData', 'Unerwartete Antwortstruktur: ' . json_encode($data), 0);
+            $this->LogMessage('Unerwartete Antwortstruktur', KL_ERROR);
             return false;
         }
     }
     
-    private function GetVehicleID(string $accessToken): ?string
+    private function GetVehicleID(string $accessToken, int $retryCount = 0): ?string
     {
+        $maxRetries = 2; // Maximal zwei Wiederholungen (eine für den ursprünglichen Versuch und eine für die erneute Anfrage)
+    
+        if ($retryCount > $maxRetries) {
+            $this->SendDebug('GetVehicleID', 'Maximale Anzahl von Wiederholungen erreicht. Anfrage abgebrochen.', 0);
+            $this->LogMessage('Maximale Anzahl von Wiederholungen erreicht. Anfrage abgebrochen.', KL_ERROR);
+            return null;
+        }
+    
         $url = "https://api.smartcar.com/v2.0/vehicles";
     
         $options = [
@@ -638,13 +651,14 @@ class Smartcar extends IPSModule
     
         if ($response === false) {
             $this->SendDebug('GetVehicleID', 'Fehler: Keine Antwort von der API!', 0);
+            $this->LogMessage('Keine Antwort von der API!', KL_ERROR);
             return null;
         }
     
         $data = json_decode($response, true);
         $this->SendDebug('GetVehicleID', 'Antwort: ' . json_encode($data), 0);
     
-        // Überprüfen auf 401-Fehler (Fehlerhafte Authentifikation)
+        // Überprüfen auf 401-Fehler
         if (isset($data['statusCode']) && $data['statusCode'] === 401) {
             $this->SendDebug('GetVehicleID', 'Fehler 401: Access Token ungültig. Versuche, den Token zu erneuern.', 0);
     
@@ -652,15 +666,16 @@ class Smartcar extends IPSModule
             $this->RefreshAccessToken();
     
             // Access Token erneut lesen
-            $newAccessToken = $this->ReadAttributeString('AccessToken');
-            if (!empty($newAccessToken)) {
+            $AccessToken = $this->ReadAttributeString('AccessToken');
+            if (!empty($AccessToken)) {
                 $this->SendDebug('GetVehicleID', 'Erneuter Versuch mit aktualisiertem Access Token.', 0);
     
-                // Anfrage erneut senden
-                return $this->GetVehicleID($newAccessToken);
+                // Anfrage erneut senden, dabei Retry-Count erhöhen
+                return $this->GetVehicleID($AccessToken, $retryCount + 1);
             }
     
-            $this->SendDebug('GetVehicleID', 'Fehler: Token konnte nicht erneuert werden.', 0);
+            $this->SendDebug('GetVehicleID', 'Fehler: Token konnte nicht erneuert werden!', 0);
+            $this->LogMessage('Token konnte nicht erneuert werden!', KL_ERROR);
             return null;
         }
     
@@ -669,6 +684,7 @@ class Smartcar extends IPSModule
         }
     
         $this->SendDebug('GetVehicleID', 'Keine Fahrzeug-ID gefunden!', 0);
+        $this->LogMessage('Keine Fahrzeug-ID gefunden!', KL_ERROR);
         return null;
     }
     
@@ -753,7 +769,8 @@ class Smartcar extends IPSModule
                 break;
     
             default:
-                $this->SendDebug('ProcessResponse', "Unbekannter Pfad: $path", 0);
+                $this->SendDebug('ProcessResponse', "Unbekannter Scope: $path", 0);
+                $this->LogMessage('Unbekannter Scope!', KL_ERROR);
         }
     }
 
@@ -789,6 +806,7 @@ class Smartcar extends IPSModule
     
         if ($response === false) {
             $this->SendDebug('SetChargeLimit', 'Fehler: Keine Antwort von der API!', 0);
+            $this->LogMessage('Keine Antwort von der API!', KL_ERROR);
             return;
         }
     
@@ -809,6 +827,7 @@ class Smartcar extends IPSModule
     
         if (empty($accessToken) || empty($vehicleID)) {
             $this->SendDebug('SetChargeStatus', 'Access Token oder Fahrzeug-ID fehlt!', 0);
+            $this->LogMessage('Access Token oder Fahrzeug-ID fehlt!', KL_ERROR);
             return;
         }
     
@@ -832,6 +851,7 @@ class Smartcar extends IPSModule
     
         if ($response === false) {
             $this->SendDebug('SetChargeStatus', 'Fehler: Keine Antwort von der API!', 0);
+            $this->LogMessage('Keine Antwort von der API!', KL_ERROR);
             return;
         }
     
@@ -876,6 +896,7 @@ class Smartcar extends IPSModule
     
         if ($response === false) {
             $this->SendDebug('SetLockStatus', 'Fehler: Keine Antwort von der API!', 0);
+            $this->LogMessage('Keine Antwort von der API!', KL_ERROR);
             return;
         }
     
@@ -957,6 +978,7 @@ class Smartcar extends IPSModule
     
         if (empty($accessToken) || empty($vehicleID)) {
             $this->SendDebug('FetchSingleEndpoint', 'Access Token oder Fahrzeug-ID fehlt!', 0);
+            $this->LogMessage('Access Token oder Fahrzeug-ID fehlt!', KL_ERROR)
             return;
         }
     
@@ -982,6 +1004,7 @@ class Smartcar extends IPSModule
     
         if ($response === false) {
             $this->SendDebug('FetchSingleEndpoint', 'Fehler: Keine Antwort von der API!', 0);
+            $this->LogMessage('Keine Antwort von der API!', KL_ERROR);
             return;
         }
     
@@ -999,12 +1022,14 @@ class Smartcar extends IPSModule
     
         if ($statusCode !== 200) {
             $this->SendDebug('FetchSingleEndpoint', "Fehlerhafte HTTP-Antwort ($statusCode): " . $response, 0);
+            $this->LogMessage('Fehlerhafte HTTP-Antwort!', KL_ERROR);
             return;
         }
     
         $data = json_decode($response, true);
         if (isset($data['statusCode']) && $data['statusCode'] !== 200) {
             $this->SendDebug('FetchSingleEndpoint', "API-Fehler: " . json_encode($data), 0);
+            $this->LogMessage('API-Fehler!', KL_ERROR);
             return;
         }
     
@@ -1013,6 +1038,7 @@ class Smartcar extends IPSModule
             $this->ProcessResponse($path, $data);
         } else {
             $this->SendDebug('FetchSingleEndpoint', 'Keine gültige Antwortstruktur.', 0);
+            $this->LogMessage('Keine gültige Antwortstruktur!', KL_ERROR);
         }
     }
     
