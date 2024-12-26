@@ -978,7 +978,7 @@ class Smartcar extends IPSModule
     
         if (empty($accessToken) || empty($vehicleID)) {
             $this->SendDebug('FetchSingleEndpoint', 'Access Token oder Fahrzeug-ID fehlt!', 0);
-            $this->LogMessage('Access Token oder Fahrzeug-ID fehlt!', KL_ERROR)
+            $this->LogMessage('Access Token oder Fahrzeug-ID fehlt!', KL_ERROR);
             return;
         }
     
