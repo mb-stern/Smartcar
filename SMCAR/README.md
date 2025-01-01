@@ -122,7 +122,7 @@ SMCAR_FetchChargeStatus(12345);     |   Abfrage des Ladestatus
 SMCAR_FetchEngineOil(12345);        |   Abfrage der restliche Oellebensdauer
 SMCAR_FetchFuel(12345);             |   Abfrage des Tankvolumens und der Reichweite Tank    
 SMCAR_FetchLocation(12345);         |   Abfragen der GPS-Koordinaten
-SMCAR_FetchOdometer(12345);         |   Abfragen des Kilomterstandes
+SMCAR_FetchOdometer(12345);         |   Abfragen des Kilometerstandes
 SMCAR_FetchCSecurity(12345);        |   Abfrage des Verriegelungsstatus der Türen, Klappen und Fenster
 SMCAR_FetchTires(12345);            |   Abfrage des Reifendruckes
 SMCAR_FetchVIN(12345);              |   Abfrage der Fahrgestellnummer
