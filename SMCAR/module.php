@@ -326,7 +326,7 @@ class Smartcar extends IPSModule
         return json_encode($form);
     }
     
-    private function GenerateAuthURL()
+    public function GenerateAuthURL()
     {
         $clientID = $this->ReadPropertyString('ClientID');
         $mode = $this->ReadPropertyString('Mode');

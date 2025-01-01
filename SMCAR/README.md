@@ -132,7 +132,6 @@ SMCAR_FetchVehicleData(12345);      |   Alle im Modul aktiverten Scopes abfragen
 
 Version 2.0 (02.01.2025)
 - Code und Readme anepasst
-- Einige public Funktionen auf private gesetzt
 - Version um die Store-Kompatibilität zu erlangen
 
 Version 1.3 (26.12.2024)
