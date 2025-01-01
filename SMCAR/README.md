@@ -111,7 +111,7 @@ Die Variablen zur Steuerung der Fahrzeugfunktion können aus der Visualisierung 
 
 Hier findest du die Info, wie geziehlt (zb über einen Ablaufplan) nur bestimmte Endpunkte (Scopes) abgefragt werden, um API-Calls zu sparen. 
 Ein Scenario wäre, dass der SOC nur bei aktiviertem Ladevorgang alle 15min über einen Ablaufplan aktualisiert wird.
-Beachte, dass nur im Konfigurationsformuler (Berechtigungen) freigegebene Scopes abgefragt werden können.
+Beachte, dass nur im Konfigurationsformuler (Berechtigungen) freigegebene Scopes abgefragt werden können. Falls über einen Ablaufplan mehere Scopes nacheinander abgerufen werden ist ein Abstand von ca 2 Minuten empfehlensert, da Smartcar bei häufigerer Abfragefrequnz diese blockiert.
 
 Befehl   | Beschreibung
 ------ | -------
@@ -129,6 +129,16 @@ SMCAR_FetchVIN(12345);              |   Abfrage der Fahrgestellnummer
 SMCAR_FetchVehicleData(12345);      |   Alle im Modul aktiverten Scopes abfragen. Vorsicht, es könnten sehr viele API-Calls verbraucht werden
 
 ### 8. Versionen
+
+Version 2.0 (02.01.2025)
+- Code und Readme anepasst
+- Version um die Store-Kompatibilität zu erlangen
+
+Version 1.3 (26.12.2024)
+- Timer für Token-Erneuerung auf 90 min fixiert.
+- Token wird nun zusätzlich bei jeder Konfigurationsänderung erneuert.
+- Abhandlung bei 401-Fehler (Authentication) wärend der Datenabfrage hinzugefügt, so dass der Access-Token erneuert und die Abfrage erneut ausgeführt wird.
+- Fehlerausgabe in Log aktiviert
 
 Version 1.2 (22.12.2024)
 - Anpassungen einiger Variablennamen
