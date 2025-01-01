@@ -132,7 +132,7 @@ SMCAR_FetchVehicleData(12345);      |   Alle im Modul aktiverten Scopes abfragen
 
 Version 1.3 (26.12.2024)
 - Timer für Token-Erneuerung auf 90 min fixiert.
-- Token wird nun zusätzlich bei jeder Konfigurationsänderung erneurt.
+- Token wird nun zusätzlich bei jeder Konfigurationsänderung erneuert.
 - Abhandlung bei 401-Fehler (Authentication) wärend der Datenabfrage hinzugefügt, so dass der Access-Token erneuert und die Abfrage erneut ausgeführt wird.
 - Fehlerausgabe in Log aktiviert
 
