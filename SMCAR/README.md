@@ -123,7 +123,7 @@ SMCAR_FetchEngineOil(12345);        |   Abfrage der restliche Oellebensdauer
 SMCAR_FetchFuel(12345);             |   Abfrage des Tankvolumens und der Reichweite Tank    
 SMCAR_FetchLocation(12345);         |   Abfragen der GPS-Koordinaten
 SMCAR_FetchOdometer(12345);         |   Abfragen des Kilometerstandes
-SMCAR_FetchSecurity(12345);        |   Abfrage des Verriegelungsstatus der Türen, Klappen und Fenster
+SMCAR_FetchSecurity(12345);         |   Abfrage des Verriegelungsstatus der Türen, Klappen und Fenster
 SMCAR_FetchTires(12345);            |   Abfrage des Reifendruckes
 SMCAR_FetchVIN(12345);              |   Abfrage der Fahrgestellnummer
 SMCAR_FetchVehicleData(12345);      |   Alle im Modul aktiverten Scopes abfragen. Vorsicht, es könnten sehr viele API-Calls verbraucht werden
