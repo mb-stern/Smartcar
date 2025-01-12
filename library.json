@@ -1,12 +1,12 @@
 {
     "id": "{F0D3899F-F0FF-66C4-CC26-C8F72CC42B1B}",
-    "name": "SMCAR",
+    "name": "Smartcar",
     "author": "Stefan Künzli",
-    "url": "https://github.com/mb-stern/MercedesMe",
+    "url": "https://github.com/mb-stern/Smartcar",
     "compatibility": {
         "version": "7.0"
     },
-    "version": "1.0",
+    "version": "2.0",
     "build": 0,
     "date": 0
 }
