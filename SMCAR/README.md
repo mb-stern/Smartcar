@@ -65,7 +65,7 @@ Aktuell sind folgende Ansteuerungen unterstützt
 
 ### 3. Software-Installation
 
-* Über den Module Store kann das Modul noch nicht installiert werden da noch beta. Es muss im Store nach dem genauen Modulnamen gesucht werden.
+* Über den Module Store kann das Modul installiert werden.
 
 ### 4. Einrichten der Instanzen in IP-Symcon
 
