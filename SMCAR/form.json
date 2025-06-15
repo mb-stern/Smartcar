@@ -81,7 +81,7 @@
         {
           "type": "CheckBox",
           "name": "ScopeReadSecurity",
-          "caption": "Sicherheitsstatus lesen (/security)"
+          "caption": "Verriegelungsstatus lesen (/security)"
         },
         {
           "type": "CheckBox",
