@@ -132,7 +132,7 @@ SMCAR_FetchVehicleData(12345);      |   Alle im Modul aktivierten Scopes abfrage
 
 Version 2.1 (15.06.2025)
 - Rechtschreibekorrektur
-- Codeanpassungen für Ladestatus und Batterie-Kapazität
+- Codeanpassungen für Ladestatus
 
 Version 2.0 (02.01.2025)
 - Code und Readme angepasst
