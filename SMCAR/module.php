@@ -312,23 +312,48 @@ class Smartcar extends IPSModule
     public function GetConfigurationForm()
     {
         $form = json_decode(file_get_contents(__DIR__ . '/form.json'), true);
+
         $connectAddress = $this->ReadAttributeString('RedirectURI');
-    
+        $batteryURL = $this->GetValue('BatteryCapacityURL');
+        $batteryOptions = $this->GetValue('BatteryCapacityOptions');
+
         // Webhook-Pfad dynamisch einfügen
         $webhookElements = [
             [
                 "type"    => "Label",
-                "caption" => "Redirect-URI: " .$connectAddress
+                "caption" => "Redirect-URI: " . $connectAddress
             ],
             [
                 "type"    => "Label",
                 "caption" => "Diese URI gehört in die Smartcar-Konfiguration."
             ]
         ];
-    
-        // Webhook-Pfad an den Anfang des Formulars setzen
+
+        // Webhook-Info an den Anfang setzen
         array_splice($form['elements'], 0, 0, $webhookElements);
-    
+
+        // Aktionen vorbereiten (Battery-Auswahl etc.)
+        if (!isset($form['actions'])) {
+            $form['actions'] = [];
+        }
+
+        // Verfügbare Kapazitäten anzeigen (optional)
+        if (!empty($batteryOptions)) {
+            $form['actions'][] = [
+                'type'    => 'Label',
+                'caption' => "Verfügbare Batteriekapazitäten:\n" . $batteryOptions
+            ];
+        }
+
+        // OpenURL-Button für Auswahl nur anzeigen, wenn URL vorhanden ist
+        if (!empty($batteryURL)) {
+            $form['actions'][] = [
+                'type'    => 'OpenURL',
+                'caption' => 'Batteriekapazität wählen',
+                'url'     => $batteryURL
+            ];
+        }
+
         return json_encode($form);
     }
     
@@ -754,45 +779,35 @@ class Smartcar extends IPSModule
                 break;
     
         case '/battery/nominal_capacity':
-            // Kapazität setzen
-            if (isset($body['capacity']) && is_array($body['capacity'])) {
-                $this->SetValue('BatteryCapacity', $body['capacity']['nominal'] ?? 0);
-                $this->SetValue('BatteryCapacitySource', $body['capacity']['source'] ?? 'UNKNOWN');
-            } else {
-                $this->SetValue('BatteryCapacitySource', 'UNDETERMINED');
+        // Erzeuge BatteryCapacityOptions
+        $available = $body['availableCapacities'] ?? [];
+        $entries = [];
+        foreach ($available as $entry) {
+            $cap = $entry['capacity'] ?? 0;
+            $desc = $entry['description'] ?? '';
+            $entries[] = $desc ? sprintf('%.1f kWh (%s)', $cap, $desc) : sprintf('%.1f kWh', $cap);
+        }
+        $this->SetValue('BatteryCapacityOptions', implode("\n", $entries));
+
+        // Setze ggf. Auswahl-Link (nur wenn Token und Redirect vorhanden)
+        $url = $body['url'] ?? '';
+        if (!empty($url) && isset($body['token'])) {
+            $vehicleId = $this->ReadAttributeString('VehicleID');
+            $clientId = $this->ReadPropertyString('ClientID');
+            $redirectURI = $this->ReadAttributeString('RedirectURI');
+            $token = $body['token'];
+
+            if (!empty($vehicleId) && !empty($clientId) && !empty($redirectURI)) {
+                $url = 'https://connect.smartcar.com/battery-capacity'
+                    . '?vehicle_id=' . urlencode($vehicleId)
+                    . '&client_id=' . urlencode($clientId)
+                    . '&token=' . urlencode($token)
+                    . '&response_type=vehicle_id'
+                    . '&redirect_uri=' . urlencode($redirectURI);
+
+                $this->SetValue('BatteryCapacityURL', $url);
             }
-
-            // Optionen anzeigen
-            $available = $body['availableCapacities'] ?? [];
-            $entries = [];
-            foreach ($available as $entry) {
-                $cap = $entry['capacity'] ?? 0;
-                $desc = $entry['description'] ?? '';
-                $entries[] = $desc ? sprintf('%.1f kWh (%s)', $cap, $desc) : sprintf('%.1f kWh', $cap);
-            }
-            $this->SetValue('BatteryCapacityOptions', implode("\n", $entries));
-
-            // URL setzen – Smartcar liefert sie evtl. nicht mehr
-            $url = $body['url'] ?? '';
-            if (empty($url) && count($available) > 1 && isset($body['token'])) {
-                $vehicleId = $this->ReadAttributeString('VehicleID');
-                $clientId = $this->ReadPropertyString('ClientID');
-                $redirectURI = $this->ReadAttributeString('RedirectURI');
-                $token = $body['token'];
-
-                if (!empty($vehicleId) && !empty($clientId) && !empty($redirectURI)) {
-                    $url = 'https://connect.smartcar.com/battery-capacity'
-                        . '?vehicle_id=' . urlencode($vehicleId)
-                        . '&client_id=' . urlencode($clientId)
-                        . '&token=' . urlencode($token)
-                        . '&response_type=vehicle_id'
-                        . '&redirect_uri=' . urlencode($redirectURI);
-                }
-            }
-
-            $this->SetValue('BatteryCapacityURL', $url);
-            break;
-
+        }
             case '/fuel':
                 $this->SetValue('FuelLevel', ($body['percentRemaining'] ?? 0) * 100);
                 $this->SetValue('FuelRange', $body['range'] ?? 0);
