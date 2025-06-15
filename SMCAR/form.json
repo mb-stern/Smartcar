@@ -123,10 +123,9 @@
       "onClick": "SMCAR_FetchVehicleData($id);"
     },
     {
-      "type": "OpenURL",
+      "type": "Button",
       "caption": "Batteriekapazität wählen",
-      "name": "BatteryCapacitySelect",
-      "url": ""
+      "onClick": "echo SMCAR_OpenBatterySelection($id);"
     },
     {
       "type": "Label",

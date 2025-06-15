@@ -412,7 +412,18 @@ class Smartcar extends IPSModule
     
         return $authURL;
     }
-    
+
+    public function OpenBatterySelection()
+    {
+        $url = $this->GetValue('BatteryCapacityURL');
+
+        if (!empty($url)) {
+            echo "👉 Bitte öffne diesen Link zur Auswahl der Batteriekapazität:\n$url";
+        } else {
+            echo "❌ Kein Auswahl-Link verfügbar. Eventuell ist bereits eine Kapazität gespeichert oder der Token ist abgelaufen.";
+        }
+    }
+
     public function ProcessHookData()
     {
         $this->SendDebug('SmartcarHook', 'Webhook aufgerufen mit Daten: ' . print_r($_GET, true), 0);
