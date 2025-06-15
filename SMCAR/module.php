@@ -976,8 +976,8 @@ class Smartcar extends IPSModule
     
     public function FetchChargeStatus()
     {
-        $this->FetchSingleEndpoint('/charge/status'); // Ladestatus
-    }    
+        $this->FetchSingleEndpoint('/charge'); // Ladestatus
+    }
 
     private function FetchSingleEndpoint(string $path)
     {
