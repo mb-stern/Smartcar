@@ -418,9 +418,9 @@ class Smartcar extends IPSModule
         $url = $this->GetValue('BatteryCapacityURL');
 
         if (!empty($url)) {
-            echo "👉 Bitte öffne diesen Link zur Auswahl der Batteriekapazität:\n$url";
+            $this->SendDebug('BatteryCapacityURL', $url, 0);
         } else {
-            echo "❌ Kein Auswahl-Link verfügbar. Eventuell ist bereits eine Kapazität gespeichert oder der Token ist abgelaufen.";
+            $this->SendDebug('BatteryCapacityURL', 'Kein Link verfügbar, möglicherweise wurde die Kapazität bereits gewählt oder der Token fehlt.', 0);
         }
     }
 
