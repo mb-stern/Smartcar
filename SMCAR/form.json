@@ -66,7 +66,7 @@
         {
           "type": "CheckBox",
           "name": "ScopeReadBatteryCapacity",
-          "caption": "Batteriekapazität lesen (/battery/nominal_capacity)"
+          "caption": "Batteriekapazität lesen (/battery/capacity)"
         },
         {
           "type": "CheckBox",
@@ -121,11 +121,6 @@
       "type": "Button",
       "caption": "Fahrzeugdaten abrufen",
       "onClick": "SMCAR_FetchVehicleData($id);"
-    },
-    {
-      "type": "Button",
-      "caption": "Batteriekapazität wählen",
-      "onClick": "echo SMCAR_OpenBatterySelection($id);"
     },
     {
       "type": "Label",
