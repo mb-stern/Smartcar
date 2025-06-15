@@ -91,7 +91,7 @@
         {
           "type": "CheckBox",
           "name": "ScopeReadChargeStatus",
-          "caption": "Ladestatus lesen (/charge/status)"
+          "caption": "Ladestatus lesen (/charge)"
         },
         {
           "type": "CheckBox",
