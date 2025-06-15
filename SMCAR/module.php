@@ -446,23 +446,21 @@ class Smartcar extends IPSModule
 
         // Standard-Fall: OAuth Autorisierungscode empfangen
         if (!isset($_GET['code'])) {
-            $this->SendDebug('SmartcarHook', 'Kein Autorisierungscode empfangen.', 0);
+            $this->SendDebug('ProcessHookData', 'Kein Autorisierungscode erhalten.', 0);
+            http_response_code(400);
+            echo "Fehler: Kein Code erhalten.";
             return;
         }
-
+    
         $authCode = $_GET['code'];
-        $this->SendDebug('SmartcarHook', 'Authorization code empfangen: ' . $authCode, 0);
-
-        // Tausche Code gegen Access Token
-        $success = $this->RequestAccessToken($authCode);
-        if (!$success) {
-            $this->SendDebug('SmartcarHook', 'Fehler beim Tauschen des Authorization-Codes.', 0);
-            return;
-        }
-
-        // Daten aktualisieren
-        $this->FetchVehicleDetails();
-        $this->FetchData();
+        $state = $_GET['state'] ?? '';
+    
+        $this->SendDebug('ProcessHookData', "Autorisierungscode erhalten: $authCode, State: $state", 0);
+    
+        // Tausche den Code gegen Access Token
+        $this->RequestAccessToken($authCode);
+    
+        echo "Fahrzeug erfolgreich verbunden!";
     }
 
     private function RequestAccessToken(string $authCode)
