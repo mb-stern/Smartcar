@@ -161,14 +161,9 @@ class Smartcar extends IPSModule
         if ($this->ReadPropertyBoolean('ScopeReadBatteryCapacity')) {
             $this->RegisterVariableFloat('BatteryCapacity', 'Batteriekapazität', '~Electricity', 50);
             $this->RegisterVariableString('BatteryCapacitySource', 'Kapazitätsquelle', '', 51);
-            $this->RegisterVariableString('BatteryCapacityOptions', 'Verfügbare Kapazitäten', '', 52);
-            $this->RegisterVariableString('BatteryCapacityURL', 'Batteriekapazität bearbeiten (URL)', '', 53);
-
         } else {
             $this->UnregisterVariable('BatteryCapacity');
             $this->UnregisterVariable('BatteryCapacitySource');
-            $this->UnregisterVariable('BatteryCapacityOptions');
-            $this->UnregisterVariable('BatteryCapacityURL');
         }
 
         // Tank
