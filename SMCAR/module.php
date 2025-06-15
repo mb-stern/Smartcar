@@ -313,11 +313,9 @@ class Smartcar extends IPSModule
     {
         $form = json_decode(file_get_contents(__DIR__ . '/form.json'), true);
 
+        // RedirectURI anzeigen
         $connectAddress = $this->ReadAttributeString('RedirectURI');
-        $batteryURL = $this->GetValue('BatteryCapacityURL');
-        $batteryOptions = $this->GetValue('BatteryCapacityOptions');
 
-        // Webhook-Pfad dynamisch einfügen
         $webhookElements = [
             [
                 "type"    => "Label",
@@ -329,29 +327,17 @@ class Smartcar extends IPSModule
             ]
         ];
 
-        // Webhook-Info an den Anfang setzen
+        // Webhook-Label an den Anfang von elements einfügen
         array_splice($form['elements'], 0, 0, $webhookElements);
 
-        // Aktionen vorbereiten (Battery-Auswahl etc.)
-        if (!isset($form['actions'])) {
-            $form['actions'] = [];
-        }
-
-        // Verfügbare Kapazitäten anzeigen (optional)
-        if (!empty($batteryOptions)) {
-            $form['actions'][] = [
-                'type'    => 'Label',
-                'caption' => "Verfügbare Batteriekapazitäten:\n" . $batteryOptions
-            ];
-        }
-
-        // OpenURL-Button für Auswahl nur anzeigen, wenn URL vorhanden ist
+        // Dynamische URL setzen, falls vorhanden
+        $batteryURL = $this->GetValue('BatteryCapacityURL');
         if (!empty($batteryURL)) {
-            $form['actions'][] = [
-                'type'    => 'OpenURL',
-                'caption' => 'Batteriekapazität wählen',
-                'url'     => $batteryURL
-            ];
+            foreach ($form['actions'] as &$action) {
+                if (isset($action['name']) && $action['name'] === 'BatteryCapacitySelect') {
+                    $action['url'] = $batteryURL;
+                }
+            }
         }
 
         return json_encode($form);
