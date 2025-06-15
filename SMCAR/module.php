@@ -727,9 +727,10 @@ class Smartcar extends IPSModule
                 break;
     
             case '/battery/nominal_capacity':
-                $this->SetValue('BatteryCapacity', $body['capacity'] ?? 0);
+                $nominalCapacity = $body['capacity']['nominal'] ?? 0;
+                $this->SetValue('BatteryCapacity', $nominalCapacity);
                 break;
-    
+
             case '/fuel':
                 $this->SetValue('FuelLevel', ($body['percentRemaining'] ?? 0) * 100);
                 $this->SetValue('FuelRange', $body['range'] ?? 0);
