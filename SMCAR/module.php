@@ -415,12 +415,18 @@ class Smartcar extends IPSModule
 
     public function OpenBatterySelection()
     {
-        $url = $this->GetValue('BatteryCapacityURL');
+        $ident = 'BatteryCapacityURL';
 
-        if (!empty($url)) {
-            $this->SendDebug('BatteryCapacityURL', $url, 0);
+        if (@IPS_GetObjectIDByIdent($ident, $this->InstanceID)) {
+            $url = $this->GetValue($ident);
+            if (!empty($url)) {
+                $this->SendDebug('BatteryCapacityURL', $url, 0);
+                // Optional: Öffnen der URL oder Hinweis geben
+            } else {
+                $this->SendDebug('BatteryCapacityURL', 'Kein Link verfügbar, möglicherweise wurde die Kapazität bereits gewählt oder der Token fehlt.', 0);
+            }
         } else {
-            $this->SendDebug('BatteryCapacityURL', 'Kein Link verfügbar, möglicherweise wurde die Kapazität bereits gewählt oder der Token fehlt.', 0);
+            $this->SendDebug('BatteryCapacityURL', 'Variable BatteryCapacityURL existiert nicht – vermutlich, weil der Scope deaktiviert ist.', 0);
         }
     }
 
