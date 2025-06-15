@@ -735,11 +735,8 @@ class Smartcar extends IPSModule
     
             case '/battery/nominal_capacity':
                 $this->SetValue('BatteryCapacity', $body['capacity']['nominal'] ?? 0);
-
-                $this->RegisterVariableString('BatteryCapacitySource', 'Kapazitätsquelle', '', 51);
                 $this->SetValue('BatteryCapacitySource', $body['capacity']['source'] ?? 'UNKNOWN');
 
-                $this->RegisterVariableString('BatteryCapacityOptions', 'Verfügbare Kapazitäten', '', 52);
                 $available = $body['availableCapacities'] ?? [];
                 $entries = [];
                 foreach ($available as $entry) {
@@ -749,8 +746,8 @@ class Smartcar extends IPSModule
                 }
                 $this->SetValue('BatteryCapacityOptions', implode("\n", $entries));
 
-                $this->RegisterVariableString('BatteryCapacityURL', 'Batteriekapazität bearbeiten (URL)', '', 53);
                 $this->SetValue('BatteryCapacityURL', $body['url'] ?? '');
+
                 break;
 
             case '/fuel':
