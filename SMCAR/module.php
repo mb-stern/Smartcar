@@ -160,8 +160,15 @@ class Smartcar extends IPSModule
 
         if ($this->ReadPropertyBoolean('ScopeReadBatteryCapacity')) {
             $this->RegisterVariableFloat('BatteryCapacity', 'Batteriekapazität', '~Electricity', 50);
+            $this->RegisterVariableString('BatteryCapacitySource', 'Kapazitätsquelle', '', 51);
+            $this->RegisterVariableString('BatteryCapacityOptions', 'Verfügbare Kapazitäten', '', 52);
+            $this->RegisterVariableString('BatteryCapacityURL', 'Batteriekapazität bearbeiten (URL)', '', 53);
+
         } else {
             $this->UnregisterVariable('BatteryCapacity');
+            $this->UnregisterVariable('BatteryCapacitySource');
+            $this->UnregisterVariable('BatteryCapacityOptions');
+            $this->UnregisterVariable('BatteryCapacityURL');
         }
 
         // Tank
@@ -727,8 +734,23 @@ class Smartcar extends IPSModule
                 break;
     
             case '/battery/nominal_capacity':
-                $nominalCapacity = $body['capacity']['nominal'] ?? 0;
-                $this->SetValue('BatteryCapacity', $nominalCapacity);
+                $this->SetValue('BatteryCapacity', $body['capacity']['nominal'] ?? 0);
+
+                $this->RegisterVariableString('BatteryCapacitySource', 'Kapazitätsquelle', '', 51);
+                $this->SetValue('BatteryCapacitySource', $body['capacity']['source'] ?? 'UNKNOWN');
+
+                $this->RegisterVariableString('BatteryCapacityOptions', 'Verfügbare Kapazitäten', '', 52);
+                $available = $body['availableCapacities'] ?? [];
+                $entries = [];
+                foreach ($available as $entry) {
+                    $cap = $entry['capacity'] ?? 0;
+                    $desc = $entry['description'] ?? '';
+                    $entries[] = $desc ? sprintf('%.1f kWh (%s)', $cap, $desc) : sprintf('%.1f kWh', $cap);
+                }
+                $this->SetValue('BatteryCapacityOptions', implode("\n", $entries));
+
+                $this->RegisterVariableString('BatteryCapacityURL', 'Batteriekapazität bearbeiten (URL)', '', 53);
+                $this->SetValue('BatteryCapacityURL', $body['url'] ?? '');
                 break;
 
             case '/fuel':

@@ -66,7 +66,7 @@
         {
           "type": "CheckBox",
           "name": "ScopeReadBatteryCapacity",
-          "caption": "Batteriekapazität lesen (/battery/capacity)"
+          "caption": "Batteriekapazität lesen (/battery/nominal_capacity)"
         },
         {
           "type": "CheckBox",
