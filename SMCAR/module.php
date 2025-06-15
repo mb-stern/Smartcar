@@ -536,7 +536,7 @@ class Smartcar extends IPSModule
             $endpoints[] = ["path" => "/battery"];
         }
         if ($this->ReadPropertyBoolean('ScopeReadBatteryCapacity')) {
-            $endpoints[] = ["path" => "/battery/capacity"];
+            $endpoints[] = ["path" => "/battery/nominal_capacity"];
         }
         if ($this->ReadPropertyBoolean('ScopeReadFuel')) {
             $endpoints[] = ["path" => "/fuel"];
@@ -726,7 +726,7 @@ class Smartcar extends IPSModule
                 $this->SetValue('BatteryLevel', ($body['percentRemaining'] ?? 0) * 100);
                 break;
     
-            case '/battery/capacity':
+            case '/battery/nominal_capacity':
                 $this->SetValue('BatteryCapacity', $body['capacity'] ?? 0);
                 break;
     
@@ -951,7 +951,7 @@ class Smartcar extends IPSModule
     
     public function FetchBatteryCapacity()
     {
-        $this->FetchSingleEndpoint('/battery/capacity'); // Batterieskapazität
+        $this->FetchSingleEndpoint('/battery/nominal_capacity'); // Batterieskapazität
     }
     
     public function FetchEngineOil()
