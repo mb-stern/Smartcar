@@ -966,7 +966,7 @@ class Smartcar extends IPSModule
     
     public function FetchSecurity()
     {
-        $this->FetchSingleEndpoint('/security'); // Sicherheitsstatus (z. B. verriegelt)
+        $this->FetchSingleEndpoint('/security'); // Verriegelungsstatus
     }
     
     public function FetchChargeLimit()
