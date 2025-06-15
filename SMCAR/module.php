@@ -330,8 +330,10 @@ class Smartcar extends IPSModule
         // Webhook-Label an den Anfang von elements einfügen
         array_splice($form['elements'], 0, 0, $webhookElements);
 
-        // Dynamische URL setzen, falls vorhanden
-        $batteryURL = $this->GetValue('BatteryCapacityURL');
+        // Dynamische URL setzen, falls Variable existiert
+        $vid = @IPS_GetObjectIDByIdent('BatteryCapacityURL', $this->InstanceID);
+        $batteryURL = ($vid !== false) ? GetValue($vid) : '';
+
         if (!empty($batteryURL)) {
             foreach ($form['actions'] as &$action) {
                 if (isset($action['name']) && $action['name'] === 'BatteryCapacitySelect') {
@@ -339,7 +341,7 @@ class Smartcar extends IPSModule
                 }
             }
         }
-
+        
         return json_encode($form);
     }
     
