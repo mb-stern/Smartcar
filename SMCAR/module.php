@@ -1001,6 +1001,7 @@ class Smartcar extends IPSModule
         }
 
         $data = json_decode($response, true);
+        $this->SendDebug('FetchSingleEndpoint', "Antwort: " . json_encode($data, JSON_PRETTY_PRINT), 0);
 
         if ($statusCode !== 200) {
             $msg = $this->GetHttpErrorDetails($statusCode, $data);
