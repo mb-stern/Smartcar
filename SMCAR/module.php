@@ -629,11 +629,17 @@ class Smartcar extends IPSModule
         if (isset($data['responses']) && is_array($data['responses'])) {
             foreach ($data['responses'] as $resp) {
                 if (($resp['code'] ?? 0) === 200 && isset($resp['body'])) {
-                    // Verarbeitung der erfolgreichen Antwort
+                    // Erfolgreiche Antwort
                     $this->ProcessResponse($resp['path'], $resp['body']);
                 } else {
                     $scCode = $resp['code'] ?? 'unknown';
-                    $this->SendDebug('FetchVehicleData', "⚠️ Fehlerhafte Teilantwort für {$resp['path']} (Code: $scCode): " . json_encode($resp), 0);
+                    $errorMsg = "Fehlerhafte Teilantwort für {$resp['path']} (Code: $scCode)";
+
+                    // Debug-Ausgabe
+                    $this->SendDebug('FetchVehicleData', "⚠️ $errorMsg: " . json_encode($resp), 0);
+
+                    // Fehler auch ins Protokoll schreiben
+                    $this->LogMessage("FetchVehicleData - $errorMsg", KL_ERROR);
                 }
             }
             return true;
