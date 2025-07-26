@@ -515,7 +515,7 @@ class Smartcar extends IPSModule
             return false;
         }
 
-        // Endpunkte sammeln
+        // Sammle die aktivierten Endpunkte
         $endpoints = [];
         if ($this->ReadPropertyBoolean('ScopeReadVehicleInfo')) $endpoints[] = ["path" => "/"];
         if ($this->ReadPropertyBoolean('ScopeReadVIN')) $endpoints[] = ["path" => "/vin"];
@@ -541,8 +541,8 @@ class Smartcar extends IPSModule
 
         $options = [
             'http' => [
-                'header'  => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
-                'method'  => 'POST',
+                'header' => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
+                'method' => 'POST',
                 'content' => $postData,
                 'ignore_errors' => true
             ]
@@ -557,11 +557,12 @@ class Smartcar extends IPSModule
             return false;
         }
 
-        // HTTP-Statuscode bestimmen
+        // HTTP-Statuscode prüfen
+        $httpResponseHeader = $http_response_header ?? [];
         $statusCode = 0;
-        foreach ($http_response_header ?? [] as $header) {
-            if (preg_match('#HTTP/\d+\.\d+\s+(\d+)#', $header, $m)) {
-                $statusCode = (int)$m[1];
+        foreach ($httpResponseHeader as $header) {
+            if (preg_match('#HTTP/\d+\.\d+\s+(\d+)#', $header, $matches)) {
+                $statusCode = (int)$matches[1];
                 break;
             }
         }
@@ -569,13 +570,13 @@ class Smartcar extends IPSModule
         $data = json_decode($response, true);
 
         if ($statusCode !== 200) {
-            $msg = $this->GetHttpErrorDetails($statusCode, $data);
-            $this->SendDebug('FetchVehicleData', "❌ Fehler: $msg", 0);
-            $this->LogMessage("FetchVehicleData - $msg", KL_ERROR);
+            $fullMsg = $this->GetHttpErrorDetails($statusCode, $data);
+            $this->SendDebug('FetchVehicleData', "❌ Fehler: $fullMsg", 0);
+            $this->LogMessage("FetchVehicleData - $fullMsg", KL_ERROR);
             return false;
         }
 
-        // JSON-Ausgabe immer anzeigen
+        // Vollständige JSON-Antwort ins Debug
         $this->SendDebug('FetchVehicleData', "Antwort: " . json_encode($data, JSON_PRETTY_PRINT), 0);
 
         if (!isset($data['responses']) || !is_array($data['responses'])) {
@@ -587,19 +588,26 @@ class Smartcar extends IPSModule
         $hasError = false;
 
         foreach ($data['responses'] as $resp) {
-            if (($resp['code'] ?? 0) === 200 && isset($resp['body'])) {
+            $scCode = $resp['code'] ?? 0;
+
+            if ($scCode === 200 && isset($resp['body'])) {
+                // Erfolgreiche Antwort
                 $this->ProcessResponse($resp['path'], $resp['body']);
+                $this->SendDebug('FetchVehicleData', "✅ Erfolgreiche Teilantwort für {$resp['path']}", 0);
             } else {
                 $hasError = true;
-                $msg = $this->GetHttpErrorDetails($resp['code'] ?? 0, $resp['body'] ?? []);
-                $this->SendDebug('FetchVehicleData', "⚠️ Fehlerhafte Teilantwort für {$resp['path']}: $msg", 0);
-                $this->LogMessage("FetchVehicleData - Fehlerhafte Teilantwort für {$resp['path']}: $msg", KL_ERROR);
+                $fullMsg = $this->GetHttpErrorDetails($scCode, $resp['body'] ?? $resp);
+
+                $this->SendDebug('FetchVehicleData', "⚠️ Fehlerhafte Teilantwort für {$resp['path']}: $fullMsg", 0);
+                $this->LogMessage("FetchVehicleData - Fehlerhafte Teilantwort für {$resp['path']}: $fullMsg", KL_ERROR);
             }
         }
 
-        $this->SendDebug('FetchVehicleData', $hasError
-            ? '⚠️ Ergebnis: Teilweise erfolgreich – einige Endpunkte fehlerhaft.'
-            : '✅ Ergebnis: Alle Endpunkte erfolgreich.', 0);
+        if ($hasError) {
+            $this->SendDebug('FetchVehicleData', '⚠️ Ergebnis: Teilweise erfolgreich – einige Endpunkte fehlerhaft.', 0);
+        } else {
+            $this->SendDebug('FetchVehicleData', '✅ Ergebnis: Alle Endpunkte erfolgreich.', 0);
+        }
 
         return true;
     }
