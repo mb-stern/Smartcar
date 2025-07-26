@@ -1003,15 +1003,15 @@ class Smartcar extends IPSModule
     {
         $accessToken = $this->ReadAttributeString('AccessToken');
         $vehicleID = $this->GetVehicleID($accessToken);
-
+    
         if (empty($accessToken) || empty($vehicleID)) {
-            $this->SendDebug('FetchSingleEndpoint', '❌ Access Token oder Fahrzeug-ID fehlt!', 0);
+            $this->SendDebug('FetchSingleEndpoint', 'Access Token oder Fahrzeug-ID fehlt!', 0);
             $this->LogMessage('FetchSingleEndpoint - Access Token oder Fahrzeug-ID fehlt!', KL_ERROR);
             return;
         }
-
+    
         $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID" . $path;
-
+    
         $options = [
             'http' => [
                 'header' => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
@@ -1019,23 +1019,24 @@ class Smartcar extends IPSModule
                 'ignore_errors' => true
             ]
         ];
-
+    
+        //Debug-Ausgabe für die API-Anfrage
         $this->SendDebug('FetchSingleEndpoint', 'API-Anfrage: ' . json_encode([
             'url' => $url,
             'method' => $options['http']['method'],
             'header' => $options['http']['header']
         ], JSON_PRETTY_PRINT), 0);
-
+    
         $context = stream_context_create($options);
         $response = @file_get_contents($url, false, $context);
-
+    
         if ($response === false) {
-            $this->SendDebug('FetchSingleEndpoint', '❌ Fehler: Keine Antwort von der API!', 0);
+            $this->SendDebug('FetchSingleEndpoint', 'Fehler: Keine Antwort von der API!', 0);
             $this->LogMessage('FetchSingleEndpoint - Keine Antwort von der API!', KL_ERROR);
             return;
         }
-
-        // HTTP-Statuscode ermitteln
+    
+        // HTTP-Statuscode aus den Headern extrahieren
         $httpResponseHeader = $http_response_header ?? [];
         $statusCode = 0;
         foreach ($httpResponseHeader as $header) {
@@ -1044,36 +1045,31 @@ class Smartcar extends IPSModule
                 break;
             }
         }
-
-        $data = json_decode($response, true);
-
-        // Fehlerhafte Antwort behandeln
+    
+        $this->SendDebug('FetchSingleEndpoint', "HTTP-Statuscode: $statusCode", 0);
+    
         if ($statusCode !== 200) {
-            $errorText = $this->GetHttpErrorText($statusCode);
-            $apiCode   = $data['code'] ?? '';
-            $apiDesc   = $data['description'] ?? '';
-
-            $fullMsg = "HTTP $statusCode: $errorText";
-            if ($apiCode !== '') {
-                $fullMsg .= " | Smartcar-Code: $apiCode - $apiDesc";
-            }
-
-            $this->SendDebug('FetchSingleEndpoint', "❌ Fehler: $fullMsg", 0);
-            $this->LogMessage("FetchSingleEndpoint - $fullMsg", KL_ERROR);
+            $this->SendDebug('FetchSingleEndpoint', "Fehlerhafte HTTP-Antwort ($statusCode): " . $response, 0);
+            $this->LogMessage('FetchSingleEndpoint - Fehlerhafte HTTP-Antwort!', KL_ERROR);
             return;
         }
-
-        // Erfolgreiche Antwort
-        $this->SendDebug('FetchSingleEndpoint', "✅ Erfolgreiche Antwort für $path: " . json_encode($data, JSON_PRETTY_PRINT), 0);
-
-        if (!empty($data)) {
+    
+        $data = json_decode($response, true);
+        if (isset($data['statusCode']) && $data['statusCode'] !== 200) {
+            $this->SendDebug('FetchSingleEndpoint', "API-Fehler: " . json_encode($data), 0);
+            $this->LogMessage('FetchSingleEndpoint - API-Fehler!', KL_ERROR);
+            return;
+        }
+    
+        if (isset($data) && !empty($data)) {
+            $this->SendDebug('FetchSingleEndpoint', "Erfolgreiche Antwort für $path: " . json_encode($data, JSON_PRETTY_PRINT), 0);
             $this->ProcessResponse($path, $data);
         } else {
-            $this->SendDebug('FetchSingleEndpoint', '❌ Keine gültige Antwortstruktur.', 0);
+            $this->SendDebug('FetchSingleEndpoint', 'Keine gültige Antwortstruktur.', 0);
             $this->LogMessage('FetchSingleEndpoint - Keine gültige Antwortstruktur!', KL_ERROR);
         }
     }
-
+    
     private function CreateProfile()
     {
 
