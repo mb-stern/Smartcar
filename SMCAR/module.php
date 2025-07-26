@@ -602,29 +602,43 @@ class Smartcar extends IPSModule
                 break;
             }
         }
-    
+
+        // Antwort-Daten dekodieren
+        $data = json_decode($response, true);
+
+        // Prüfe auf HTTP-Fehler
         if ($statusCode !== 200) {
-            $this->SendDebug('FetchVehicleData', "HTTP-Fehler: $statusCode", 0);
-            $this->LogMessage('FetchVehicleData - HTTP-Fehler', KL_ERROR);
+            $errorText = $this->GetHttpErrorText($statusCode);
+            $apiCode   = $data['code'] ?? '';
+            $apiDesc   = $data['description'] ?? '';
+
+            $fullMsg = "HTTP $statusCode: $errorText";
+            if ($apiCode !== '') {
+                $fullMsg .= " | Smartcar-Code: $apiCode - $apiDesc";
+            }
+
+            $this->SendDebug('FetchVehicleData', "❌ Fehler: $fullMsg", 0);
+            $this->LogMessage("FetchVehicleData - $fullMsg", KL_ERROR);
             return false;
         }
-    
-        $data = json_decode($response, true);
-        $this->SendDebug('FetchVehicleData', 'Antwort: ' . json_encode($data), 0);
-    
+
+        // Debug-Ausgabe für erfolgreiche Antwort
+        $this->SendDebug('FetchVehicleData', 'Antwort: ' . json_encode($data, JSON_PRETTY_PRINT), 0);
+
         // Verarbeite die Antwort
         if (isset($data['responses']) && is_array($data['responses'])) {
-            foreach ($data['responses'] as $response) {
-                if ($response['code'] === 200 && isset($response['body'])) {
+            foreach ($data['responses'] as $resp) {
+                if (($resp['code'] ?? 0) === 200 && isset($resp['body'])) {
                     // Verarbeitung der erfolgreichen Antwort
-                    $this->ProcessResponse($response['path'], $response['body']);
+                    $this->ProcessResponse($resp['path'], $resp['body']);
                 } else {
-                    $this->SendDebug('FetchVehicleData', "Fehlerhafte Antwort: " . json_encode($response), 0);
+                    $scCode = $resp['code'] ?? 'unknown';
+                    $this->SendDebug('FetchVehicleData', "⚠️ Fehlerhafte Teilantwort für {$resp['path']} (Code: $scCode): " . json_encode($resp), 0);
                 }
             }
-            return true; // Erfolg
+            return true;
         } else {
-            $this->SendDebug('FetchVehicleData', 'Unerwartete Antwortstruktur: ' . json_encode($data), 0);
+            $this->SendDebug('FetchVehicleData', '❌ Unerwartete Antwortstruktur: ' . json_encode($data), 0);
             $this->LogMessage('FetchVehicleData - Unerwartete Antwortstruktur', KL_ERROR);
             return false;
         }
