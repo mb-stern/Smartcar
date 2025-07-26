@@ -576,15 +576,15 @@ class Smartcar extends IPSModule
 
         $data = json_decode($response, true);
 
+        // Vollständige JSON-Antwort ins Debug
+        $this->SendDebug('FetchVehicleData', "Antwort: " . json_encode($data, JSON_PRETTY_PRINT), 0);
+
         if ($statusCode !== 200) {
             $fullMsg = $this->GetHttpErrorDetails($statusCode, $data);
             $this->SendDebug('FetchVehicleData', "❌ Fehler: $fullMsg", 0);
             $this->LogMessage("FetchVehicleData - $fullMsg", KL_ERROR);
             return false;
         }
-
-        // Vollständige JSON-Antwort ins Debug
-        $this->SendDebug('FetchVehicleData', "Antwort: " . json_encode($data, JSON_PRETTY_PRINT), 0);
 
         if (!isset($data['responses']) || !is_array($data['responses'])) {
             $this->SendDebug('FetchVehicleData', '❌ Unerwartete Antwortstruktur: ' . json_encode($data), 0);
@@ -1015,6 +1015,8 @@ class Smartcar extends IPSModule
         }
 
         $data = json_decode($response, true);
+
+        // Vollständige JSON-Antwort ins Debug
         $this->SendDebug('FetchSingleEndpoint', "Antwort: " . json_encode($data, JSON_PRETTY_PRINT), 0);
 
         if ($statusCode !== 200) {
