@@ -508,65 +508,37 @@ class Smartcar extends IPSModule
     {
         $accessToken = $this->ReadAttributeString('AccessToken');
         $vehicleID = $this->GetVehicleID($accessToken);
-    
+
         if (empty($accessToken) || empty($vehicleID)) {
-            $this->SendDebug('FetchVehicleData', 'Access Token oder Fahrzeug-ID fehlt!', 0);
+            $this->SendDebug('FetchVehicleData', '❌ Access Token oder Fahrzeug-ID fehlt!', 0);
             $this->LogMessage('FetchVehicleData - Access Token oder Fahrzeug-ID fehlt!', KL_ERROR);
-            return false; // Fehlerstatus zurückgeben
+            return false;
         }
-    
+
         // Sammle die aktivierten Endpunkte
         $endpoints = [];
-        if ($this->ReadPropertyBoolean('ScopeReadVehicleInfo')) {
-            $endpoints[] = ["path" => "/"];
-        }
-        if ($this->ReadPropertyBoolean('ScopeReadVIN')) {
-            $endpoints[] = ["path" => "/vin"];
-        }
-        if ($this->ReadPropertyBoolean('ScopeReadLocation')) {
-            $endpoints[] = ["path" => "/location"];
-        }
-        if ($this->ReadPropertyBoolean('ScopeReadTires')) {
-            $endpoints[] = ["path" => "/tires/pressure"];
-        }
-        if ($this->ReadPropertyBoolean('ScopeReadOdometer')) {
-            $endpoints[] = ["path" => "/odometer"];
-        }
-        if ($this->ReadPropertyBoolean('ScopeReadBattery')) {
-            $endpoints[] = ["path" => "/battery"];
-        }
-        if ($this->ReadPropertyBoolean('ScopeReadBatteryCapacity')) {
-            $endpoints[] = ["path" => "/battery/capacity"];
-        }
-        if ($this->ReadPropertyBoolean('ScopeReadFuel')) {
-            $endpoints[] = ["path" => "/fuel"];
-        }
-        if ($this->ReadPropertyBoolean('ScopeReadSecurity')) {
-            $endpoints[] = ["path" => "/security"];
-        }
-        if ($this->ReadPropertyBoolean('ScopeReadChargeLimit')) {
-            $endpoints[] = ["path" => "/charge/limit"];
-        }
-        if ($this->ReadPropertyBoolean('ScopeReadChargeStatus')) {
-            $endpoints[] = ["path" => "/charge"];
-        }
-        if ($this->ReadPropertyBoolean('ScopeReadOilLife')) {
-            $endpoints[] = ["path" => "/engine/oil"];
-        }
-    
-        // Filtere leere Einträge
-        $endpoints = array_filter($endpoints, fn($endpoint) => !empty($endpoint['path']));
-    
+        if ($this->ReadPropertyBoolean('ScopeReadVehicleInfo')) $endpoints[] = ["path" => "/"];
+        if ($this->ReadPropertyBoolean('ScopeReadVIN')) $endpoints[] = ["path" => "/vin"];
+        if ($this->ReadPropertyBoolean('ScopeReadLocation')) $endpoints[] = ["path" => "/location"];
+        if ($this->ReadPropertyBoolean('ScopeReadTires')) $endpoints[] = ["path" => "/tires/pressure"];
+        if ($this->ReadPropertyBoolean('ScopeReadOdometer')) $endpoints[] = ["path" => "/odometer"];
+        if ($this->ReadPropertyBoolean('ScopeReadBattery')) $endpoints[] = ["path" => "/battery"];
+        if ($this->ReadPropertyBoolean('ScopeReadBatteryCapacity')) $endpoints[] = ["path" => "/battery/capacity"];
+        if ($this->ReadPropertyBoolean('ScopeReadFuel')) $endpoints[] = ["path" => "/fuel"];
+        if ($this->ReadPropertyBoolean('ScopeReadSecurity')) $endpoints[] = ["path" => "/security"];
+        if ($this->ReadPropertyBoolean('ScopeReadChargeLimit')) $endpoints[] = ["path" => "/charge/limit"];
+        if ($this->ReadPropertyBoolean('ScopeReadChargeStatus')) $endpoints[] = ["path" => "/charge"];
+        if ($this->ReadPropertyBoolean('ScopeReadOilLife')) $endpoints[] = ["path" => "/engine/oil"];
+
         if (empty($endpoints)) {
             $this->SendDebug('FetchVehicleData', 'Keine Scopes aktiviert!', 0);
             $this->LogMessage('FetchVehicleData - Keine Scopes aktiviert!', KL_WARNING);
             return false;
         }
-    
-        // Erstelle den Batch-Request
+
         $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID/batch";
         $postData = json_encode(["requests" => $endpoints]);
-    
+
         $options = [
             'http' => [
                 'header' => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
@@ -575,24 +547,23 @@ class Smartcar extends IPSModule
                 'ignore_errors' => true
             ]
         ];
-    
-        // Debug-Ausgabe für die API-Anfrage
-        $this->SendDebug('FetchVehicleData', 'API-Anfrage: ' . json_encode([
-            'url'    => $url,
-            'method' => $options['http']['method'],
-            'header' => $options['http']['header'],
-            'body'   => $options['http']['content']
+
+        $this->SendDebug('FetchVehicleData', "API-Anfrage: " . json_encode([
+        'url'    => $url,
+        'method' => $options['http']['method'],
+        'header' => $options['http']['header'],
+        'body'   => $postData
         ], JSON_PRETTY_PRINT), 0);
-    
+
         $context = stream_context_create($options);
         $response = @file_get_contents($url, false, $context);
-    
+
         if ($response === false) {
-            $this->SendDebug('FetchVehicleData', 'Fehler: Keine Antwort von der API!', 0);
+            $this->SendDebug('FetchVehicleData', '❌ Fehler: Keine Antwort von der API!', 0);
             $this->LogMessage('FetchVehicleData - Keine Antwort von der API!', KL_ERROR);
             return false;
         }
-    
+
         // HTTP-Statuscode prüfen
         $httpResponseHeader = $http_response_header ?? [];
         $statusCode = 0;
@@ -602,34 +573,52 @@ class Smartcar extends IPSModule
                 break;
             }
         }
-    
+
+        $data = json_decode($response, true);
+
+        // Vollständige JSON-Antwort ins Debug
+        $this->SendDebug('FetchVehicleData', "Antwort: " . json_encode($data, JSON_PRETTY_PRINT), 0);
+
         if ($statusCode !== 200) {
-            $this->SendDebug('FetchVehicleData', "HTTP-Fehler: $statusCode", 0);
-            $this->LogMessage('FetchVehicleData - HTTP-Fehler', KL_ERROR);
+            $fullMsg = $this->GetHttpErrorDetails($statusCode, $data);
+            $this->SendDebug('FetchVehicleData', "❌ Fehler: $fullMsg", 0);
+            $this->LogMessage("FetchVehicleData - $fullMsg", KL_ERROR);
             return false;
         }
-    
-        $data = json_decode($response, true);
-        $this->SendDebug('FetchVehicleData', 'Antwort: ' . json_encode($data), 0);
-    
-        // Verarbeite die Antwort
-        if (isset($data['responses']) && is_array($data['responses'])) {
-            foreach ($data['responses'] as $response) {
-                if ($response['code'] === 200 && isset($response['body'])) {
-                    // Verarbeitung der erfolgreichen Antwort
-                    $this->ProcessResponse($response['path'], $response['body']);
-                } else {
-                    $this->SendDebug('FetchVehicleData', "Fehlerhafte Antwort: " . json_encode($response), 0);
-                }
-            }
-            return true; // Erfolg
-        } else {
-            $this->SendDebug('FetchVehicleData', 'Unerwartete Antwortstruktur: ' . json_encode($data), 0);
+
+        if (!isset($data['responses']) || !is_array($data['responses'])) {
+            $this->SendDebug('FetchVehicleData', '❌ Unerwartete Antwortstruktur: ' . json_encode($data), 0);
             $this->LogMessage('FetchVehicleData - Unerwartete Antwortstruktur', KL_ERROR);
             return false;
         }
+
+        $hasError = false;
+
+        foreach ($data['responses'] as $resp) {
+            $scCode = $resp['code'] ?? 0;
+
+            if ($scCode === 200 && isset($resp['body'])) {
+                // Erfolgreiche Antwort
+                $this->ProcessResponse($resp['path'], $resp['body']);
+                $this->SendDebug('FetchVehicleData', "✅ Erfolgreiche Teilantwort für {$resp['path']}", 0);
+            } else {
+                $hasError = true;
+                $fullMsg = $this->GetHttpErrorDetails($scCode, $resp['body'] ?? $resp);
+
+                $this->SendDebug('FetchVehicleData', "⚠️ Fehlerhafte Teilantwort für {$resp['path']}: $fullMsg", 0);
+                $this->LogMessage("FetchVehicleData - Fehlerhafte Teilantwort für {$resp['path']}: $fullMsg", KL_ERROR);
+            }
+        }
+
+        if ($hasError) {
+            $this->SendDebug('FetchVehicleData', '⚠️ Ergebnis: Teilweise erfolgreich – einige Endpunkte fehlerhaft.', 0);
+        } else {
+            $this->SendDebug('FetchVehicleData', '✅ Ergebnis: Alle Endpunkte erfolgreich.', 0);
+        }
+
+        return true;
     }
-    
+
     private function GetVehicleID(string $accessToken, int $retryCount = 0): ?string
     {
         $maxRetries = 2; // Maximal zwei Wiederholungen (eine für den ursprünglichen Versuch und eine für die erneute Anfrage falls der Token abgelaufen ist)
@@ -983,73 +972,98 @@ class Smartcar extends IPSModule
     {
         $accessToken = $this->ReadAttributeString('AccessToken');
         $vehicleID = $this->GetVehicleID($accessToken);
-    
+
         if (empty($accessToken) || empty($vehicleID)) {
-            $this->SendDebug('FetchSingleEndpoint', 'Access Token oder Fahrzeug-ID fehlt!', 0);
+            $this->SendDebug('FetchSingleEndpoint', '❌ Access Token oder Fahrzeug-ID fehlt!', 0);
             $this->LogMessage('FetchSingleEndpoint - Access Token oder Fahrzeug-ID fehlt!', KL_ERROR);
             return;
         }
-    
-        $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID" . $path;
-    
+
+        $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID$path";
+
         $options = [
             'http' => [
-                'header' => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
-                'method' => 'GET',
+                'header'  => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
+                'method'  => 'GET',
                 'ignore_errors' => true
             ]
         ];
-    
-        //Debug-Ausgabe für die API-Anfrage
-        $this->SendDebug('FetchSingleEndpoint', 'API-Anfrage: ' . json_encode([
-            'url' => $url,
-            'method' => $options['http']['method'],
-            'header' => $options['http']['header']
+
+        $this->SendDebug('FetchSingleEndpoint', "API-Anfrage: " . json_encode([
+        'url'    => $url,
+        'method' => $options['http']['method'],
+        'header' => $options['http']['header'],
+        'body'   => null
         ], JSON_PRETTY_PRINT), 0);
-    
+
         $context = stream_context_create($options);
         $response = @file_get_contents($url, false, $context);
-    
+
         if ($response === false) {
-            $this->SendDebug('FetchSingleEndpoint', 'Fehler: Keine Antwort von der API!', 0);
+            $this->SendDebug('FetchSingleEndpoint', '❌ Fehler: Keine Antwort von der API!', 0);
             $this->LogMessage('FetchSingleEndpoint - Keine Antwort von der API!', KL_ERROR);
             return;
         }
-    
-        // HTTP-Statuscode aus den Headern extrahieren
-        $httpResponseHeader = $http_response_header ?? [];
+
+        // HTTP-Statuscode bestimmen
         $statusCode = 0;
-        foreach ($httpResponseHeader as $header) {
-            if (preg_match('#HTTP/\d+\.\d+\s+(\d+)#', $header, $matches)) {
-                $statusCode = (int)$matches[1];
+        foreach ($http_response_header ?? [] as $header) {
+            if (preg_match('#HTTP/\d+\.\d+\s+(\d+)#', $header, $m)) {
+                $statusCode = (int)$m[1];
                 break;
             }
         }
-    
-        $this->SendDebug('FetchSingleEndpoint', "HTTP-Statuscode: $statusCode", 0);
-    
-        if ($statusCode !== 200) {
-            $this->SendDebug('FetchSingleEndpoint', "Fehlerhafte HTTP-Antwort ($statusCode): " . $response, 0);
-            $this->LogMessage('FetchSingleEndpoint - Fehlerhafte HTTP-Antwort!', KL_ERROR);
-            return;
-        }
-    
+
         $data = json_decode($response, true);
-        if (isset($data['statusCode']) && $data['statusCode'] !== 200) {
-            $this->SendDebug('FetchSingleEndpoint', "API-Fehler: " . json_encode($data), 0);
-            $this->LogMessage('FetchSingleEndpoint - API-Fehler!', KL_ERROR);
+
+        // Vollständige JSON-Antwort ins Debug
+        $this->SendDebug('FetchSingleEndpoint', "Antwort: " . json_encode($data, JSON_PRETTY_PRINT), 0);
+
+        if ($statusCode !== 200) {
+            $msg = $this->GetHttpErrorDetails($statusCode, $data);
+            $this->SendDebug('FetchSingleEndpoint', "❌ Fehler: $msg", 0);
+            $this->LogMessage("FetchSingleEndpoint - $msg", KL_ERROR);
             return;
         }
-    
-        if (isset($data) && !empty($data)) {
-            $this->SendDebug('FetchSingleEndpoint', "Erfolgreiche Antwort für $path: " . json_encode($data, JSON_PRETTY_PRINT), 0);
+
+        // JSON-Ausgabe immer anzeigen
+        $this->SendDebug('FetchSingleEndpoint', "✅ Erfolgreiche Antwort: " . json_encode($data, JSON_PRETTY_PRINT), 0);
+
+        if (!empty($data)) {
             $this->ProcessResponse($path, $data);
         } else {
-            $this->SendDebug('FetchSingleEndpoint', 'Keine gültige Antwortstruktur.', 0);
-            $this->LogMessage('FetchSingleEndpoint - Keine gültige Antwortstruktur!', KL_ERROR);
+            $this->SendDebug('FetchSingleEndpoint', '❌ Unerwartete Antwortstruktur: ' . json_encode($data), 0);
+            $this->LogMessage('FetchSingleEndpoint - Unerwartete Antwortstruktur', KL_ERROR);
         }
     }
-    
+
+    private function GetHttpErrorDetails(int $statusCode, array $data): string
+    {
+        // Grundtext abhängig vom HTTP-Code
+        $errorText = match ($statusCode) {
+            400 => 'Ungültige Anfrage an die Smartcar API.',
+            401 => 'Ungültiges Access Token – bitte neu verbinden.',
+            403 => 'Keine Berechtigung für diesen API-Endpunkt.',
+            404 => 'Fahrzeug oder Ressource nicht gefunden.',
+            408 => 'Zeitüberschreitung bei der API-Anfrage.',
+            429 => 'Zu viele Anfragen – Rate-Limit erreicht.',
+            500, 502, 503, 504 => 'Smartcar API-Serverfehler.',
+            default => "Unbekannter HTTP-Fehler ($statusCode)."
+        };
+
+        // API-spezifische Infos anhängen
+        $apiCode = $data['code'] ?? ($data['body']['code'] ?? '');
+        $apiDesc = $data['description'] ?? ($data['body']['description'] ?? '');
+
+        if ($apiCode !== '') {
+            $errorText .= " | Code: $statusCode | Smartcar-Code: $apiCode - $apiDesc";
+        } else {
+            $errorText .= " | Code: $statusCode";
+        }
+
+        return $errorText;
+    }
+
     private function CreateProfile()
     {
 
