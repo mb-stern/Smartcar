@@ -604,13 +604,16 @@ class Smartcar extends IPSModule
         }
 
         // Erfolgreiche Antwort ins Debug
-        $this->SendDebug('FetchVehicleData', "✅ Erfolgreiche Antwort: " . json_encode($data, JSON_PRETTY_PRINT), 0);
+        $this->SendDebug('FetchVehicleData', "Antwort: " . json_encode($data, JSON_PRETTY_PRINT), 0);
 
         if (isset($data['responses']) && is_array($data['responses'])) {
+            $hasError = false;
+
             foreach ($data['responses'] as $resp) {
                 if (($resp['code'] ?? 0) === 200 && isset($resp['body'])) {
                     $this->ProcessResponse($resp['path'], $resp['body']);
                 } else {
+                    $hasError = true;
                     $scCode = $resp['code'] ?? 'unknown';
                     $errorMsg = "Fehlerhafte Teilantwort für {$resp['path']} (Code: $scCode)";
 
@@ -618,6 +621,13 @@ class Smartcar extends IPSModule
                     $this->LogMessage("FetchVehicleData - $errorMsg", KL_ERROR);
                 }
             }
+
+            if ($hasError) {
+                $this->SendDebug('FetchVehicleData', '⚠️ Ergebnis: Teilweise erfolgreich – einige Endpunkte fehlerhaft.', 0);
+            } else {
+                $this->SendDebug('FetchVehicleData', '✅ Ergebnis: Alle Endpunkte erfolgreich.', 0);
+            }
+
             return true;
         } else {
             $this->SendDebug('FetchVehicleData', '❌ Unerwartete Antwortstruktur: ' . json_encode($data), 0);
