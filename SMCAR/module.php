@@ -514,62 +514,35 @@ class Smartcar extends IPSModule
             $this->LogMessage('FetchVehicleData - Access Token oder Fahrzeug-ID fehlt!', KL_ERROR);
             return false;
         }
-    
-        // Sammle die aktivierten Endpunkte
+
+        // Endpunkte sammeln
         $endpoints = [];
-        if ($this->ReadPropertyBoolean('ScopeReadVehicleInfo')) {
-            $endpoints[] = ["path" => "/"];
-        }
-        if ($this->ReadPropertyBoolean('ScopeReadVIN')) {
-            $endpoints[] = ["path" => "/vin"];
-        }
-        if ($this->ReadPropertyBoolean('ScopeReadLocation')) {
-            $endpoints[] = ["path" => "/location"];
-        }
-        if ($this->ReadPropertyBoolean('ScopeReadTires')) {
-            $endpoints[] = ["path" => "/tires/pressure"];
-        }
-        if ($this->ReadPropertyBoolean('ScopeReadOdometer')) {
-            $endpoints[] = ["path" => "/odometer"];
-        }
-        if ($this->ReadPropertyBoolean('ScopeReadBattery')) {
-            $endpoints[] = ["path" => "/battery"];
-        }
-        if ($this->ReadPropertyBoolean('ScopeReadBatteryCapacity')) {
-            $endpoints[] = ["path" => "/battery/capacity"];
-        }
-        if ($this->ReadPropertyBoolean('ScopeReadFuel')) {
-            $endpoints[] = ["path" => "/fuel"];
-        }
-        if ($this->ReadPropertyBoolean('ScopeReadSecurity')) {
-            $endpoints[] = ["path" => "/security"];
-        }
-        if ($this->ReadPropertyBoolean('ScopeReadChargeLimit')) {
-            $endpoints[] = ["path" => "/charge/limit"];
-        }
-        if ($this->ReadPropertyBoolean('ScopeReadChargeStatus')) {
-            $endpoints[] = ["path" => "/charge"];
-        }
-        if ($this->ReadPropertyBoolean('ScopeReadOilLife')) {
-            $endpoints[] = ["path" => "/engine/oil"];
-        }
-    
-        // Filtere leere Einträge
-        $endpoints = array_filter($endpoints, fn($endpoint) => !empty($endpoint['path']));
-    
+        if ($this->ReadPropertyBoolean('ScopeReadVehicleInfo')) $endpoints[] = ["path" => "/"];
+        if ($this->ReadPropertyBoolean('ScopeReadVIN')) $endpoints[] = ["path" => "/vin"];
+        if ($this->ReadPropertyBoolean('ScopeReadLocation')) $endpoints[] = ["path" => "/location"];
+        if ($this->ReadPropertyBoolean('ScopeReadTires')) $endpoints[] = ["path" => "/tires/pressure"];
+        if ($this->ReadPropertyBoolean('ScopeReadOdometer')) $endpoints[] = ["path" => "/odometer"];
+        if ($this->ReadPropertyBoolean('ScopeReadBattery')) $endpoints[] = ["path" => "/battery"];
+        if ($this->ReadPropertyBoolean('ScopeReadBatteryCapacity')) $endpoints[] = ["path" => "/battery/capacity"];
+        if ($this->ReadPropertyBoolean('ScopeReadFuel')) $endpoints[] = ["path" => "/fuel"];
+        if ($this->ReadPropertyBoolean('ScopeReadSecurity')) $endpoints[] = ["path" => "/security"];
+        if ($this->ReadPropertyBoolean('ScopeReadChargeLimit')) $endpoints[] = ["path" => "/charge/limit"];
+        if ($this->ReadPropertyBoolean('ScopeReadChargeStatus')) $endpoints[] = ["path" => "/charge"];
+        if ($this->ReadPropertyBoolean('ScopeReadOilLife')) $endpoints[] = ["path" => "/engine/oil"];
+
         if (empty($endpoints)) {
             $this->SendDebug('FetchVehicleData', 'Keine Scopes aktiviert!', 0);
             $this->LogMessage('FetchVehicleData - Keine Scopes aktiviert!', KL_WARNING);
             return false;
         }
-    
+
         $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID/batch";
         $postData = json_encode(["requests" => $endpoints]);
 
         $options = [
             'http' => [
-                'header' => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
-                'method' => 'POST',
+                'header'  => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
+                'method'  => 'POST',
                 'content' => $postData,
                 'ignore_errors' => true
             ]
@@ -584,12 +557,11 @@ class Smartcar extends IPSModule
             return false;
         }
 
-        // HTTP-Statuscode prüfen
-        $httpResponseHeader = $http_response_header ?? [];
+        // HTTP-Statuscode bestimmen
         $statusCode = 0;
-        foreach ($httpResponseHeader as $header) {
-            if (preg_match('#HTTP/\d+\.\d+\s+(\d+)#', $header, $matches)) {
-                $statusCode = (int)$matches[1];
+        foreach ($http_response_header ?? [] as $header) {
+            if (preg_match('#HTTP/\d+\.\d+\s+(\d+)#', $header, $m)) {
+                $statusCode = (int)$m[1];
                 break;
             }
         }
@@ -597,46 +569,41 @@ class Smartcar extends IPSModule
         $data = json_decode($response, true);
 
         if ($statusCode !== 200) {
-            $fullMsg = $this->GetHttpErrorDetails($statusCode, $data);
-            $this->SendDebug('FetchVehicleData', "❌ Fehler: $fullMsg", 0);
-            $this->LogMessage("FetchVehicleData - $fullMsg", KL_ERROR);
+            $msg = $this->GetHttpErrorDetails($statusCode, $data);
+            $this->SendDebug('FetchVehicleData', "❌ Fehler: $msg", 0);
+            $this->LogMessage("FetchVehicleData - $msg", KL_ERROR);
             return false;
         }
 
-        // Vollständige Antwort ins Debug ausgeben
+        // JSON-Ausgabe immer anzeigen
         $this->SendDebug('FetchVehicleData', "Antwort: " . json_encode($data, JSON_PRETTY_PRINT), 0);
 
-        if (isset($data['responses']) && is_array($data['responses'])) {
-            $hasError = false;
-
-            foreach ($data['responses'] as $resp) {
-                if (($resp['code'] ?? 0) === 200 && isset($resp['body'])) {
-                    $this->ProcessResponse($resp['path'], $resp['body']);
-                } else {
-                    $hasError = true;
-                    $scCode = $resp['code'] ?? 'unknown';
-                    $errorMsg = "Fehlerhafte Teilantwort für {$resp['path']} (Code: $scCode)";
-
-                    $this->SendDebug('FetchVehicleData', "⚠️ $errorMsg: " . json_encode($resp), 0);
-                    $this->LogMessage("FetchVehicleData - $errorMsg", KL_ERROR);
-                }
-            }
-
-            // Zusammenfassung ins Debug (JSON bleibt trotzdem erhalten)
-            if ($hasError) {
-                $this->SendDebug('FetchVehicleData', '⚠️ Ergebnis: Teilweise erfolgreich – einige Endpunkte fehlerhaft.', 0);
-            } else {
-                $this->SendDebug('FetchVehicleData', '✅ Ergebnis: Alle Endpunkte erfolgreich.', 0);
-            }
-
-            return true;
-        } else {
+        if (!isset($data['responses']) || !is_array($data['responses'])) {
             $this->SendDebug('FetchVehicleData', '❌ Unerwartete Antwortstruktur: ' . json_encode($data), 0);
             $this->LogMessage('FetchVehicleData - Unerwartete Antwortstruktur', KL_ERROR);
             return false;
         }
+
+        $hasError = false;
+
+        foreach ($data['responses'] as $resp) {
+            if (($resp['code'] ?? 0) === 200 && isset($resp['body'])) {
+                $this->ProcessResponse($resp['path'], $resp['body']);
+            } else {
+                $hasError = true;
+                $msg = $this->GetHttpErrorDetails($resp['code'] ?? 0, $resp['body'] ?? []);
+                $this->SendDebug('FetchVehicleData', "⚠️ Fehlerhafte Teilantwort für {$resp['path']}: $msg", 0);
+                $this->LogMessage("FetchVehicleData - Fehlerhafte Teilantwort für {$resp['path']}: $msg", KL_ERROR);
+            }
+        }
+
+        $this->SendDebug('FetchVehicleData', $hasError
+            ? '⚠️ Ergebnis: Teilweise erfolgreich – einige Endpunkte fehlerhaft.'
+            : '✅ Ergebnis: Alle Endpunkte erfolgreich.', 0);
+
+        return true;
     }
-    
+
     private function GetVehicleID(string $accessToken, int $retryCount = 0): ?string
     {
         $maxRetries = 2; // Maximal zwei Wiederholungen (eine für den ursprünglichen Versuch und eine für die erneute Anfrage falls der Token abgelaufen ist)
@@ -997,12 +964,12 @@ class Smartcar extends IPSModule
             return;
         }
 
-        $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID" . $path;
+        $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID$path";
 
         $options = [
             'http' => [
-                'header' => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
-                'method' => 'GET',
+                'header'  => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
+                'method'  => 'GET',
                 'ignore_errors' => true
             ]
         ];
@@ -1016,12 +983,11 @@ class Smartcar extends IPSModule
             return;
         }
 
-        // HTTP-Statuscode prüfen
-        $httpResponseHeader = $http_response_header ?? [];
+        // HTTP-Statuscode bestimmen
         $statusCode = 0;
-        foreach ($httpResponseHeader as $header) {
-            if (preg_match('#HTTP/\d+\.\d+\s+(\d+)#', $header, $matches)) {
-                $statusCode = (int)$matches[1];
+        foreach ($http_response_header ?? [] as $header) {
+            if (preg_match('#HTTP/\d+\.\d+\s+(\d+)#', $header, $m)) {
+                $statusCode = (int)$m[1];
                 break;
             }
         }
@@ -1029,13 +995,13 @@ class Smartcar extends IPSModule
         $data = json_decode($response, true);
 
         if ($statusCode !== 200) {
-            $fullMsg = $this->GetHttpErrorDetails($statusCode, $data);
-            $this->SendDebug('FetchSingleEndpoint', "❌ Fehler: $fullMsg", 0);
-            $this->LogMessage("FetchSingleEndpoint - $fullMsg", KL_ERROR);
+            $msg = $this->GetHttpErrorDetails($statusCode, $data);
+            $this->SendDebug('FetchSingleEndpoint', "❌ Fehler: $msg", 0);
+            $this->LogMessage("FetchSingleEndpoint - $msg", KL_ERROR);
             return;
         }
 
-        // Erfolgreiche Antwort ins Debug
+        // JSON-Ausgabe immer anzeigen
         $this->SendDebug('FetchSingleEndpoint', "✅ Erfolgreiche Antwort: " . json_encode($data, JSON_PRETTY_PRINT), 0);
 
         if (!empty($data)) {
@@ -1048,6 +1014,7 @@ class Smartcar extends IPSModule
 
     private function GetHttpErrorDetails(int $statusCode, array $data): string
     {
+        // Grundtext abhängig vom HTTP-Code
         $errorText = match ($statusCode) {
             400 => 'Ungültige Anfrage an die Smartcar API.',
             401 => 'Ungültiges Access Token – bitte neu verbinden.',
@@ -1059,11 +1026,14 @@ class Smartcar extends IPSModule
             default => "Unbekannter HTTP-Fehler ($statusCode)."
         };
 
-        $apiCode = $data['code'] ?? '';
-        $apiDesc = $data['description'] ?? '';
+        // API-spezifische Infos anhängen
+        $apiCode = $data['code'] ?? ($data['body']['code'] ?? '');
+        $apiDesc = $data['description'] ?? ($data['body']['description'] ?? '');
 
         if ($apiCode !== '') {
-            $errorText .= " | Smartcar-Code: $apiCode - $apiDesc";
+            $errorText .= " | Code: $statusCode | Smartcar-Code: $apiCode - $apiDesc";
+        } else {
+            $errorText .= " | Code: $statusCode";
         }
 
         return $errorText;
