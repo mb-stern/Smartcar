@@ -603,7 +603,7 @@ class Smartcar extends IPSModule
             return false;
         }
 
-        // Erfolgreiche Antwort ins Debug
+        // Vollständige Antwort ins Debug ausgeben
         $this->SendDebug('FetchVehicleData', "Antwort: " . json_encode($data, JSON_PRETTY_PRINT), 0);
 
         if (isset($data['responses']) && is_array($data['responses'])) {
@@ -622,6 +622,7 @@ class Smartcar extends IPSModule
                 }
             }
 
+            // Zusammenfassung ins Debug (JSON bleibt trotzdem erhalten)
             if ($hasError) {
                 $this->SendDebug('FetchVehicleData', '⚠️ Ergebnis: Teilweise erfolgreich – einige Endpunkte fehlerhaft.', 0);
             } else {
