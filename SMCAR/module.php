@@ -548,6 +548,13 @@ class Smartcar extends IPSModule
             ]
         ];
 
+        $this->SendDebug('FetchVehicleData', "API-Anfrage: " . json_encode([
+        'url'    => $url,
+        'method' => $options['http']['method'],
+        'header' => $options['http']['header'],
+        'body'   => $postData
+        ], JSON_PRETTY_PRINT), 0);
+
         $context = stream_context_create($options);
         $response = @file_get_contents($url, false, $context);
 
@@ -981,6 +988,13 @@ class Smartcar extends IPSModule
                 'ignore_errors' => true
             ]
         ];
+
+        $this->SendDebug('FetchSingleEndpoint', "API-Anfrage: " . json_encode([
+        'url'    => $url,
+        'method' => $options['http']['method'],
+        'header' => $options['http']['header'],
+        'body'   => null
+        ], JSON_PRETTY_PRINT), 0);
 
         $context = stream_context_create($options);
         $response = @file_get_contents($url, false, $context);
