@@ -130,6 +130,9 @@ SMCAR_FetchVehicleData(12345);      |   Alle im Modul aktivierten Scopes abfrage
 
 ### 8. Versionen
 
+Version 2.3 (28.09.2025)
+- Der Token wird nun bei jeder Konfigurationsänderung oder auch beim Update erneuert, sobald Symcon bereit ist. Dies sollte die zeitweiligen Token-Fehler nach Neustart des Systems beheben.
+
 Version 2.2 (26.07.2025)
 - Verbesserung der Fehlerausgabe im Debug und Statusdialog von Symcon
 
