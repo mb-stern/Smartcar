@@ -38,6 +38,8 @@ class Smartcar extends IPSModule
         $this->RegisterAttributeString('RedirectURI', '');
 
         $this->RegisterTimer('TokenRefreshTimer', 0, 'SMCAR_RefreshAccessToken(' . $this->InstanceID . ');'); 
+
+        $this->RegisterMessage(0, IPS_KERNELMESSAGE);
     }
     
     public function ApplyChanges()
@@ -52,9 +54,13 @@ class Smartcar extends IPSModule
         }
     
         // Timer für Token-Erneuerung
-        $this->RefreshAccessToken();
         $this->SetTimerInterval('TokenRefreshTimer', 90 * 60 * 1000); // Alle 90 Minuten
         $this->SendDebug('ApplyChanges', 'Token-Erneuerungs-Timer auf 90 min gestellt.', 0);
+
+        // Wenn Kernel bereits bereit ist (z. B. nach Konfig-Änderung oder Neustart), sofort erneuern
+        if (IPS_GetKernelRunlevel() === KR_READY && $this->ReadAttributeString('RefreshToken') !== '') {
+            $this->RefreshAccessToken();
+        }
     
         // Connect-Adresse ermitteln
         $ipsymconconnectid = IPS_GetInstanceListByModuleID("{9486D575-BE8C-4ED8-B5B5-20930E26DE6F}")[0];
@@ -458,6 +464,20 @@ class Smartcar extends IPSModule
         }
     }
     
+    public function MessageSink($TimeStamp, $SenderID, $Message, $Data)
+    {
+        // Wird aufgerufen, weil in Create() RegisterMessage(0, IPS_KERNELMESSAGE) gesetzt ist
+        if ($Message === IPS_KERNELMESSAGE) {
+            $runlevel = $Data[0] ?? -1;
+            if ($runlevel === KR_READY) {
+                // Genau hier ist Symcon vollständig bereit
+                if ($this->ReadAttributeString('RefreshToken') !== '') {
+                    $this->RefreshAccessToken();
+                }
+            }
+        }
+    }
+
     public function RefreshAccessToken()
     {
         $this->SendDebug('RefreshAccessToken', 'Token-Erneuerung gestartet!', 0);
