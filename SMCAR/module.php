@@ -936,3 +936,4 @@ class Smartcar extends IPSModule
 
         return $errorText;
     }
+}
