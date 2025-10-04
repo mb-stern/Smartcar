@@ -358,11 +358,12 @@ class Smartcar extends IPSModule
     {
         $form = json_decode(file_get_contents(__DIR__ . '/form.json'), true);
 
-        // Anzeigen, was aktuell als Redirect-URI gilt (Custom oder Connect)
         $effectiveRedirect = $this->ReadAttributeString('RedirectURI');
-        $hookPath = $this->ReadAttributeString('CurrentHook');
+        $hookPath          = $this->ReadAttributeString('CurrentHook');
 
-        // UI: Oben Steuerung für Custom Redirect + HookName einfügen
+        // Sichtbarkeit der Custom-URI beim Laden setzen (kein Ausdruckstext verwenden)
+        $useCustom = $this->ReadPropertyBoolean('UseCustomRedirectURI');
+
         $inject = [
             [
                 'type'    => 'Label',
@@ -378,15 +379,20 @@ class Smartcar extends IPSModule
                 'caption' => 'Eigene Redirect-URI verwenden (anstelle der ipmagic/Connect-Adresse)'
             ],
             [
-                'type'      => 'ValidationTextBox',
-                'name'      => 'CustomRedirectURI',
-                'caption'   => 'Eigene Redirect-URI (z. B. https://example.tld/hook/mein-smartcar)',
-                'visible'   => '{UseCustomRedirectURI}'
+                'type'    => 'ValidationTextBox',
+                'name'    => 'CustomRedirectURI',
+                'caption' => 'Eigene Redirect-URI (z. B. https://example.tld/hook/mein-smartcar)',
+                'visible' => $useCustom
             ],
             [
                 'type'    => 'ValidationTextBox',
                 'name'    => 'CustomHookName',
                 'caption' => 'Eigener Hook-Name (optional, ohne /hook/ Präfix)'
+            ],
+            // --- einfacher "Separator" als Label ---
+            [
+                'type'    => 'Label',
+                'caption' => '────────────────────────────────────────'
             ],
             [
                 'type'    => 'Label',
@@ -394,9 +400,8 @@ class Smartcar extends IPSModule
             ],
             [
                 'type'    => 'Label',
-                'caption' => 'Ansonsten wird die ipmagic/Connect-URL + Hook-Pfad gebaut.'
+                'caption' => 'Andernfalls wird ipmagic/Connect-URL + Hook-Pfad automatisch gebildet.'
             ],
-            [ 'type' => 'Separator' ],
         ];
 
         // vor die bestehenden elements setzen
