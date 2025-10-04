@@ -774,108 +774,239 @@ class Smartcar extends IPSModule
     // -------------------------
     // Webhook Signal → Variablen
     // -------------------------
+    private function prettyName(string $ident): string {
+        return preg_replace('/([a-z])([A-Z])/', '$1 $2', $ident);
+    }
+
+    // Legt Variablen bei Bedarf an und schreibt den Wert – nur wenn erlaubt.
+    private function setSafe(string $ident, int $varType, $value, string $profile = '', int $pos = 0, bool $createIfMissing = true): void
+    {
+        $id = @($this->GetIDForIdent($ident));
+        if (!$id) {
+            if (!$createIfMissing) return; // nichts anlegen, nur zuweisen wenn vorhanden
+            switch ($varType) {
+                case VARIABLETYPE_BOOLEAN: $this->RegisterVariableBoolean($ident, $this->prettyName($ident), $profile, $pos); break;
+                case VARIABLETYPE_INTEGER: $this->RegisterVariableInteger($ident, $this->prettyName($ident), $profile, $pos); break;
+                case VARIABLETYPE_FLOAT:   $this->RegisterVariableFloat($ident,   $this->prettyName($ident), $profile, $pos); break;
+                case VARIABLETYPE_STRING:  $this->RegisterVariableString($ident,  $this->prettyName($ident), $profile, $pos); break;
+            }
+        }
+        $this->SetValue($ident, $value);
+    }
+    
     private function ApplySignal(string $code, array $body): void
     {
         $mi2km = 1.609344;
 
-        switch ($code) {
-            // Traction Battery
-            case 'tractionbattery-stateofcharge':
-                // {"unit":"percent","value":75}
-                $val = $body['value'] ?? null;
-                if ($val !== null) $this->SetValue('BatteryLevel', floatval($val));
-                break;
+        switch (strtolower($code)) {
 
-            case 'tractionbattery-range':
-                // {"unit":"kilometers|miles","value":350}
+            // ===== ODOMETER =====
+            case 'odometer-traveleddistance': {
                 $val  = $body['value'] ?? null;
+                if ($val === null) break;
                 $unit = strtolower($body['unit'] ?? '');
-                if ($val !== null) {
-                    $km = ($unit === 'miles') ? floatval($val) * $mi2km : floatval($val);
-                    $this->SetValue('BatteryRange', $km);
+                $km   = ($unit === 'miles') ? floatval($val) * $mi2km : floatval($val);
+                $this->setSafe('Odometer', VARIABLETYPE_FLOAT, $km, 'SMCAR.Odometer', 20, true);
+                break;
+            }
+
+            // ===== LOCATION =====
+            case 'location-preciselocation': {
+                if (isset($body['latitude']))     $this->setSafe('Latitude',      VARIABLETYPE_FLOAT,  (float)$body['latitude'],      '', 10, true);
+                if (isset($body['longitude']))    $this->setSafe('Longitude',     VARIABLETYPE_FLOAT,  (float)$body['longitude'],     '', 11, true);
+                if (isset($body['heading']))      $this->setSafe('Heading',       VARIABLETYPE_FLOAT,  (float)$body['heading'],       '', 12, true);
+                if (isset($body['direction']))    $this->setSafe('Direction',     VARIABLETYPE_STRING, (string)$body['direction'],     '', 13, true);
+                if (isset($body['locationType'])) $this->setSafe('LocationType',  VARIABLETYPE_STRING, (string)$body['locationType'],  '', 14, true);
+                break;
+            }
+
+            // ===== CLOSURE / LOCK =====
+            case 'closure-islocked': {
+                if (array_key_exists('value', $body)) {
+                    $this->setSafe('DoorsLocked', VARIABLETYPE_BOOLEAN, (bool)$body['value'], '~Lock', 70, true);
                 }
                 break;
-
-            case 'tractionbattery-nominalcapacity':
-                // {"capacity": 73.5, "unit":"kWhr", ...}
-                if (isset($body['capacity'])) {
-                    $this->SetValue('BatteryCapacity', floatval($body['capacity']));
+            }
+            case 'closure-doors': {
+                // erwartet Grid: values[{row, column, isOpen}]
+                $this->mapGridToVehicleSides($body, 'Door', 'FrontLeftDoor', 'FrontRightDoor', 'BackLeftDoor', 'BackRightDoor');
+                break;
+            }
+            case 'closure-windows': {
+                $this->mapGridToVehicleSides($body, 'Window', 'FrontLeftWindow', 'FrontRightWindow', 'BackLeftWindow', 'BackRightWindow');
+                break;
+            }
+            case 'closure-sunroof': {
+                if (array_key_exists('isOpen', $body)) {
+                    $this->setSafe('Sunroof', VARIABLETYPE_STRING, ($body['isOpen'] ? 'OPEN' : 'CLOSED'), 'SMCAR.Status', 79, true);
                 }
                 break;
+            }
 
-            // Location
-            case 'location-preciselocation':
-                // {"latitude":..., "longitude":...}
-                if (isset($body['latitude']))  $this->SetValue('Latitude',  floatval($body['latitude']));
-                if (isset($body['longitude'])) $this->SetValue('Longitude', floatval($body['longitude']));
+            // ===== VEHICLE IDENTIFICATION =====
+            case 'vehicleidentification-vin': {
+                if (isset($body['value'])) $this->setSafe('VIN', VARIABLETYPE_STRING, (string)$body['value'], '', 4, true);
                 break;
+            }
+            case 'vehicleidentification-trim': {
+                if (isset($body['value'])) $this->setSafe('Trim', VARIABLETYPE_STRING, (string)$body['value'], '', 5, true);
+                break;
+            }
+            case 'vehicleidentification-exteriorcolor': {
+                if (isset($body['value'])) $this->setSafe('ExteriorColor', VARIABLETYPE_STRING, (string)$body['value'], '', 6, true);
+                break;
+            }
+            case 'vehicleidentification-packages': {
+                if (!empty($body['values']) && is_array($body['values'])) {
+                    $this->setSafe('Packages', VARIABLETYPE_STRING, implode(',', array_map('strval', $body['values'])), '', 7, true);
+                }
+                break;
+            }
+            case 'vehicleidentification-nickname': {
+                if (isset($body['value'])) $this->setSafe('Nickname', VARIABLETYPE_STRING, (string)$body['value'], '', 8, true);
+                break;
+            }
 
-            // Odometer
-            case 'odometer-traveleddistance':
-                // {"unit":"kilometers|miles", "value": 12345}
+            // ===== CONNECTIVITY =====
+            case 'connectivitystatus-isonline': {
+                if (array_key_exists('value', $body)) $this->setSafe('IsOnline', VARIABLETYPE_BOOLEAN, (bool)$body['value'], '~Switch', 150, true);
+                break;
+            }
+            case 'connectivitystatus-isasleep': {
+                if (array_key_exists('value', $body)) $this->setSafe('IsAsleep', VARIABLETYPE_BOOLEAN, (bool)$body['value'], '~Switch', 151, true);
+                break;
+            }
+            case 'connectivitystatus-isdigitalkeypaired': {
+                if (array_key_exists('value', $body)) $this->setSafe('IsDigitalKeyPaired', VARIABLETYPE_BOOLEAN, (bool)$body['value'], '~Switch', 152, true);
+                break;
+            }
+            case 'connectivitysoftware-currentfirmwareversion': {
+                if (isset($body['value'])) $this->setSafe('FirmwareVersion', VARIABLETYPE_STRING, (string)$body['value'], '', 153, true);
+                break;
+            }
+
+            // ===== ICE (Verbrenner) =====
+            case 'internalcombustionengine-fuellevel': {
+                if (!isset($body['value'])) break;
+                $v = (float)$body['value'];
+                if ($v <= 1.0) $v *= 100.0; // robust für 0..1
+                $this->setSafe('FuelLevel', VARIABLETYPE_FLOAT, $v, 'SMCAR.Progress', 60, true);
+                break;
+            }
+            case 'internalcombustionengine-oillife': {
+                if (!isset($body['value'])) break;
+                $v = (float)$body['value'];
+                if ($v <= 1.0) $v *= 100.0;
+                $this->setSafe('OilLife', VARIABLETYPE_FLOAT, $v, 'SMCAR.Progress', 100, true);
+                break;
+            }
+
+            // ===== EV / CHARGE (falls relevant) =====
+            case 'tractionbattery-stateofcharge': { // percent (0..100) oder 0..1
+                if (!isset($body['value'])) break;
+                $v = (float)$body['value'];
+                if ($v <= 1.0) $v *= 100.0;
+                $this->setSafe('BatteryLevel', VARIABLETYPE_FLOAT, $v, 'SMCAR.Progress', 40, true);
+                break;
+            }
+            case 'tractionbattery-range': { // km|miles
                 $val  = $body['value'] ?? null;
+                if ($val === null) break;
                 $unit = strtolower($body['unit'] ?? '');
-                if ($val !== null) {
-                    $km = ($unit === 'miles') ? floatval($val) * $mi2km : floatval($val);
-                    $this->SetValue('Odometer', $km);
+                $km   = ($unit === 'miles') ? (float)$val * $mi2km : (float)$val;
+                $this->setSafe('BatteryRange', VARIABLETYPE_FLOAT, $km, 'SMCAR.Odometer', 41, true);
+                break;
+            }
+            case 'tractionbattery-nominalcapacity': { // kWh
+                if (isset($body['capacity'])) $this->setSafe('BatteryCapacity', VARIABLETYPE_FLOAT, (float)$body['capacity'], '~Electricity', 50, true);
+                break;
+            }
+            case 'charge-detailedchargingstatus': {
+                if (isset($body['value'])) $this->setSafe('ChargeStatus', VARIABLETYPE_STRING, strtoupper((string)$body['value']), 'SMCAR.Charge', 91, true);
+                break;
+            }
+            case 'charge-ischarging': {
+                if (array_key_exists('value', $body)) {
+                    $this->setSafe('ChargeStatus', VARIABLETYPE_STRING, ($body['value'] ? 'CHARGING' : 'NOT_CHARGING'), 'SMCAR.Charge', 91, true);
                 }
                 break;
-
-            // Charge
-            case 'charge-detailedchargingstatus':
-                // {"value":"CHARGING|NOT_CHARGING|FULLY_CHARGED|..."}
-                if (isset($body['value'])) $this->SetValue('ChargeStatus', strtoupper($body['value']));
+            }
+            case 'charge-ischargingcableconnected': {
+                if (array_key_exists('value', $body)) $this->setSafe('PluggedIn', VARIABLETYPE_BOOLEAN, (bool)$body['value'], '~Switch', 92, true);
                 break;
-
-            case 'charge-ischarging':
-                // {"value": true|false}
-                if (isset($body['value'])) $this->SetValue('ChargeStatus', ($body['value'] ? 'CHARGING' : 'NOT_CHARGING'));
-                break;
-
-            case 'charge-ischargingcableconnected':
-                // {"value": true|false}
-                if (isset($body['value'])) $this->SetValue('PluggedIn', (bool)$body['value']);
-                break;
-
-            case 'charge-chargelimits':
-                // {"values":[{"type":"global","limit":80,...}, ...]}
+            }
+            case 'charge-chargelimits': {
+                // {"values":[{"type":"global","limit":80}, ...]}
                 if (isset($body['values']) && is_array($body['values'])) {
-                    $limit = null;
                     foreach ($body['values'] as $cfg) {
                         if (($cfg['type'] ?? '') === 'global' && isset($cfg['limit'])) {
-                            $limit = $cfg['limit'];
+                            $lim = (float)$cfg['limit'];
+                            if ($lim <= 1.0) $lim *= 100.0;
+                            $this->setSafe('ChargeLimit', VARIABLETYPE_FLOAT, $lim, 'SMCAR.Progress', 90, true);
                             break;
                         }
                     }
-                    if ($limit !== null) $this->SetValue('ChargeLimit', floatval($limit));
                 }
                 break;
+            }
 
-            // Closure (Verriegelung / Türen / Fenster / Dach)
-            case 'closure-islocked':
-                // {"value": true|false}
-                if (isset($body['value'])) $this->SetValue('DoorsLocked', (bool)$body['value']);
+            // ===== DIAGNOSTICS =====
+            case 'diagnostics-dtccount': {
+                if (isset($body['value'])) $this->setSafe('DTCCount', VARIABLETYPE_INTEGER, (int)$body['value'], '', 210, true);
                 break;
-
-            case 'closure-doors':
-                // {"rowCount":2,"columnCount":2,"values":[{"row":0,"column":0,"isOpen":false}, ...]}
-                $this->mapGridToVehicleSides($body, 'Door', 'FrontLeftDoor', 'FrontRightDoor', 'BackLeftDoor', 'BackRightDoor');
-                break;
-
-            case 'closure-windows':
-                $this->mapGridToVehicleSides($body, 'Window', 'FrontLeftWindow', 'FrontRightWindow', 'BackLeftWindow', 'BackRightWindow');
-                break;
-
-            case 'closure-sunroof':
-                // {"isOpen":true}
-                if (array_key_exists('isOpen', $body)) {
-                    $this->SetValue('Sunroof', $body['isOpen'] ? 'OPEN' : 'CLOSED');
+            }
+            case 'diagnostics-dtclist': {
+                if (isset($body['values']) && is_array($body['values'])) {
+                    // JSON speichern, damit Code + Timestamp erhalten bleiben
+                    $this->setSafe('DTCList', VARIABLETYPE_STRING, json_encode($body['values']), '', 211, true);
                 }
                 break;
+            }
 
+            // Alle Status-basierten Diagnostic-Signale (legen wir als String "OK/WARN/ERROR/..." an)
+            case 'diagnostics-abs':
+            case 'diagnostics-activesafety':
+            case 'diagnostics-airbag':
+            case 'diagnostics-driverassistance':
+            case 'diagnostics-emissions':
+            case 'diagnostics-evbatteryconditioning':
+            case 'diagnostics-evcharging':
+            case 'diagnostics-evdriveunit':
+            case 'diagnostics-evhvbattery':
+            case 'diagnostics-lighting':
+            case 'diagnostics-mil':
+            case 'diagnostics-oillife':
+            case 'diagnostics-oilpressure':
+            case 'diagnostics-oiltemperature':
+            case 'diagnostics-telematics':
+            case 'diagnostics-tirepressure':
+            case 'diagnostics-tirepressuremonitoring':
+            case 'diagnostics-transmission':
+            case 'diagnostics-washerfluid':
+            case 'diagnostics-waterinfuel': {
+                if (isset($body['status'])) {
+                    $suffix = strtoupper(substr($code, strlen('diagnostics-'))); // z.B. ABS -> DIAG_ABS
+                    $ident  = 'Diag_' . $suffix;
+                    $this->setSafe($ident, VARIABLETYPE_STRING, (string)$body['status'], '', 250, true);
+                }
+                break;
+            }
+
+            // ===== USER ACCOUNT (informativ) =====
+            case 'vehicleuseraccount-permissions': {
+                if (isset($body['values']) && is_array($body['values'])) {
+                    $this->setSafe('Permissions', VARIABLETYPE_STRING, implode(',', array_map('strval', $body['values'])), '', 300, true);
+                }
+                break;
+            }
+            case 'vehicleuseraccount-role': {
+                if (isset($body['value'])) $this->setSafe('Role', VARIABLETYPE_STRING, (string)$body['value'], '', 301, true);
+                break;
+            }
+
+            // ===== DEFAULT =====
             default:
-                // Unbekanntes/noch nicht gemapptes Signal – nur debuggen
-                $this->SendDebug('ApplySignal', "unmapped code=$code body=" . json_encode($body), 0);
+                $this->SendDebug('ApplySignal', "unmapped code={$code} body=" . json_encode($body), 0);
                 break;
         }
     }
