@@ -50,30 +50,48 @@ class Smartcar extends IPSModule
     {
         parent::ApplyChanges();
 
-        // Hook immer korrekt (und aufräumen)
-        $hookPath = $this->RegisterHook();
+        // 1) Hook immer korrekt registrieren (bereinigt alte/kaputte Einträge)
+        $hookPath = $this->RegisterHook(); // erwartet z. B. /hook/smartcar_<InstanceID>
+        $this->SendDebug('ApplyChanges', "Hook-Pfad aktiv: $hookPath", 0);
 
-        // Timer für Token-Erneuerung
-        $this->SetTimerInterval('TokenRefreshTimer', 90 * 60 * 1000);
+        // 2) Token-Refresh-Timer
+        $this->SetTimerInterval('TokenRefreshTimer', 90 * 60 * 1000); // 90 Minuten
+        $this->SendDebug('ApplyChanges', 'Token-Erneuerungs-Timer auf 90 min gestellt.', 0);
+
+        // Bei fertig initialisiertem Kernel ggf. sofort Refresh
         if (IPS_GetKernelRunlevel() === KR_READY && $this->ReadAttributeString('RefreshToken') !== '') {
             $this->RefreshAccessToken();
         }
 
-        // Redirect-URI bestimmen: manuell > Connect+Hook
+        // 3) Redirect-URI bestimmen
+        //    a) Wenn im Formular manuell gesetzt -> exakt diese verwenden
+        //    b) sonst automatisch aus Connect-URL + Hook
         $manual = trim($this->ReadPropertyString('ManualRedirectURI'));
+        $effectiveRedirect = '';
+
         if ($manual !== '') {
-            $this->WriteAttributeString('RedirectURI', $manual);
-            $this->SendDebug('ApplyChanges', 'Manuelle Redirect-URI verwendet: ' . $manual, 0);
+            // minimale Plausibilitätsprüfung
+            if (!preg_match('~^https://~i', $manual)) {
+                $this->SendDebug('ApplyChanges', 'Warnung: Manuelle Redirect-URI ohne https:// – wird trotzdem verwendet.', 0);
+            }
+            $effectiveRedirect = $manual;
+            $this->SendDebug('ApplyChanges', 'Manuelle Redirect-URI aktiv.', 0);
         } else {
-            $autoRedirect = $this->BuildConnectURL($hookPath);
-            $this->WriteAttributeString('RedirectURI', $autoRedirect !== '' ? $autoRedirect : 'Connect-Adresse nicht verfügbar');
-            $this->SendDebug('ApplyChanges', 'Redirect-URI automatisch (Connect+Hook): ' . $autoRedirect, 0);
+            $effectiveRedirect = $this->BuildConnectURL($hookPath);
+            if ($effectiveRedirect === '') {
+                $this->SendDebug('ApplyChanges', 'Connect-Adresse nicht verfügbar. Redirect-URI bleibt leer.', 0);
+                $this->LogMessage('ApplyChanges - Connect-Adresse konnte nicht ermittelt werden.', KL_ERROR);
+            } else {
+                $this->SendDebug('ApplyChanges', 'Redirect-URI automatisch (Connect+Hook).', 0);
+            }
         }
+        $this->WriteAttributeString('RedirectURI', $effectiveRedirect);
 
-        // (Optional) für spätere Anzeige
-        $this->WriteAttributeString('WebhookCallbackURI', $this->BuildConnectURL($hookPath));
+        // 4) Webhook-Callback-URI (für Anzeige/Info) immer aus Connect+Hook ableiten
+        $callbackURI = $this->BuildConnectURL($hookPath);
+        $this->WriteAttributeString('WebhookCallbackURI', $callbackURI);
 
-        // Profile & Variablen
+        // 5) Profile & Variablen anlegen/aufräumen
         $this->CreateProfile();
         $this->UpdateVariablesBasedOnScopes();
     }
