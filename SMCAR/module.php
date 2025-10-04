@@ -40,6 +40,7 @@ class Smartcar extends IPSModule
         $this->RegisterAttributeString('RefreshToken', '');
         $this->RegisterAttributeString('VehicleID', '');
         $this->RegisterAttributeString('RedirectURI', ''); // Effektive OAuth-Redirect-URI (manuell ODER Connect+Hook)
+        $this->RegisterAttributeString('WebhookCallbackURI', '');   // <-- NEU (fehlte)
 
         $this->RegisterTimer('TokenRefreshTimer', 0, 'SMCAR_RefreshAccessToken(' . $this->InstanceID . ');'); 
 
