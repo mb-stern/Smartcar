@@ -1063,29 +1063,46 @@ class Smartcar extends IPSModule
             // ---------- Diagnostics ----------
             default:
                 if (str_starts_with(strtolower($code), 'diagnostics-')) {
-                    // Zwei Varianten:
-                    // 1) body: {"status":"OK","description":""}
-                    // 2) nur status (mit Fehlerarten)
-                    $ident = $asDiagIdent($code);
+                    $ident = $asDiagIdent($code); // z.B. "DiagABS"
 
-                    if (isset($body['status'])) {
-                        $setSafe($ident, VARIABLETYPE_STRING, 'Diagnose ' . $ident, '', $asUpper($body['status']));
-                        if (isset($body['description'])) {
-                            $setSafe($ident . '_Desc', VARIABLETYPE_STRING, 'Diagnose Beschreibung ' . $ident, '', (string)$body['description']);
+                    // Status bestimmen (Bevorzugt body.status; Fallback: $statusValue vom Wrapper; Fallback: body.value)
+                    $statusStr = null;
+                    if (isset($body['status']) && $body['status'] !== '') {
+                        $statusStr = $asUpper($body['status']); // "OK", "WARN", "ERROR", ...
+                    } elseif (!empty($statusValue)) {
+                        // z.B. aus VEHICLE_ERROR; nur den Basisstatus in die Hauptvariable
+                        $statusStr = $asUpper($statusValue);    // "ERROR" etc.
+                        if (!empty($statusErr)) {
+                            // Fehler-Typ/Code separat ablegen (nicht an den Status anhängen -> sonst passt Profil nicht mehr)
+                            $setSafe($ident . '_Detail', VARIABLETYPE_STRING, 'Diagnose Detail ' . $ident, '', $asUpper($statusErr));
                         }
-                    } elseif ($statusValue) {
-                        // ERROR/PERMISSION/COMPATIBILITY/UNAVAILABLE etc.
-                        $txt = $asUpper($statusValue);
-                        if ($statusErr) $txt .= ' (' . $asUpper($statusErr) . ')';
-                        $setSafe($ident, VARIABLETYPE_STRING, 'Diagnose ' . $ident, '', $txt);
+                    } elseif (array_key_exists('value', $body)) {
+                        // Manche Diag-Endpunkte liefern nur value; bool -> OK/ERROR, sonst roher Wert
+                        $v = $body['value'];
+                        if (is_bool($v)) {
+                            $statusStr = $v ? 'OK' : 'ERROR';
+                        } else {
+                            $statusStr = $asUpper((string)$v);
+                        }
                     }
 
-                    // Sonderfälle Zähl-/Listenwerte
-                    if (str_ends_with(strtolower($code), 'dtccount') && isset($body['value'])) {
+                    // Hauptstatus mit Profil SMCAR.Health speichern
+                    if ($statusStr !== null) {
+                        $setSafe($ident, VARIABLETYPE_STRING, 'Diagnose ' . $ident, 'SMCAR.Health', $statusStr);
+                    }
+
+                    // Optionale Beschreibung separat
+                    if (isset($body['description']) && $body['description'] !== '') {
+                        $setSafe($ident . '_Desc', VARIABLETYPE_STRING, 'Diagnose Beschreibung ' . $ident, '', (string)$body['description']);
+                    }
+
+                    // Sonderfälle: Zähl-/Listenwerte
+                    $codeLower = strtolower($code);
+                    if (str_ends_with($codeLower, 'dtccount') && isset($body['value'])) {
                         $setSafe('Diag_DTCCount', VARIABLETYPE_INTEGER, 'Diagnose DTC Count', '', intval($body['value']));
                     }
-                    if (str_ends_with(strtolower($code), 'dtclist') && isset($body['values'])) {
-                        // als JSON speichern, damit struktur erhalten bleibt
+                    if (str_ends_with($codeLower, 'dtclist') && isset($body['values'])) {
+                        // Als JSON ablegen, Struktur bleibt erhalten
                         $setSafe('Diag_DTCList', VARIABLETYPE_STRING, 'Diagnose DTC Liste', '', json_encode($body['values']));
                     }
                     break;
@@ -1379,6 +1396,13 @@ class Smartcar extends IPSModule
             IPS_SetVariableProfileAssociation('SMCAR.Charge', 'CHARGING', 'Laden', '', -1);
             IPS_SetVariableProfileAssociation('SMCAR.Charge', 'FULLY_CHARGED', 'Voll geladen', '', -1);
             IPS_SetVariableProfileAssociation('SMCAR.Charge', 'NOT_CHARGING', 'Lädt nicht', '', -1);
+        }
+        if (!IPS_VariableProfileExists('SMCAR.Health')) {
+        IPS_CreateVariableProfile('SMCAR.Health', VARIABLETYPE_STRING);
+        IPS_SetVariableProfileAssociation('SMCAR.Health', 'OK',      'OK',        '', -1);
+        IPS_SetVariableProfileAssociation('SMCAR.Health', 'WARN',    'Warnung',   '', -1);
+        IPS_SetVariableProfileAssociation('SMCAR.Health', 'ERROR',   'Fehler',    '', -1);
+        IPS_SetVariableProfileAssociation('SMCAR.Health', 'UNKNOWN', 'Unbekannt', '', -1);
         }
     }
 

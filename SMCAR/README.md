@@ -102,6 +102,7 @@ SMCAR.Pressure   |  Float
 SMCAR.Progress   |  Float  
 SMCAR.Status     |  String   
 SMCAR.Charge     |  String
+SMCAR.Health     |  String
 
 ### 6. WebFront
 
@@ -129,6 +130,9 @@ SMCAR_FetchVIN(12345);              |   Abfrage der Fahrgestellnummer
 SMCAR_FetchVehicleData(12345);      |   Alle im Modul aktivierten Scopes abfragen. Vorsicht, es könnten sehr viele API-Calls verbraucht werden
 
 ### 8. Versionen
+
+Version 3.0 (05.10.2025)
+- Neu werden Webhooks unterstütz. Diese müssen über einen Plan von Smartcar erworben und in der Config angepasst werden.
 
 Version 2.3 (28.09.2025)
 - Der Token wird nun bei jeder Konfigurationsänderung oder auch beim Update erneuert, sobald Symcon bereit ist. Dies sollte die zeitweiligen Token-Fehler nach Neustart des Systems beheben.
