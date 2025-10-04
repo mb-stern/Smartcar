@@ -49,58 +49,50 @@ class Smartcar extends IPSModule
     public function ApplyChanges()
     {
         parent::ApplyChanges();
-    
-        // Hook initialisieren (automatisch, kein manueller Name)
-        $hookPath = $this->ReadAttributeString("CurrentHook");
-        if ($hookPath === "") {
-            $hookPath = $this->RegisterHook();
-            $this->SendDebug('ApplyChanges', "Die Initialisierung des Hook-Pfades '$hookPath' gestartet.", 0);
-        }
-    
-        // Timer für Token-Erneuerung
-        $this->SetTimerInterval('TokenRefreshTimer', 90 * 60 * 1000); // Alle 90 Minuten
-        $this->SendDebug('ApplyChanges', 'Token-Erneuerungs-Timer auf 90 min gestellt.', 0);
 
-        // Wenn Kernel bereits bereit ist (z. B. nach Konfig-Änderung oder Neustart), sofort erneuern
+        // Hook immer korrekt (und aufräumen)
+        $hookPath = $this->RegisterHook();
+
+        // Timer für Token-Erneuerung
+        $this->SetTimerInterval('TokenRefreshTimer', 90 * 60 * 1000);
         if (IPS_GetKernelRunlevel() === KR_READY && $this->ReadAttributeString('RefreshToken') !== '') {
             $this->RefreshAccessToken();
         }
-    
-        // Effektive Redirect-URI bestimmen:
-        // 1) Falls im Formular "ManualRedirectURI" gesetzt -> genau diese verwenden
-        // 2) sonst: Connect-Adresse + Hook
+
+        // Redirect-URI bestimmen: manuell > Connect+Hook
         $manual = trim($this->ReadPropertyString('ManualRedirectURI'));
         if ($manual !== '') {
             $this->WriteAttributeString('RedirectURI', $manual);
             $this->SendDebug('ApplyChanges', 'Manuelle Redirect-URI verwendet: ' . $manual, 0);
         } else {
-            // Connect-Adresse ermitteln und mit Hook verknüpfen (Standard)
-            $ipsymconconnectid_list = IPS_GetInstanceListByModuleID("{9486D575-BE8C-4ED8-B5B5-20930E26DE6F}");
-            if (!empty($ipsymconconnectid_list)) {
-                $ipsymconconnectid = $ipsymconconnectid_list[0];
-                $connectAddress = @CC_GetUrl($ipsymconconnectid);
-                if ($connectAddress && is_string($connectAddress) && $connectAddress !== '') {
-                    $hookPath = $this->ReadAttributeString("CurrentHook");
-                    $redirectURI = rtrim($connectAddress, '/') . $hookPath;
-                    $this->WriteAttributeString('RedirectURI', $redirectURI);
-                    $this->SendDebug('ApplyChanges', 'Redirect-URI (Connect+Hook) gespeichert: ' . $redirectURI, 0);
-                } else {
-                    $this->WriteAttributeString('RedirectURI', 'Connect-Adresse konnte nicht ermittelt werden.');
-                    $this->SendDebug('ApplyChanges', 'Connect-Adresse konnte nicht ermittelt werden.', 0);
-                    $this->LogMessage('ApplyChanges - Connect-Adresse konnte nicht ermittelt werden.', KL_ERROR);
-                }
-            } else {
-                $this->WriteAttributeString('RedirectURI', 'Connect-Instanz nicht gefunden.');
-                $this->SendDebug('ApplyChanges', 'Connect-Instanz nicht gefunden.', 0);
-                $this->LogMessage('ApplyChanges - Connect-Instanz nicht gefunden.', KL_ERROR);
-            }
+            $autoRedirect = $this->BuildConnectURL($hookPath);
+            $this->WriteAttributeString('RedirectURI', $autoRedirect !== '' ? $autoRedirect : 'Connect-Adresse nicht verfügbar');
+            $this->SendDebug('ApplyChanges', 'Redirect-URI automatisch (Connect+Hook): ' . $autoRedirect, 0);
         }
-    
-        // Profile erstellen
+
+        // (Optional) für spätere Anzeige
+        $this->WriteAttributeString('WebhookCallbackURI', $this->BuildConnectURL($hookPath));
+
+        // Profile & Variablen
         $this->CreateProfile();
-        
-        // Variablenregistrierung basierend auf aktivierten Scopes
         $this->UpdateVariablesBasedOnScopes();
+    }
+
+    private function BuildConnectURL(string $hookPath): string
+    {
+        if ($hookPath === '' || strpos($hookPath, '/hook/') !== 0) {
+            $hookPath = '/hook/' . ltrim($hookPath, '/');
+        }
+
+        $connectAddress = '';
+        $ids = @IPS_GetInstanceListByModuleID('{9486D575-BE8C-4ED8-B5B5-20930E26DE6F}');
+        if (!empty($ids)) {
+            $connectAddress = @CC_GetUrl($ids[0]);
+        }
+        if (is_string($connectAddress) && $connectAddress !== '') {
+            return rtrim($connectAddress, '/') . $hookPath;
+        }
+        return '';
     }
 
     public function RequestAction($ident, $value)
@@ -289,43 +281,46 @@ class Smartcar extends IPSModule
 
     private function RegisterHook()
     {
-        $hookBase = '/hook/smartcar_';
-        $hookPath = $this->ReadAttributeString("CurrentHook");
-    
-        // Wenn kein Hook registriert ist, einen neuen erstellen
-        if ($hookPath === "") {
-            $hookPath = $hookBase . $this->InstanceID;
-            $this->WriteAttributeString("CurrentHook", $hookPath);
-        }
-        
+        $desired = '/hook/smartcar_' . $this->InstanceID;
+
         $ids = IPS_GetInstanceListByModuleID('{015A6EB8-D6E5-4B93-B496-0D3F77AE9FE1}');
         if (count($ids) === 0) {
+            $this->WriteAttributeString('CurrentHook', $desired);
             $this->SendDebug('RegisterHook', 'Keine WebHook-Control-Instanz gefunden.', 0);
-            $this->LogMessage('RegisterHook - Keine WebHook-Control-Instanz gefunden.', KL_ERROR);
-            return $hookPath;
+            return $desired;
         }
-    
+
         $hookInstanceID = $ids[0];
         $hooks = json_decode(IPS_GetProperty($hookInstanceID, 'Hooks'), true);
-    
-        if (!is_array($hooks)) {
-            $hooks = [];
+        if (!is_array($hooks)) $hooks = [];
+
+        // alte/kaputte Mappings entfernen (dieser InstanceID oder /hook/http…)
+        $clean = [];
+        $changed = false;
+        foreach ($hooks as $h) {
+            $hHook = $h['Hook'] ?? '';
+            $hTarget = $h['TargetID'] ?? 0;
+
+            // alles von dieser Instanz verwerfen (wir setzen gleich neu)
+            if ($hTarget === $this->InstanceID) { $changed = true; continue; }
+            // kaputte Einträge wie /hook/https://… entfernen
+            if (preg_match('~^/hook/https?://~i', $hHook)) { $changed = true; continue; }
+
+            $clean[] = $h;
         }
-    
-        // Prüfen, ob der Hook bereits existiert
-        foreach ($hooks as $hook) {
-            if ($hook['Hook'] === $hookPath && $hook['TargetID'] === $this->InstanceID) {
-                $this->SendDebug('RegisterHook', "Hook '$hookPath' ist bereits registriert.", 0);
-                return $hookPath;
-            }
+
+        // unser gewünschtes Mapping hinzufügen
+        $clean[] = ['Hook' => $desired, 'TargetID' => $this->InstanceID];
+        $changed = true;
+
+        if ($changed) {
+            IPS_SetProperty($hookInstanceID, 'Hooks', json_encode($clean));
+            IPS_ApplyChanges($hookInstanceID);
+            $this->SendDebug('RegisterHook', "Hook neu registriert: $desired", 0);
         }
-    
-        // Neuen Hook hinzufügen
-        $hooks[] = ['Hook' => $hookPath, 'TargetID' => $this->InstanceID];
-        IPS_SetProperty($hookInstanceID, 'Hooks', json_encode($hooks));
-        IPS_ApplyChanges($hookInstanceID);
-        $this->SendDebug('RegisterHook', "Hook '$hookPath' wurde registriert.", 0);
-        return $hookPath;
+
+        $this->WriteAttributeString('CurrentHook', $desired);
+        return $desired;
     }
 
     public function GetConfigurationForm()
