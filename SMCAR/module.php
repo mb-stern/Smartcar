@@ -571,6 +571,44 @@ class Smartcar extends IPSModule
         }
     }
 
+        private function CreateProfile()
+    {
+        if (!IPS_VariableProfileExists('SMCAR.Pressure')) {
+            IPS_CreateVariableProfile('SMCAR.Pressure', VARIABLETYPE_FLOAT);
+            IPS_SetVariableProfileText('SMCAR.Pressure', '', ' bar');
+            IPS_SetVariableProfileDigits('SMCAR.Pressure', 1);
+            IPS_SetVariableProfileValues('SMCAR.Pressure', 0, 5, 0.1);
+        }
+
+        if (!IPS_VariableProfileExists('SMCAR.Odometer')) {
+            IPS_CreateVariableProfile('SMCAR.Odometer', VARIABLETYPE_FLOAT);
+            IPS_SetVariableProfileText('SMCAR.Odometer', '', ' km');
+            IPS_SetVariableProfileDigits('SMCAR.Odometer', 0);
+            IPS_SetVariableProfileValues('SMCAR.Odometer', 0, 0, 1);
+        }
+
+        if (!IPS_VariableProfileExists('SMCAR.Progress')) {
+            IPS_CreateVariableProfile('SMCAR.Progress', VARIABLETYPE_FLOAT);
+            IPS_SetVariableProfileText('SMCAR.Progress', '', ' %');
+            IPS_SetVariableProfileDigits('SMCAR.Progress', 0);
+            IPS_SetVariableProfileValues('SMCAR.Progress', 0, 100, 1);
+        }
+
+        if (!IPS_VariableProfileExists('SMCAR.Status')) {
+            IPS_CreateVariableProfile('SMCAR.Status', VARIABLETYPE_STRING);
+            IPS_SetVariableProfileAssociation('SMCAR.Status', 'OPEN', 'Offen', '', -1);
+            IPS_SetVariableProfileAssociation('SMCAR.Status', 'CLOSED', 'Geschlossen', '', -1);
+            IPS_SetVariableProfileAssociation('SMCAR.Status', 'UNKNOWN', 'Unbekannt', '', -1);
+        }
+
+        if (!IPS_VariableProfileExists('SMCAR.Charge')) {
+            IPS_CreateVariableProfile('SMCAR.Charge', VARIABLETYPE_STRING);
+            IPS_SetVariableProfileAssociation('SMCAR.Charge', 'CHARGING', 'Laden', '', -1);
+            IPS_SetVariableProfileAssociation('SMCAR.Charge', 'FULLY_CHARGED', 'Voll geladen', '', -1);
+            IPS_SetVariableProfileAssociation('SMCAR.Charge', 'NOT_CHARGING', 'Lädt nicht', '', -1);
+        }
+    }
+
     // -------- Variablen je nach Scopes registrieren --------
     private function UpdateVariablesBasedOnScopes()
     {
