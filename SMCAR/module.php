@@ -310,32 +310,37 @@ class Smartcar extends IPSModule
 
         // --- VERIFY-Challenge ---
         if (($payload['eventType'] ?? '') === 'VERIFY') {
-            $challenge = $payload['challenge'] ?? '';
+            // Wichtig: challenge steckt in data.challenge (Fallback: top-level, falls Smartcar das mal ändert)
+            $challenge = $payload['data']['challenge'] ?? ($payload['challenge'] ?? '');
             if ($challenge === '') {
-                $this->SendDebug('Webhook', '❌ VERIFY ohne challenge.', 0);
+                $this->SendDebug('Webhook', '❌ VERIFY: challenge fehlt (erwartet data.challenge).', 0);
                 http_response_code(400);
                 echo 'Bad Request';
                 return;
             }
 
-            // Wenn Verifizierung AUS → für Tests challenge ungehast zurückgeben
+            $verifyEnabled = $this->ReadPropertyBoolean('VerifyWebhookSignature');
+            $mgmtToken     = trim($this->ReadPropertyString('ManagementToken'));
+
+            // Testmodus: Verifizierung AUS → plain challenge zurückgeben
             if (!$verifyEnabled) {
-                $this->SendDebug('Webhook', 'VERIFY ohne HMAC (VerifyWebhookSignature=false) → nur Testbetrieb!', 0);
+                $this->SendDebug('Webhook', "VERIFY (Testmodus): gebe plain challenge zurück: {$challenge}", 0);
                 header('Content-Type: application/json');
                 echo json_encode(['challenge' => $challenge]);
                 return;
             }
 
-            // Verifizierung AN → HMAC benötigt ManagementToken
+            // Verifizierung AN → HMAC über die challenge mit ManagementToken bilden
             if ($mgmtToken === '') {
-                $this->SendDebug('Webhook', '❌ VERIFY: ManagementToken fehlt (HMAC nicht möglich).', 0);
+                $this->SendDebug('Webhook', '❌ VERIFY: VerifyWebhookSignature=true aber ManagementToken leer.', 0);
                 http_response_code(401);
                 echo 'Unauthorized';
                 return;
             }
 
+            // Smartcar erwartet HMAC-SHA256 (hex) über die challenge mit dem Application Management Token
             $hmac = hash_hmac('sha256', $challenge, $mgmtToken);
-            $this->SendDebug('Webhook', '✅ VERIFY HMAC gesendet.', 0);
+            $this->SendDebug('Webhook', "✅ VERIFY HMAC gebildet: {$hmac}", 0);
             header('Content-Type: application/json');
             echo json_encode(['challenge' => $hmac]);
             return;
