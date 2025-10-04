@@ -89,11 +89,13 @@ class Smartcar extends IPSModule
                 $this->SendDebug('ApplyChanges', 'Redirect-URI automatisch (Connect+Hook).', 0);
             }
         }
+
+        // Speichern
         $this->WriteAttributeString('RedirectURI', $effectiveRedirect);
 
-        // Webhook Callback URI (immer Connect+Hook) – für Dashboard/Smartcar Webhooks
-        $callbackURI = $this->BuildConnectURL($hookPath);
-        $this->WriteAttributeString('WebhookCallbackURI', $callbackURI);
+        // WICHTIG: Webhook-Callback-URI = dieselbe URL wie RedirectURI (gleicher Pfad/gleiche Adresse)
+        // Wir unterscheiden in ProcessHookData anhand GET(OAuth)/POST(Webhook) + Payload.
+        $this->WriteAttributeString('WebhookCallbackURI', $effectiveRedirect);
 
         // Profile & Variablen
         $this->CreateProfile();
@@ -182,21 +184,20 @@ class Smartcar extends IPSModule
 
         $effectiveRedirect = $this->ReadAttributeString('RedirectURI');
         $hookPath          = $this->ReadAttributeString('CurrentHook');
-        $callbackURI       = $this->ReadAttributeString('WebhookCallbackURI');
+        // jetzt identisch zur RedirectURI
+        $callbackURI       = $effectiveRedirect;
 
         $inject = [
             ['type' => 'Label', 'caption' => 'Hook-Pfad: ' . $hookPath],
-            ['type' => 'Label', 'caption' => 'Aktuelle Redirect-URI (wird an Smartcar gesendet):'],
+            ['type' => 'Label', 'caption' => 'Aktuelle Redirect- & Webhook-URI (beide identisch):'],
             ['type' => 'Label', 'caption' => $effectiveRedirect],
             [
                 'type'    => 'ValidationTextBox',
                 'name'    => 'ManualRedirectURI',
                 'caption' => 'Manuelle Redirect-URI (optional; volle HTTPS-URL). Wenn leer, wird ipmagic-Connect + Hook verwendet.'
             ],
-            ['type' => 'Label', 'caption' => 'Webhook Callback-URI (bei Smartcar im Webhook hinterlegen):'],
-            ['type' => 'Label', 'caption' => $callbackURI],
             ['type' => 'CheckBox', 'name' => 'EnableWebhook', 'caption' => 'Webhook-Empfang aktivieren'],
-            ['type' => 'CheckBox', 'name' => 'VerifyWebhookSignature', 'caption' => 'SC-Signature verifizieren (empfohlen)'],
+            ['type' => 'CheckBox', 'name' => 'VerifyWebhookSignature', 'caption' => 'SC-Signature/VERIFY verifizieren (empfohlen)'],
             [
                 'type'    => 'ValidationTextBox',
                 'name'    => 'ManagementToken',
@@ -206,11 +207,10 @@ class Smartcar extends IPSModule
             ['type' => 'Label', 'caption' => 'Hinweis: Manuelle Redirect-URI überschreibt die automatisch gebildete Connect-URL.']
         ];
 
-        // vor die bestehenden elements setzen
         array_splice($form['elements'], 0, 0, $inject);
-
         return json_encode($form);
     }
+
     public function GenerateAuthURL()
     {
         $clientID     = $this->ReadPropertyString('ClientID');
@@ -257,118 +257,159 @@ class Smartcar extends IPSModule
 
     public function ProcessHookData()
     {
-        // Der gleiche Hook behandelt:
-        // 1) GET ...?code=...   -> OAuth Redirect
-        // 2) POST application/json -> Smartcar Webhook (VERIFY + EVENTS)
         $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+        $uri    = $_SERVER['REQUEST_URI']     ?? '';
+        $qs     = $_SERVER['QUERY_STRING']    ?? '';
 
+        $this->SendDebug('Webhook', "Request: method=$method uri=$uri qs=$qs", 0);
+
+        // --- OAuth Redirect (GET ?code=...) ---
         if ($method === 'GET' && isset($_GET['code'])) {
             $authCode = $_GET['code'];
             $state    = $_GET['state'] ?? '';
-            $this->SendDebug('ProcessHookData', "OAuth Redirect: code=$authCode state=$state", 0);
+            $this->SendDebug('Webhook', "OAuth Redirect: code=$authCode state=$state", 0);
             $this->RequestAccessToken($authCode);
             echo 'Fahrzeug erfolgreich verbunden!';
             return;
         }
 
+        // --- Webhook deaktiviert? ---
         if (!$this->ReadPropertyBoolean('EnableWebhook')) {
+            $this->SendDebug('Webhook', 'Empfang deaktiviert → 200/ignored', 0);
             http_response_code(200);
-            echo 'Webhook deaktiviert';
+            echo 'ignored';
             return;
         }
 
+        // --- Nur POST für Webhooks ---
         if ($method !== 'POST') {
+            $this->SendDebug('Webhook', "Nicht-POST → 200/OK", 0);
             http_response_code(200);
             echo 'OK';
             return;
         }
 
-        // rohen Body einmal lesen (für HMAC) und danach JSON dekodieren
-        $raw = file_get_contents('php://input');
-        $payload = json_decode($raw, true);
+        // --- Headers / RAW debuggen ---
+        $sigHeader = $this->getRequestHeader('SC-Signature') ?? $this->getRequestHeader('X-Smartcar-Signature') ?? '';
+        $this->SendDebug('Webhook', 'Header SC-Signature: ' . ($sigHeader !== '' ? $sigHeader : '(leer)'), 0);
 
+        $raw = file_get_contents('php://input') ?: '';
+        $this->SendDebug('Webhook', 'RAW Body: ' . $raw, 0);
+
+        $payload = json_decode($raw, true);
         if (!is_array($payload)) {
             $this->SendDebug('Webhook', '❌ Ungültiges JSON.', 0);
             http_response_code(400);
             echo 'Bad Request';
             return;
         }
+        $this->SendDebug('Webhook', 'JSON: ' . json_encode($payload, JSON_PRETTY_PRINT), 0);
 
-        // 2a) Callback URI Verification (Challenge)
+        $verifyEnabled = $this->ReadPropertyBoolean('VerifyWebhookSignature');
+        $mgmtToken     = trim($this->ReadPropertyString('ManagementToken'));
+
+        // --- VERIFY-Challenge ---
         if (($payload['eventType'] ?? '') === 'VERIFY') {
             $challenge = $payload['challenge'] ?? '';
-            $token = $this->ReadPropertyString('ManagementToken');
-            if ($challenge === '' || $token === '') {
-                $this->SendDebug('Webhook', '❌ VERIFY ohne challenge oder fehlendes ManagementToken.', 0);
+            if ($challenge === '') {
+                $this->SendDebug('Webhook', '❌ VERIFY ohne challenge.', 0);
                 http_response_code(400);
                 echo 'Bad Request';
                 return;
             }
-            $hmac = hash_hmac('sha256', $challenge, $token);
-            $this->SendDebug('Webhook', '✅ VERIFY beantwortet.', 0);
+
+            // Wenn Verifizierung AUS → für Tests challenge ungehast zurückgeben
+            if (!$verifyEnabled) {
+                $this->SendDebug('Webhook', 'VERIFY ohne HMAC (VerifyWebhookSignature=false) → nur Testbetrieb!', 0);
+                header('Content-Type: application/json');
+                echo json_encode(['challenge' => $challenge]);
+                return;
+            }
+
+            // Verifizierung AN → HMAC benötigt ManagementToken
+            if ($mgmtToken === '') {
+                $this->SendDebug('Webhook', '❌ VERIFY: ManagementToken fehlt (HMAC nicht möglich).', 0);
+                http_response_code(401);
+                echo 'Unauthorized';
+                return;
+            }
+
+            $hmac = hash_hmac('sha256', $challenge, $mgmtToken);
+            $this->SendDebug('Webhook', '✅ VERIFY HMAC gesendet.', 0);
             header('Content-Type: application/json');
             echo json_encode(['challenge' => $hmac]);
             return;
         }
 
-        // 2b) Payload-HMAC prüfen (SC-Signature) – empfohlen
-        if ($this->ReadPropertyBoolean('VerifyWebhookSignature')) {
-            $sig = $this->getRequestHeader('SC-Signature');
-            $token = $this->ReadPropertyString('ManagementToken');
-            if ($sig === null || $token === '') {
-                $this->SendDebug('Webhook', '❌ Signaturprüfung nicht möglich (Header oder Token fehlt).', 0);
+        // --- Signatur prüfen (nur wenn aktiviert) ---
+        if ($verifyEnabled) {
+            if ($mgmtToken === '') {
+                $this->SendDebug('Webhook', '❌ Signaturprüfung aktiv, aber ManagementToken fehlt.', 0);
                 http_response_code(401);
                 echo 'Unauthorized';
                 return;
             }
-            $calc = hash_hmac('sha256', $raw, $token);
-            if (!hash_equals($calc, trim($sig))) {
-                $this->SendDebug('Webhook', "❌ Signatur ungültig. Erwartet $calc, erhalten $sig", 0);
+            if ($sigHeader === '') {
+                $this->SendDebug('Webhook', '❌ Signatur-Header fehlt.', 0);
                 http_response_code(401);
                 echo 'Unauthorized';
                 return;
             }
+            $calc = hash_hmac('sha256', $raw, $mgmtToken);
+            if (!hash_equals($calc, trim($sigHeader))) {
+                $this->SendDebug('Webhook', "❌ Signatur ungültig. expected=$calc received=$sigHeader", 0);
+                http_response_code(401);
+                echo 'Unauthorized';
+                return;
+            }
+            $this->SendDebug('Webhook', '✅ Signatur verifiziert.', 0);
+        } else {
+            $this->SendDebug('Webhook', 'Signaturprüfung deaktiviert (Testmodus).', 0);
         }
 
-        // 2c) Fahrzeug filtern
+        // --- Fahrzeug-Filter ---
         $incomingVehicle = $payload['data']['vehicle']['id'] ?? '';
         $boundVehicle    = $this->ReadAttributeString('VehicleID');
+        $this->SendDebug('Webhook', "VehicleID inbound=$incomingVehicle bound=$boundVehicle", 0);
+
         if ($boundVehicle !== '' && $incomingVehicle !== '' && $incomingVehicle !== $boundVehicle) {
-            // Nicht für diese Instanz
-            $this->SendDebug('Webhook', "ℹ️ Event ignoriert (VehicleID passt nicht): $incomingVehicle != $boundVehicle", 0);
+            $this->SendDebug('Webhook', "Event ignoriert: VehicleID passt nicht.", 0);
             http_response_code(200);
             echo 'ignored';
             return;
         }
 
-        // 2d) Events verarbeiten
+        // --- Events ---
         $eventType = $payload['eventType'] ?? '';
+        $this->SendDebug('Webhook', "eventType=$eventType", 0);
+
         switch ($eventType) {
             case 'VEHICLE_STATE':
                 $signals = $payload['data']['signals'] ?? [];
+                $this->SendDebug('Webhook', 'Signals: ' . json_encode($signals), 0);
                 if (is_array($signals)) {
                     foreach ($signals as $sig) {
                         $code = $sig['code'] ?? '';
                         $body = $sig['body'] ?? [];
+                        $this->SendDebug('Webhook', "Signal code=$code body=" . json_encode($body), 0);
                         if ($code !== '' && is_array($body)) {
                             $this->ApplySignal($code, $body);
                         }
                     }
                 }
-                $this->SendDebug('Webhook', '✅ VEHICLE_STATE verarbeitet.', 0);
                 http_response_code(200);
                 echo 'ok';
                 return;
 
             case 'VEHICLE_ERROR':
                 $err = $payload['data']['error'] ?? [];
-                $this->SendDebug('Webhook', '⚠️ VEHICLE_ERROR: ' . json_encode($err), 0);
+                $this->SendDebug('Webhook', 'VEHICLE_ERROR: ' . json_encode($err), 0);
                 http_response_code(200);
                 echo 'ok';
                 return;
 
             default:
-                $this->SendDebug('Webhook', "ℹ️ unbekannter eventType: $eventType", 0);
+                $this->SendDebug('Webhook', "Unbekannter eventType: $eventType", 0);
                 http_response_code(200);
                 echo 'ok';
                 return;
