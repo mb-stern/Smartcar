@@ -406,12 +406,27 @@ class Smartcar extends IPSModule
                 echo 'ok';
                 return;
 
-            case 'VEHICLE_ERROR':
-                $err = $payload['data']['error'] ?? [];
-                $this->SendDebug('Webhook', 'VEHICLE_ERROR: ' . json_encode($err), 0);
-                http_response_code(200);
-                echo 'ok';
-                return;
+        case 'VEHICLE_ERROR':
+            $errs = $payload['data']['errors'] ?? [];
+            $this->SendDebug('Webhook', 'VEHICLE_ERROR: ' . json_encode($errs), 0);
+            // optional: pro Fehler schön ausgeben
+            foreach ($errs as $e) {
+                $this->SendDebug(
+                    'Webhook',
+                    sprintf(
+                        'ERROR type=%s code=%s state=%s desc=%s signals=%s',
+                        $e['type'] ?? 'n/a',
+                        $e['code'] ?? 'n/a',
+                        $e['state'] ?? 'n/a',
+                        $e['description'] ?? 'n/a',
+                        implode(',', $e['signals'] ?? [])
+                    ),
+                    0
+                );
+            }
+            http_response_code(200);
+            echo 'ok';
+            return;
 
             default:
                 $this->SendDebug('Webhook', "Unbekannter eventType: $eventType", 0);
