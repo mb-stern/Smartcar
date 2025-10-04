@@ -5,16 +5,21 @@ class Smartcar extends IPSModule
     public function Create()
     {
         parent::Create();
-    
+
         // Allgemeine Eigenschaften
         $this->RegisterPropertyString('ClientID', '');
         $this->RegisterPropertyString('ClientSecret', '');
         $this->RegisterPropertyString('Mode', 'live');
 
-        // NEU: Manuelle Redirect-URI (optional)
-        // Wenn leer -> Connect-Adresse + Hook verwenden (Standard)
+        // Optional: Manuelle Redirect-URI (überschreibt Connect+Hook)
         $this->RegisterPropertyString('ManualRedirectURI', '');
-    
+
+        // Webhook-Optionen
+        $this->RegisterPropertyBoolean('EnableWebhook', true);
+        $this->RegisterPropertyBoolean('VerifyWebhookSignature', true);
+        // Smartcar "application_management_token" für HMAC (SC-Signature) & VERIFY-Challenge
+        $this->RegisterPropertyString('ManagementToken', '');
+
         // Scopes für API-Endpunkte
         $this->RegisterPropertyBoolean('ScopeReadVehicleInfo', false);
         $this->RegisterPropertyBoolean('ScopeReadLocation', false);
@@ -28,50 +33,48 @@ class Smartcar extends IPSModule
         $this->RegisterPropertyBoolean('ScopeReadChargeStatus', false);
         $this->RegisterPropertyBoolean('ScopeReadVIN', false);
         $this->RegisterPropertyBoolean('ScopeReadOilLife', false);
-    
+
         // Vorhandene Ansteuerungen (POST-Endpunkte)
         $this->RegisterPropertyBoolean('SetChargeLimit', false);
         $this->RegisterPropertyBoolean('SetChargeStatus', false);
         $this->RegisterPropertyBoolean('SetLockStatus', false);
-    
+
         // Attribute für interne Nutzung
-        $this->RegisterAttributeString("CurrentHook", "");
+        $this->RegisterAttributeString('CurrentHook', '');
         $this->RegisterAttributeString('AccessToken', '');
         $this->RegisterAttributeString('RefreshToken', '');
         $this->RegisterAttributeString('VehicleID', '');
-        $this->RegisterAttributeString('RedirectURI', ''); // Effektive OAuth-Redirect-URI (manuell ODER Connect+Hook)
-        $this->RegisterAttributeString('WebhookCallbackURI', '');   // <-- NEU (fehlte)
+        // Effektive OAuth-Redirect-URI (manuell ODER Connect+Hook)
+        $this->RegisterAttributeString('RedirectURI', '');
+        // Nur Info/Anzeige: unter dieser URL ist dein Webhook erreichbar (Connect + Hook)
+        $this->RegisterAttributeString('WebhookCallbackURI', '');
 
-        $this->RegisterTimer('TokenRefreshTimer', 0, 'SMCAR_RefreshAccessToken(' . $this->InstanceID . ');'); 
+        // Timer
+        $this->RegisterTimer('TokenRefreshTimer', 0, 'SMCAR_RefreshAccessToken(' . $this->InstanceID . ');');
 
+        // Kernel-Runlevel
         $this->RegisterMessage(0, IPS_KERNELMESSAGE);
     }
-    
+
     public function ApplyChanges()
     {
         parent::ApplyChanges();
 
-        // 1) Hook immer korrekt registrieren (bereinigt alte/kaputte Einträge)
-        $hookPath = $this->RegisterHook(); // erwartet z. B. /hook/smartcar_<InstanceID>
+        // Hook (WebHook-Control) setzen/aufräumen → /hook/smartcar_<InstanceID>
+        $hookPath = $this->RegisterHook();
         $this->SendDebug('ApplyChanges', "Hook-Pfad aktiv: $hookPath", 0);
 
-        // 2) Token-Refresh-Timer
-        $this->SetTimerInterval('TokenRefreshTimer', 90 * 60 * 1000); // 90 Minuten
+        // Token-Refresh alle 90 Minuten
+        $this->SetTimerInterval('TokenRefreshTimer', 90 * 60 * 1000);
         $this->SendDebug('ApplyChanges', 'Token-Erneuerungs-Timer auf 90 min gestellt.', 0);
 
-        // Bei fertig initialisiertem Kernel ggf. sofort Refresh
         if (IPS_GetKernelRunlevel() === KR_READY && $this->ReadAttributeString('RefreshToken') !== '') {
             $this->RefreshAccessToken();
         }
 
-        // 3) Redirect-URI bestimmen
-        //    a) Wenn im Formular manuell gesetzt -> exakt diese verwenden
-        //    b) sonst automatisch aus Connect-URL + Hook
+        // Effektive Redirect-URI festlegen (manuell oder ipmagic-Connect + Hook)
         $manual = trim($this->ReadPropertyString('ManualRedirectURI'));
-        $effectiveRedirect = '';
-
         if ($manual !== '') {
-            // minimale Plausibilitätsprüfung
             if (!preg_match('~^https://~i', $manual)) {
                 $this->SendDebug('ApplyChanges', 'Warnung: Manuelle Redirect-URI ohne https:// – wird trotzdem verwendet.', 0);
             }
@@ -88,11 +91,11 @@ class Smartcar extends IPSModule
         }
         $this->WriteAttributeString('RedirectURI', $effectiveRedirect);
 
-        // 4) Webhook-Callback-URI (für Anzeige/Info) immer aus Connect+Hook ableiten
+        // Webhook Callback URI (immer Connect+Hook) – für Dashboard/Smartcar Webhooks
         $callbackURI = $this->BuildConnectURL($hookPath);
         $this->WriteAttributeString('WebhookCallbackURI', $callbackURI);
 
-        // 5) Profile & Variablen anlegen/aufräumen
+        // Profile & Variablen
         $this->CreateProfile();
         $this->UpdateVariablesBasedOnScopes();
     }
@@ -126,175 +129,14 @@ class Smartcar extends IPSModule
                 $this->SetChargeStatus($value);
                 $this->SetValue($ident, $value);
                 break;
-                
+
             case 'SetLockStatus':
                 $this->SetLockStatus($value);
                 $this->SetValue($ident, $value);
                 break;
 
             default:
-                throw new Exception("Invalid ident");
-        }
-    }
-
-    private function UpdateVariablesBasedOnScopes()
-    {
-        // Fahrzeugdetails
-        if ($this->ReadPropertyBoolean('ScopeReadVehicleInfo')) {
-            $this->RegisterVariableString('VehicleMake', 'Fahrzeug Hersteller', '', 1);
-            $this->RegisterVariableString('VehicleModel', 'Fahrzeug Modell', '', 2);
-            $this->RegisterVariableInteger('VehicleYear', 'Fahrzeug Baujahr', '', 3);
-        } else {
-            $this->UnregisterVariable('VehicleMake');
-            $this->UnregisterVariable('VehicleModel');
-            $this->UnregisterVariable('VehicleYear');
-        }
-
-        // VIN
-        if ($this->ReadPropertyBoolean('ScopeReadVIN')) {
-            $this->RegisterVariableString('VIN', 'Fahrgestellnummer (VIN)', '', 4);
-        } else {
-            $this->UnregisterVariable('VIN');
-        }
-
-        // Standort
-        if ($this->ReadPropertyBoolean('ScopeReadLocation')) {
-            $this->RegisterVariableFloat('Latitude', 'Breitengrad', '', 10);
-            $this->RegisterVariableFloat('Longitude', 'Längengrad', '', 11);
-        } else {
-            $this->UnregisterVariable('Latitude');
-            $this->UnregisterVariable('Longitude');
-        }
-
-        // Kilometerstand
-        if ($this->ReadPropertyBoolean('ScopeReadOdometer')) {
-            $this->RegisterVariableFloat('Odometer', 'Kilometerstand', 'SMCAR.Odometer', 20);
-        } else {
-            $this->UnregisterVariable('Odometer');
-        }
-
-        // Reifendruck
-        if ($this->ReadPropertyBoolean('ScopeReadTires')) {
-            $this->RegisterVariableFloat('TireFrontLeft', 'Reifendruck Vorderreifen Links', 'SMCAR.Pressure', 30);
-            $this->RegisterVariableFloat('TireFrontRight', 'Reifendruck Vorderreifen Rechts', 'SMCAR.Pressure', 31);
-            $this->RegisterVariableFloat('TireBackLeft', 'Reifendruck Hinterreifen Links', 'SMCAR.Pressure', 32);
-            $this->RegisterVariableFloat('TireBackRight', 'Reifendruck Hinterreifen Rechts', 'SMCAR.Pressure', 33);
-        } else {
-            $this->UnregisterVariable('TireFrontLeft');
-            $this->UnregisterVariable('TireFrontRight');
-            $this->UnregisterVariable('TireBackLeft');
-            $this->UnregisterVariable('TireBackRight');
-        }
-
-        // Batterie
-        if ($this->ReadPropertyBoolean('ScopeReadBattery')) {
-            $this->RegisterVariableFloat('BatteryLevel', 'Batterieladestand (SOC)', 'SMCAR.Progress', 40);
-            $this->RegisterVariableFloat('BatteryRange', 'Reichweite Batterie', 'SMCAR.Odometer', 41);
-        } else {
-            $this->UnregisterVariable('BatteryRange');
-            $this->UnregisterVariable('BatteryLevel');
-        }
-
-        if ($this->ReadPropertyBoolean('ScopeReadBatteryCapacity')) {
-            $this->RegisterVariableFloat('BatteryCapacity', 'Batteriekapazität', '~Electricity', 50);
-        } else {
-            $this->UnregisterVariable('BatteryCapacity');
-        }
-
-        // Tank
-        if ($this->ReadPropertyBoolean('ScopeReadFuel')) {
-            $this->RegisterVariableFloat('FuelLevel', 'Tankfüllstand', 'SMCAR.Progress', 60);
-            $this->RegisterVariableFloat('FuelRange', 'Reichweite Tank', 'SMCAR.Odometer', 61);
-        } else {
-            $this->UnregisterVariable('FuelLevel');
-            $this->UnregisterVariable('FuelRange');
-        }
-
-        // Security
-        if ($this->ReadPropertyBoolean('ScopeReadSecurity')) {
-            $this->RegisterVariableBoolean('DoorsLocked', 'Fahrzeug verriegelt', '~Lock', 70);
-            
-            // Türen
-            $this->RegisterVariableString('FrontLeftDoor', 'Vordertür links', 'SMCAR.Status', 71);
-            $this->RegisterVariableString('FrontRightDoor', 'Vordertür rechts', 'SMCAR.Status', 72);
-            $this->RegisterVariableString('BackLeftDoor', 'Hintentür links', 'SMCAR.Status', 73);
-            $this->RegisterVariableString('BackRightDoor', 'Hintentür rechts', 'SMCAR.Status', 74);
-        
-            // Fenster
-            $this->RegisterVariableString('FrontLeftWindow', 'Vorderfenster links', 'SMCAR.Status', 75);
-            $this->RegisterVariableString('FrontRightWindow', 'Vorderfenster rechts', 'SMCAR.Status', 76);
-            $this->RegisterVariableString('BackLeftWindow', 'Hinterfenster links', 'SMCAR.Status', 77);
-            $this->RegisterVariableString('BackRightWindow', 'Hinterfenster rechts', 'SMCAR.Status', 78);
-        
-            // Schiebedach
-            $this->RegisterVariableString('Sunroof', 'Schiebedach', 'SMCAR.Status', 79);
-        
-            // Stauraum
-            $this->RegisterVariableString('RearStorage', 'Stauraum hinten', 'SMCAR.Status', 80);
-            $this->RegisterVariableString('FrontStorage', 'Stauraum vorne', 'SMCAR.Status', 81);
-        
-            // Ladeanschluss
-            $this->RegisterVariableString('ChargingPort', 'Ladeanschluss', 'SMCAR.Status', 82);        
-        } else {
-            $this->UnregisterVariable('DoorsLocked');
-            $this->UnregisterVariable('FrontLeftDoor');
-            $this->UnregisterVariable('FrontRightDoor');
-            $this->UnregisterVariable('BackLeftDoor');
-            $this->UnregisterVariable('BackRightDoor');
-            $this->UnregisterVariable('FrontLeftWindow');
-            $this->UnregisterVariable('FrontRightWindow');
-            $this->UnregisterVariable('BackLeftWindow');
-            $this->UnregisterVariable('BackRightWindow');
-            $this->UnregisterVariable('Sunroof');
-            $this->UnregisterVariable('RearStorage');
-            $this->UnregisterVariable('FrontStorage');
-            $this->UnregisterVariable('ChargingPort');
-        }
-        
-        // Ladeinformationen
-        if ($this->ReadPropertyBoolean('ScopeReadChargeLimit')) {
-            $this->RegisterVariableFloat('ChargeLimit', 'Aktuelles Ladelimit', 'SMCAR.Progress', 90);
-        } else {
-            $this->UnregisterVariable('ChargeLimit');
-        }
-
-        if ($this->ReadPropertyBoolean('ScopeReadChargeStatus')) {
-            $this->RegisterVariableString('ChargeStatus', 'Ladestatus', 'SMCAR.Charge', 91);
-            $this->RegisterVariableBoolean('PluggedIn', 'Ladekabel eingesteckt', '~Switch', 92);
-        } else {
-            $this->UnregisterVariable('ChargeStatus');
-            $this->UnregisterVariable('PluggedIn');
-        }
-
-        // Ölstatus
-        if ($this->ReadPropertyBoolean('ScopeReadOilLife')) {
-            $this->RegisterVariableFloat('OilLife', 'Verbleibende Öl-Lebensdauer', 'SMCAR.Progress', 100);
-        } else {
-            $this->UnregisterVariable('OilLife');
-        }
-
-        // Ladelimit setzen
-        if ($this->ReadPropertyBoolean('SetChargeLimit')) {
-            $this->RegisterVariableFloat('SetChargeLimit', 'Ladelimit setzen', 'SMCAR.Progress', 110);
-            $this->EnableAction('SetChargeLimit');
-        } else {
-            $this->UnregisterVariable('SetChargeLimit');
-        }
-
-        // Ladestatus setzen
-        if ($this->ReadPropertyBoolean('SetChargeStatus')) {
-            $this->RegisterVariableBoolean('SetChargeStatus', 'Ladestatus setzen', '~Switch', 120);
-            $this->EnableAction('SetChargeStatus');
-        } else {
-            $this->UnregisterVariable('SetChargeStatus');
-        }
-
-        // Zentralverriegelung setzen
-        if ($this->ReadPropertyBoolean('SetLockStatus')) {
-            $this->RegisterVariableBoolean('SetLockStatus', 'Zentralverriegelung', '~Lock', 130);
-            $this->EnableAction('SetLockStatus');
-        } else {
-            $this->UnregisterVariable('SetLockStatus');
+                throw new Exception('Invalid ident');
         }
     }
 
@@ -313,30 +155,22 @@ class Smartcar extends IPSModule
         $hooks = json_decode(IPS_GetProperty($hookInstanceID, 'Hooks'), true);
         if (!is_array($hooks)) $hooks = [];
 
-        // alte/kaputte Mappings entfernen (dieser InstanceID oder /hook/http…)
+        // alte/kaputte Mappings entfernen
         $clean = [];
-        $changed = false;
         foreach ($hooks as $h) {
             $hHook = $h['Hook'] ?? '';
             $hTarget = $h['TargetID'] ?? 0;
-
-            // alles von dieser Instanz verwerfen (wir setzen gleich neu)
-            if ($hTarget === $this->InstanceID) { $changed = true; continue; }
-            // kaputte Einträge wie /hook/https://… entfernen
-            if (preg_match('~^/hook/https?://~i', $hHook)) { $changed = true; continue; }
-
+            if ($hTarget === $this->InstanceID) continue; // von dieser Instanz → entfernen
+            if (preg_match('~^/hook/https?://~i', $hHook)) continue; // kaputte Einträge
             $clean[] = $h;
         }
 
         // unser gewünschtes Mapping hinzufügen
         $clean[] = ['Hook' => $desired, 'TargetID' => $this->InstanceID];
-        $changed = true;
 
-        if ($changed) {
-            IPS_SetProperty($hookInstanceID, 'Hooks', json_encode($clean));
-            IPS_ApplyChanges($hookInstanceID);
-            $this->SendDebug('RegisterHook', "Hook neu registriert: $desired", 0);
-        }
+        IPS_SetProperty($hookInstanceID, 'Hooks', json_encode($clean));
+        IPS_ApplyChanges($hookInstanceID);
+        $this->SendDebug('RegisterHook', "Hook neu registriert: $desired", 0);
 
         $this->WriteAttributeString('CurrentHook', $desired);
         return $desired;
@@ -348,33 +182,28 @@ class Smartcar extends IPSModule
 
         $effectiveRedirect = $this->ReadAttributeString('RedirectURI');
         $hookPath          = $this->ReadAttributeString('CurrentHook');
+        $callbackURI       = $this->ReadAttributeString('WebhookCallbackURI');
 
         $inject = [
-            [
-                'type'    => 'Label',
-                'caption' => 'Hook-Pfad: ' . $hookPath
-            ],
-            [
-                'type'    => 'Label',
-                'caption' => 'Aktuelle Redirect-URI (wird an Smartcar gesendet):'
-            ],
-            [
-                'type'    => 'Label',
-                'caption' => $effectiveRedirect
-            ],
+            ['type' => 'Label', 'caption' => 'Hook-Pfad: ' . $hookPath],
+            ['type' => 'Label', 'caption' => 'Aktuelle Redirect-URI (wird an Smartcar gesendet):'],
+            ['type' => 'Label', 'caption' => $effectiveRedirect],
             [
                 'type'    => 'ValidationTextBox',
                 'name'    => 'ManualRedirectURI',
                 'caption' => 'Manuelle Redirect-URI (optional; volle HTTPS-URL). Wenn leer, wird ipmagic-Connect + Hook verwendet.'
             ],
+            ['type' => 'Label', 'caption' => 'Webhook Callback-URI (bei Smartcar im Webhook hinterlegen):'],
+            ['type' => 'Label', 'caption' => $callbackURI],
+            ['type' => 'CheckBox', 'name' => 'EnableWebhook', 'caption' => 'Webhook-Empfang aktivieren'],
+            ['type' => 'CheckBox', 'name' => 'VerifyWebhookSignature', 'caption' => 'SC-Signature verifizieren (empfohlen)'],
             [
-                'type'    => 'Label',
-                'caption' => '────────────────────────────────────────'
+                'type'    => 'ValidationTextBox',
+                'name'    => 'ManagementToken',
+                'caption' => 'Application Management Token (für HMAC & VERIFY)'
             ],
-            [
-                'type'    => 'Label',
-                'caption' => 'Hinweis: Die manuelle Redirect-URI überschreibt die automatisch gebildete Connect-URL.'
-            ]
+            ['type' => 'Label', 'caption' => '────────────────────────────────────────'],
+            ['type' => 'Label', 'caption' => 'Hinweis: Manuelle Redirect-URI überschreibt die automatisch gebildete Connect-URL.']
         ];
 
         // vor die bestehenden elements setzen
@@ -382,20 +211,19 @@ class Smartcar extends IPSModule
 
         return json_encode($form);
     }
-    
     public function GenerateAuthURL()
     {
-        $clientID = $this->ReadPropertyString('ClientID');
-        $mode = $this->ReadPropertyString('Mode');
+        $clientID     = $this->ReadPropertyString('ClientID');
         $clientSecret = $this->ReadPropertyString('ClientSecret');
-        $redirectURI = $this->ReadAttributeString('RedirectURI'); // nutzt ggf. manuelle URI
-    
-        if (empty($clientID) || empty($clientSecret)) {
-            $this->SendDebug('GenerateAuthURL', 'Fehler: Client ID oder Client Secret ist nicht gesetzt!', 0);
-            return "Fehler: Client ID oder Client Secret ist nicht gesetzt!";
+        $mode         = $this->ReadPropertyString('Mode');
+        $redirectURI  = $this->ReadAttributeString('RedirectURI'); // nutzt ggf. manuelle URI
+
+        if (empty($clientID) || empty($clientSecret) || empty($redirectURI)) {
+            $this->SendDebug('GenerateAuthURL', 'Fehler: ClientID/ClientSecret/RedirectURI fehlt!', 0);
+            return 'Fehler: Client ID / Client Secret / Redirect-URI fehlt!';
         }
-    
-        // Scopes dynamisch basierend auf aktivierten Endpunkten zusammenstellen
+
+        // Scopes dynamisch
         $scopes = [];
         if ($this->ReadPropertyBoolean('ScopeReadVehicleInfo')) $scopes[] = 'read_vehicle_info';
         if ($this->ReadPropertyBoolean('ScopeReadLocation')) $scopes[] = 'read_location';
@@ -412,9 +240,9 @@ class Smartcar extends IPSModule
 
         if (empty($scopes)) {
             $this->SendDebug('GenerateAuthURL', 'Fehler: Keine Scopes ausgewählt!', 0);
-            return "Fehler: Keine Scopes ausgewählt!";
+            return 'Fehler: Keine Scopes ausgewählt!';
         }
-    
+
         $authURL = "https://connect.smartcar.com/oauth/authorize?" .
             "response_type=code" .
             "&client_id=" . urlencode($clientID) .
@@ -422,40 +250,153 @@ class Smartcar extends IPSModule
             "&scope=" . urlencode(implode(' ', $scopes)) .
             "&state=" . bin2hex(random_bytes(8)) .
             "&mode=" . urlencode($mode);
-    
-        $this->SendDebug('GenerateAuthURL', "Generierte Authentifizierungs-URL: $authURL", 0);
-    
+
+        $this->SendDebug('GenerateAuthURL', "Generierte Auth-URL: $authURL", 0);
         return $authURL;
     }
-    
+
     public function ProcessHookData()
     {
-        if (!isset($_GET['code'])) {
-            $this->SendDebug('ProcessHookData', 'Kein Autorisierungscode erhalten.', 0);
-            http_response_code(400);
-            echo "Fehler: Kein Code erhalten.";
+        // Der gleiche Hook behandelt:
+        // 1) GET ...?code=...   -> OAuth Redirect
+        // 2) POST application/json -> Smartcar Webhook (VERIFY + EVENTS)
+        $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+
+        if ($method === 'GET' && isset($_GET['code'])) {
+            $authCode = $_GET['code'];
+            $state    = $_GET['state'] ?? '';
+            $this->SendDebug('ProcessHookData', "OAuth Redirect: code=$authCode state=$state", 0);
+            $this->RequestAccessToken($authCode);
+            echo 'Fahrzeug erfolgreich verbunden!';
             return;
         }
-    
-        $authCode = $_GET['code'];
-        $state = $_GET['state'] ?? '';
-    
-        $this->SendDebug('ProcessHookData', "Autorisierungscode erhalten: $authCode, State: $state", 0);
-    
-        // Tausche den Code gegen Access Token
-        $this->RequestAccessToken($authCode);
-    
-        echo "Fahrzeug erfolgreich verbunden!";
+
+        if (!$this->ReadPropertyBoolean('EnableWebhook')) {
+            http_response_code(200);
+            echo 'Webhook deaktiviert';
+            return;
+        }
+
+        if ($method !== 'POST') {
+            http_response_code(200);
+            echo 'OK';
+            return;
+        }
+
+        // rohen Body einmal lesen (für HMAC) und danach JSON dekodieren
+        $raw = file_get_contents('php://input');
+        $payload = json_decode($raw, true);
+
+        if (!is_array($payload)) {
+            $this->SendDebug('Webhook', '❌ Ungültiges JSON.', 0);
+            http_response_code(400);
+            echo 'Bad Request';
+            return;
+        }
+
+        // 2a) Callback URI Verification (Challenge)
+        if (($payload['eventType'] ?? '') === 'VERIFY') {
+            $challenge = $payload['challenge'] ?? '';
+            $token = $this->ReadPropertyString('ManagementToken');
+            if ($challenge === '' || $token === '') {
+                $this->SendDebug('Webhook', '❌ VERIFY ohne challenge oder fehlendes ManagementToken.', 0);
+                http_response_code(400);
+                echo 'Bad Request';
+                return;
+            }
+            $hmac = hash_hmac('sha256', $challenge, $token);
+            $this->SendDebug('Webhook', '✅ VERIFY beantwortet.', 0);
+            header('Content-Type: application/json');
+            echo json_encode(['challenge' => $hmac]);
+            return;
+        }
+
+        // 2b) Payload-HMAC prüfen (SC-Signature) – empfohlen
+        if ($this->ReadPropertyBoolean('VerifyWebhookSignature')) {
+            $sig = $this->getRequestHeader('SC-Signature');
+            $token = $this->ReadPropertyString('ManagementToken');
+            if ($sig === null || $token === '') {
+                $this->SendDebug('Webhook', '❌ Signaturprüfung nicht möglich (Header oder Token fehlt).', 0);
+                http_response_code(401);
+                echo 'Unauthorized';
+                return;
+            }
+            $calc = hash_hmac('sha256', $raw, $token);
+            if (!hash_equals($calc, trim($sig))) {
+                $this->SendDebug('Webhook', "❌ Signatur ungültig. Erwartet $calc, erhalten $sig", 0);
+                http_response_code(401);
+                echo 'Unauthorized';
+                return;
+            }
+        }
+
+        // 2c) Fahrzeug filtern
+        $incomingVehicle = $payload['data']['vehicle']['id'] ?? '';
+        $boundVehicle    = $this->ReadAttributeString('VehicleID');
+        if ($boundVehicle !== '' && $incomingVehicle !== '' && $incomingVehicle !== $boundVehicle) {
+            // Nicht für diese Instanz
+            $this->SendDebug('Webhook', "ℹ️ Event ignoriert (VehicleID passt nicht): $incomingVehicle != $boundVehicle", 0);
+            http_response_code(200);
+            echo 'ignored';
+            return;
+        }
+
+        // 2d) Events verarbeiten
+        $eventType = $payload['eventType'] ?? '';
+        switch ($eventType) {
+            case 'VEHICLE_STATE':
+                $signals = $payload['data']['signals'] ?? [];
+                if (is_array($signals)) {
+                    foreach ($signals as $sig) {
+                        $code = $sig['code'] ?? '';
+                        $body = $sig['body'] ?? [];
+                        if ($code !== '' && is_array($body)) {
+                            $this->ApplySignal($code, $body);
+                        }
+                    }
+                }
+                $this->SendDebug('Webhook', '✅ VEHICLE_STATE verarbeitet.', 0);
+                http_response_code(200);
+                echo 'ok';
+                return;
+
+            case 'VEHICLE_ERROR':
+                $err = $payload['data']['error'] ?? [];
+                $this->SendDebug('Webhook', '⚠️ VEHICLE_ERROR: ' . json_encode($err), 0);
+                http_response_code(200);
+                echo 'ok';
+                return;
+
+            default:
+                $this->SendDebug('Webhook', "ℹ️ unbekannter eventType: $eventType", 0);
+                http_response_code(200);
+                echo 'ok';
+                return;
+        }
     }
-    
+
+    private function getRequestHeader(string $name): ?string
+    {
+        // Robust alle Varianten: getallheaders & $_SERVER
+        $target = strtolower($name);
+        if (function_exists('getallheaders')) {
+            foreach (getallheaders() as $k => $v) {
+                if (strtolower($k) === $target) return $v;
+            }
+        }
+        $key = 'HTTP_' . strtoupper(str_replace('-', '_', $name));
+        if (isset($_SERVER[$key])) return $_SERVER[$key];
+        return null;
+    }
+
     private function RequestAccessToken(string $authCode)
     {
-        $clientID = $this->ReadPropertyString('ClientID');
+        $clientID     = $this->ReadPropertyString('ClientID');
         $clientSecret = $this->ReadPropertyString('ClientSecret');
-        $redirectURI = $this->ReadAttributeString('RedirectURI'); // manuell ODER Connect+Hook
-    
-        $url = "https://auth.smartcar.com/oauth/token";
-    
+        $redirectURI  = $this->ReadAttributeString('RedirectURI'); // manuell ODER Connect+Hook
+
+        $url = 'https://auth.smartcar.com/oauth/token';
+
         $postData = http_build_query([
             'grant_type'    => 'authorization_code',
             'code'          => $authCode,
@@ -463,40 +404,36 @@ class Smartcar extends IPSModule
             'client_id'     => $clientID,
             'client_secret' => $clientSecret
         ]);
-    
+
         $options = [
             'http' => [
-                'header'  => "Content-Type: application/x-www-form-urlencoded\r\n",
-                'method'  => 'POST',
-                'content' => $postData,
+                'header'        => "Content-Type: application/x-www-form-urlencoded\r\n",
+                'method'        => 'POST',
+                'content'       => $postData,
                 'ignore_errors' => true
             ]
         ];
-    
-        $context = stream_context_create($options);
-        $response = file_get_contents($url, false, $context);
+
+        $context  = stream_context_create($options);
+        $response = @file_get_contents($url, false, $context);
         $responseData = json_decode($response, true);
-    
+
         if (isset($responseData['access_token'], $responseData['refresh_token'])) {
-            $this->WriteAttributeString('AccessToken', $responseData['access_token']);
+            $this->WriteAttributeString('AccessToken',  $responseData['access_token']);
             $this->WriteAttributeString('RefreshToken', $responseData['refresh_token']);
-            $this->SendDebug('RequestAccessToken', 'Access und Refresh Token gespeichert!', 0);
-    
-            // Wende Änderungen an, um den Timer zu starten
-            $this->ApplyChanges(); 
+            $this->SendDebug('RequestAccessToken', 'Access & Refresh Token gespeichert.', 0);
+            $this->ApplyChanges();
         } else {
-            $this->SendDebug('RequestAccessToken', 'Token-Austausch fehlgeschlagen! Antwort: ' . $response, 0);
+            $this->SendDebug('RequestAccessToken', '❌ Token-Austausch fehlgeschlagen! Antwort: ' . $response, 0);
             $this->LogMessage('RequestAccessToken - Token-Austausch fehlgeschlagen.', KL_ERROR);
         }
     }
-    
+
     public function MessageSink($TimeStamp, $SenderID, $Message, $Data)
     {
-        // Wird aufgerufen, weil in Create() RegisterMessage(0, IPS_KERNELMESSAGE) gesetzt ist
         if ($Message === IPS_KERNELMESSAGE) {
             $runlevel = $Data[0] ?? -1;
             if ($runlevel === KR_READY) {
-                // Genau hier ist Symcon vollständig bereit
                 if ($this->ReadAttributeString('RefreshToken') !== '') {
                     $this->RefreshAccessToken();
                 }
@@ -507,26 +444,25 @@ class Smartcar extends IPSModule
     public function RefreshAccessToken()
     {
         $this->SendDebug('RefreshAccessToken', 'Token-Erneuerung gestartet!', 0);
-    
-        $clientID = $this->ReadPropertyString('ClientID');
+
+        $clientID     = $this->ReadPropertyString('ClientID');
         $clientSecret = $this->ReadPropertyString('ClientSecret');
         $refreshToken = $this->ReadAttributeString('RefreshToken');
-    
-        if (empty($clientID) || empty($clientSecret) || empty($refreshToken)) {
-            $this->SendDebug('RefreshAccessToken', 'Fehler: Fehlende Zugangsdaten!', 0);
+
+        if ($clientID === '' || $clientSecret === '' || $refreshToken === '') {
+            $this->SendDebug('RefreshAccessToken', '❌ Fehlende Zugangsdaten!', 0);
             $this->LogMessage('RefreshAccessToken - Fehlende Zugangsdaten!', KL_ERROR);
             return;
         }
-    
-        $url = "https://auth.smartcar.com/oauth/token";
-    
+
+        $url = 'https://auth.smartcar.com/oauth/token';
         $postData = http_build_query([
             'grant_type'    => 'refresh_token',
             'refresh_token' => $refreshToken,
             'client_id'     => $clientID,
             'client_secret' => $clientSecret
         ]);
-    
+
         $options = [
             'http' => [
                 'header'        => "Content-Type: application/x-www-form-urlencoded\r\n",
@@ -535,46 +471,44 @@ class Smartcar extends IPSModule
                 'ignore_errors' => true
             ]
         ];
-    
-        $context = stream_context_create($options);
-        $response = file_get_contents($url, false, $context);
-        $responseData = json_decode($response, true);
-    
-        if (isset($responseData['access_token'], $responseData['refresh_token'])) {
-            $this->WriteAttributeString('AccessToken', $responseData['access_token']);
-            $this->WriteAttributeString('RefreshToken', $responseData['refresh_token']);
-            $this->SendDebug('RefreshAccessToken', 'Token erfolgreich erneuert.', 0);
+
+        $context  = stream_context_create($options);
+        $response = @file_get_contents($url, false, $context);
+        $data     = json_decode($response, true);
+
+        if (isset($data['access_token'], $data['refresh_token'])) {
+            $this->WriteAttributeString('AccessToken',  $data['access_token']);
+            $this->WriteAttributeString('RefreshToken', $data['refresh_token']);
+            $this->SendDebug('RefreshAccessToken', '✅ Token erfolgreich erneuert.', 0);
         } else {
-            $this->SendDebug('RefreshAccessToken', 'Token-Erneuerung fehlgeschlagen!', 0);
-            $this->LogMessage('FetchVehicleData - Token-Erneuerung fehlgeschlagen!', KL_ERROR);
+            $this->SendDebug('RefreshAccessToken', '❌ Token-Erneuerung fehlgeschlagen!', 0);
+            $this->LogMessage('RefreshAccessToken - fehlgeschlagen!', KL_ERROR);
         }
     }
-    
     public function FetchVehicleData()
     {
         $accessToken = $this->ReadAttributeString('AccessToken');
-        $vehicleID = $this->GetVehicleID($accessToken);
+        $vehicleID   = $this->GetVehicleID($accessToken);
 
-        if (empty($accessToken) || empty($vehicleID)) {
+        if ($accessToken === '' || $vehicleID === null || $vehicleID === '') {
             $this->SendDebug('FetchVehicleData', '❌ Access Token oder Fahrzeug-ID fehlt!', 0);
             $this->LogMessage('FetchVehicleData - Access Token oder Fahrzeug-ID fehlt!', KL_ERROR);
             return false;
         }
 
-        // Sammle die aktivierten Endpunkte
         $endpoints = [];
-        if ($this->ReadPropertyBoolean('ScopeReadVehicleInfo')) $endpoints[] = ["path" => "/"];
-        if ($this->ReadPropertyBoolean('ScopeReadVIN')) $endpoints[] = ["path" => "/vin"];
-        if ($this->ReadPropertyBoolean('ScopeReadLocation')) $endpoints[] = ["path" => "/location"];
-        if ($this->ReadPropertyBoolean('ScopeReadTires')) $endpoints[] = ["path" => "/tires/pressure"];
-        if ($this->ReadPropertyBoolean('ScopeReadOdometer')) $endpoints[] = ["path" => "/odometer"];
-        if ($this->ReadPropertyBoolean('ScopeReadBattery')) $endpoints[] = ["path" => "/battery"];
-        if ($this->ReadPropertyBoolean('ScopeReadBatteryCapacity')) $endpoints[] = ["path" => "/battery/capacity"];
-        if ($this->ReadPropertyBoolean('ScopeReadFuel')) $endpoints[] = ["path" => "/fuel"];
-        if ($this->ReadPropertyBoolean('ScopeReadSecurity')) $endpoints[] = ["path" => "/security"];
-        if ($this->ReadPropertyBoolean('ScopeReadChargeLimit')) $endpoints[] = ["path" => "/charge/limit"];
-        if ($this->ReadPropertyBoolean('ScopeReadChargeStatus')) $endpoints[] = ["path" => "/charge"];
-        if ($this->ReadPropertyBoolean('ScopeReadOilLife')) $endpoints[] = ["path" => "/engine/oil"];
+        if ($this->ReadPropertyBoolean('ScopeReadVehicleInfo'))     $endpoints[] = ['path' => '/'];
+        if ($this->ReadPropertyBoolean('ScopeReadVIN'))             $endpoints[] = ['path' => '/vin'];
+        if ($this->ReadPropertyBoolean('ScopeReadLocation'))        $endpoints[] = ['path' => '/location'];
+        if ($this->ReadPropertyBoolean('ScopeReadTires'))           $endpoints[] = ['path' => '/tires/pressure'];
+        if ($this->ReadPropertyBoolean('ScopeReadOdometer'))        $endpoints[] = ['path' => '/odometer'];
+        if ($this->ReadPropertyBoolean('ScopeReadBattery'))         $endpoints[] = ['path' => '/battery'];
+        if ($this->ReadPropertyBoolean('ScopeReadBatteryCapacity')) $endpoints[] = ['path' => '/battery/capacity'];
+        if ($this->ReadPropertyBoolean('ScopeReadFuel'))            $endpoints[] = ['path' => '/fuel'];
+        if ($this->ReadPropertyBoolean('ScopeReadSecurity'))        $endpoints[] = ['path' => '/security'];
+        if ($this->ReadPropertyBoolean('ScopeReadChargeLimit'))     $endpoints[] = ['path' => '/charge/limit'];
+        if ($this->ReadPropertyBoolean('ScopeReadChargeStatus'))    $endpoints[] = ['path' => '/charge'];
+        if ($this->ReadPropertyBoolean('ScopeReadOilLife'))         $endpoints[] = ['path' => '/engine/oil'];
 
         if (empty($endpoints)) {
             $this->SendDebug('FetchVehicleData', 'Keine Scopes aktiviert!', 0);
@@ -583,34 +517,32 @@ class Smartcar extends IPSModule
         }
 
         $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID/batch";
-        $postData = json_encode(["requests" => $endpoints]);
+        $postData = json_encode(['requests' => $endpoints]);
 
         $options = [
             'http' => [
-                'header' => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
-                'method' => 'POST',
-                'content' => $postData,
+                'header'        => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
+                'method'        => 'POST',
+                'content'       => $postData,
                 'ignore_errors' => true
             ]
         ];
 
         $this->SendDebug('FetchVehicleData', "API-Anfrage: " . json_encode([
-        'url'    => $url,
-        'method' => $options['http']['method'],
-        'header' => $options['http']['header'],
-        'body'   => $postData
+            'url'    => $url,
+            'method' => $options['http']['method'],
+            'header' => $options['http']['header'],
+            'body'   => $postData
         ], JSON_PRETTY_PRINT), 0);
 
-        $context = stream_context_create($options);
+        $context  = stream_context_create($options);
         $response = @file_get_contents($url, false, $context);
-
         if ($response === false) {
-            $this->SendDebug('FetchVehicleData', '❌ Fehler: Keine Antwort von der API!', 0);
+            $this->SendDebug('FetchVehicleData', '❌ Keine Antwort von der API!', 0);
             $this->LogMessage('FetchVehicleData - Keine Antwort von der API!', KL_ERROR);
             return false;
         }
 
-        // HTTP-Statuscode prüfen
         $httpResponseHeader = $http_response_header ?? [];
         $statusCode = 0;
         foreach ($httpResponseHeader as $header) {
@@ -621,8 +553,6 @@ class Smartcar extends IPSModule
         }
 
         $data = json_decode($response, true);
-
-        // Vollständige JSON-Antwort ins Debug
         $this->SendDebug('FetchVehicleData', "Antwort: " . json_encode($data, JSON_PRETTY_PRINT), 0);
 
         if ($statusCode !== 200) {
@@ -633,428 +563,441 @@ class Smartcar extends IPSModule
         }
 
         if (!isset($data['responses']) || !is_array($data['responses'])) {
-            $this->SendDebug('FetchVehicleData', '❌ Unerwartete Antwortstruktur: ' . json_encode($data), 0);
+            $this->SendDebug('FetchVehicleData', '❌ Unerwartete Antwortstruktur.', 0);
             $this->LogMessage('FetchVehicleData - Unerwartete Antwortstruktur', KL_ERROR);
             return false;
         }
 
         $hasError = false;
-
         foreach ($data['responses'] as $resp) {
             $scCode = $resp['code'] ?? 0;
-
             if ($scCode === 200 && isset($resp['body'])) {
-                // Erfolgreiche Antwort
                 $this->ProcessResponse($resp['path'], $resp['body']);
-                $this->SendDebug('FetchVehicleData', "✅ Erfolgreiche Teilantwort für {$resp['path']}", 0);
             } else {
                 $hasError = true;
                 $fullMsg = $this->GetHttpErrorDetails($scCode, $resp['body'] ?? $resp);
-
-                $this->SendDebug('FetchVehicleData', "⚠️ Fehlerhafte Teilantwort für {$resp['path']}: $fullMsg", 0);
-                $this->LogMessage("FetchVehicleData - Fehlerhafte Teilantwort für {$resp['path']}: $fullMsg", KL_ERROR);
+                $this->SendDebug('FetchVehicleData', "⚠️ Teilfehler für {$resp['path']}: $fullMsg", 0);
+                $this->LogMessage("FetchVehicleData - Teilfehler für {$resp['path']}: $fullMsg", KL_ERROR);
             }
         }
 
-        if ($hasError) {
-            $this->SendDebug('FetchVehicleData', '⚠️ Ergebnis: Teilweise erfolgreich – einige Endpunkte fehlerhaft.', 0);
-        } else {
-            $this->SendDebug('FetchVehicleData', '✅ Ergebnis: Alle Endpunkte erfolgreich.', 0);
-        }
-
+        $this->SendDebug('FetchVehicleData', $hasError ? '⚠️ Teilweise erfolgreich.' : '✅ Alle Endpunkte erfolgreich.', 0);
         return true;
     }
 
     private function GetVehicleID(string $accessToken, int $retryCount = 0): ?string
     {
-        $maxRetries = 2; // Maximal zwei Wiederholungen
-    
+        $maxRetries = 2;
         if ($retryCount > $maxRetries) {
-            $this->SendDebug('GetVehicleID', 'Maximale Anzahl von Wiederholungen erreicht. Anfrage abgebrochen.', 0);
-            $this->LogMessage('GetVehicleID - Maximale Anzahl von Wiederholungen erreicht. Anfrage abgebrochen.', KL_ERROR);
+            $this->SendDebug('GetVehicleID', 'Max. Wiederholungen erreicht.', 0);
+            $this->LogMessage('GetVehicleID - Max. Wiederholungen erreicht.', KL_ERROR);
             return null;
         }
-    
-        $url = "https://api.smartcar.com/v2.0/vehicles";
-    
+
+        $url = 'https://api.smartcar.com/v2.0/vehicles';
         $options = [
             'http' => [
-                'header'  => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
-                'method'  => 'GET',
+                'header'        => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
+                'method'        => 'GET',
                 'ignore_errors' => true
             ]
         ];
-    
-        $context = stream_context_create($options);
+
+        $context  = stream_context_create($options);
         $response = @file_get_contents($url, false, $context);
-    
         if ($response === false) {
-            $this->SendDebug('GetVehicleID', 'Fehler: Keine Antwort von der API!', 0);
+            $this->SendDebug('GetVehicleID', 'Keine Antwort von der API!', 0);
             $this->LogMessage('GetVehicleID - Keine Antwort von der API!', KL_ERROR);
             return null;
         }
-    
+
         $data = json_decode($response, true);
         $this->SendDebug('GetVehicleID', 'Antwort: ' . json_encode($data), 0);
-    
-        // Überprüfen auf 401-Fehler (Authentifizierungsfehler)
-        if (isset($data['statusCode'])) {
-            if ($data['statusCode'] === 401) {
-                $this->SendDebug('GetVehicleID', 'Fehler 401: Access Token ungültig oder fehlt. Versuche, den Token zu erneuern.', 0);
-        
-                // Token erneuern
-                $this->RefreshAccessToken();
-        
-                // Access Token erneut lesen
-                $AccessToken = $this->ReadAttributeString('AccessToken');
-                if (!empty($AccessToken)) {
-                    $this->SendDebug('GetVehicleID', 'Erneutes Abfragen der Fahrzeug-ID...', 0);
-                    return $this->GetVehicleID($AccessToken, $retryCount + 1);
-                }
-        
-                $this->SendDebug('GetVehicleID', 'Fehler: Token konnte nicht erneuert werden!', 0);
-                $this->LogMessage('GetVehicleID - Token konnte nicht erneuert werden!', KL_ERROR);
-                return null;
+
+        if (isset($data['statusCode']) && $data['statusCode'] === 401) {
+            $this->SendDebug('GetVehicleID', '401 – Token erneuern und erneut versuchen…', 0);
+            $this->RefreshAccessToken();
+            $AccessToken = $this->ReadAttributeString('AccessToken');
+            if ($AccessToken !== '') {
+                return $this->GetVehicleID($AccessToken, $retryCount + 1);
             }
+            $this->SendDebug('GetVehicleID', 'Token konnte nicht erneuert werden.', 0);
+            return null;
         }
-    
+
         if (isset($data['vehicles'][0])) {
             $vehicleId = $data['vehicles'][0];
-            // Instanz an das Fahrzeug „binden“, damit wir später filtern können
-            $this->WriteAttributeString('VehicleID', $vehicleId);
+            $this->WriteAttributeString('VehicleID', $vehicleId); // binden
             return $vehicleId;
         }
-    
+
         $this->SendDebug('GetVehicleID', 'Keine Fahrzeug-ID gefunden!', 0);
         $this->LogMessage('GetVehicleID - Keine Fahrzeug-ID gefunden!', KL_ERROR);
         return null;
     }
-    
+
     private function ProcessResponse(string $path, array $body)
     {
         switch ($path) {
             case '/':
-                $this->SetValue('VehicleMake', $body['make'] ?? '');
+                $this->SetValue('VehicleMake',  $body['make']  ?? '');
                 $this->SetValue('VehicleModel', $body['model'] ?? '');
-                $this->SetValue('VehicleYear', $body['year'] ?? 0);
+                $this->SetValue('VehicleYear',  $body['year']  ?? 0);
                 break;
-    
+
             case '/vin':
                 $this->SetValue('VIN', $body['vin'] ?? '');
                 break;
-    
+
             case '/location':
-                $this->SetValue('Latitude', $body['latitude'] ?? 0.0);
+                $this->SetValue('Latitude',  $body['latitude']  ?? 0.0);
                 $this->SetValue('Longitude', $body['longitude'] ?? 0.0);
                 break;
-    
+
             case '/tires/pressure':
-                $this->SetValue('TireFrontLeft', ($body['frontLeft'] ?? 0) * 0.01);
+                $this->SetValue('TireFrontLeft',  ($body['frontLeft']  ?? 0) * 0.01);
                 $this->SetValue('TireFrontRight', ($body['frontRight'] ?? 0) * 0.01);
-                $this->SetValue('TireBackLeft', ($body['backLeft'] ?? 0) * 0.01);
-                $this->SetValue('TireBackRight', ($body['backRight'] ?? 0) * 0.01);
+                $this->SetValue('TireBackLeft',   ($body['backLeft']   ?? 0) * 0.01);
+                $this->SetValue('TireBackRight',  ($body['backRight']  ?? 0) * 0.01);
                 break;
-    
+
             case '/odometer':
                 $this->SetValue('Odometer', $body['distance'] ?? 0);
                 break;
-    
+
             case '/battery':
                 $this->SetValue('BatteryRange', $body['range'] ?? 0);
                 $this->SetValue('BatteryLevel', ($body['percentRemaining'] ?? 0) * 100);
                 break;
-    
+
             case '/battery/capacity':
                 $this->SetValue('BatteryCapacity', $body['capacity'] ?? 0);
                 break;
-    
+
             case '/fuel':
                 $this->SetValue('FuelLevel', ($body['percentRemaining'] ?? 0) * 100);
                 $this->SetValue('FuelRange', $body['range'] ?? 0);
                 break;
-    
+
             case '/security':
                 $this->SetValue('DoorsLocked', $body['isLocked'] ?? false);
-    
-                // Türen
+
                 foreach ($body['doors'] ?? [] as $door) {
-                    $ident = ucfirst($door['type']) . 'Door'; // z.B. FrontLeftDoor
+                    $ident = ucfirst($door['type']) . 'Door';
                     $this->SetValue($ident, $door['status'] ?? 'UNKNOWN');
                 }
-    
-                // Fenster
                 foreach ($body['windows'] ?? [] as $window) {
-                    $ident = ucfirst($window['type']) . 'Window'; // z.B. FrontLeftWindow
+                    $ident = ucfirst($window['type']) . 'Window';
                     $this->SetValue($ident, $window['status'] ?? 'UNKNOWN');
                 }
-    
-                // Schiebedach
-                $this->SetValue('Sunroof', $body['sunroof'][0]['status'] ?? 'UNKNOWN');
-    
-                // Stauraum
-                foreach ($body['storage'] ?? [] as $storage) {
-                    $ident = ucfirst($storage['type']) . 'Storage'; // z.B. FrontStorage
-                    $this->SetValue($ident, $storage['status'] ?? 'UNKNOWN');
-                }
-    
-                // Ladeanschluss
+                $this->SetValue('Sunroof',      $body['sunroof'][0]['status']      ?? 'UNKNOWN');
+                $this->SetValue('RearStorage',  $body['storage'][0]['status']      ?? 'UNKNOWN');
+                $this->SetValue('FrontStorage', $body['storage'][1]['status']      ?? 'UNKNOWN');
                 $this->SetValue('ChargingPort', $body['chargingPort'][0]['status'] ?? 'UNKNOWN');
                 break;
-    
+
             case '/charge/limit':
                 $this->SetValue('ChargeLimit', ($body['limit'] ?? 0) * 100);
                 break;
-    
+
             case '/charge':
                 $this->SetValue('ChargeStatus', $body['state'] ?? 'UNKNOWN');
-                $this->SetValue('PluggedIn', $body['isPluggedIn'] ?? false);
+                $this->SetValue('PluggedIn',    $body['isPluggedIn'] ?? false);
                 break;
-    
+
             default:
                 $this->SendDebug('ProcessResponse', "Unbekannter Scope: $path", 0);
-                $this->LogMessage('ProcessResponse - Unbekannter Scope!', KL_ERROR);
         }
     }
+
+    // -------------------------
+    // Webhook Signal → Variablen
+    // -------------------------
+    private function ApplySignal(string $code, array $body): void
+    {
+        $mi2km = 1.609344;
+
+        switch ($code) {
+            // Traction Battery
+            case 'tractionbattery-stateofcharge':
+                // {"unit":"percent","value":75}
+                $val = $body['value'] ?? null;
+                if ($val !== null) $this->SetValue('BatteryLevel', floatval($val));
+                break;
+
+            case 'tractionbattery-range':
+                // {"unit":"kilometers|miles","value":350}
+                $val  = $body['value'] ?? null;
+                $unit = strtolower($body['unit'] ?? '');
+                if ($val !== null) {
+                    $km = ($unit === 'miles') ? floatval($val) * $mi2km : floatval($val);
+                    $this->SetValue('BatteryRange', $km);
+                }
+                break;
+
+            case 'tractionbattery-nominalcapacity':
+                // {"capacity": 73.5, "unit":"kWhr", ...}
+                if (isset($body['capacity'])) {
+                    $this->SetValue('BatteryCapacity', floatval($body['capacity']));
+                }
+                break;
+
+            // Location
+            case 'location-preciselocation':
+                // {"latitude":..., "longitude":...}
+                if (isset($body['latitude']))  $this->SetValue('Latitude',  floatval($body['latitude']));
+                if (isset($body['longitude'])) $this->SetValue('Longitude', floatval($body['longitude']));
+                break;
+
+            // Odometer
+            case 'odometer-traveleddistance':
+                // {"unit":"kilometers|miles", "value": 12345}
+                $val  = $body['value'] ?? null;
+                $unit = strtolower($body['unit'] ?? '');
+                if ($val !== null) {
+                    $km = ($unit === 'miles') ? floatval($val) * $mi2km : floatval($val);
+                    $this->SetValue('Odometer', $km);
+                }
+                break;
+
+            // Charge
+            case 'charge-detailedchargingstatus':
+                // {"value":"CHARGING|NOT_CHARGING|FULLY_CHARGED|..."}
+                if (isset($body['value'])) $this->SetValue('ChargeStatus', strtoupper($body['value']));
+                break;
+
+            case 'charge-ischarging':
+                // {"value": true|false}
+                if (isset($body['value'])) $this->SetValue('ChargeStatus', ($body['value'] ? 'CHARGING' : 'NOT_CHARGING'));
+                break;
+
+            case 'charge-ischargingcableconnected':
+                // {"value": true|false}
+                if (isset($body['value'])) $this->SetValue('PluggedIn', (bool)$body['value']);
+                break;
+
+            case 'charge-chargelimits':
+                // {"values":[{"type":"global","limit":80,...}, ...]}
+                if (isset($body['values']) && is_array($body['values'])) {
+                    $limit = null;
+                    foreach ($body['values'] as $cfg) {
+                        if (($cfg['type'] ?? '') === 'global' && isset($cfg['limit'])) {
+                            $limit = $cfg['limit'];
+                            break;
+                        }
+                    }
+                    if ($limit !== null) $this->SetValue('ChargeLimit', floatval($limit));
+                }
+                break;
+
+            // Closure (Verriegelung / Türen / Fenster / Dach)
+            case 'closure-islocked':
+                // {"value": true|false}
+                if (isset($body['value'])) $this->SetValue('DoorsLocked', (bool)$body['value']);
+                break;
+
+            case 'closure-doors':
+                // {"rowCount":2,"columnCount":2,"values":[{"row":0,"column":0,"isOpen":false}, ...]}
+                $this->mapGridToVehicleSides($body, 'Door', 'FrontLeftDoor', 'FrontRightDoor', 'BackLeftDoor', 'BackRightDoor');
+                break;
+
+            case 'closure-windows':
+                $this->mapGridToVehicleSides($body, 'Window', 'FrontLeftWindow', 'FrontRightWindow', 'BackLeftWindow', 'BackRightWindow');
+                break;
+
+            case 'closure-sunroof':
+                // {"isOpen":true}
+                if (array_key_exists('isOpen', $body)) {
+                    $this->SetValue('Sunroof', $body['isOpen'] ? 'OPEN' : 'CLOSED');
+                }
+                break;
+
+            default:
+                // Unbekanntes/noch nicht gemapptes Signal – nur debuggen
+                $this->SendDebug('ApplySignal', "unmapped code=$code body=" . json_encode($body), 0);
+                break;
+        }
+    }
+
+    private function mapGridToVehicleSides(array $body, string $kind, string $fl, string $fr, string $bl, string $br): void
+    {
+        // Erwartet: values[ {row:0/1, column:0/1, isOpen:true/false}, ... ]
+        if (!isset($body['values']) || !is_array($body['values'])) return;
+
+        foreach ($body['values'] as $item) {
+            $row = $item['row'] ?? null;
+            $col = $item['column'] ?? null;
+            $isOpen = $item['isOpen'] ?? null;
+            if ($row === null || $col === null || $isOpen === null) continue;
+
+            $status = $isOpen ? 'OPEN' : 'CLOSED';
+            if ($row === 0 && $col === 0) $this->SetValue($fl, $status);
+            if ($row === 0 && $col === 1) $this->SetValue($fr, $status);
+            if ($row === 1 && $col === 0) $this->SetValue($bl, $status);
+            if ($row === 1 && $col === 1) $this->SetValue($br, $status);
+        }
+    }
+
+    // -------- Commands --------
 
     public function SetChargeLimit(float $limit)
     {
         $accessToken = $this->ReadAttributeString('AccessToken');
-        $vehicleID = $this->GetVehicleID($accessToken);
-        
+        $vehicleID   = $this->GetVehicleID($accessToken);
+
         if ($limit < 0.5 || $limit > 1.0) {
-            $this->SendDebug('SetChargeLimit', 'Ungültiges Limit. Es muss zwischen 0.5 und 1.0 liegen.', 0);
-            $this->LogMessage('SetChargeLimit - Ungültiges Limit. Es muss zwischen 0.5 und 1.0 liegen!', KL_ERROR);
+            $this->SendDebug('SetChargeLimit', 'Ungültiges Limit (0.5–1.0).', 0);
+            $this->LogMessage('SetChargeLimit - Ungültiges Limit!', KL_ERROR);
             return;
         }
-    
-        if (empty($accessToken) || empty($vehicleID)) {
-            $this->SendDebug('SetChargeLimit', 'Access Token oder Fahrzeug-ID fehlt!', 0);
-            $this->LogMessage('SetChargeLimit - Access Token oder Fahrzeug-ID fehlt!', KL_ERROR);
+        if ($accessToken === '' || $vehicleID === null || $vehicleID === '') {
+            $this->SendDebug('SetChargeLimit', 'Access Token oder VehicleID fehlt.', 0);
             return;
         }
-    
+
         $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID/charge/limit";
-        $postData = json_encode(["limit" => $limit]);
-    
+        $postData = json_encode(['limit' => $limit]);
+
         $options = [
             'http' => [
-                'header'  => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
-                'method'  => 'POST',
-                'content' => $postData,
+                'header'        => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
+                'method'        => 'POST',
+                'content'       => $postData,
                 'ignore_errors' => true
             ]
         ];
-    
-        $context = stream_context_create($options);
+
+        $context  = stream_context_create($options);
         $response = @file_get_contents($url, false, $context);
-    
         if ($response === false) {
-            $this->SendDebug('SetChargeLimit', 'Fehler: Keine Antwort von der API!', 0);
-            $this->LogMessage('SetChargeLimit - Keine Antwort von der API!', KL_ERROR);
+            $this->SendDebug('SetChargeLimit', 'Keine Antwort.', 0);
             return;
         }
-    
+
         $data = json_decode($response, true);
-        $this->SendDebug('SetChargeLimit', 'Antwort: ' . json_encode($data), 0);
-    
         if (isset($data['statusCode']) && $data['statusCode'] !== 200) {
-            $this->SendDebug('SetChargeLimit', "Fehler beim Setzen des Ladelimits: " . json_encode($data), 0);
-            $this->LogMessage("Fehler beim Setzen des Ladestatus: " . ($data['description'] ?? 'Unbekannter Fehler'), KL_ERROR);
+            $this->SendDebug('SetChargeLimit', "Fehler: " . json_encode($data), 0);
         } else {
-            $this->SendDebug('SetChargeLimit', 'Ladelimit erfolgreich gesetzt.', 0);
+            $this->SendDebug('SetChargeLimit', '✅ Ladelimit gesetzt.', 0);
         }
-    }    
+    }
 
     public function SetChargeStatus(bool $status)
     {
         $accessToken = $this->ReadAttributeString('AccessToken');
-        $vehicleID = $this->GetVehicleID($accessToken);
-    
-        if (empty($accessToken) || empty($vehicleID)) {
-            $this->SendDebug('SetChargeStatus', 'Access Token oder Fahrzeug-ID fehlt!', 0);
-            $this->LogMessage('SetChargeStatus - Access Token oder Fahrzeug-ID fehlt!', KL_ERROR);
+        $vehicleID   = $this->GetVehicleID($accessToken);
+
+        if ($accessToken === '' || $vehicleID === null || $vehicleID === '') {
+            $this->SendDebug('SetChargeStatus', 'Access Token oder VehicleID fehlt.', 0);
             return;
         }
-    
-        // Konvertiere den Status in die erwarteten Werte
-        $action = $status ? "START" : "STOP";
-    
-        $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID/charge";
-        $postData = json_encode(["action" => $action]);
-    
+
+        $action   = $status ? 'START' : 'STOP';
+        $url      = "https://api.smartcar.com/v2.0/vehicles/$vehicleID/charge";
+        $postData = json_encode(['action' => $action]);
+
         $options = [
             'http' => [
-                'header'  => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
-                'method'  => 'POST',
-                'content' => $postData,
+                'header'        => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
+                'method'        => 'POST',
+                'content'       => $postData,
                 'ignore_errors' => true
             ]
         ];
-    
-        $context = stream_context_create($options);
+
+        $context  = stream_context_create($options);
         $response = @file_get_contents($url, false, $context);
-    
-        if ($response === false) {
-            $this->SendDebug('SetChargeStatus', 'Fehler: Keine Antwort von der API!', 0);
-            $this->LogMessage('SetChargeStatus - Keine Antwort von der API!', KL_ERROR);
-            return;
-        }
-    
-        $data = json_decode($response, true);
-        $this->SendDebug('SetChargeStatus', 'Antwort: ' . json_encode($data), 0);
-    
+        $data     = json_decode($response, true);
         if (isset($data['statusCode']) && $data['statusCode'] !== 200) {
-            $this->SendDebug('SetChargeStatus', "Fehler beim Setzen des Ladestatus: " . json_encode($data), 0);
-            $this->LogMessage("Fehler beim Setzen des Ladestatus: " . ($data['description'] ?? 'Unbekannter Fehler'), KL_ERROR);
+            $this->SendDebug('SetChargeStatus', "Fehler: " . json_encode($data), 0);
         } else {
-            $this->SendDebug('SetChargeStatus', 'Ladestatus erfolgreich gesetzt.', 0);
+            $this->SendDebug('SetChargeStatus', '✅ Ladestatus gesetzt.', 0);
         }
     }
 
     public function SetLockStatus(bool $status)
     {
         $accessToken = $this->ReadAttributeString('AccessToken');
-        $vehicleID = $this->GetVehicleID($accessToken);
-    
-        if (empty($accessToken) || empty($vehicleID)) {
-            $this->SendDebug('SetLockStatus', 'Access Token oder Fahrzeug-ID fehlt!', 0);
-            $this->LogMessage('SetLockStatus - Keine Antwort von der API!', KL_ERROR);
+        $vehicleID   = $this->GetVehicleID($accessToken);
+
+        if ($accessToken === '' || $vehicleID === null || $vehicleID === '') {
+            $this->SendDebug('SetLockStatus', 'Access Token oder VehicleID fehlt.', 0);
             return;
         }
-    
-        // Konvertiere den Status in die erwarteten Werte
-        $action = $status ? "LOCK" : "UNLOCK";
-    
-        $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID/security";
-        $postData = json_encode(["action" => $action]);
-    
+
+        $action   = $status ? 'LOCK' : 'UNLOCK';
+        $url      = "https://api.smartcar.com/v2.0/vehicles/$vehicleID/security";
+        $postData = json_encode(['action' => $action]);
+
         $options = [
             'http' => [
-                'header'  => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
-                'method'  => 'POST',
-                'content' => $postData,
+                'header'        => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
+                'method'        => 'POST',
+                'content'       => $postData,
                 'ignore_errors' => true
             ]
         ];
-    
-        $context = stream_context_create($options);
+
+        $context  = stream_context_create($options);
         $response = @file_get_contents($url, false, $context);
-    
-        if ($response === false) {
-            $this->SendDebug('SetLockStatus', 'Fehler: Keine Antwort von der API!', 0);
-            $this->LogMessage('SetLockStatus - Keine Antwort von der API!', KL_ERROR);
-            return;
-        }
-    
-        $data = json_decode($response, true);
-        $this->SendDebug('SetLockStatus', 'Antwort: ' . json_encode($data), 0);
-    
+        $data     = json_decode($response, true);
         if (isset($data['statusCode']) && $data['statusCode'] !== 200) {
-            $this->SendDebug('SetLockStatus', "Fehler beim Setzen der Zentralverriegelung: " . json_encode($data), 0);
-            $this->LogMessage("Fehler beim Setzen der Zentralverriegelung: " . ($data['description'] ?? 'Unbekannter Fehler'), KL_ERROR);
+            $this->SendDebug('SetLockStatus', "Fehler: " . json_encode($data), 0);
         } else {
-            $this->SendDebug('SetLockStatus', 'Zentralverriegelung erfolgreich gesetzt.', 0);
+            $this->SendDebug('SetLockStatus', '✅ Zentralverriegelung gesetzt.', 0);
         }
     }
 
-    public function FetchVehicleInfo()
-    {
-        $this->FetchSingleEndpoint('/'); // Fahrzeugdetails
-    }
-    
-    public function FetchVIN()
-    {
-        $this->FetchSingleEndpoint('/vin'); // Fahrzeug-Identifikationsnummer (VIN)
-    }
-    
-    public function FetchLocation()
-    {
-        $this->FetchSingleEndpoint('/location'); // Standort
-    }
-    
-    public function FetchTires()
-    {
-        $this->FetchSingleEndpoint('/tires/pressure'); // Reifendruck
-    }
-    
-    public function FetchOdometer()
-    {
-        $this->FetchSingleEndpoint('/odometer'); // Kilometerstand
-    }
-    
-    public function FetchBatteryLevel()
-    {
-        $this->FetchSingleEndpoint('/battery'); // Batterielevel und Reichweite
-    }
-    
-    public function FetchBatteryCapacity()
-    {
-        $this->FetchSingleEndpoint('/battery/capacity'); // Batterieskapazität
-    }
-    
-    public function FetchEngineOil()
-    {
-        $this->FetchSingleEndpoint('/oil'); // Motorölstatus
-    }
-    
-    public function FetchFuel()
-    {
-        $this->FetchSingleEndpoint('/fuel'); // Tankfüllstand und Reichweite
-    }
-    
-    public function FetchSecurity()
-    {
-        $this->FetchSingleEndpoint('/security'); // Verriegelungsstatus
-    }
-    
-    public function FetchChargeLimit()
-    {
-        $this->FetchSingleEndpoint('/charge/limit'); // Aktuelles Ladeziel
-    }
-    
-    public function FetchChargeStatus()
-    {
-        $this->FetchSingleEndpoint('/charge/status'); // Ladestatus (falls vom OEM unterstützt)
-    }    
+    // -------- Einzel-Reads (bestehende Helfer) --------
+
+    public function FetchVehicleInfo()  { $this->FetchSingleEndpoint('/'); }
+    public function FetchVIN()          { $this->FetchSingleEndpoint('/vin'); }
+    public function FetchLocation()     { $this->FetchSingleEndpoint('/location'); }
+    public function FetchTires()        { $this->FetchSingleEndpoint('/tires/pressure'); }
+    public function FetchOdometer()     { $this->FetchSingleEndpoint('/odometer'); }
+    public function FetchBatteryLevel() { $this->FetchSingleEndpoint('/battery'); }
+    public function FetchBatteryCapacity(){ $this->FetchSingleEndpoint('/battery/capacity'); }
+    public function FetchEngineOil()    { $this->FetchSingleEndpoint('/oil'); }
+    public function FetchFuel()         { $this->FetchSingleEndpoint('/fuel'); }
+    public function FetchSecurity()     { $this->FetchSingleEndpoint('/security'); }
+    public function FetchChargeLimit()  { $this->FetchSingleEndpoint('/charge/limit'); }
+    public function FetchChargeStatus() { $this->FetchSingleEndpoint('/charge/status'); }
 
     private function FetchSingleEndpoint(string $path)
     {
         $accessToken = $this->ReadAttributeString('AccessToken');
-        $vehicleID = $this->GetVehicleID($accessToken);
+        $vehicleID   = $this->GetVehicleID($accessToken);
 
-        if (empty($accessToken) || empty($vehicleID)) {
-            $this->SendDebug('FetchSingleEndpoint', '❌ Access Token oder Fahrzeug-ID fehlt!', 0);
-            $this->LogMessage('FetchSingleEndpoint - Access Token oder Fahrzeug-ID fehlt!', KL_ERROR);
+        if ($accessToken === '' || $vehicleID === null || $vehicleID === '') {
+            $this->SendDebug('FetchSingleEndpoint', '❌ Access Token oder VehicleID fehlt!', 0);
+            $this->LogMessage('FetchSingleEndpoint - Access Token oder VehicleID fehlt!', KL_ERROR);
             return;
         }
 
         $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID$path";
-
         $options = [
             'http' => [
-                'header'  => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
-                'method'  => 'GET',
+                'header'        => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
+                'method'        => 'GET',
                 'ignore_errors' => true
             ]
         ];
 
         $this->SendDebug('FetchSingleEndpoint', "API-Anfrage: " . json_encode([
-        'url'    => $url,
-        'method' => $options['http']['method'],
-        'header' => $options['http']['header'],
-        'body'   => null
+            'url'    => $url,
+            'method' => $options['http']['method'],
+            'header' => $options['http']['header'],
+            'body'   => null
         ], JSON_PRETTY_PRINT), 0);
 
-        $context = stream_context_create($options);
+        $context  = stream_context_create($options);
         $response = @file_get_contents($url, false, $context);
-
         if ($response === false) {
-            $this->SendDebug('FetchSingleEndpoint', '❌ Fehler: Keine Antwort von der API!', 0);
+            $this->SendDebug('FetchSingleEndpoint', '❌ Keine Antwort von der API!', 0);
             $this->LogMessage('FetchSingleEndpoint - Keine Antwort von der API!', KL_ERROR);
             return;
         }
 
-        // HTTP-Statuscode bestimmen
         $statusCode = 0;
         foreach ($http_response_header ?? [] as $header) {
             if (preg_match('#HTTP/\d+\.\d+\s+(\d+)#', $header, $m)) {
@@ -1064,8 +1007,6 @@ class Smartcar extends IPSModule
         }
 
         $data = json_decode($response, true);
-
-        // Vollständige JSON-Antwort ins Debug
         $this->SendDebug('FetchSingleEndpoint', "Antwort: " . json_encode($data, JSON_PRETTY_PRINT), 0);
 
         if ($statusCode !== 200) {
@@ -1075,20 +1016,16 @@ class Smartcar extends IPSModule
             return;
         }
 
-        // JSON-Ausgabe immer anzeigen
-        $this->SendDebug('FetchSingleEndpoint', "✅ Erfolgreiche Antwort: " . json_encode($data, JSON_PRETTY_PRINT), 0);
-
         if (!empty($data)) {
             $this->ProcessResponse($path, $data);
         } else {
-            $this->SendDebug('FetchSingleEndpoint', '❌ Unerwartete Antwortstruktur: ' . json_encode($data), 0);
+            $this->SendDebug('FetchSingleEndpoint', '❌ Unerwartete Antwortstruktur.', 0);
             $this->LogMessage('FetchSingleEndpoint - Unerwartete Antwortstruktur', KL_ERROR);
         }
     }
 
     private function GetHttpErrorDetails(int $statusCode, array $data): string
     {
-        // Grundtext abhängig vom HTTP-Code
         $errorText = match ($statusCode) {
             400 => 'Ungültige Anfrage an die Smartcar API.',
             401 => 'Ungültiges Access Token – bitte neu verbinden.',
@@ -1100,57 +1037,203 @@ class Smartcar extends IPSModule
             default => "Unbekannter HTTP-Fehler ($statusCode)."
         };
 
-        // API-spezifische Infos anhängen
         $apiCode = $data['code'] ?? ($data['body']['code'] ?? '');
         $apiDesc = $data['description'] ?? ($data['body']['description'] ?? '');
-
         if ($apiCode !== '') {
             $errorText .= " | Code: $statusCode | Smartcar-Code: $apiCode - $apiDesc";
         } else {
             $errorText .= " | Code: $statusCode";
         }
-
         return $errorText;
     }
 
     private function CreateProfile()
     {
-
         if (!IPS_VariableProfileExists('SMCAR.Pressure')) {
             IPS_CreateVariableProfile('SMCAR.Pressure', VARIABLETYPE_FLOAT);
             IPS_SetVariableProfileText('SMCAR.Pressure', '', ' bar');
             IPS_SetVariableProfileDigits('SMCAR.Pressure', 1);
             IPS_SetVariableProfileValues('SMCAR.Pressure', 0, 5, 0.1);
-            $this->SendDebug('CreateProfile', 'Profil erstellt: SMCAR.Pressure', 0);
-        } 
+        }
 
         if (!IPS_VariableProfileExists('SMCAR.Odometer')) {
             IPS_CreateVariableProfile('SMCAR.Odometer', VARIABLETYPE_FLOAT);
             IPS_SetVariableProfileText('SMCAR.Odometer', '', ' km');
             IPS_SetVariableProfileDigits('SMCAR.Odometer', 0);
             IPS_SetVariableProfileValues('SMCAR.Odometer', 0, 0, 1);
-            $this->SendDebug('CreateProfile', 'Profil erstellt: SMCAR.Odometer', 0);
-        } 
+        }
+
         if (!IPS_VariableProfileExists('SMCAR.Progress')) {
             IPS_CreateVariableProfile('SMCAR.Progress', VARIABLETYPE_FLOAT);
             IPS_SetVariableProfileText('SMCAR.Progress', '', ' %');
             IPS_SetVariableProfileDigits('SMCAR.Progress', 0);
             IPS_SetVariableProfileValues('SMCAR.Progress', 0, 100, 1);
-            $this->SendDebug('CreateProfile', 'Profil erstellt: SMCAR.Progress', 0);
-        } 
+        }
+
         if (!IPS_VariableProfileExists('SMCAR.Status')) {
             IPS_CreateVariableProfile('SMCAR.Status', VARIABLETYPE_STRING);
             IPS_SetVariableProfileAssociation('SMCAR.Status', 'OPEN', 'Offen', '', -1);
             IPS_SetVariableProfileAssociation('SMCAR.Status', 'CLOSED', 'Geschlossen', '', -1);
             IPS_SetVariableProfileAssociation('SMCAR.Status', 'UNKNOWN', 'Unbekannt', '', -1);
-            $this->SendDebug('CreateProfile', 'Profil erstellt: SMCAR.Status', 0);
         }
+
         if (!IPS_VariableProfileExists('SMCAR.Charge')) {
             IPS_CreateVariableProfile('SMCAR.Charge', VARIABLETYPE_STRING);
             IPS_SetVariableProfileAssociation('SMCAR.Charge', 'CHARGING', 'Laden', '', -1);
             IPS_SetVariableProfileAssociation('SMCAR.Charge', 'FULLY_CHARGED', 'Voll geladen', '', -1);
             IPS_SetVariableProfileAssociation('SMCAR.Charge', 'NOT_CHARGING', 'Lädt nicht', '', -1);
-            $this->SendDebug('CreateProfile', 'Profil erstellt: SMCAR.Charge', 0);
+        }
+    }
+
+    // -------- Variablen je nach Scopes registrieren --------
+    private function UpdateVariablesBasedOnScopes()
+    {
+        // Fahrzeugdetails
+        if ($this->ReadPropertyBoolean('ScopeReadVehicleInfo')) {
+            $this->RegisterVariableString('VehicleMake', 'Fahrzeug Hersteller', '', 1);
+            $this->RegisterVariableString('VehicleModel', 'Fahrzeug Modell', '', 2);
+            $this->RegisterVariableInteger('VehicleYear', 'Fahrzeug Baujahr', '', 3);
+        } else {
+            @$this->UnregisterVariable('VehicleMake');
+            @$this->UnregisterVariable('VehicleModel');
+            @$this->UnregisterVariable('VehicleYear');
+        }
+
+        // VIN
+        if ($this->ReadPropertyBoolean('ScopeReadVIN')) {
+            $this->RegisterVariableString('VIN', 'Fahrgestellnummer (VIN)', '', 4);
+        } else {
+            @$this->UnregisterVariable('VIN');
+        }
+
+        // Standort
+        if ($this->ReadPropertyBoolean('ScopeReadLocation')) {
+            $this->RegisterVariableFloat('Latitude', 'Breitengrad', '', 10);
+            $this->RegisterVariableFloat('Longitude', 'Längengrad', '', 11);
+        } else {
+            @$this->UnregisterVariable('Latitude');
+            @$this->UnregisterVariable('Longitude');
+        }
+
+        // Kilometerstand
+        if ($this->ReadPropertyBoolean('ScopeReadOdometer')) {
+            $this->RegisterVariableFloat('Odometer', 'Kilometerstand', 'SMCAR.Odometer', 20);
+        } else {
+            @$this->UnregisterVariable('Odometer');
+        }
+
+        // Reifendruck
+        if ($this->ReadPropertyBoolean('ScopeReadTires')) {
+            $this->RegisterVariableFloat('TireFrontLeft', 'Reifendruck Vorderreifen Links', 'SMCAR.Pressure', 30);
+            $this->RegisterVariableFloat('TireFrontRight', 'Reifendruck Vorderreifen Rechts', 'SMCAR.Pressure', 31);
+            $this->RegisterVariableFloat('TireBackLeft', 'Reifendruck Hinterreifen Links', 'SMCAR.Pressure', 32);
+            $this->RegisterVariableFloat('TireBackRight', 'Reifendruck Hinterreifen Rechts', 'SMCAR.Pressure', 33);
+        } else {
+            @$this->UnregisterVariable('TireFrontLeft');
+            @$this->UnregisterVariable('TireFrontRight');
+            @$this->UnregisterVariable('TireBackLeft');
+            @$this->UnregisterVariable('TireBackRight');
+        }
+
+        // Batterie
+        if ($this->ReadPropertyBoolean('ScopeReadBattery')) {
+            $this->RegisterVariableFloat('BatteryLevel', 'Batterieladestand (SOC)', 'SMCAR.Progress', 40);
+            $this->RegisterVariableFloat('BatteryRange', 'Reichweite Batterie', 'SMCAR.Odometer', 41);
+        } else {
+            @$this->UnregisterVariable('BatteryRange');
+            @$this->UnregisterVariable('BatteryLevel');
+        }
+
+        if ($this->ReadPropertyBoolean('ScopeReadBatteryCapacity')) {
+            $this->RegisterVariableFloat('BatteryCapacity', 'Batteriekapazität', '~Electricity', 50);
+        } else {
+            @$this->UnregisterVariable('BatteryCapacity');
+        }
+
+        // Tank
+        if ($this->ReadPropertyBoolean('ScopeReadFuel')) {
+            $this->RegisterVariableFloat('FuelLevel', 'Tankfüllstand', 'SMCAR.Progress', 60);
+            $this->RegisterVariableFloat('FuelRange', 'Reichweite Tank', 'SMCAR.Odometer', 61);
+        } else {
+            @$this->UnregisterVariable('FuelLevel');
+            @$this->UnregisterVariable('FuelRange');
+        }
+
+        // Security
+        if ($this->ReadPropertyBoolean('ScopeReadSecurity')) {
+            $this->RegisterVariableBoolean('DoorsLocked', 'Fahrzeug verriegelt', '~Lock', 70);
+            $this->RegisterVariableString('FrontLeftDoor',  'Vordertür links',  'SMCAR.Status', 71);
+            $this->RegisterVariableString('FrontRightDoor', 'Vordertür rechts', 'SMCAR.Status', 72);
+            $this->RegisterVariableString('BackLeftDoor',   'Hintentür links',  'SMCAR.Status', 73);
+            $this->RegisterVariableString('BackRightDoor',  'Hintentür rechts', 'SMCAR.Status', 74);
+
+            $this->RegisterVariableString('FrontLeftWindow',  'Vorderfenster links',  'SMCAR.Status', 75);
+            $this->RegisterVariableString('FrontRightWindow', 'Vorderfenster rechts', 'SMCAR.Status', 76);
+            $this->RegisterVariableString('BackLeftWindow',   'Hinterfenster links',  'SMCAR.Status', 77);
+            $this->RegisterVariableString('BackRightWindow',  'Hinterfenster rechts', 'SMCAR.Status', 78);
+
+            $this->RegisterVariableString('Sunroof',       'Schiebedach', 'SMCAR.Status', 79);
+            $this->RegisterVariableString('RearStorage',   'Stauraum hinten', 'SMCAR.Status', 80);
+            $this->RegisterVariableString('FrontStorage',  'Stauraum vorne',  'SMCAR.Status', 81);
+            $this->RegisterVariableString('ChargingPort',  'Ladeanschluss',   'SMCAR.Status', 82);
+        } else {
+            @$this->UnregisterVariable('DoorsLocked');
+            @$this->UnregisterVariable('FrontLeftDoor');
+            @$this->UnregisterVariable('FrontRightDoor');
+            @$this->UnregisterVariable('BackLeftDoor');
+            @$this->UnregisterVariable('BackRightDoor');
+            @$this->UnregisterVariable('FrontLeftWindow');
+            @$this->UnregisterVariable('FrontRightWindow');
+            @$this->UnregisterVariable('BackLeftWindow');
+            @$this->UnregisterVariable('BackRightWindow');
+            @$this->UnregisterVariable('Sunroof');
+            @$this->UnregisterVariable('RearStorage');
+            @$this->UnregisterVariable('FrontStorage');
+            @$this->UnregisterVariable('ChargingPort');
+        }
+
+        // Ladeinformationen
+        if ($this->ReadPropertyBoolean('ScopeReadChargeLimit')) {
+            $this->RegisterVariableFloat('ChargeLimit', 'Aktuelles Ladelimit', 'SMCAR.Progress', 90);
+        } else {
+            @$this->UnregisterVariable('ChargeLimit');
+        }
+
+        if ($this->ReadPropertyBoolean('ScopeReadChargeStatus')) {
+            $this->RegisterVariableString('ChargeStatus', 'Ladestatus', 'SMCAR.Charge', 91);
+            $this->RegisterVariableBoolean('PluggedIn', 'Ladekabel eingesteckt', '~Switch', 92);
+        } else {
+            @$this->UnregisterVariable('ChargeStatus');
+            @$this->UnregisterVariable('PluggedIn');
+        }
+
+        // Ölstatus
+        if ($this->ReadPropertyBoolean('ScopeReadOilLife')) {
+            $this->RegisterVariableFloat('OilLife', 'Verbleibende Öl-Lebensdauer', 'SMCAR.Progress', 100);
+        } else {
+            @$this->UnregisterVariable('OilLife');
+        }
+
+        // Commands
+        if ($this->ReadPropertyBoolean('SetChargeLimit')) {
+            $this->RegisterVariableFloat('SetChargeLimit', 'Ladelimit setzen', 'SMCAR.Progress', 110);
+            $this->EnableAction('SetChargeLimit');
+        } else {
+            @$this->UnregisterVariable('SetChargeLimit');
+        }
+
+        if ($this->ReadPropertyBoolean('SetChargeStatus')) {
+            $this->RegisterVariableBoolean('SetChargeStatus', 'Ladestatus setzen', '~Switch', 120);
+            $this->EnableAction('SetChargeStatus');
+        } else {
+            @$this->UnregisterVariable('SetChargeStatus');
+        }
+
+        if ($this->ReadPropertyBoolean('SetLockStatus')) {
+            $this->RegisterVariableBoolean('SetLockStatus', 'Zentralverriegelung', '~Lock', 130);
+            $this->EnableAction('SetLockStatus');
+        } else {
+            @$this->UnregisterVariable('SetLockStatus');
         }
     }
 }
