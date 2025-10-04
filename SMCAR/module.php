@@ -389,22 +389,30 @@ class Smartcar extends IPSModule
         $this->SendDebug('Webhook', "eventType=$eventType", 0);
 
         switch ($eventType) {
-            case 'VEHICLE_STATE':
-                $signals = $payload['data']['signals'] ?? [];
-                $this->SendDebug('Webhook', 'Signals: ' . json_encode($signals), 0);
-                if (is_array($signals)) {
-                    foreach ($signals as $sig) {
-                        $code = $sig['code'] ?? '';
-                        $body = $sig['body'] ?? [];
-                        $this->SendDebug('Webhook', "Signal code=$code body=" . json_encode($body), 0);
-                        if ($code !== '' && is_array($body)) {
-                            $this->ApplySignal($code, $body);
-                        }
+        case 'VEHICLE_STATE':
+            $signals = $payload['data']['signals'] ?? [];
+            $this->SendDebug('Webhook', 'Signals: ' . json_encode($signals), 0);
+
+            if (is_array($signals)) {
+                foreach ($signals as $sig) {
+                    $code   = $sig['code']   ?? '';
+                    $body   = $sig['body']   ?? [];
+                    $status = $sig['status'] ?? null;
+
+                    if ($code !== '') {
+                        $this->SendDebug(
+                            'Webhook',
+                            "Signal code={$code} body=" . json_encode(is_array($body) ? $body : []) .
+                            " status=" . json_encode($status),
+                            0
+                        );
+                        $this->ApplySignal($code, is_array($body) ? $body : [], $status);
                     }
                 }
-                http_response_code(200);
-                echo 'ok';
-                return;
+            }
+            http_response_code(200);
+            echo 'ok';
+            return;
 
         case 'VEHICLE_ERROR':
             $errs = $payload['data']['errors'] ?? [];
@@ -794,219 +802,316 @@ class Smartcar extends IPSModule
         $this->SetValue($ident, $value);
     }
     
-    private function ApplySignal(string $code, array $body): void
+    // Hybride Auswertung: nutzt Scope-Variablen, legt fehlende Variablen bei Bedarf an,
+    // versteht body + status und behandelt Einheiten/Umrechnungen.
+    private function ApplySignal(string $code, array $body, ?array $status = null): void
     {
         $mi2km = 1.609344;
 
+        // --- kleine Helfer ---
+        $setSafe = function (string $ident, int $type, string $caption, string $profile, $value): void {
+            // Falls die Variable durch Scopes bereits existiert -> benutzen
+            $id = @ $this->GetIDForIdent($ident);
+            if (!$id) {
+                // dynamisch anlegen
+                switch ($type) {
+                    case VARIABLETYPE_BOOLEAN: $this->RegisterVariableBoolean($ident, $caption, $profile, 0); break;
+                    case VARIABLETYPE_INTEGER: $this->RegisterVariableInteger($ident, $caption, $profile, 0); break;
+                    case VARIABLETYPE_FLOAT:   $this->RegisterVariableFloat($ident,   $caption, $profile, 0); break;
+                    default:                   $this->RegisterVariableString($ident,  $caption, $profile, 0); break;
+                }
+                $id = $this->GetIDForIdent($ident);
+            }
+            if ($profile !== '') {
+                @IPS_SetVariableCustomProfile($id, $profile);
+            }
+            $this->SetValue($ident, $value);
+        };
+
+        $asUpper = function (?string $v): string {
+            return strtoupper(trim((string)$v));
+        };
+
+        $asDiagIdent = function (string $diagCode): string {
+            // "diagnostics-tirepressuremonitoring" -> "Diag_TirePressureMonitoring"
+            $suffix = preg_replace('~^diagnostics-~i', '', $diagCode);
+            $suffix = preg_replace('~[^A-Za-z0-9]+~', ' ', $suffix);
+            $suffix = str_replace(' ', '', ucwords(strtolower($suffix)));
+            return 'Diag_' . $suffix;
+        };
+
+        // Status-Wert extrahieren (für Fälle ohne body)
+        $statusValue = null;
+        $statusErr   = null;
+        if ($status !== null && is_array($status)) {
+            $statusValue = $status['value'] ?? null;                     // z.B. "ERROR" | "UNAVAILABLE"
+            $statusErr   = $status['error']['type'] ?? null;             // z.B. "PERMISSION" | "COMPATIBILITY" | "UPSTREAM"
+        }
+
         switch (strtolower($code)) {
-
-            // ===== ODOMETER =====
-            case 'odometer-traveleddistance': {
-                $val  = $body['value'] ?? null;
-                if ($val === null) break;
-                $unit = strtolower($body['unit'] ?? '');
-                $km   = ($unit === 'miles') ? floatval($val) * $mi2km : floatval($val);
-                $this->setSafe('Odometer', VARIABLETYPE_FLOAT, $km, 'SMCAR.Odometer', 20, true);
-                break;
-            }
-
-            // ===== LOCATION =====
-            case 'location-preciselocation': {
-                if (isset($body['latitude']))     $this->setSafe('Latitude',      VARIABLETYPE_FLOAT,  (float)$body['latitude'],      '', 10, true);
-                if (isset($body['longitude']))    $this->setSafe('Longitude',     VARIABLETYPE_FLOAT,  (float)$body['longitude'],     '', 11, true);
-                if (isset($body['heading']))      $this->setSafe('Heading',       VARIABLETYPE_FLOAT,  (float)$body['heading'],       '', 12, true);
-                if (isset($body['direction']))    $this->setSafe('Direction',     VARIABLETYPE_STRING, (string)$body['direction'],     '', 13, true);
-                if (isset($body['locationType'])) $this->setSafe('LocationType',  VARIABLETYPE_STRING, (string)$body['locationType'],  '', 14, true);
-                break;
-            }
-
-            // ===== CLOSURE / LOCK =====
-            case 'closure-islocked': {
-                if (array_key_exists('value', $body)) {
-                    $this->setSafe('DoorsLocked', VARIABLETYPE_BOOLEAN, (bool)$body['value'], '~Lock', 70, true);
+            // ---------- Batterie (HV/EV) ----------
+            case 'tractionbattery-stateofcharge':
+                // {"value":100,"unit":"percent"}
+                if (isset($body['value'])) {
+                    $setSafe('BatteryLevel', VARIABLETYPE_FLOAT, 'Batterieladestand (SOC)', 'SMCAR.Progress', floatval($body['value']));
                 }
                 break;
-            }
-            case 'closure-doors': {
-                // erwartet Grid: values[{row, column, isOpen}]
-                $this->mapGridToVehicleSides($body, 'Door', 'FrontLeftDoor', 'FrontRightDoor', 'BackLeftDoor', 'BackRightDoor');
-                break;
-            }
-            case 'closure-windows': {
-                $this->mapGridToVehicleSides($body, 'Window', 'FrontLeftWindow', 'FrontRightWindow', 'BackLeftWindow', 'BackRightWindow');
-                break;
-            }
-            case 'closure-sunroof': {
-                if (array_key_exists('isOpen', $body)) {
-                    $this->setSafe('Sunroof', VARIABLETYPE_STRING, ($body['isOpen'] ? 'OPEN' : 'CLOSED'), 'SMCAR.Status', 79, true);
+
+            case 'tractionbattery-range':
+                // {"value":52,"unit":"km"|"miles", "type":"DEFAULT", ...}
+                if (isset($body['value'])) {
+                    $val  = floatval($body['value']);
+                    $unit = strtolower($body['unit'] ?? 'km');
+                    $km   = ($unit === 'miles') ? $val * $mi2km : $val;
+                    $setSafe('BatteryRange', VARIABLETYPE_FLOAT, 'Reichweite Batterie', 'SMCAR.Odometer', $km);
                 }
                 break;
-            }
 
-            // ===== VEHICLE IDENTIFICATION =====
-            case 'vehicleidentification-vin': {
-                if (isset($body['value'])) $this->setSafe('VIN', VARIABLETYPE_STRING, (string)$body['value'], '', 4, true);
-                break;
-            }
-            case 'vehicleidentification-trim': {
-                if (isset($body['value'])) $this->setSafe('Trim', VARIABLETYPE_STRING, (string)$body['value'], '', 5, true);
-                break;
-            }
-            case 'vehicleidentification-exteriorcolor': {
-                if (isset($body['value'])) $this->setSafe('ExteriorColor', VARIABLETYPE_STRING, (string)$body['value'], '', 6, true);
-                break;
-            }
-            case 'vehicleidentification-packages': {
-                if (!empty($body['values']) && is_array($body['values'])) {
-                    $this->setSafe('Packages', VARIABLETYPE_STRING, implode(',', array_map('strval', $body['values'])), '', 7, true);
+            case 'tractionbattery-nominalcapacity':
+                // {"capacity": 73.5, "unit": "kWhr"}  | oder nur status: UNAVAILABLE
+                if (isset($body['capacity'])) {
+                    $setSafe('BatteryCapacity', VARIABLETYPE_FLOAT, 'Batteriekapazität', '~Electricity', floatval($body['capacity']));
+                } elseif ($statusValue) {
+                    // kein Wert -> nur Info-Status ablegen
+                    $setSafe('BatteryCapacityStatus', VARIABLETYPE_STRING, 'Batteriekapazität Status', '', $asUpper($statusValue));
                 }
                 break;
-            }
-            case 'vehicleidentification-nickname': {
-                if (isset($body['value'])) $this->setSafe('Nickname', VARIABLETYPE_STRING, (string)$body['value'], '', 8, true);
-                break;
-            }
 
-            // ===== CONNECTIVITY =====
-            case 'connectivitystatus-isonline': {
-                if (array_key_exists('value', $body)) $this->setSafe('IsOnline', VARIABLETYPE_BOOLEAN, (bool)$body['value'], '~Switch', 150, true);
-                break;
-            }
-            case 'connectivitystatus-isasleep': {
-                if (array_key_exists('value', $body)) $this->setSafe('IsAsleep', VARIABLETYPE_BOOLEAN, (bool)$body['value'], '~Switch', 151, true);
-                break;
-            }
-            case 'connectivitystatus-isdigitalkeypaired': {
-                if (array_key_exists('value', $body)) $this->setSafe('IsDigitalKeyPaired', VARIABLETYPE_BOOLEAN, (bool)$body['value'], '~Switch', 152, true);
-                break;
-            }
-            case 'connectivitysoftware-currentfirmwareversion': {
-                if (isset($body['value'])) $this->setSafe('FirmwareVersion', VARIABLETYPE_STRING, (string)$body['value'], '', 153, true);
-                break;
-            }
-
-            // ===== ICE (Verbrenner) =====
-            case 'internalcombustionengine-fuellevel': {
-                if (!isset($body['value'])) break;
-                $v = (float)$body['value'];
-                if ($v <= 1.0) $v *= 100.0; // robust für 0..1
-                $this->setSafe('FuelLevel', VARIABLETYPE_FLOAT, $v, 'SMCAR.Progress', 60, true);
-                break;
-            }
-            case 'internalcombustionengine-oillife': {
-                if (!isset($body['value'])) break;
-                $v = (float)$body['value'];
-                if ($v <= 1.0) $v *= 100.0;
-                $this->setSafe('OilLife', VARIABLETYPE_FLOAT, $v, 'SMCAR.Progress', 100, true);
-                break;
-            }
-
-            // ===== EV / CHARGE (falls relevant) =====
-            case 'tractionbattery-stateofcharge': { // percent (0..100) oder 0..1
-                if (!isset($body['value'])) break;
-                $v = (float)$body['value'];
-                if ($v <= 1.0) $v *= 100.0;
-                $this->setSafe('BatteryLevel', VARIABLETYPE_FLOAT, $v, 'SMCAR.Progress', 40, true);
-                break;
-            }
-            case 'tractionbattery-range': { // km|miles
-                $val  = $body['value'] ?? null;
-                if ($val === null) break;
-                $unit = strtolower($body['unit'] ?? '');
-                $km   = ($unit === 'miles') ? (float)$val * $mi2km : (float)$val;
-                $this->setSafe('BatteryRange', VARIABLETYPE_FLOAT, $km, 'SMCAR.Odometer', 41, true);
-                break;
-            }
-            case 'tractionbattery-nominalcapacity': { // kWh
-                if (isset($body['capacity'])) $this->setSafe('BatteryCapacity', VARIABLETYPE_FLOAT, (float)$body['capacity'], '~Electricity', 50, true);
-                break;
-            }
-            case 'charge-detailedchargingstatus': {
-                if (isset($body['value'])) $this->setSafe('ChargeStatus', VARIABLETYPE_STRING, strtoupper((string)$body['value']), 'SMCAR.Charge', 91, true);
-                break;
-            }
-            case 'charge-ischarging': {
-                if (array_key_exists('value', $body)) {
-                    $this->setSafe('ChargeStatus', VARIABLETYPE_STRING, ($body['value'] ? 'CHARGING' : 'NOT_CHARGING'), 'SMCAR.Charge', 91, true);
+            // ---------- Laden ----------
+            case 'charge-detailedchargingstatus':
+                // {"value":"CHARGING|NOT_CHARGING|FULLY_CHARGED|..."}
+                if (isset($body['value'])) {
+                    $setSafe('ChargeStatus', VARIABLETYPE_STRING, 'Ladestatus', 'SMCAR.Charge', $asUpper($body['value']));
                 }
                 break;
-            }
-            case 'charge-ischargingcableconnected': {
-                if (array_key_exists('value', $body)) $this->setSafe('PluggedIn', VARIABLETYPE_BOOLEAN, (bool)$body['value'], '~Switch', 92, true);
+
+            case 'charge-ischarging':
+                // {"value": true|false}
+                if (isset($body['value'])) {
+                    $is = (bool)$body['value'];
+                    // Beides pflegen: bool + string (falls Scope-Variable existiert)
+                    $setSafe('IsCharging',  VARIABLETYPE_BOOLEAN, 'Lädt', '~Switch', $is);
+                    $setSafe('ChargeStatus', VARIABLETYPE_STRING,  'Ladestatus', 'SMCAR.Charge', $is ? 'CHARGING' : 'NOT_CHARGING');
+                }
                 break;
-            }
-            case 'charge-chargelimits': {
+
+            case 'charge-ischargingcableconnected':
+                if (isset($body['value'])) {
+                    $setSafe('PluggedIn', VARIABLETYPE_BOOLEAN, 'Ladekabel eingesteckt', '~Switch', (bool)$body['value']);
+                }
+                break;
+
+            case 'charge-chargelimits':
                 // {"values":[{"type":"global","limit":80}, ...]}
                 if (isset($body['values']) && is_array($body['values'])) {
                     foreach ($body['values'] as $cfg) {
                         if (($cfg['type'] ?? '') === 'global' && isset($cfg['limit'])) {
-                            $lim = (float)$cfg['limit'];
-                            if ($lim <= 1.0) $lim *= 100.0;
-                            $this->setSafe('ChargeLimit', VARIABLETYPE_FLOAT, $lim, 'SMCAR.Progress', 90, true);
+                            $setSafe('ChargeLimit', VARIABLETYPE_FLOAT, 'Aktuelles Ladelimit', 'SMCAR.Progress', floatval($cfg['limit']));
                             break;
                         }
                     }
                 }
                 break;
-            }
 
-            // ===== DIAGNOSTICS =====
-            case 'diagnostics-dtccount': {
-                if (isset($body['value'])) $this->setSafe('DTCCount', VARIABLETYPE_INTEGER, (int)$body['value'], '', 210, true);
+            // ---------- Standort ----------
+            case 'location-preciselocation':
+                // {"latitude":..,"longitude":..,"heading":..,"direction":"NE","locationType":"PARKED"|"DRIVING"|...}
+                if (isset($body['latitude']))  $setSafe('Latitude',  VARIABLETYPE_FLOAT,  'Breitengrad',  '', floatval($body['latitude']));
+                if (isset($body['longitude'])) $setSafe('Longitude', VARIABLETYPE_FLOAT,  'Längengrad',   '', floatval($body['longitude']));
+                if (isset($body['heading']))   $setSafe('Heading',   VARIABLETYPE_FLOAT,  'Fahrtrichtung (°)', '', floatval($body['heading']));
+                if (isset($body['direction'])) $setSafe('Direction', VARIABLETYPE_STRING, 'Himmelsrichtung',    '', $asUpper($body['direction']));
+                if (isset($body['locationType'])) $setSafe('LocationType', VARIABLETYPE_STRING, 'Standort-Typ', '', $asUpper($body['locationType']));
                 break;
-            }
-            case 'diagnostics-dtclist': {
+
+            // ---------- Kilometerstand ----------
+            case 'odometer-traveleddistance':
+                // {"value": 78432, "unit":"km"|"miles"} | bei manchen OEM ohne unit -> als km interpretieren
+                if (isset($body['value'])) {
+                    $val  = floatval($body['value']);
+                    $unit = strtolower($body['unit'] ?? 'km');
+                    $km   = ($unit === 'miles') ? $val * $mi2km : $val;
+                    $setSafe('Odometer', VARIABLETYPE_FLOAT, 'Kilometerstand', 'SMCAR.Odometer', $km);
+                }
+                break;
+
+            // ---------- Security / Schließsystem ----------
+            case 'closure-islocked':
+                if (isset($body['value'])) {
+                    $setSafe('DoorsLocked', VARIABLETYPE_BOOLEAN, 'Fahrzeug verriegelt', '~Lock', (bool)$body['value']);
+                } elseif ($statusValue) {
+                    $setSafe('DoorsLockedStatus', VARIABLETYPE_STRING, 'Verriegelungs-Status', '', $asUpper($statusValue));
+                }
+                break;
+
+            case 'closure-doors':
+                // Grid -> bereits im Modul vorhanden (Front/Back + Left/Right)
+                $this->mapGridToVehicleSides($body, 'Door', 'FrontLeftDoor', 'FrontRightDoor', 'BackLeftDoor', 'BackRightDoor');
+                break;
+
+            case 'closure-windows':
+                $this->mapGridToVehicleSides($body, 'Window', 'FrontLeftWindow', 'FrontRightWindow', 'BackLeftWindow', 'BackRightWindow');
+                break;
+
+            case 'closure-sunroof':
+                if (array_key_exists('isOpen', $body)) {
+                    $setSafe('Sunroof', VARIABLETYPE_STRING, 'Schiebedach', 'SMCAR.Status', $body['isOpen'] ? 'OPEN' : 'CLOSED');
+                }
+                break;
+
+            // ---------- Connectivity ----------
+            case 'connectivitystatus-isonline':
+                if (isset($body['value'])) {
+                    $setSafe('IsOnline', VARIABLETYPE_BOOLEAN, 'Online', '~Switch', (bool)$body['value']);
+                } elseif ($statusValue) {
+                    $setSafe('IsOnlineStatus', VARIABLETYPE_STRING, 'Online-Status', '', $asUpper($statusValue));
+                }
+                break;
+
+            case 'connectivitystatus-isasleep':
+                if (isset($body['value'])) {
+                    $setSafe('IsAsleep', VARIABLETYPE_BOOLEAN, 'Schlafmodus', '~Switch', (bool)$body['value']);
+                } elseif ($statusValue) {
+                    $setSafe('IsAsleepStatus', VARIABLETYPE_STRING, 'Schlafmodus-Status', '', $asUpper($statusValue));
+                }
+                break;
+
+            case 'connectivitystatus-isdigitalkeypaired':
+                if (isset($body['value'])) {
+                    $setSafe('IsDigitalKeyPaired', VARIABLETYPE_BOOLEAN, 'Digitalschlüssel gekoppelt', '~Switch', (bool)$body['value']);
+                } elseif ($statusValue) {
+                    $setSafe('IsDigitalKeyPairedStatus', VARIABLETYPE_STRING, 'Digitalschlüssel-Status', '', $asUpper($statusValue));
+                }
+                break;
+
+            case 'connectivitysoftware-currentfirmwareversion':
+                if (isset($body['value'])) {
+                    $setSafe('FirmwareVersion', VARIABLETYPE_STRING, 'Firmware-Version', '', (string)$body['value']);
+                } elseif ($statusValue) {
+                    $setSafe('FirmwareVersionStatus', VARIABLETYPE_STRING, 'Firmware-Version Status', '', $asUpper($statusValue));
+                }
+                break;
+
+            // ---------- ICE (Verbrenner) ----------
+            case 'internalcombustionengine-fuellevel':
+                // {"value": 44, "unit":"percent"}
+                if (isset($body['value'])) {
+                    $setSafe('FuelLevel', VARIABLETYPE_FLOAT, 'Tankfüllstand', 'SMCAR.Progress', floatval($body['value']));
+                }
+                break;
+
+            case 'internalcombustionengine-oillife':
+                // {"value": 72} oder status->KNOWN_ISSUE
+                if (isset($body['value'])) {
+                    $setSafe('OilLife', VARIABLETYPE_FLOAT, 'Öl-Lebensdauer', 'SMCAR.Progress', floatval($body['value']));
+                } elseif ($statusValue) {
+                    $setSafe('OilLifeStatus', VARIABLETYPE_STRING, 'Öl-Lebensdauer Status', '', $asUpper($statusValue));
+                }
+                break;
+
+            // ---------- Vehicle Identification ----------
+            case 'vehicleidentification-vin':
+                if (isset($body['value'])) {
+                    $setSafe('VIN', VARIABLETYPE_STRING, 'Fahrgestellnummer (VIN)', '', (string)$body['value']);
+                }
+                break;
+
+            case 'vehicleidentification-trim':
+                if (isset($body['value'])) {
+                    $setSafe('Trim', VARIABLETYPE_STRING, 'Ausstattungslinie (Trim)', '', (string)$body['value']);
+                }
+                break;
+
+            case 'vehicleidentification-exteriorcolor':
+                if (isset($body['value'])) {
+                    $setSafe('ExteriorColor', VARIABLETYPE_STRING, 'Außenfarbe', '', (string)$body['value']);
+                }
+                break;
+
+            case 'vehicleidentification-packages':
+                // {"values":["Base","MY2021"]}
                 if (isset($body['values']) && is_array($body['values'])) {
-                    // JSON speichern, damit Code + Timestamp erhalten bleiben
-                    $this->setSafe('DTCList', VARIABLETYPE_STRING, json_encode($body['values']), '', 211, true);
+                    $setSafe('Packages', VARIABLETYPE_STRING, 'Pakete', '', implode(', ', array_map('strval', $body['values'])));
                 }
                 break;
-            }
 
-            // Alle Status-basierten Diagnostic-Signale (legen wir als String "OK/WARN/ERROR/..." an)
-            case 'diagnostics-abs':
-            case 'diagnostics-activesafety':
-            case 'diagnostics-airbag':
-            case 'diagnostics-driverassistance':
-            case 'diagnostics-emissions':
-            case 'diagnostics-evbatteryconditioning':
-            case 'diagnostics-evcharging':
-            case 'diagnostics-evdriveunit':
-            case 'diagnostics-evhvbattery':
-            case 'diagnostics-lighting':
-            case 'diagnostics-mil':
-            case 'diagnostics-oillife':
-            case 'diagnostics-oilpressure':
-            case 'diagnostics-oiltemperature':
-            case 'diagnostics-telematics':
-            case 'diagnostics-tirepressure':
-            case 'diagnostics-tirepressuremonitoring':
-            case 'diagnostics-transmission':
-            case 'diagnostics-washerfluid':
-            case 'diagnostics-waterinfuel': {
-                if (isset($body['status'])) {
-                    $suffix = strtoupper(substr($code, strlen('diagnostics-'))); // z.B. ABS -> DIAG_ABS
-                    $ident  = 'Diag_' . $suffix;
-                    $this->setSafe($ident, VARIABLETYPE_STRING, (string)$body['status'], '', 250, true);
+            case 'vehicleidentification-nickname':
+                if (isset($body['value'])) {
+                    $setSafe('Nickname', VARIABLETYPE_STRING, 'Fahrzeug-Spitzname', '', (string)$body['value']);
+                } elseif ($statusValue) {
+                    $setSafe('NicknameStatus', VARIABLETYPE_STRING, 'Spitzname Status', '', $asUpper($statusValue));
                 }
                 break;
-            }
 
-            // ===== USER ACCOUNT (informativ) =====
-            case 'vehicleuseraccount-permissions': {
+            // ---------- Vehicle User Account ----------
+            case 'vehicleuseraccount-permissions':
+                // {"values":["vehicle_cmds","vehicle_device_data"]}
                 if (isset($body['values']) && is_array($body['values'])) {
-                    $this->setSafe('Permissions', VARIABLETYPE_STRING, implode(',', array_map('strval', $body['values'])), '', 300, true);
+                    $setSafe('UserPermissions', VARIABLETYPE_STRING, 'User-Berechtigungen', '', implode(', ', array_map('strval', $body['values'])));
+                } elseif ($statusValue) {
+                    $setSafe('UserPermissionsStatus', VARIABLETYPE_STRING, 'User-Berechtigungen Status', '', $asUpper($statusValue));
                 }
                 break;
-            }
-            case 'vehicleuseraccount-role': {
-                if (isset($body['value'])) $this->setSafe('Role', VARIABLETYPE_STRING, (string)$body['value'], '', 301, true);
-                break;
-            }
 
-            // ===== DEFAULT =====
+            case 'vehicleuseraccount-role':
+                if (isset($body['value'])) {
+                    $setSafe('UserRole', VARIABLETYPE_STRING, 'User-Rolle', '', (string)$body['value']);
+                } elseif ($statusValue) {
+                    $setSafe('UserRoleStatus', VARIABLETYPE_STRING, 'User-Rolle Status', '', $asUpper($statusValue));
+                }
+                break;
+
+            // ---------- Diagnostics ----------
             default:
-                $this->SendDebug('ApplySignal', "unmapped code={$code} body=" . json_encode($body), 0);
+                if (str_starts_with(strtolower($code), 'diagnostics-')) {
+                    // Zwei Varianten:
+                    // 1) body: {"status":"OK","description":""}
+                    // 2) nur status (mit Fehlerarten)
+                    $ident = $asDiagIdent($code);
+
+                    if (isset($body['status'])) {
+                        $setSafe($ident, VARIABLETYPE_STRING, 'Diagnose ' . $ident, '', $asUpper($body['status']));
+                        if (isset($body['description'])) {
+                            $setSafe($ident . '_Desc', VARIABLETYPE_STRING, 'Diagnose Beschreibung ' . $ident, '', (string)$body['description']);
+                        }
+                    } elseif ($statusValue) {
+                        // ERROR/PERMISSION/COMPATIBILITY/UNAVAILABLE etc.
+                        $txt = $asUpper($statusValue);
+                        if ($statusErr) $txt .= ' (' . $asUpper($statusErr) . ')';
+                        $setSafe($ident, VARIABLETYPE_STRING, 'Diagnose ' . $ident, '', $txt);
+                    }
+
+                    // Sonderfälle Zähl-/Listenwerte
+                    if (str_ends_with(strtolower($code), 'dtccount') && isset($body['value'])) {
+                        $setSafe('Diag_DTCCount', VARIABLETYPE_INTEGER, 'Diagnose DTC Count', '', intval($body['value']));
+                    }
+                    if (str_ends_with(strtolower($code), 'dtclist') && isset($body['values'])) {
+                        // als JSON speichern, damit struktur erhalten bleibt
+                        $setSafe('Diag_DTCList', VARIABLETYPE_STRING, 'Diagnose DTC Liste', '', json_encode($body['values']));
+                    }
+                    break;
+                }
+
+                // Fallback: unbekanntes Signal – wenn ein einfacher "value" existiert, schreibe ihn in eine generische Variable
+                if (array_key_exists('value', $body)) {
+                    $ident = 'Sig_' . strtoupper(preg_replace('~[^A-Za-z0-9]+~', '_', $code));
+                    $val   = $body['value'];
+                    if (is_bool($val)) {
+                        $setSafe($ident, VARIABLETYPE_BOOLEAN, $code, '~Switch', $val);
+                    } elseif (is_numeric($val)) {
+                        $setSafe($ident, VARIABLETYPE_FLOAT, $code, '', floatval($val));
+                    } else {
+                        $setSafe($ident, VARIABLETYPE_STRING, $code, '', (string)$val);
+                    }
+                } elseif ($statusValue) {
+                    // nur Status ohne Value -> als Status-String ablegen
+                    $ident = 'SigStatus_' . strtoupper(preg_replace('~[^A-Za-z0-9]+~', '_', $code));
+                    $txt   = $asUpper($statusValue);
+                    if ($statusErr) $txt .= ' (' . $asUpper($statusErr) . ')';
+                    $setSafe($ident, VARIABLETYPE_STRING, $code . ' Status', '', $txt);
+                } else {
+                    // nichts zu tun – nur Debug
+                    $this->SendDebug('ApplySignal', "unmapped code=$code body=" . json_encode($body), 0);
+                }
                 break;
         }
     }
