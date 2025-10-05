@@ -227,7 +227,7 @@ class Smartcar extends IPSModule
                         ['type' => 'CheckBox', 'name' => 'ScopeReadOdometer',        'caption' => 'Kilometerstand lesen (/odometer)'],
                         ['type' => 'CheckBox', 'name' => 'ScopeReadBattery',         'caption' => 'Batterielevel lesen (/battery)'],
                         ['type' => 'CheckBox', 'name' => 'ScopeReadBatteryCapacity', 'caption' => 'Batteriekapazität lesen (/battery/capacity)'],
-                        ['type' => 'CheckBox', 'name' => 'ScopeReadOilLife',         'caption' => 'Motoröl lesen (/oil)'],
+                        ['type' => 'CheckBox', 'name' => 'ScopeReadOilLife',         'caption' => 'Motoröl lesen (/engine/oil)'],
                         ['type' => 'CheckBox', 'name' => 'ScopeReadFuel',            'caption' => 'Kraftstoffstand lesen (/fuel)'],
                         ['type' => 'CheckBox', 'name' => 'ScopeReadSecurity',        'caption' => 'Verriegelungsstatus lesen (/security)'],
                         ['type' => 'CheckBox', 'name' => 'ScopeReadChargeLimit',     'caption' => 'Ladelimit lesen (/charge/limit)'],
