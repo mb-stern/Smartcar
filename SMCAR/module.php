@@ -189,8 +189,7 @@ class Smartcar extends IPSModule
 
         $inject = [
             ['type' => 'Label', 'caption' => 'Hook-Pfad: ' . $hookPath],
-            ['type' => 'Label', 'caption' => 'Redirect- & Webhook-URI:'],
-            ['type' => 'Label', 'caption' => $effectiveRedirect],
+            ['type' => 'Label', 'caption' => 'Redirect- & Webhook-URI: ' . $effectiveRedirect]
             [
                 'type'    => 'ValidationTextBox',
                 'name'    => 'ManualRedirectURI',
