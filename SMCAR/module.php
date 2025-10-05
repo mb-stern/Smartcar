@@ -181,14 +181,9 @@ class Smartcar extends IPSModule
     public function GetConfigurationForm()
     {
         $form = json_decode(file_get_contents(__DIR__ . '/form.json'), true);
-
         $effectiveRedirect = $this->ReadAttributeString('RedirectURI');
-        $hookPath          = $this->ReadAttributeString('CurrentHook');
-        // jetzt identisch zur RedirectURI
-        $callbackURI       = $effectiveRedirect;
 
         $inject = [
-            ['type' => 'Label', 'caption' => 'Hook-Pfad: ' . $hookPath],
             ['type' => 'Label', 'caption' => 'Redirect- & Webhook-URI: ' . $effectiveRedirect],
             [
                 'type'    => 'ValidationTextBox',
