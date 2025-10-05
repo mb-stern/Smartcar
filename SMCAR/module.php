@@ -191,17 +191,12 @@ class Smartcar extends IPSModule
                     'name'    => 'ManualRedirectURI',
                     'caption' => 'Manuelle Redirect-URI überschreibt Connect-URL'
                 ],
-                [
-                    'type'    => 'ExpansionPanel',
-                    'caption' => 'Webhook & Redirect',
-                    'items'   => [
-                        ['type' => 'CheckBox', 'name' => 'EnableWebhook', 'caption' => 'Webhook-Empfang aktivieren'],
-                        ['type' => 'CheckBox', 'name' => 'VerifyWebhookSignature', 'caption' => 'Fahrzeug verifizieren (Fahrzeugfilter!)'],
-                        [
-                            'type'    => 'ValidationTextBox',
-                            'name'    => 'ManagementToken',
-                            'caption' => 'Application Management Token (HMAC & VERIFY)'
-                        ]
+                ['type' => 'CheckBox', 'name' => 'EnableWebhook', 'caption' => 'Webhook-Empfang aktivieren'],
+                ['type' => 'CheckBox', 'name' => 'VerifyWebhookSignature', 'caption' => 'Fahrzeug verifizieren (Fahrzeugfilter!)'],
+                    [
+                    'type'    => 'ValidationTextBox',
+                    'name'    => 'ManagementToken',
+                    'caption' => 'Application Management Token (HMAC & VERIFY)'
                     ]
                 ],
                 ['type' => 'Label', 'caption' => '────────────────────────────────────────'],
