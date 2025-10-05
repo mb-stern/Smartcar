@@ -439,70 +439,70 @@ class Smartcar extends IPSModule
         $this->SendDebug('Webhook', "eventType=$eventType", 0);
 
         switch ($eventType) {
-    case 'VEHICLE_STATE':
-        // Original-Signals
-        $signals = $payload['data']['signals'] ?? [];
-        if (!is_array($signals)) $signals = [];
+        case 'VEHICLE_STATE':
+            // Original-Signals
+            $signals = $payload['data']['signals'] ?? [];
+            if (!is_array($signals)) $signals = [];
 
-        // Top-Level vehicle → als synthetische Signals hinzufügen,
-        // damit make/model/year über ApplySignal() laufen
-        $veh = $payload['data']['vehicle'] ?? [];
-        $synthetic = [];
-        if (is_array($veh)) {
-            if (array_key_exists('make', $veh)) {
-                $synthetic[] = ['code' => 'vehicleidentification-make',  'body' => ['value' => (string)$veh['make']]];
+            // Top-Level vehicle → als synthetische Signals hinzufügen,
+            // damit make/model/year über ApplySignal() laufen
+            $veh = $payload['data']['vehicle'] ?? [];
+            $synthetic = [];
+            if (is_array($veh)) {
+                if (array_key_exists('make', $veh)) {
+                    $synthetic[] = ['code' => 'vehicleidentification-make',  'body' => ['value' => (string)$veh['make']]];
+                }
+                if (array_key_exists('model', $veh)) {
+                    $synthetic[] = ['code' => 'vehicleidentification-model', 'body' => ['value' => (string)$veh['model']]];
+                }
+                if (array_key_exists('year', $veh)) {
+                    $synthetic[] = ['code' => 'vehicleidentification-year',  'body' => ['value' => (int)$veh['year']]];
+                }
             }
-            if (array_key_exists('model', $veh)) {
-                $synthetic[] = ['code' => 'vehicleidentification-model', 'body' => ['value' => (string)$veh['model']]];
+            if (!empty($synthetic)) {
+                $this->SendDebug('Webhook', 'Synthetische Signals: ' . json_encode($synthetic), 0);
+                $signals = array_merge($synthetic, $signals);
             }
-            if (array_key_exists('year', $veh)) {
-                $synthetic[] = ['code' => 'vehicleidentification-year',  'body' => ['value' => (int)$veh['year']]];
+
+            // Sammelstrukturen für ein aufgeräumtes Debug
+            $created = []; // neu angelegte Variablen: ident => value
+            $skipped = [
+                'COMPATIBILITY' => [],
+                'PERMISSION'    => [],
+                'UPSTREAM'      => [],
+                'STATUS_ONLY'   => [],
+                'OTHER'         => []
+            ];
+
+            // Alle Signals einheitlich über ApplySignal()
+            foreach ($signals as $sig) {
+                $code   = $sig['code']   ?? '';
+                $body   = $sig['body']   ?? [];
+                $status = $sig['status'] ?? null;
+                if ($code === '') continue;
+
+                $this->ApplySignal(
+                    $code,
+                    is_array($body) ? $body : [],
+                    $status,
+                    $created,
+                    $skipped
+                );
             }
-        }
-        if (!empty($synthetic)) {
-            $this->SendDebug('Webhook', 'Synthetische Signals: ' . json_encode($synthetic), 0);
-            $signals = array_merge($synthetic, $signals);
-        }
 
-        // Sammelstrukturen für ein aufgeräumtes Debug
-        $created = []; // neu angelegte Variablen: ident => value
-        $skipped = [
-            'COMPATIBILITY' => [],
-            'PERMISSION'    => [],
-            'UPSTREAM'      => [],
-            'STATUS_ONLY'   => [],
-            'OTHER'         => []
-        ];
+            // genau EIN Eintrag für alle neu angelegten Variablen
+            if (!empty($created)) {
+                $this->SendDebug('Signals/created', json_encode($created, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 0);
+            }
+            // genau EIN Eintrag für alle übersprungenen (nur Status/keine Daten)
+            $skippedOut = array_filter($skipped, fn($arr) => !empty($arr));
+            if (!empty($skippedOut)) {
+                $this->SendDebug('Signals/skipped', json_encode($skippedOut, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 0);
+            }
 
-        // Alle Signals einheitlich über ApplySignal()
-        foreach ($signals as $sig) {
-            $code   = $sig['code']   ?? '';
-            $body   = $sig['body']   ?? [];
-            $status = $sig['status'] ?? null;
-            if ($code === '') continue;
-
-            $this->ApplySignal(
-                $code,
-                is_array($body) ? $body : [],
-                $status,
-                $created,
-                $skipped
-            );
-        }
-
-        // genau EIN Eintrag für alle neu angelegten Variablen
-        if (!empty($created)) {
-            $this->SendDebug('Signals/created', json_encode($created, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 0);
-        }
-        // genau EIN Eintrag für alle übersprungenen (nur Status/keine Daten)
-        $skippedOut = array_filter($skipped, fn($arr) => !empty($arr));
-        if (!empty($skippedOut)) {
-            $this->SendDebug('Signals/skipped', json_encode($skippedOut, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 0);
-        }
-
-        http_response_code(200);
-        echo 'ok';
-        return;
+            http_response_code(200);
+            echo 'ok';
+            return;
         }
     }
 
