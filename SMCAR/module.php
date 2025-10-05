@@ -195,7 +195,7 @@ class Smartcar extends IPSModule
             [
                 'type'    => 'ValidationTextBox',
                 'name'    => 'ManagementToken',
-                'caption' => 'Application Management Token (für HMAC & VERIFY)'
+                'caption' => 'Application Management Token'
             ],
             ['type' => 'Label', 'caption' => '────────────────────────────────────────']
         ];
