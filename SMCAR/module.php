@@ -227,7 +227,7 @@ class Smartcar extends IPSModule
                         ['type' => 'CheckBox', 'name' => 'ScopeReadOdometer',        'caption' => 'Kilometerstand lesen (/odometer)'],
                         ['type' => 'CheckBox', 'name' => 'ScopeReadBattery',         'caption' => 'Batterielevel lesen (/battery)'],
                         ['type' => 'CheckBox', 'name' => 'ScopeReadBatteryCapacity', 'caption' => 'Batteriekapazität lesen (/battery/capacity)'],
-                        ['type' => 'CheckBox', 'name' => 'ScopeReadOilLife',         'caption' => 'Motoröl lesen (/oil)'],
+                        ['type' => 'CheckBox', 'name' => 'ScopeReadOilLife',         'caption' => 'Motoröl lesen (/engine/oil)'],
                         ['type' => 'CheckBox', 'name' => 'ScopeReadFuel',            'caption' => 'Kraftstoffstand lesen (/fuel)'],
                         ['type' => 'CheckBox', 'name' => 'ScopeReadSecurity',        'caption' => 'Verriegelungsstatus lesen (/security)'],
                         ['type' => 'CheckBox', 'name' => 'ScopeReadChargeLimit',     'caption' => 'Ladelimit lesen (/charge/limit)'],
@@ -960,6 +960,14 @@ class Smartcar extends IPSModule
                     $setSafe('BatteryCapacity', VARIABLETYPE_FLOAT, 'Batteriekapazität', '~Electricity', floatval($body['capacity']));
                 }
                 break;
+            
+            case 'tractionbattery-maxrangechargecounter':
+                if (isset($body['value'])) $setSafe('MaxRangeChargeCounter', VARIABLETYPE_FLOAT, 'Max-Range-Ladezyklen', '', floatval($body['value']));
+                break;
+
+            case 'tractionbattery-nominalcapacities':
+                if (isset($body['values'])) $setSafe('BatteryNominalCapacities', VARIABLETYPE_STRING, 'Nominalkapazitäten', '', json_encode($body['values'], JSON_UNESCAPED_UNICODE));
+                break;
 
             // ---------- Laden ----------
             case 'charge-detailedchargingstatus':
@@ -992,6 +1000,84 @@ class Smartcar extends IPSModule
                     }
                 }
                 break;
+
+            case 'charge-amperage':
+                if (isset($body['value'])) $setSafe('ChargeAmperage', VARIABLETYPE_FLOAT, 'Ladestrom (A)', '', floatval($body['value']));
+                break;
+
+            case 'charge-amperagemax':
+            case 'charge-maximumamperage':
+                if (isset($body['value'])) $setSafe('ChargeAmperageMax', VARIABLETYPE_FLOAT, 'Max. Ladestrom (A)', '', floatval($body['value']));
+                break;
+
+            case 'charge-amperagerequested':
+                if (isset($body['value'])) $setSafe('ChargeAmperageRequested', VARIABLETYPE_FLOAT, 'Angeforderter Ladestrom (A)', '', floatval($body['value']));
+                break;
+
+            case 'charge-chargerate':
+                // Einheit je nach OEM (km/h, mi/h, kW…). Wir speichern Rohwert.
+                if (isset($body['value'])) $setSafe('ChargeRate', VARIABLETYPE_FLOAT, 'Laderate', '', floatval($body['value']));
+                break;
+
+            case 'charge-voltage':
+                if (isset($body['value'])) $setSafe('ChargeVoltage', VARIABLETYPE_FLOAT, 'Ladespannung (V)', '', floatval($body['value']));
+                break;
+
+            case 'charge-wattage':
+            case 'charge-power':
+                if (isset($body['value'])) $setSafe('ChargeWattage', VARIABLETYPE_FLOAT, 'Ladeleistung (W)', '', floatval($body['value']));
+                break;
+
+            case 'charge-energyadded':
+                // meist kWh – falls Unit beiliegt, kannst du optional prüfen
+                if (isset($body['value'])) $setSafe('ChargeEnergyAdded', VARIABLETYPE_FLOAT, 'Energie hinzugefügt', '~Electricity', floatval($body['value']));
+                break;
+
+            case 'charge-timetocomplete':
+                // je nach OEM als Minuten/Sekunden – wir speichern den Rohwert
+                if (isset($body['value'])) $setSafe('ChargeTimeToComplete', VARIABLETYPE_FLOAT, 'Restladezeit', '', floatval($body['value']));
+                break;
+
+            case 'charge-fastchargertype':
+                if (isset($body['value'])) $setSafe('FastChargerType', VARIABLETYPE_STRING, 'Schnelllader-Typ', '', (string)$body['value']);
+                break;
+
+            case 'charge-isfastchargerpresent':
+                if (isset($body['value'])) $setSafe('IsFastChargerPresent', VARIABLETYPE_BOOLEAN, 'Schnelllader erkannt', '~Switch', (bool)$body['value']);
+                break;
+
+            case 'charge-chargingconnectortype':
+                if (isset($body['value'])) $setSafe('ChargingConnectorType', VARIABLETYPE_STRING, 'Steckertyp', '', (string)$body['value']);
+                break;
+
+            case 'charge-chargerphases':
+                // je nach OEM: Zahl/Enum – Rohwert speichern
+                if (isset($body['value'])) $setSafe('ChargerPhases', VARIABLETYPE_FLOAT, 'Phasen', '', floatval($body['value']));
+                break;
+
+            case 'charge-chargetimers':
+                // typischerweise Liste → als JSON ablegen
+                if (isset($body['values'])) $setSafe('ChargeTimers', VARIABLETYPE_STRING, 'Lade-Timer', '', json_encode($body['values'], JSON_UNESCAPED_UNICODE));
+                break;
+
+            case 'charge-records':
+                if (isset($body['values'])) $setSafe('ChargeRecords', VARIABLETYPE_STRING, 'Lade-Records', '', json_encode($body['values'], JSON_UNESCAPED_UNICODE));
+                break;
+
+            case 'charge-ischargingcablelatched':
+                if (isset($body['value'])) $setSafe('IsChargingCableLatched', VARIABLETYPE_BOOLEAN, 'Ladekabel verriegelt', '~Switch', (bool)$body['value']);
+                break;
+
+            case 'charge-ischargingportflapopen':
+                if (array_key_exists('isOpen', $body)) {
+                    $setSafe('ChargingPortFlap', VARIABLETYPE_STRING, 'Ladeport-Klappe', 'SMCAR.Status', $body['isOpen'] ? 'OPEN' : 'CLOSED');
+                }
+                break;     
+                
+            case 'charge-chargeportstatuscolor':
+            case 'closure-chargeportstatuscolor':
+                if (isset($body['value'])) $setSafe('ChargingPortStatusColor', VARIABLETYPE_STRING, 'Ladeport-Statusfarbe', '', (string)$body['value']);
+                break;    
 
             // ---------- Standort ----------
             case 'location-preciselocation':
@@ -1069,6 +1155,32 @@ class Smartcar extends IPSModule
                 if (isset($body['value'])) {
                     $setSafe('OilLife', VARIABLETYPE_FLOAT, 'Öl-Lebensdauer', 'SMCAR.Progress', floatval($body['value']));
                 }
+                break;
+
+            case 'internalcombustionengine-oilpressure':
+                if (isset($body['value'])) $setSafe('OilPressure', VARIABLETYPE_FLOAT, 'Öldruck', '', floatval($body['value']));
+                break;
+
+            case 'internalcombustionengine-oiltemperature':
+                if (isset($body['value'])) $setSafe('OilTemperature', VARIABLETYPE_FLOAT, 'Öltemperatur', '', floatval($body['value']));
+                break;
+
+            case 'internalcombustionengine-waterinfuel':
+                if (isset($body['value'])) $setSafe('WaterInFuel', VARIABLETYPE_BOOLEAN, 'Wasser im Kraftstoff', '~Switch', (bool)$body['value']);
+                break;
+
+            // --- HVAC / Komfort ---
+            case 'climatecontrol-isheateractive':
+                if (isset($body['value'])) $setSafe('IsHeaterActive', VARIABLETYPE_BOOLEAN, 'Heizung aktiv', '~Switch', (bool)$body['value']);
+                break;
+
+            // --- Tires ---
+            case 'tires-pressure':
+                // mögliche Struktur: frontLeft/frontRight/backLeft/backRight ODER Grid/values
+                if (isset($body['frontLeft']))  $setSafe('TireFrontLeft',  VARIABLETYPE_FLOAT, 'Reifendruck Vorderreifen Links',  'SMCAR.Pressure', floatval($body['frontLeft'])  * 0.01);
+                if (isset($body['frontRight'])) $setSafe('TireFrontRight', VARIABLETYPE_FLOAT, 'Reifendruck Vorderreifen Rechts', 'SMCAR.Pressure', floatval($body['frontRight']) * 0.01);
+                if (isset($body['backLeft']))   $setSafe('TireBackLeft',   VARIABLETYPE_FLOAT, 'Reifendruck Hinterreifen Links', 'SMCAR.Pressure', floatval($body['backLeft'])   * 0.01);
+                if (isset($body['backRight']))  $setSafe('TireBackRight',  VARIABLETYPE_FLOAT, 'Reifendruck Hinterreifen Rechts','SMCAR.Pressure', floatval($body['backRight'])  * 0.01);
                 break;
 
             // ---------- Vehicle Identification ----------
