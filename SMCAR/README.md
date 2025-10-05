@@ -57,6 +57,7 @@ Aktuell sind folgende Ansteuerungen unterstützt
 * In der aktuellen Version dieses Moduls ist ein Fahrzeug unterstützt, für mehrere Fahrzeuge/Profile ist das Modul mehrmals anzulegen.
 * Im Smartcar-Profil können mehrere Redirect-URI's angelegt werden, womit auch mehrere Module mit Zugriff auf dasselbe Smartcar-Konto unterstützt sind.
 * Nicht unterstützt ist ein Benutzerprofil bei einem Fahrzeug-Hersteller, wo mehrere Fahrzeuge verknüpft sind. Dies ist aber nur ein Thema, wenn mehrere Fahrzeuge desselben Herstellers gehalten werden. Hier muss dann jedes Fahrzeug auf ein anderes Profil lauten.
+* Signals über Webhook sind unterstützt, sofern ein entsprechender (kostenpflichtiger) Plan bei Smartcar gewählt wurde. Das Konfigurationsformular ist komplett zu konfigurieren, da einige Signals auch die Daten der entsprechenden Scopes aktualisieren.
 
 ### 2. Voraussetzungen
 
@@ -76,10 +77,14 @@ __Konfigurationsseite__:
 
 Name     | Beschreibung
 -------- | ------------------
-Redirect-URI                |  Das ist der Pfad zum Webhook. Dieser Pfad gehört in die Konfiguration von Smartcar unter REDIRECT URIS.
+Redirect & Webhhok-URI      |  Dieser Pfad gehört in der Smartcar-Kunfiguration unter 'Configuration' in die REDIRECT URIS und ebenfalls unter 'Integrations' in den entprechenden WEBHOOK.
+Manuelle Redirect-URI       |  Wird dieses Feld befüllt, wird diese URI statt der Connect-Adresse verwendet.
+Webhook-Empfang aktiviren   |  Dieser Schalter aktiviert den Empfang der Signals. Signals über Webhook sind für die simmulierten Fahrezeuge aktuell nicht verfügbar.
+Fahrzeug verifizieren       |  Dieser Schalter aktiviert die Überprüfung, ob es sich bei den ankommenden Daten um diejenigen des Fahrezuges handelt, welches auch über die API verbunden ist.
+Application Management Token|  Hier kommt der Application Managemt Token aus der Smartcar-Konfiguration rein. Der Token ist nur einmal lesbar, ansosnten er neu generiert werden muss.
 Client ID                   |  Entnimm diesen in der Konfiguration von Smartcar unter OAuth
 Client Secret               |  Entnimm diesen in der Konfiguration von Smartcar unter OAuth
-Verbindungsmodus            |  Hier definierst du, ob es sich um ein Simuliertes oder ein Live-Fahrzeug handelt. Die Fahrzeuge verwaltest du im Dashboard von Smartcar. Es kann auch zwischen simuliertem und Live-Fahrzeug gewechselt werden, jedoch muss danach 'Smartcar verbinden' erneut gewählt werden.
+Verbindungsmodus            |  Hier definierst du, ob es sich um ein Simuliertes oder ein Live-Fahrzeug handelt. Die Fahrzeuge verwaltest du im Dashboard von Smartcar. Es kann auch zwischen simuliertem und Live-Fahrzeug gewechselt werden, jedoch muss danach 'Smartcar verbinden' erneut gewählt werden. Signals über Webhook sind für die simmulierten Fahrezeuge aktuell nicht verfügbar.
 Berechtigungen (Scopes)      |  Hier sind die aktuell vom Modul unterstützten Scopes zur Auswahl. Wichtig ist, dass alle angewählt werden, die später abgefragt werden, sonst werden hier keine Werte geliefert. Im Zweifelsfalle vor der Abfrage alle aktivieren. Die Variablen werden automatisch erstellt und beim Deaktivieren wieder gelöscht. Die Berechtigungen bleiben aber.
 Smartcar verbinden         |  Es öffnet sich ein Browserfenster, wo du dich mit deinen Zugangsdaten vom Fahrzeughersteller anmeldest und die gewählten Berechtigungen bei Smartcar noch genehmigst. Am Anschluss erscheint eine Erfolgsmeldung und die Zugriff-Token werden über die Redirect-URI an das Modul übertragen.
 Fahrzeugdaten abrufen       |  Hier rufst du alle aktivierten Scopes ab. Sei vorsichtig bei einem Live-Fahrzeug. Fünf aktivierte Scopes ergeben 5 API-Calls. Lies hier [PHP-Befehlsreferenz](#7-php-befehlsreferenz), wie du exklusiv die gewünschten Variablen aktualisierst.
@@ -132,7 +137,7 @@ SMCAR_FetchVehicleData(12345);      |   Alle im Modul aktivierten Scopes abfrage
 ### 8. Versionen
 
 Version 3.0 (05.10.2025)
-- Neu werden Webhooks unterstütz. Diese müssen über einen Plan von Smartcar erworben und in der Config angepasst werden.
+- Neu werden Signals über Webhooks unterstützt. Diese müssen über einen Plan von Smartcar erworben und in der Config angepasst werden. Es werden nicht alle Signals von allen Fahrezugherstellern unterstützt.
 
 Version 2.3 (28.09.2025)
 - Der Token wird nun bei jeder Konfigurationsänderung oder auch beim Update erneuert, sobald Symcon bereit ist. Dies sollte die zeitweiligen Token-Fehler nach Neustart des Systems beheben.
