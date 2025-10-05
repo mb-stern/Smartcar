@@ -439,59 +439,70 @@ class Smartcar extends IPSModule
         $this->SendDebug('Webhook', "eventType=$eventType", 0);
 
         switch ($eventType) {
-        case 'VEHICLE_STATE':
-            $signals = $payload['data']['signals'] ?? [];
-            // Sammelstrukturen
-            $created = []; // ident => value (nur neu angelegte Variablen)
-            $skipped = [   // gruppiert nach Grund
-                'COMPATIBILITY' => [],
-                'PERMISSION'    => [],
-                'UPSTREAM'      => [],
-                'STATUS_ONLY'   => [],
-                'OTHER'         => []
-            ];
+    case 'VEHICLE_STATE':
+        // Original-Signals
+        $signals = $payload['data']['signals'] ?? [];
+        if (!is_array($signals)) $signals = [];
 
-            if (is_array($signals)) {
-                foreach ($signals as $sig) {
-                    $code   = $sig['code']   ?? '';
-                    $body   = $sig['body']   ?? [];
-                    $status = $sig['status'] ?? null;
-
-                    if ($code !== '') {
-                        // KEIN per-Signal Debug; alles wird gesammelt:
-                        $this->ApplySignal(
-                            $code,
-                            is_array($body) ? $body : [],
-                            $status,
-                            $created,
-                            $skipped
-                        );
-                    }
-                }
+        // Top-Level vehicle → als synthetische Signals hinzufügen,
+        // damit make/model/year über ApplySignal() laufen
+        $veh = $payload['data']['vehicle'] ?? [];
+        $synthetic = [];
+        if (is_array($veh)) {
+            if (array_key_exists('make', $veh)) {
+                $synthetic[] = ['code' => 'vehicleidentification-make',  'body' => ['value' => (string)$veh['make']]];
             }
-
-            // genau EIN Eintrag für alle neu angelegten Variablen
-            if (!empty($created)) {
-                $this->SendDebug('Signals/created', json_encode($created, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 0);
+            if (array_key_exists('model', $veh)) {
+                $synthetic[] = ['code' => 'vehicleidentification-model', 'body' => ['value' => (string)$veh['model']]];
             }
-
-            // genau EIN Eintrag für alle übersprungenen (nur Status)
-            // leere Gruppen ausblenden für Übersicht
-            $skippedOut = array_filter($skipped, fn($arr) => !empty($arr));
-            if (!empty($skippedOut)) {
-                $this->SendDebug('Signals/skipped', json_encode($skippedOut, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 0);
+            if (array_key_exists('year', $veh)) {
+                $synthetic[] = ['code' => 'vehicleidentification-year',  'body' => ['value' => (int)$veh['year']]];
             }
-
-            http_response_code(200);
-            echo 'ok';
-            return;
-
-            default:
-                $this->SendDebug('Webhook', "Unbekannter eventType: $eventType", 0);
-                http_response_code(200);
-                echo 'ok';
-                return;
         }
+        if (!empty($synthetic)) {
+            $this->SendDebug('Webhook', 'Synthetische Signals: ' . json_encode($synthetic), 0);
+            $signals = array_merge($synthetic, $signals);
+        }
+
+        // Sammelstrukturen für ein aufgeräumtes Debug
+        $created = []; // neu angelegte Variablen: ident => value
+        $skipped = [
+            'COMPATIBILITY' => [],
+            'PERMISSION'    => [],
+            'UPSTREAM'      => [],
+            'STATUS_ONLY'   => [],
+            'OTHER'         => []
+        ];
+
+        // Alle Signals einheitlich über ApplySignal()
+        foreach ($signals as $sig) {
+            $code   = $sig['code']   ?? '';
+            $body   = $sig['body']   ?? [];
+            $status = $sig['status'] ?? null;
+            if ($code === '') continue;
+
+            $this->ApplySignal(
+                $code,
+                is_array($body) ? $body : [],
+                $status,
+                $created,
+                $skipped
+            );
+        }
+
+        // genau EIN Eintrag für alle neu angelegten Variablen
+        if (!empty($created)) {
+            $this->SendDebug('Signals/created', json_encode($created, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 0);
+        }
+        // genau EIN Eintrag für alle übersprungenen (nur Status/keine Daten)
+        $skippedOut = array_filter($skipped, fn($arr) => !empty($arr));
+        if (!empty($skippedOut)) {
+            $this->SendDebug('Signals/skipped', json_encode($skippedOut, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 0);
+        }
+
+        http_response_code(200);
+        echo 'ok';
+        return;
     }
 
     private function getRequestHeader(string $name): ?string
@@ -856,7 +867,7 @@ class Smartcar extends IPSModule
     {
         $mi2km = 1.609344;
 
-        // --- erkennt "echten" Payload vs. reine Statusmeldungen ---
+        // erkennt "echten" Payload vs. reine Statusmeldungen
         $hasPayload = static function(array $b): bool {
             foreach ([
                 'value','values','capacity','latitude','longitude','heading',
@@ -868,8 +879,8 @@ class Smartcar extends IPSModule
         };
 
         // Status extrahieren (zum Gruppieren der Skips)
-        $statusValue = null;  // z.B. "ERROR" | "UNAVAILABLE" | "OK"
-        $statusErr   = null;  // z.B. "COMPATIBILITY" | "PERMISSION" | "UPSTREAM"
+        $statusValue = null;  // "ERROR" | "UNAVAILABLE" | "OK" | ...
+        $statusErr   = null;  // "COMPATIBILITY" | "PERMISSION" | "UPSTREAM" | ...
         if ($status !== null && is_array($status)) {
             $statusValue = $status['value']         ?? null;
             $statusErr   = $status['error']['type'] ?? null;
@@ -883,7 +894,7 @@ class Smartcar extends IPSModule
             return $g; // z.B. UNAVAILABLE, KNOWN_ISSUE, ...
         };
 
-        // Variablen-Setter, der neu angelegte Idents in $created sammelt
+        // Variablen-Setter, der Neu-Anlagen in $created sammelt
         $setSafe = function (string $ident, int $type, string $caption, string $profile, $value) use (&$created) {
             $id = @$this->GetIDForIdent($ident);
             $wasCreated = false;
@@ -919,9 +930,7 @@ class Smartcar extends IPSModule
             return 'Diag_' . $suffix;
         };
 
-        // ——————————————————————————————————————————
-        // Early-Exit: Status-only → KEINE Variable, nur sammeln
-        // ——————————————————————————————————————————
+        // Status-only → KEINE Variable, nur gesammelt fürs Debug
         if (!$hasPayload($body) && ($statusValue !== null || $statusErr !== null)) {
             $skipped[$group()][] = $code;
             return;
@@ -930,13 +939,13 @@ class Smartcar extends IPSModule
         // ====== ab hier nur Pfade mit "echten" Daten ======
         switch (strtolower($code)) {
             // ---------- Batterie (HV/EV) ----------
-            case 'tractionbattery-stateofcharge': // {"value":100,"unit":"percent"}
+            case 'tractionbattery-stateofcharge':
                 if (isset($body['value'])) {
                     $setSafe('BatteryLevel', VARIABLETYPE_FLOAT, 'Batterieladestand (SOC)', 'SMCAR.Progress', floatval($body['value']));
                 }
                 break;
 
-            case 'tractionbattery-range': // {"value":52,"unit":"km"|"miles", ...}
+            case 'tractionbattery-range':
                 if (isset($body['value'])) {
                     $val  = floatval($body['value']);
                     $unit = strtolower($body['unit'] ?? 'km');
@@ -945,20 +954,20 @@ class Smartcar extends IPSModule
                 }
                 break;
 
-            case 'tractionbattery-nominalcapacity': // {"capacity": 73.5, "unit": "kWhr"}
+            case 'tractionbattery-nominalcapacity':
                 if (isset($body['capacity'])) {
                     $setSafe('BatteryCapacity', VARIABLETYPE_FLOAT, 'Batteriekapazität', '~Electricity', floatval($body['capacity']));
                 }
                 break;
 
             // ---------- Laden ----------
-            case 'charge-detailedchargingstatus': // {"value":"CHARGING|..."}
+            case 'charge-detailedchargingstatus':
                 if (isset($body['value'])) {
                     $setSafe('ChargeStatus', VARIABLETYPE_STRING, 'Ladestatus', 'SMCAR.Charge', $asUpper($body['value']));
                 }
                 break;
 
-            case 'charge-ischarging': // {"value": true|false}
+            case 'charge-ischarging':
                 if (isset($body['value'])) {
                     $is = (bool)$body['value'];
                     $setSafe('IsCharging',  VARIABLETYPE_BOOLEAN, 'Lädt', '~Switch', $is);
@@ -966,13 +975,13 @@ class Smartcar extends IPSModule
                 }
                 break;
 
-            case 'charge-ischargingcableconnected': // {"value": true|false}
+            case 'charge-ischargingcableconnected':
                 if (isset($body['value'])) {
                     $setSafe('PluggedIn', VARIABLETYPE_BOOLEAN, 'Ladekabel eingesteckt', '~Switch', (bool)$body['value']);
                 }
                 break;
 
-            case 'charge-chargelimits': // {"values":[{"type":"global","limit":80}, ...]}
+            case 'charge-chargelimits':
                 if (isset($body['values']) && is_array($body['values'])) {
                     foreach ($body['values'] as $cfg) {
                         if (($cfg['type'] ?? '') === 'global' && isset($cfg['limit'])) {
@@ -993,7 +1002,7 @@ class Smartcar extends IPSModule
                 break;
 
             // ---------- Kilometerstand ----------
-            case 'odometer-traveleddistance': // {"value": 78432, "unit":"km"|"miles"}
+            case 'odometer-traveleddistance':
                 if (isset($body['value'])) {
                     $val  = floatval($body['value']);
                     $unit = strtolower($body['unit'] ?? 'km');
@@ -1002,7 +1011,7 @@ class Smartcar extends IPSModule
                 }
                 break;
 
-            // ---------- Security / Schließsystem ----------
+            // ---------- Security ----------
             case 'closure-islocked':
                 if (isset($body['value'])) {
                     $setSafe('DoorsLocked', VARIABLETYPE_BOOLEAN, 'Fahrzeug verriegelt', '~Lock', (bool)$body['value']);
@@ -1010,7 +1019,6 @@ class Smartcar extends IPSModule
                 break;
 
             case 'closure-doors':
-                // erwartet: values[] mit row/column/isOpen
                 $this->mapGridToVehicleSides($body, 'Door', 'FrontLeftDoor', 'FrontRightDoor', 'BackLeftDoor', 'BackRightDoor');
                 break;
 
@@ -1049,14 +1057,14 @@ class Smartcar extends IPSModule
                 }
                 break;
 
-            // ---------- ICE (Verbrenner) ----------
-            case 'internalcombustionengine-fuellevel': // {"value": 44, "unit":"percent"}
+            // ---------- ICE ----------
+            case 'internalcombustionengine-fuellevel':
                 if (isset($body['value'])) {
                     $setSafe('FuelLevel', VARIABLETYPE_FLOAT, 'Tankfüllstand', 'SMCAR.Progress', floatval($body['value']));
                 }
                 break;
 
-            case 'internalcombustionengine-oillife': // {"value": 72}
+            case 'internalcombustionengine-oillife':
                 if (isset($body['value'])) {
                     $setSafe('OilLife', VARIABLETYPE_FLOAT, 'Öl-Lebensdauer', 'SMCAR.Progress', floatval($body['value']));
                 }
@@ -1081,7 +1089,7 @@ class Smartcar extends IPSModule
                 }
                 break;
 
-            case 'vehicleidentification-packages': // {"values":["Base","MY2021"]}
+            case 'vehicleidentification-packages':
                 if (isset($body['values']) && is_array($body['values'])) {
                     $setSafe('Packages', VARIABLETYPE_STRING, 'Pakete', '', implode(', ', array_map('strval', $body['values'])));
                 }
@@ -1093,16 +1101,22 @@ class Smartcar extends IPSModule
                 }
                 break;
 
-            // ---------- Vehicle User Account ----------
-            case 'vehicleuseraccount-permissions': // {"values":[...]}
-                if (isset($body['values']) && is_array($body['values'])) {
-                    $setSafe('UserPermissions', VARIABLETYPE_STRING, 'User-Berechtigungen', '', implode(', ', array_map('strval', $body['values'])));
+            // Synthetische vehicle-Felder (Top-Level) → gleiche Variablen wie Scopes
+            case 'vehicleidentification-make':
+                if (isset($body['value'])) {
+                    $setSafe('VehicleMake', VARIABLETYPE_STRING, 'Fahrzeug Hersteller', '', (string)$body['value']);
                 }
                 break;
 
-            case 'vehicleuseraccount-role':
+            case 'vehicleidentification-model':
                 if (isset($body['value'])) {
-                    $setSafe('UserRole', VARIABLETYPE_STRING, 'User-Rolle', '', (string)$body['value']);
+                    $setSafe('VehicleModel', VARIABLETYPE_STRING, 'Fahrzeug Modell', '', (string)$body['value']);
+                }
+                break;
+
+            case 'vehicleidentification-year':
+                if (isset($body['value'])) {
+                    $setSafe('VehicleYear', VARIABLETYPE_INTEGER, 'Fahrzeug Baujahr', '', (int)$body['value']);
                 }
                 break;
 
@@ -1110,14 +1124,12 @@ class Smartcar extends IPSModule
             default:
                 if (str_starts_with(strtolower($code), 'diagnostics-')) {
                     $ident = $asDiagIdent($code);
-
                     if (isset($body['status']) && $body['status'] !== '') {
                         $setSafe($ident, VARIABLETYPE_STRING, 'Diagnose ' . $ident, 'SMCAR.Health', $asUpper($body['status']));
                     }
                     if (isset($body['description']) && $body['description'] !== '') {
                         $setSafe($ident . '_Desc', VARIABLETYPE_STRING, 'Diagnose Beschreibung ' . $ident, '', (string)$body['description']);
                     }
-
                     $low = strtolower($code);
                     if (str_ends_with($low, 'dtccount') && isset($body['value'])) {
                         $setSafe('Diag_DTCCount', VARIABLETYPE_INTEGER, 'Diagnose DTC Count', '', intval($body['value']));
