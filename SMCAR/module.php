@@ -188,10 +188,10 @@ class Smartcar extends IPSModule
             [
                 'type'    => 'ValidationTextBox',
                 'name'    => 'ManualRedirectURI',
-                'caption' => 'Manuelle Redirect-URI überschreibt Connect-URL.'
+                'caption' => 'Manuelle URI überschreibt Connect-URL'
             ],
             ['type' => 'Label', 'caption' => '────────────────────────────────────────'],
-            ['type' => 'Label', 'caption' => 'Konfiguration Signals'],
+            ['type' => 'Label', 'caption' => 'Konfiguration Signals (über Webhook)'],
             ['type' => 'CheckBox', 'name' => 'EnableWebhook', 'caption' => 'Webhook-Empfang aktivieren'],
             ['type' => 'CheckBox', 'name' => 'VerifyWebhookSignature', 'caption' => 'Fahrzeug verifizieren (Fahrzeugfilter!)'],
             [
@@ -200,7 +200,7 @@ class Smartcar extends IPSModule
                 'caption' => 'Application Management Token'
             ],
             ['type' => 'Label', 'caption' => '────────────────────────────────────────'],
-            ['type' => 'Label', 'caption' => 'Konfiguration API-Abfrage'],
+            ['type' => 'Label', 'caption' => 'Konfiguration Scopes (über API-Abfrage)'],
         ];
 
         array_splice($form['elements'], 0, 0, $inject);
@@ -387,7 +387,15 @@ class Smartcar extends IPSModule
         switch ($eventType) {
         case 'VEHICLE_STATE':
             $signals = $payload['data']['signals'] ?? [];
-            $this->SendDebug('Webhook', 'Signals: ' . json_encode($signals), 0);
+            // Sammelstrukturen
+            $created = []; // ident => value (nur neu angelegte Variablen)
+            $skipped = [   // gruppiert nach Grund
+                'COMPATIBILITY' => [],
+                'PERMISSION'    => [],
+                'UPSTREAM'      => [],
+                'STATUS_ONLY'   => [],
+                'OTHER'         => []
+            ];
 
             if (is_array($signals)) {
                 foreach ($signals as $sig) {
@@ -396,38 +404,30 @@ class Smartcar extends IPSModule
                     $status = $sig['status'] ?? null;
 
                     if ($code !== '') {
-                        $this->SendDebug(
-                            'Webhook',
-                            "Signal code={$code} body=" . json_encode(is_array($body) ? $body : []) .
-                            " status=" . json_encode($status),
-                            0
+                        // KEIN per-Signal Debug; alles wird gesammelt:
+                        $this->ApplySignal(
+                            $code,
+                            is_array($body) ? $body : [],
+                            $status,
+                            $created,
+                            $skipped
                         );
-                        $this->ApplySignal($code, is_array($body) ? $body : [], $status);
                     }
                 }
             }
-            http_response_code(200);
-            echo 'ok';
-            return;
 
-        case 'VEHICLE_ERROR':
-            $errs = $payload['data']['errors'] ?? [];
-            $this->SendDebug('Webhook', 'VEHICLE_ERROR: ' . json_encode($errs), 0);
-            // optional: pro Fehler schön ausgeben
-            foreach ($errs as $e) {
-                $this->SendDebug(
-                    'Webhook',
-                    sprintf(
-                        'ERROR type=%s code=%s state=%s desc=%s signals=%s',
-                        $e['type'] ?? 'n/a',
-                        $e['code'] ?? 'n/a',
-                        $e['state'] ?? 'n/a',
-                        $e['description'] ?? 'n/a',
-                        implode(',', $e['signals'] ?? [])
-                    ),
-                    0
-                );
+            // genau EIN Eintrag für alle neu angelegten Variablen
+            if (!empty($created)) {
+                $this->SendDebug('Signals/created', json_encode($created, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 0);
             }
+
+            // genau EIN Eintrag für alle übersprungenen (nur Status)
+            // leere Gruppen ausblenden für Übersicht
+            $skippedOut = array_filter($skipped, fn($arr) => !empty($arr));
+            if (!empty($skippedOut)) {
+                $this->SendDebug('Signals/skipped', json_encode($skippedOut, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 0);
+            }
+
             http_response_code(200);
             echo 'ok';
             return;
@@ -798,18 +798,42 @@ class Smartcar extends IPSModule
         $this->SetValue($ident, $value);
     }
     
-    // Hybride Auswertung: nutzt Scope-Variablen, legt fehlende Variablen bei Bedarf an,
-    // versteht body + status und behandelt Einheiten/Umrechnungen.
-    private function ApplySignal(string $code, array $body, ?array $status = null): void
+    private function ApplySignal(string $code, array $body, ?array $status, array &$created, array &$skipped): void
     {
         $mi2km = 1.609344;
 
-        // --- kleine Helfer ---
-        $setSafe = function (string $ident, int $type, string $caption, string $profile, $value): void {
-            // Falls die Variable durch Scopes bereits existiert -> benutzen
-            $id = @ $this->GetIDForIdent($ident);
+        // --- erkennt "echten" Payload vs. reine Statusmeldungen ---
+        $hasPayload = static function(array $b): bool {
+            foreach ([
+                'value','values','capacity','latitude','longitude','heading',
+                'direction','locationType','limit','isOpen'
+            ] as $k) {
+                if (array_key_exists($k, $b)) return true;
+            }
+            return false;
+        };
+
+        // Status extrahieren (zum Gruppieren der Skips)
+        $statusValue = null;  // z.B. "ERROR" | "UNAVAILABLE" | "OK"
+        $statusErr   = null;  // z.B. "COMPATIBILITY" | "PERMISSION" | "UPSTREAM"
+        if ($status !== null && is_array($status)) {
+            $statusValue = $status['value']         ?? null;
+            $statusErr   = $status['error']['type'] ?? null;
+        }
+
+        // Gruppierungsschlüssel für $skipped
+        $group = function() use ($statusValue, $statusErr): string {
+            $g = strtoupper((string)($statusErr ?: $statusValue ?: 'OTHER'));
+            if (in_array($g, ['COMPATIBILITY','PERMISSION','UPSTREAM'], true)) return $g;
+            if ($g === 'ERROR' || $g === '') return 'OTHER';
+            return $g; // z.B. UNAVAILABLE, KNOWN_ISSUE, ...
+        };
+
+        // Variablen-Setter, der neu angelegte Idents in $created sammelt
+        $setSafe = function (string $ident, int $type, string $caption, string $profile, $value) use (&$created) {
+            $id = @$this->GetIDForIdent($ident);
+            $wasCreated = false;
             if (!$id) {
-                // dynamisch anlegen
                 switch ($type) {
                     case VARIABLETYPE_BOOLEAN: $this->RegisterVariableBoolean($ident, $caption, $profile, 0); break;
                     case VARIABLETYPE_INTEGER: $this->RegisterVariableInteger($ident, $caption, $profile, 0); break;
@@ -817,16 +841,21 @@ class Smartcar extends IPSModule
                     default:                   $this->RegisterVariableString($ident,  $caption, $profile, 0); break;
                 }
                 $id = $this->GetIDForIdent($ident);
+                $wasCreated = true;
             }
             if ($profile !== '') {
                 @IPS_SetVariableCustomProfile($id, $profile);
             }
             $this->SetValue($ident, $value);
+
+            if ($wasCreated) {
+                if (is_object($value)) $value = json_encode($value, JSON_UNESCAPED_UNICODE);
+                if (is_array($value))  $value = json_encode($value, JSON_UNESCAPED_UNICODE);
+                $created[$ident] = $value;
+            }
         };
 
-        $asUpper = function (?string $v): string {
-            return strtoupper(trim((string)$v));
-        };
+        $asUpper = fn(?string $v): string => strtoupper(trim((string)$v));
 
         $asDiagIdent = function (string $diagCode): string {
             // "diagnostics-tirepressuremonitoring" -> "Diag_TirePressureMonitoring"
@@ -836,25 +865,24 @@ class Smartcar extends IPSModule
             return 'Diag_' . $suffix;
         };
 
-        // Status-Wert extrahieren (für Fälle ohne body)
-        $statusValue = null;
-        $statusErr   = null;
-        if ($status !== null && is_array($status)) {
-            $statusValue = $status['value'] ?? null;                     // z.B. "ERROR" | "UNAVAILABLE"
-            $statusErr   = $status['error']['type'] ?? null;             // z.B. "PERMISSION" | "COMPATIBILITY" | "UPSTREAM"
+        // ——————————————————————————————————————————
+        // Early-Exit: Status-only → KEINE Variable, nur sammeln
+        // ——————————————————————————————————————————
+        if (!$hasPayload($body) && ($statusValue !== null || $statusErr !== null)) {
+            $skipped[$group()][] = $code;
+            return;
         }
 
+        // ====== ab hier nur Pfade mit "echten" Daten ======
         switch (strtolower($code)) {
             // ---------- Batterie (HV/EV) ----------
-            case 'tractionbattery-stateofcharge':
-                // {"value":100,"unit":"percent"}
+            case 'tractionbattery-stateofcharge': // {"value":100,"unit":"percent"}
                 if (isset($body['value'])) {
                     $setSafe('BatteryLevel', VARIABLETYPE_FLOAT, 'Batterieladestand (SOC)', 'SMCAR.Progress', floatval($body['value']));
                 }
                 break;
 
-            case 'tractionbattery-range':
-                // {"value":52,"unit":"km"|"miles", "type":"DEFAULT", ...}
+            case 'tractionbattery-range': // {"value":52,"unit":"km"|"miles", ...}
                 if (isset($body['value'])) {
                     $val  = floatval($body['value']);
                     $unit = strtolower($body['unit'] ?? 'km');
@@ -863,42 +891,34 @@ class Smartcar extends IPSModule
                 }
                 break;
 
-            case 'tractionbattery-nominalcapacity':
-                // {"capacity": 73.5, "unit": "kWhr"}  | oder nur status: UNAVAILABLE
+            case 'tractionbattery-nominalcapacity': // {"capacity": 73.5, "unit": "kWhr"}
                 if (isset($body['capacity'])) {
                     $setSafe('BatteryCapacity', VARIABLETYPE_FLOAT, 'Batteriekapazität', '~Electricity', floatval($body['capacity']));
-                } elseif ($statusValue) {
-                    // kein Wert -> nur Info-Status ablegen
-                    $setSafe('BatteryCapacityStatus', VARIABLETYPE_STRING, 'Batteriekapazität Status', '', $asUpper($statusValue));
                 }
                 break;
 
             // ---------- Laden ----------
-            case 'charge-detailedchargingstatus':
-                // {"value":"CHARGING|NOT_CHARGING|FULLY_CHARGED|..."}
+            case 'charge-detailedchargingstatus': // {"value":"CHARGING|..."}
                 if (isset($body['value'])) {
                     $setSafe('ChargeStatus', VARIABLETYPE_STRING, 'Ladestatus', 'SMCAR.Charge', $asUpper($body['value']));
                 }
                 break;
 
-            case 'charge-ischarging':
-                // {"value": true|false}
+            case 'charge-ischarging': // {"value": true|false}
                 if (isset($body['value'])) {
                     $is = (bool)$body['value'];
-                    // Beides pflegen: bool + string (falls Scope-Variable existiert)
                     $setSafe('IsCharging',  VARIABLETYPE_BOOLEAN, 'Lädt', '~Switch', $is);
                     $setSafe('ChargeStatus', VARIABLETYPE_STRING,  'Ladestatus', 'SMCAR.Charge', $is ? 'CHARGING' : 'NOT_CHARGING');
                 }
                 break;
 
-            case 'charge-ischargingcableconnected':
+            case 'charge-ischargingcableconnected': // {"value": true|false}
                 if (isset($body['value'])) {
                     $setSafe('PluggedIn', VARIABLETYPE_BOOLEAN, 'Ladekabel eingesteckt', '~Switch', (bool)$body['value']);
                 }
                 break;
 
-            case 'charge-chargelimits':
-                // {"values":[{"type":"global","limit":80}, ...]}
+            case 'charge-chargelimits': // {"values":[{"type":"global","limit":80}, ...]}
                 if (isset($body['values']) && is_array($body['values'])) {
                     foreach ($body['values'] as $cfg) {
                         if (($cfg['type'] ?? '') === 'global' && isset($cfg['limit'])) {
@@ -911,17 +931,15 @@ class Smartcar extends IPSModule
 
             // ---------- Standort ----------
             case 'location-preciselocation':
-                // {"latitude":..,"longitude":..,"heading":..,"direction":"NE","locationType":"PARKED"|"DRIVING"|...}
-                if (isset($body['latitude']))  $setSafe('Latitude',  VARIABLETYPE_FLOAT,  'Breitengrad',  '', floatval($body['latitude']));
-                if (isset($body['longitude'])) $setSafe('Longitude', VARIABLETYPE_FLOAT,  'Längengrad',   '', floatval($body['longitude']));
-                if (isset($body['heading']))   $setSafe('Heading',   VARIABLETYPE_FLOAT,  'Fahrtrichtung (°)', '', floatval($body['heading']));
-                if (isset($body['direction'])) $setSafe('Direction', VARIABLETYPE_STRING, 'Himmelsrichtung',    '', $asUpper($body['direction']));
-                if (isset($body['locationType'])) $setSafe('LocationType', VARIABLETYPE_STRING, 'Standort-Typ', '', $asUpper($body['locationType']));
+                if (isset($body['latitude']))     $setSafe('Latitude',     VARIABLETYPE_FLOAT,  'Breitengrad', '', floatval($body['latitude']));
+                if (isset($body['longitude']))    $setSafe('Longitude',    VARIABLETYPE_FLOAT,  'Längengrad',  '', floatval($body['longitude']));
+                if (isset($body['heading']))      $setSafe('Heading',      VARIABLETYPE_FLOAT,  'Fahrtrichtung (°)', '', floatval($body['heading']));
+                if (isset($body['direction']))    $setSafe('Direction',    VARIABLETYPE_STRING, 'Himmelsrichtung',    '', $asUpper($body['direction']));
+                if (isset($body['locationType'])) $setSafe('LocationType', VARIABLETYPE_STRING, 'Standort-Typ',        '', $asUpper($body['locationType']));
                 break;
 
             // ---------- Kilometerstand ----------
-            case 'odometer-traveleddistance':
-                // {"value": 78432, "unit":"km"|"miles"} | bei manchen OEM ohne unit -> als km interpretieren
+            case 'odometer-traveleddistance': // {"value": 78432, "unit":"km"|"miles"}
                 if (isset($body['value'])) {
                     $val  = floatval($body['value']);
                     $unit = strtolower($body['unit'] ?? 'km');
@@ -934,13 +952,11 @@ class Smartcar extends IPSModule
             case 'closure-islocked':
                 if (isset($body['value'])) {
                     $setSafe('DoorsLocked', VARIABLETYPE_BOOLEAN, 'Fahrzeug verriegelt', '~Lock', (bool)$body['value']);
-                } elseif ($statusValue) {
-                    $setSafe('DoorsLockedStatus', VARIABLETYPE_STRING, 'Verriegelungs-Status', '', $asUpper($statusValue));
                 }
                 break;
 
             case 'closure-doors':
-                // Grid -> bereits im Modul vorhanden (Front/Back + Left/Right)
+                // erwartet: values[] mit row/column/isOpen
                 $this->mapGridToVehicleSides($body, 'Door', 'FrontLeftDoor', 'FrontRightDoor', 'BackLeftDoor', 'BackRightDoor');
                 break;
 
@@ -958,49 +974,37 @@ class Smartcar extends IPSModule
             case 'connectivitystatus-isonline':
                 if (isset($body['value'])) {
                     $setSafe('IsOnline', VARIABLETYPE_BOOLEAN, 'Online', '~Switch', (bool)$body['value']);
-                } elseif ($statusValue) {
-                    $setSafe('IsOnlineStatus', VARIABLETYPE_STRING, 'Online-Status', '', $asUpper($statusValue));
                 }
                 break;
 
             case 'connectivitystatus-isasleep':
                 if (isset($body['value'])) {
                     $setSafe('IsAsleep', VARIABLETYPE_BOOLEAN, 'Schlafmodus', '~Switch', (bool)$body['value']);
-                } elseif ($statusValue) {
-                    $setSafe('IsAsleepStatus', VARIABLETYPE_STRING, 'Schlafmodus-Status', '', $asUpper($statusValue));
                 }
                 break;
 
             case 'connectivitystatus-isdigitalkeypaired':
                 if (isset($body['value'])) {
                     $setSafe('IsDigitalKeyPaired', VARIABLETYPE_BOOLEAN, 'Digitalschlüssel gekoppelt', '~Switch', (bool)$body['value']);
-                } elseif ($statusValue) {
-                    $setSafe('IsDigitalKeyPairedStatus', VARIABLETYPE_STRING, 'Digitalschlüssel-Status', '', $asUpper($statusValue));
                 }
                 break;
 
             case 'connectivitysoftware-currentfirmwareversion':
                 if (isset($body['value'])) {
                     $setSafe('FirmwareVersion', VARIABLETYPE_STRING, 'Firmware-Version', '', (string)$body['value']);
-                } elseif ($statusValue) {
-                    $setSafe('FirmwareVersionStatus', VARIABLETYPE_STRING, 'Firmware-Version Status', '', $asUpper($statusValue));
                 }
                 break;
 
             // ---------- ICE (Verbrenner) ----------
-            case 'internalcombustionengine-fuellevel':
-                // {"value": 44, "unit":"percent"}
+            case 'internalcombustionengine-fuellevel': // {"value": 44, "unit":"percent"}
                 if (isset($body['value'])) {
                     $setSafe('FuelLevel', VARIABLETYPE_FLOAT, 'Tankfüllstand', 'SMCAR.Progress', floatval($body['value']));
                 }
                 break;
 
-            case 'internalcombustionengine-oillife':
-                // {"value": 72} oder status->KNOWN_ISSUE
+            case 'internalcombustionengine-oillife': // {"value": 72}
                 if (isset($body['value'])) {
                     $setSafe('OilLife', VARIABLETYPE_FLOAT, 'Öl-Lebensdauer', 'SMCAR.Progress', floatval($body['value']));
-                } elseif ($statusValue) {
-                    $setSafe('OilLifeStatus', VARIABLETYPE_STRING, 'Öl-Lebensdauer Status', '', $asUpper($statusValue));
                 }
                 break;
 
@@ -1023,8 +1027,7 @@ class Smartcar extends IPSModule
                 }
                 break;
 
-            case 'vehicleidentification-packages':
-                // {"values":["Base","MY2021"]}
+            case 'vehicleidentification-packages': // {"values":["Base","MY2021"]}
                 if (isset($body['values']) && is_array($body['values'])) {
                     $setSafe('Packages', VARIABLETYPE_STRING, 'Pakete', '', implode(', ', array_map('strval', $body['values'])));
                 }
@@ -1033,78 +1036,45 @@ class Smartcar extends IPSModule
             case 'vehicleidentification-nickname':
                 if (isset($body['value'])) {
                     $setSafe('Nickname', VARIABLETYPE_STRING, 'Fahrzeug-Spitzname', '', (string)$body['value']);
-                } elseif ($statusValue) {
-                    $setSafe('NicknameStatus', VARIABLETYPE_STRING, 'Spitzname Status', '', $asUpper($statusValue));
                 }
                 break;
 
             // ---------- Vehicle User Account ----------
-            case 'vehicleuseraccount-permissions':
-                // {"values":["vehicle_cmds","vehicle_device_data"]}
+            case 'vehicleuseraccount-permissions': // {"values":[...]}
                 if (isset($body['values']) && is_array($body['values'])) {
                     $setSafe('UserPermissions', VARIABLETYPE_STRING, 'User-Berechtigungen', '', implode(', ', array_map('strval', $body['values'])));
-                } elseif ($statusValue) {
-                    $setSafe('UserPermissionsStatus', VARIABLETYPE_STRING, 'User-Berechtigungen Status', '', $asUpper($statusValue));
                 }
                 break;
 
             case 'vehicleuseraccount-role':
                 if (isset($body['value'])) {
                     $setSafe('UserRole', VARIABLETYPE_STRING, 'User-Rolle', '', (string)$body['value']);
-                } elseif ($statusValue) {
-                    $setSafe('UserRoleStatus', VARIABLETYPE_STRING, 'User-Rolle Status', '', $asUpper($statusValue));
                 }
                 break;
 
-            // ---------- Diagnostics ----------
+            // ---------- Diagnostics & Fallback ----------
             default:
                 if (str_starts_with(strtolower($code), 'diagnostics-')) {
-                    $ident = $asDiagIdent($code); // z.B. "DiagABS"
+                    $ident = $asDiagIdent($code);
 
-                    // Status bestimmen (Bevorzugt body.status; Fallback: $statusValue vom Wrapper; Fallback: body.value)
-                    $statusStr = null;
                     if (isset($body['status']) && $body['status'] !== '') {
-                        $statusStr = $asUpper($body['status']); // "OK", "WARN", "ERROR", ...
-                    } elseif (!empty($statusValue)) {
-                        // z.B. aus VEHICLE_ERROR; nur den Basisstatus in die Hauptvariable
-                        $statusStr = $asUpper($statusValue);    // "ERROR" etc.
-                        if (!empty($statusErr)) {
-                            // Fehler-Typ/Code separat ablegen (nicht an den Status anhängen -> sonst passt Profil nicht mehr)
-                            $setSafe($ident . '_Detail', VARIABLETYPE_STRING, 'Diagnose Detail ' . $ident, '', $asUpper($statusErr));
-                        }
-                    } elseif (array_key_exists('value', $body)) {
-                        // Manche Diag-Endpunkte liefern nur value; bool -> OK/ERROR, sonst roher Wert
-                        $v = $body['value'];
-                        if (is_bool($v)) {
-                            $statusStr = $v ? 'OK' : 'ERROR';
-                        } else {
-                            $statusStr = $asUpper((string)$v);
-                        }
+                        $setSafe($ident, VARIABLETYPE_STRING, 'Diagnose ' . $ident, 'SMCAR.Health', $asUpper($body['status']));
                     }
-
-                    // Hauptstatus mit Profil SMCAR.Health speichern
-                    if ($statusStr !== null) {
-                        $setSafe($ident, VARIABLETYPE_STRING, 'Diagnose ' . $ident, 'SMCAR.Health', $statusStr);
-                    }
-
-                    // Optionale Beschreibung separat
                     if (isset($body['description']) && $body['description'] !== '') {
                         $setSafe($ident . '_Desc', VARIABLETYPE_STRING, 'Diagnose Beschreibung ' . $ident, '', (string)$body['description']);
                     }
 
-                    // Sonderfälle: Zähl-/Listenwerte
-                    $codeLower = strtolower($code);
-                    if (str_ends_with($codeLower, 'dtccount') && isset($body['value'])) {
+                    $low = strtolower($code);
+                    if (str_ends_with($low, 'dtccount') && isset($body['value'])) {
                         $setSafe('Diag_DTCCount', VARIABLETYPE_INTEGER, 'Diagnose DTC Count', '', intval($body['value']));
                     }
-                    if (str_ends_with($codeLower, 'dtclist') && isset($body['values'])) {
-                        // Als JSON ablegen, Struktur bleibt erhalten
-                        $setSafe('Diag_DTCList', VARIABLETYPE_STRING, 'Diagnose DTC Liste', '', json_encode($body['values']));
+                    if (str_ends_with($low, 'dtclist') && isset($body['values'])) {
+                        $setSafe('Diag_DTCList', VARIABLETYPE_STRING, 'Diagnose DTC Liste', '', json_encode($body['values'], JSON_UNESCAPED_UNICODE));
                     }
                     break;
                 }
 
-                // Fallback: unbekanntes Signal – wenn ein einfacher "value" existiert, schreibe ihn in eine generische Variable
+                // Generischer Fallback für "value"-Signale
                 if (array_key_exists('value', $body)) {
                     $ident = 'Sig_' . strtoupper(preg_replace('~[^A-Za-z0-9]+~', '_', $code));
                     $val   = $body['value'];
@@ -1115,15 +1085,9 @@ class Smartcar extends IPSModule
                     } else {
                         $setSafe($ident, VARIABLETYPE_STRING, $code, '', (string)$val);
                     }
-                } elseif ($statusValue) {
-                    // nur Status ohne Value -> als Status-String ablegen
-                    $ident = 'SigStatus_' . strtoupper(preg_replace('~[^A-Za-z0-9]+~', '_', $code));
-                    $txt   = $asUpper($statusValue);
-                    if ($statusErr) $txt .= ' (' . $asUpper($statusErr) . ')';
-                    $setSafe($ident, VARIABLETYPE_STRING, $code . ' Status', '', $txt);
                 } else {
-                    // nichts zu tun – nur Debug
-                    $this->SendDebug('ApplySignal', "unmapped code=$code body=" . json_encode($body), 0);
+                    // exotischer Payload ohne verwertbare Felder → als STATUS_ONLY gruppieren
+                    $skipped['STATUS_ONLY'][] = $code;
                 }
                 break;
         }
