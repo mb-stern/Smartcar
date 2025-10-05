@@ -189,22 +189,22 @@ class Smartcar extends IPSModule
 
         $inject = [
             ['type' => 'Label', 'caption' => 'Hook-Pfad: ' . $hookPath],
-            ['type' => 'Label', 'caption' => 'Aktuelle Redirect- & Webhook-URI (beide identisch):'],
+            ['type' => 'Label', 'caption' => 'Aktuelle Redirect- & Webhook-URI:'],
             ['type' => 'Label', 'caption' => $effectiveRedirect],
+            ['type' => 'Label', 'caption' => 'Hinweis: Manuelle Redirect-URI überschreibt die automatisch gebildete Connect-URL.'],
             [
                 'type'    => 'ValidationTextBox',
                 'name'    => 'ManualRedirectURI',
                 'caption' => 'Manuelle Redirect-URI (optional; volle HTTPS-URL). Wenn leer, wird ipmagic-Connect + Hook verwendet.'
             ],
             ['type' => 'CheckBox', 'name' => 'EnableWebhook', 'caption' => 'Webhook-Empfang aktivieren'],
-            ['type' => 'CheckBox', 'name' => 'VerifyWebhookSignature', 'caption' => 'SC-Signature/VERIFY verifizieren (empfohlen)'],
+            ['type' => 'CheckBox', 'name' => 'VerifyWebhookSignature', 'caption' => 'Fahrzeug verifizieren (Fahrzeugfilter!)'],
             [
                 'type'    => 'ValidationTextBox',
                 'name'    => 'ManagementToken',
                 'caption' => 'Application Management Token (für HMAC & VERIFY)'
             ],
-            ['type' => 'Label', 'caption' => '────────────────────────────────────────'],
-            ['type' => 'Label', 'caption' => 'Hinweis: Manuelle Redirect-URI überschreibt die automatisch gebildete Connect-URL.']
+            ['type' => 'Label', 'caption' => '────────────────────────────────────────']
         ];
 
         array_splice($form['elements'], 0, 0, $inject);
