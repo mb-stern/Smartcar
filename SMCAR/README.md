@@ -81,9 +81,9 @@ Redirect & Webhhok-URI      |  Dieser Pfad gehört in der Smartcar-Kunfiguration
 Manuelle Redirect-URI       |  Wird dieses Feld befüllt, wird diese URI statt der Connect-Adresse verwendet.
 Webhook-Empfang aktiviren   |  Dieser Schalter aktiviert den Empfang der Signals. Signals über Webhook sind für die simmulierten Fahrezeuge aktuell nicht verfügbar.
 Fahrzeug verifizieren       |  Dieser Schalter aktiviert die Überprüfung, ob es sich bei den ankommenden Daten um diejenigen des Fahrezuges handelt, welches auch über die API verbunden ist.
-Application Management Token|  Hier kommt der Application Managemt Token aus der Smartcar-Konfiguration rein. Der Token ist nur einmal lesbar, ansosnten er neu generiert werden muss.
-Client ID                   |  Entnimm diesen in der Konfiguration von Smartcar unter OAuth
-Client Secret               |  Entnimm diesen in der Konfiguration von Smartcar unter OAuth
+Application Management Token|  Entnimm diesen in der Konfiguration von Smartcar unter 'Configuration'.
+Client ID                   |  Entnimm diesen in der Konfiguration von Smartcar unter 'Configuration'.
+Client Secret               |  Entnimm diesen in der Konfiguration von Smartcar unter 'Configuration'.
 Verbindungsmodus            |  Hier definierst du, ob es sich um ein Simuliertes oder ein Live-Fahrzeug handelt. Die Fahrzeuge verwaltest du im Dashboard von Smartcar. Es kann auch zwischen simuliertem und Live-Fahrzeug gewechselt werden, jedoch muss danach 'Smartcar verbinden' erneut gewählt werden. Signals über Webhook sind für die simmulierten Fahrezeuge aktuell nicht verfügbar.
 Berechtigungen (Scopes)      |  Hier sind die aktuell vom Modul unterstützten Scopes zur Auswahl. Wichtig ist, dass alle angewählt werden, die später abgefragt werden, sonst werden hier keine Werte geliefert. Im Zweifelsfalle vor der Abfrage alle aktivieren. Die Variablen werden automatisch erstellt und beim Deaktivieren wieder gelöscht. Die Berechtigungen bleiben aber.
 Smartcar verbinden         |  Es öffnet sich ein Browserfenster, wo du dich mit deinen Zugangsdaten vom Fahrzeughersteller anmeldest und die gewählten Berechtigungen bei Smartcar noch genehmigst. Am Anschluss erscheint eine Erfolgsmeldung und die Zugriff-Token werden über die Redirect-URI an das Modul übertragen.
