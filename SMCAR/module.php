@@ -188,7 +188,7 @@ class Smartcar extends IPSModule
             [
                 'type'    => 'ValidationTextBox',
                 'name'    => 'ManualRedirectURI',
-                'caption' => 'Manuelle Redirect-URI überschreibt die automatisch gebildete Connect-URL.'
+                'caption' => 'Manuelle Redirect-URI überschreibt Connect-URL.'
             ],
             ['type' => 'CheckBox', 'name' => 'EnableWebhook', 'caption' => 'Webhook-Empfang aktivieren'],
             ['type' => 'CheckBox', 'name' => 'VerifyWebhookSignature', 'caption' => 'Fahrzeug verifizieren (Fahrzeugfilter!)'],
