@@ -57,7 +57,7 @@ Aktuell sind folgende Ansteuerungen unterstützt
 * In der aktuellen Version dieses Moduls ist ein Fahrzeug unterstützt, für mehrere Fahrzeuge/Profile ist das Modul mehrmals anzulegen.
 * Im Smartcar-Profil können mehrere Redirect-URI's angelegt werden, womit auch mehrere Module mit Zugriff auf dasselbe Smartcar-Konto unterstützt sind.
 * Nicht unterstützt ist ein Benutzerprofil bei einem Fahrzeug-Hersteller, wo mehrere Fahrzeuge verknüpft sind. Dies ist aber nur ein Thema, wenn mehrere Fahrzeuge desselben Herstellers gehalten werden. Hier muss dann jedes Fahrzeug auf ein anderes Profil lauten.
-* Signals über Webhook sind unterstützt, sofern ein entsprechender (kostenpflichtiger) Plan bei Smartcar gewählt wurde. Das Konfigurationsformular ist komplett zu konfigurieren, da einige Signals auch die Daten der entsprechenden Scopes aktualisieren.
+* Signals über Webhook sind unterstützt, sofern ein entsprechender (kostenpflichtiger) Plan bei Smartcar gewählt wurde. Die Webhooks sind unter 'Integration' ind der Smartcar Konfiguration zu konfigurieren. Es können verschidene Trigger und Datenpunkte gewählt werden, ja nach erworbenem Smartcar-Plan. Es sind längst nicht alle Signals bei allen Fahrzeugen verfügbar. Bei eintreffen der Signals im Webhook werden automatisch Varaiblen dazu angelegt. Daher sind hier nur Signals zu wählen, welche auch effektiv benötigt werden. Das Modul filtert automatisch fehlerhafte Signals, so dass dazu keine Variablen angelegt werden. Das Konfigurationsformular im Modul ist komplett zu konfigurieren, da einige Signals auch die Daten der entsprechenden Variablen der Scopes aktualisieren (z.B. SOC).
 
 ### 2. Voraussetzungen
 
