@@ -185,13 +185,13 @@ class Smartcar extends IPSModule
 
         $inject = [
             ['type' => 'Label', 'caption' => 'Redirect- & Webhook-URI: ' . $effectiveRedirect],
-            ['type' => 'Label', 'caption' => '────────────────────────────────────────'],
-            ['type' => 'Label', 'caption' => 'Konfiguration Signals'],
             [
                 'type'    => 'ValidationTextBox',
                 'name'    => 'ManualRedirectURI',
                 'caption' => 'Manuelle Redirect-URI überschreibt Connect-URL.'
             ],
+            ['type' => 'Label', 'caption' => '────────────────────────────────────────'],
+            ['type' => 'Label', 'caption' => 'Konfiguration Signals'],
             ['type' => 'CheckBox', 'name' => 'EnableWebhook', 'caption' => 'Webhook-Empfang aktivieren'],
             ['type' => 'CheckBox', 'name' => 'VerifyWebhookSignature', 'caption' => 'Fahrzeug verifizieren (Fahrzeugfilter!)'],
             [
