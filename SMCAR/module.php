@@ -185,6 +185,8 @@ class Smartcar extends IPSModule
 
         $inject = [
             ['type' => 'Label', 'caption' => 'Redirect- & Webhook-URI: ' . $effectiveRedirect],
+            ['type' => 'Label', 'caption' => '────────────────────────────────────────'],
+            ['type' => 'Label', 'caption' => 'Konfiguration Signals'],
             [
                 'type'    => 'ValidationTextBox',
                 'name'    => 'ManualRedirectURI',
@@ -197,7 +199,8 @@ class Smartcar extends IPSModule
                 'name'    => 'ManagementToken',
                 'caption' => 'Application Management Token'
             ],
-            ['type' => 'Label', 'caption' => '────────────────────────────────────────']
+            ['type' => 'Label', 'caption' => '────────────────────────────────────────'],
+            ['type' => 'Label', 'caption' => 'Konfiguration API-Abfrage'],
         ];
 
         array_splice($form['elements'], 0, 0, $inject);
