@@ -503,6 +503,7 @@ class Smartcar extends IPSModule
         http_response_code(200);
         echo 'ok';
         return;
+        }
     }
 
     private function getRequestHeader(string $name): ?string
