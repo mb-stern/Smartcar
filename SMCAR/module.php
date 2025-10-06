@@ -236,7 +236,8 @@ public function GetConfigurationForm()
             ['type' => 'Label', 'caption' => $hasCompat
                 ? 'Scope-Filter aktiv (Ergebnis der automatischen Prüfung wird angewendet).'
                 : 'Noch keine automatische Prüfung – alle Scopes werden gelistet. Kompatible Scopes mit Button prüfen und auf OK warten. Danach Formular schliessen und wieder öffnen.'],
-
+            ['type' => 'Label',  'caption' => $hasCompat ? ('Gefundene kompatible Scopes: ' . implode(', ', array_keys(array_filter($compat ?? [])))) : ''],
+            
             // Scopes (sichtbar je nach Kompatibilität)
             [
                 'type'    => 'ExpansionPanel',
@@ -268,7 +269,6 @@ public function GetConfigurationForm()
             ['type' => 'Button', 'caption' => 'Smartcar verbinden',     'onClick' => 'echo SMCAR_GenerateAuthURL($id);'],
             
             ['type' => 'Button', 'caption' => 'Scopes automatisch prüfen', 'onClick' => 'echo SMCAR_ProbeScopes($id) ? "Fertig." : "Fehlgeschlagen.";'],  
-            ['type' => 'Label',  'caption' => $hasCompat ? ('Gefundene kompatible Scopes: ' . implode(', ', array_keys(array_filter($compat ?? [])))) : ''],
  
             ['type' => 'Button', 'caption' => 'Fahrzeugdaten abrufen',  'onClick' => 'SMCAR_FetchVehicleData($id);'],
 
