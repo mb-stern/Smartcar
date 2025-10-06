@@ -916,7 +916,6 @@ public function GetConfigurationForm()
                 break;
 
             case '/battery/nominal_capacity':
-            {
                 $nominal = null;
 
                 if (isset($body['capacity']) && is_array($body['capacity']) && isset($body['capacity']['nominal']) && is_numeric($body['capacity']['nominal'])) {
@@ -938,7 +937,6 @@ public function GetConfigurationForm()
                     $this->SendDebug('ProcessResponse', '/battery/nominal_capacity ohne verwertbaren Nominalwert: ' . json_encode($body), 0);
                 }
                 break;
-            }
 
             case '/fuel':
                 $this->SetValue('FuelLevel', ($body['percentRemaining'] ?? 0) * 100);
