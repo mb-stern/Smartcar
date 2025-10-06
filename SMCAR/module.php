@@ -921,20 +921,15 @@ public function GetConfigurationForm()
                 if (isset($body['capacity']) && is_array($body['capacity']) && isset($body['capacity']['nominal']) && is_numeric($body['capacity']['nominal'])) {
                     $nominal = (float)$body['capacity']['nominal'];
                 } elseif (isset($body['capacity']) && is_numeric($body['capacity'])) {
-                    // Fallback für sehr alte/abweichende Antworten
                     $nominal = (float)$body['capacity'];
                 } elseif (isset($body['availableCapacities'][0]['capacity']) && is_numeric($body['availableCapacities'][0]['capacity'])) {
-                    // letzter Fallback: nimm die erste angebotene Kapazität
                     $nominal = (float)$body['availableCapacities'][0]['capacity'];
                 } elseif (isset($body['nominal_capacity']) && is_numeric($body['nominal_capacity'])) {
-                    // ganz alter Feldname
                     $nominal = (float)$body['nominal_capacity'];
                 }
 
                 if ($nominal !== null) {
                     $this->SetValue('BatteryCapacity', $nominal);
-                } else {
-                    $this->SendDebug('ProcessResponse', '/battery/nominal_capacity ohne verwertbaren Nominalwert: ' . json_encode($body), 0);
                 }
                 break;
 
