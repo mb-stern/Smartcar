@@ -915,7 +915,7 @@ public function GetConfigurationForm()
                 $this->SetValue('BatteryLevel', ($body['percentRemaining'] ?? 0) * 100);
                 break;
 
-            case '/battery/nominal_capacity':
+            case '/battery/capacity':
                 $this->SetValue('BatteryCapacity', $body['capacity'] ?? 0);
                 break;
 
