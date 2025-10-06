@@ -916,8 +916,43 @@ public function GetConfigurationForm()
                 break;
 
             case '/battery/nominal_capacity':
-                $this->SetValue('BatteryCapacity', $body['capacity'] ?? 0);
+            {
+                // 1) Nominalwert robust extrahieren
+                $nominal = null;
+                if (isset($body['capacity'])) {
+                    // neues Format: capacity: { nominal: <float>, source: "..." }
+                    if (is_array($body['capacity']) && isset($body['capacity']['nominal'])) {
+                        $nominal = $body['capacity']['nominal'];
+                    } elseif (is_numeric($body['capacity'])) {
+                        // Fallback, falls ein OEM (oder altes Mocking) doch noch eine Zahl liefert
+                        $nominal = $body['capacity'];
+                    }
+                } elseif (isset($body['nominal_capacity'])) {
+                    // ganz alter Fallback-Name, falls mal vorhanden
+                    $nominal = $body['nominal_capacity'];
+                }
+
+                if ($nominal !== null) {
+                    $this->SetValue('BatteryCapacity', floatval($nominal));
+                }
+
+                // 2) Optionale Zusatzinfos als STRING ablegen (nicht in Float-Variablen!)
+                if (isset($body['availableCapacities']) && is_array($body['availableCapacities'])) {
+                    // Variable anlegen, falls nicht vorhanden
+                    if (!@$this->GetIDForIdent('BatteryCapacityOptions')) {
+                        $this->RegisterVariableString('BatteryCapacityOptions', 'Verfügbare Kapazitäten (JSON)', '', 51);
+                    }
+                    $this->SetValue('BatteryCapacityOptions', json_encode($body['availableCapacities'], JSON_UNESCAPED_UNICODE));
+                }
+
+                if (isset($body['url']) && is_string($body['url'])) {
+                    if (!@$this->GetIDForIdent('BatteryCapacityURL')) {
+                        $this->RegisterVariableString('BatteryCapacityURL', 'Kapazität-URL', '', 52);
+                    }
+                    $this->SetValue('BatteryCapacityURL', $body['url']);
+                }
                 break;
+            }
 
             case '/fuel':
                 $this->SetValue('FuelLevel', ($body['percentRemaining'] ?? 0) * 100);
@@ -1524,11 +1559,11 @@ public function GetConfigurationForm()
     public function FetchOdometer()     { $this->FetchSingleEndpoint('/odometer'); }
     public function FetchBatteryLevel() { $this->FetchSingleEndpoint('/battery'); }
     public function FetchBatteryCapacity(){ $this->FetchSingleEndpoint('/battery/nominal_capacity'); }
-    public function FetchEngineOil()    { $this->FetchSingleEndpoint('/oil'); }
+    public function FetchEngineOil()    { $this->FetchSingleEndpoint('/engine/oil'); }
     public function FetchFuel()         { $this->FetchSingleEndpoint('/fuel'); }
     public function FetchSecurity()     { $this->FetchSingleEndpoint('/security'); }
     public function FetchChargeLimit()  { $this->FetchSingleEndpoint('/charge/limit'); }
-    public function FetchChargeStatus() { $this->FetchSingleEndpoint('/charge/status'); }
+    public function FetchChargeStatus() { $this->FetchSingleEndpoint('/charge'); }
 
     private function FetchSingleEndpoint(string $path)
     {
