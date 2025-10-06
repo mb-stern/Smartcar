@@ -266,14 +266,13 @@ public function GetConfigurationForm()
         ],
         'actions' => [
             ['type' => 'Button', 'caption' => 'Smartcar verbinden',     'onClick' => 'echo SMCAR_GenerateAuthURL($id);'],
+            
+            ['type' => 'Label',  'caption' => 'Scopes hier prüfen, warten bis 'OK' kommt, dann Formular schliessen und wieder öffnen'],          
+            ['type' => 'Button', 'caption' => 'Scopes automatisch prüfen', 'onClick' => 'echo SMCAR_ProbeScopes($id) ? "Fertig." : "Fehlgeschlagen.";'],
+            ['type' => 'Label',  'caption' => $hasCompat ? ('Gefundene kompatible Scopes: ' . implode(', ', array_keys(array_filter($compat ?? [])))) : ''],
+            
             ['type' => 'Button', 'caption' => 'Fahrzeugdaten abrufen',  'onClick' => 'SMCAR_FetchVehicleData($id);'],
 
-            // Neuer Button: automatische Scope-Prüfung (Batch-Probe)
-            ['type' => 'Label',  'caption' => '────────────────────────────────────────'],
-            ['type' => 'Button', 'caption' => 'Scopes automatisch prüfen (ohne Enterprise)', 'onClick' => 'echo SMCAR_ProbeScopes($id) ? "Fertig." : "Fehlgeschlagen.";'],
-            ['type' => 'Label',  'caption' => $hasCompat ? ('Gefundene kompatible Permissions: ' . implode(', ', array_keys(array_filter($compat ?? [])))) : ''],
-
-            // Support
             ['type' => 'Label',  'caption' => 'Sag danke und unterstütze den Modulentwickler:'],
             [
                 'type'  => 'RowLayout',
