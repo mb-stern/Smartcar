@@ -139,7 +139,7 @@ SMCAR_FetchVehicleData(12345);      |   Alle im Modul aktivierten Scopes abfrage
 
 Version 3.1 (06.10.2025)
 - Neu ist eine automatische Prüfung auf kompatible Scopes im Konfigurationsformular verfügbar. So werden nur noch kompatible Scopes abgefragt und Fehlermeldungen und überflüssige Abfragen vermieden.
-- Schreibfehler bei der Abfrage der Batteriekapazität behoben. So führte dieses Scope immer zu einem Fehler.
+- Fehler bei der Abfrage der Batteriekapazität behoben.
 
 Version 3.0 (05.10.2025)
 - Neu werden zusätzlich Signals über Webhooks unterstützt. Diese müssen über einen Plan von Smartcar erworben werden.
