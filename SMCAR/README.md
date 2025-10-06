@@ -55,7 +55,7 @@ Aktuell sind folgende Ansteuerungen unterstützt
 * Die Testfahrzeuge der Smartcar-Plattform sind unterstützt. Zum testen sollten diese verwendet werden, um den API-Verbrauch des Live-Fahrzeuges zu schonen.
 * Vorsicht: Frag nur Endpunkte ab, die du wirklich brauchst, sonst ist das Guthaben schnell aufgebraucht. Lies dazu weiter unten die [PHP-Befehlsreferenz](#7-php-befehlsreferenz)
 * In der aktuellen Version dieses Moduls ist ein Fahrzeug unterstützt, für mehrere Fahrzeuge/Profile ist das Modul mehrmals anzulegen.
-* Im Smartcar-Profil können mehrere Redirect-URI's angelegt werden, womit auch mehrere Module mit Zugriff auf dasselbe Smartcar-Konto unterstützt sind.
+* Im Smartcar-Profil können mehrere Redirect-URI's und mehrere Fahrzeuge angelegt werden, womit auch mehrere Modul-Instanzen mit Zugriff auf dasselbe Smartcar-Konto unterstützt sind.
 * Nicht unterstützt ist ein Benutzerprofil bei einem Fahrzeug-Hersteller, wo mehrere Fahrzeuge verknüpft sind. Dies ist aber nur ein Thema, wenn mehrere Fahrzeuge desselben Herstellers gehalten werden. Hier muss dann jedes Fahrzeug auf ein anderes Profil lauten.
 * Signals über Webhook sind unterstützt, sofern ein entsprechender (kostenpflichtiger) Plan bei Smartcar gewählt wurde. Die Webhooks sind unter 'Integration' in der Smartcar Konfiguration zu konfigurieren. Achte darauf, dass jeweils ein Webhook mit Signals einem bestimmten Fahrzeug zugewiesen ist. Es können verschiedene Trigger und Datenpunkte gewählt werden, ja nach erworbenem Smartcar-Plan. Es sind bei weitem nicht alle Signals für alle Fahrzeugen verfügbar. Bei eintreffen der Signals im Webhook werden automatisch Variablen dazu angelegt. Daher sind hier nur Signals zu wählen, welche auch effektiv benötigt werden. Das Modul filtert automatisch fehlerhafte Signals, so dass dazu keine Variablen angelegt werden. Das Konfigurationsformular im Modul ist komplett zu konfigurieren, da einige Signals auch die Daten der entsprechenden Variablen der Scopes aktualisieren (z.B. SOC).
 
@@ -85,9 +85,10 @@ Application Management Token|  Entnimm diesen in der Konfiguration von Smartcar 
 Client ID                   |  Entnimm diesen in der Konfiguration von Smartcar unter 'Configuration'.
 Client Secret               |  Entnimm diesen in der Konfiguration von Smartcar unter 'Configuration'.
 Verbindungsmodus            |  Hier definierst du, ob es sich um ein Simuliertes oder ein Live-Fahrzeug handelt. Die Fahrzeuge verwaltest du im Dashboard von Smartcar. Es kann auch zwischen simuliertem und Live-Fahrzeug gewechselt werden, jedoch muss danach 'Smartcar verbinden' erneut gewählt werden. Signals über Webhook sind für die simmulierten Fahrezeuge aktuell nicht verfügbar.
-Berechtigungen (Scopes)      |  Hier sind die aktuell vom Modul unterstützten Scopes zur Auswahl. Wichtig ist, dass alle angewählt werden, die später abgefragt werden, sonst werden hier keine Werte geliefert. Im Zweifelsfalle vor der Abfrage alle aktivieren. Die Variablen werden automatisch erstellt und beim Deaktivieren wieder gelöscht. Die Berechtigungen bleiben aber.
+Berechtigungen (Scopes)     |  Hier sind die aktuell vom Modul unterstützten Scopes zur Auswahl. Wichtig ist, dass alle angewählt werden, die später abgefragt werden, sonst werden hier keine Werte geliefert und keine Varaiblen erstellt. Über den Button 'Scopes automtisch prüfen' kann die Auswahl der Scopes auf die vom Fahrezug unterstützen eingegrenzt werden.
 Smartcar verbinden         |  Es öffnet sich ein Browserfenster, wo du dich mit deinen Zugangsdaten vom Fahrzeughersteller anmeldest und die gewählten Berechtigungen bei Smartcar noch genehmigst. Am Anschluss erscheint eine Erfolgsmeldung und die Zugriff-Token werden über die Redirect-URI an das Modul übertragen.
-Fahrzeugdaten abrufen       |  Hier rufst du alle aktivierten Scopes ab. Sei vorsichtig bei einem Live-Fahrzeug. Fünf aktivierte Scopes ergeben 5 API-Calls. Lies hier [PHP-Befehlsreferenz](#7-php-befehlsreferenz), wie du exklusiv die gewünschten Variablen aktualisierst. Einmalig aber für die gewählten Scopes  die Daten abrufen, danach können die Variablen über die Signals über Webhook aktualisiert werden.
+Scopes automatisch prüfen  |  Dieser Button prüft alle verfügbaren Scopes und blendet die nicht mit dem Fahrzeug kompatiblen aus. Diese Funktion muss in der Regel nur erstmalig bei der Inbetriebnahme des Moduls durchgeführt werden
+Fahrzeugdaten abrufen       |  Hier rufst du alle aktivierten Scopes ab. Sei vorsichtig bei einem Live-Fahrzeug. Fünf aktivierte Scopes ergeben 5 API-Calls. Lies hier [PHP-Befehlsreferenz](#7-php-befehlsreferenz), wie du exklusiv die gewünschten Scopes aktualisierst. Erstmalig sollten die Scopes über den Button 'Fahrzeugdaten abrufen' aktualisiert werden, danach können die Variablen automatisch über die Signals aus dem Webhook aktualisiert werden.
 
 
 ### 5. Statusvariablen und Profile
@@ -135,6 +136,9 @@ SMCAR_FetchVIN(12345);              |   Abfrage der Fahrgestellnummer
 SMCAR_FetchVehicleData(12345);      |   Alle im Modul aktivierten Scopes abfragen. Vorsicht, es könnten sehr viele API-Calls verbraucht werden
 
 ### 8. Versionen
+
+Version 3.1 (06.10.2025)
+- Neu ist eine automatische Prüfung auf kompatible Scopes im Konfigurationsfomular verfügbar.
 
 Version 3.0 (05.10.2025)
 - Neu werden zusätzlich Signals über Webhooks unterstützt. Diese müssen über einen Plan von Smartcar erworben werden.

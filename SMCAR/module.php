@@ -235,7 +235,7 @@ public function GetConfigurationForm()
             // Hinweis zur Scope-Filterung
             ['type' => 'Label', 'caption' => $hasCompat
                 ? 'Scope-Filter aktiv (Ergebnis der automatischen Prüfung wird angewendet).'
-                : 'Noch keine automatische Prüfung – alle Scopes werden angezeigt. Scopes mit Button prüfen und warten bis OK'],
+                : 'Noch keine automatische Prüfung – alle Scopes werden gelistet. Kompatible Scopes mit Button prüfen und auf OK warten. Danach Formular schliessen und wieder öffnen.'],
 
             // Scopes (sichtbar je nach Kompatibilität)
             [
@@ -258,9 +258,9 @@ public function GetConfigurationForm()
                     ['type'=>'CheckBox','name'=>'ScopeReadOilLife',         'caption'=>'Motoröl lesen (/engine/oil)','visible'=>$permVisible('read_engine_oil')],
 
                     // Commands (nicht aktiv probiert; optional sichtbar lassen)
-                    ['type'=>'CheckBox','name'=>'SetChargeLimit',  'caption'=>'Ladelimit setzen (/charge/limit) – (Kompatibilität nicht automatisch geprüft)'],
-                    ['type'=>'CheckBox','name'=>'SetChargeStatus', 'caption'=>'Ladestatus setzen (/charge) – (Kompatibilität nicht automatisch geprüft)'],
-                    ['type'=>'CheckBox','name'=>'SetLockStatus',   'caption'=>'Zentralverriegelung setzen (/security) – (Kompatibilität nicht automatisch geprüft)']
+                    ['type'=>'CheckBox','name'=>'SetChargeLimit',  'caption'=>'Ladelimit setzen (/charge/limit) – (Kompatibilität kann nicht geprüft werden)'],
+                    ['type'=>'CheckBox','name'=>'SetChargeStatus', 'caption'=>'Ladestatus setzen (/charge) – (Kompatibilität kann nicht geprüft werden)'],
+                    ['type'=>'CheckBox','name'=>'SetLockStatus',   'caption'=>'Zentralverriegelung setzen (/security) – (Kompatibilität kann nicht geprüft werden)']
                 ]
             ],
         ],
