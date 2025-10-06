@@ -917,39 +917,25 @@ public function GetConfigurationForm()
 
             case '/battery/nominal_capacity':
             {
-                // 1) Nominalwert robust extrahieren
                 $nominal = null;
-                if (isset($body['capacity'])) {
-                    // neues Format: capacity: { nominal: <float>, source: "..." }
-                    if (is_array($body['capacity']) && isset($body['capacity']['nominal'])) {
-                        $nominal = $body['capacity']['nominal'];
-                    } elseif (is_numeric($body['capacity'])) {
-                        // Fallback, falls ein OEM (oder altes Mocking) doch noch eine Zahl liefert
-                        $nominal = $body['capacity'];
-                    }
-                } elseif (isset($body['nominal_capacity'])) {
-                    // ganz alter Fallback-Name, falls mal vorhanden
-                    $nominal = $body['nominal_capacity'];
+
+                if (isset($body['capacity']) && is_array($body['capacity']) && isset($body['capacity']['nominal']) && is_numeric($body['capacity']['nominal'])) {
+                    $nominal = (float)$body['capacity']['nominal'];
+                } elseif (isset($body['capacity']) && is_numeric($body['capacity'])) {
+                    // Fallback für sehr alte/abweichende Antworten
+                    $nominal = (float)$body['capacity'];
+                } elseif (isset($body['availableCapacities'][0]['capacity']) && is_numeric($body['availableCapacities'][0]['capacity'])) {
+                    // letzter Fallback: nimm die erste angebotene Kapazität
+                    $nominal = (float)$body['availableCapacities'][0]['capacity'];
+                } elseif (isset($body['nominal_capacity']) && is_numeric($body['nominal_capacity'])) {
+                    // ganz alter Feldname
+                    $nominal = (float)$body['nominal_capacity'];
                 }
 
                 if ($nominal !== null) {
-                    $this->SetValue('BatteryCapacity', floatval($nominal));
-                }
-
-                // 2) Optionale Zusatzinfos als STRING ablegen (nicht in Float-Variablen!)
-                if (isset($body['availableCapacities']) && is_array($body['availableCapacities'])) {
-                    // Variable anlegen, falls nicht vorhanden
-                    if (!@$this->GetIDForIdent('BatteryCapacityOptions')) {
-                        $this->RegisterVariableString('BatteryCapacityOptions', 'Verfügbare Kapazitäten (JSON)', '', 51);
-                    }
-                    $this->SetValue('BatteryCapacityOptions', json_encode($body['availableCapacities'], JSON_UNESCAPED_UNICODE));
-                }
-
-                if (isset($body['url']) && is_string($body['url'])) {
-                    if (!@$this->GetIDForIdent('BatteryCapacityURL')) {
-                        $this->RegisterVariableString('BatteryCapacityURL', 'Kapazität-URL', '', 52);
-                    }
-                    $this->SetValue('BatteryCapacityURL', $body['url']);
+                    $this->SetValue('BatteryCapacity', $nominal);
+                } else {
+                    $this->SendDebug('ProcessResponse', '/battery/nominal_capacity ohne verwertbaren Nominalwert: ' . json_encode($body), 0);
                 }
                 break;
             }
