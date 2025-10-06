@@ -251,7 +251,7 @@ public function GetConfigurationForm()
                     ['type'=>'CheckBox','name'=>'ScopeReadTires',           'caption'=>'Reifendruck lesen (/tires/pressure)','visible'=>$permVisible('read_tires')],
                     ['type'=>'CheckBox','name'=>'ScopeReadOdometer',        'caption'=>'Kilometerstand lesen (/odometer)','visible'=>$permVisible('read_odometer')],
                     ['type'=>'CheckBox','name'=>'ScopeReadBattery',         'caption'=>'Batterielevel lesen (/battery)','visible'=>$permVisible('read_battery')],
-                    ['type'=>'CheckBox','name'=>'ScopeReadBatteryCapacity', 'caption'=>'Batteriekapazität lesen (/battery/capacity)','visible'=>$permVisible('read_battery')],
+                    ['type'=>'CheckBox','name'=>'ScopeReadBatteryCapacity', 'caption'=>'Batteriekapazität lesen (/battery/nominal_capacity)','visible'=>$permVisible('read_battery')],
                     ['type'=>'CheckBox','name'=>'ScopeReadFuel',            'caption'=>'Kraftstoffstand lesen (/fuel)','visible'=>$permVisible('read_fuel')],
                     ['type'=>'CheckBox','name'=>'ScopeReadSecurity',        'caption'=>'Verriegelungsstatus lesen (/security)','visible'=>$permVisible('read_security')],
                     ['type'=>'CheckBox','name'=>'ScopeReadChargeLimit',     'caption'=>'Ladelimit lesen (/charge/limit)','visible'=>$permVisible('read_charge')],
@@ -298,7 +298,7 @@ public function GetConfigurationForm()
             '/location'           => 'read_location',
             '/tires/pressure'     => 'read_tires',
             '/odometer'           => 'read_odometer',
-            '/battery', '/battery/capacity'
+            '/battery', '/battery/nominal_capacity'
                                 => 'read_battery',
             '/fuel'               => 'read_fuel',
             '/security'           => 'read_security',
@@ -313,7 +313,7 @@ public function GetConfigurationForm()
     {
         return [
             '/', '/vin', '/location', '/tires/pressure', '/odometer',
-            '/battery', '/battery/capacity', '/fuel', '/security',
+            '/battery', '/battery/nominal_capacity', '/fuel', '/security',
             '/charge/limit', '/charge', '/engine/oil'
         ];
     }
@@ -748,7 +748,7 @@ public function GetConfigurationForm()
         if ($this->ReadPropertyBoolean('ScopeReadTires'))           $endpoints[] = ['path' => '/tires/pressure'];
         if ($this->ReadPropertyBoolean('ScopeReadOdometer'))        $endpoints[] = ['path' => '/odometer'];
         if ($this->ReadPropertyBoolean('ScopeReadBattery'))         $endpoints[] = ['path' => '/battery'];
-        if ($this->ReadPropertyBoolean('ScopeReadBatteryCapacity')) $endpoints[] = ['path' => '/battery/capacity'];
+        if ($this->ReadPropertyBoolean('ScopeReadBatteryCapacity')) $endpoints[] = ['path' => '/battery/nominal_capacity'];
         if ($this->ReadPropertyBoolean('ScopeReadFuel'))            $endpoints[] = ['path' => '/fuel'];
         if ($this->ReadPropertyBoolean('ScopeReadSecurity'))        $endpoints[] = ['path' => '/security'];
         if ($this->ReadPropertyBoolean('ScopeReadChargeLimit'))     $endpoints[] = ['path' => '/charge/limit'];
@@ -915,7 +915,7 @@ public function GetConfigurationForm()
                 $this->SetValue('BatteryLevel', ($body['percentRemaining'] ?? 0) * 100);
                 break;
 
-            case '/battery/capacity':
+            case '/battery/nominal_capacity':
                 $this->SetValue('BatteryCapacity', $body['capacity'] ?? 0);
                 break;
 
@@ -1523,7 +1523,7 @@ public function GetConfigurationForm()
     public function FetchTires()        { $this->FetchSingleEndpoint('/tires/pressure'); }
     public function FetchOdometer()     { $this->FetchSingleEndpoint('/odometer'); }
     public function FetchBatteryLevel() { $this->FetchSingleEndpoint('/battery'); }
-    public function FetchBatteryCapacity(){ $this->FetchSingleEndpoint('/battery/capacity'); }
+    public function FetchBatteryCapacity(){ $this->FetchSingleEndpoint('/battery/nominal_capacity'); }
     public function FetchEngineOil()    { $this->FetchSingleEndpoint('/oil'); }
     public function FetchFuel()         { $this->FetchSingleEndpoint('/fuel'); }
     public function FetchSecurity()     { $this->FetchSingleEndpoint('/security'); }
