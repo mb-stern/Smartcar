@@ -51,7 +51,7 @@ Aktuell sind folgende Ansteuerungen unterstützt
 
 * Abfrage der ausgewählten Fahrzeugdaten und Ausführen verschiedener Ansteuerungen am Fahrzeug.
 * Die kostenlose Version unterstützt ein Fahrzeug mit 500 API-Calls pro Monat.
-* Es gibt eine Bezahlversion für 2.99$ mit 1000 API-Calls pro Monat
+* Es gibt Bezahlversionen (Datanpläne) von 1.99$ bis 3.99$ mit 1000 API-Calls pro Monat und die aufgeführten Signale.
 * Die Testfahrzeuge der Smartcar-Plattform sind unterstützt. Zum testen sollten diese verwendet werden, um den API-Verbrauch des Live-Fahrzeuges zu schonen.
 * Vorsicht: Frag nur Endpunkte ab, die du wirklich brauchst, sonst ist das Guthaben schnell aufgebraucht. Lies dazu weiter unten die [PHP-Befehlsreferenz](#7-php-befehlsreferenz)
 * In der aktuellen Version dieses Moduls ist ein Fahrzeug unterstützt, für mehrere Fahrzeuge/Profile ist das Modul mehrmals anzulegen.
@@ -79,8 +79,9 @@ Name     | Beschreibung
 -------- | ------------------
 Redirect & Webhhok-URI      |  Dieser Pfad gehört in der Smartcar-Kunfiguration unter 'Configuration' in die REDIRECT URIS und ebenfalls unter 'Integrations' in den entprechenden WEBHOOK.
 Manuelle Redirect-URI       |  Wird dieses Feld befüllt, wird diese URI statt der Connect-Adresse verwendet.
-Webhook-Empfang aktiviren   |  Dieser Schalter aktiviert den Empfang der Signals. Signals über Webhook sind für die simmulierten Fahrezeuge aktuell nicht verfügbar.
-Fahrzeug verifizieren       |  Dieser Schalter aktiviert die Überprüfung, ob es sich bei den ankommenden Daten um diejenigen des Fahrezuges handelt, welches auch über die API verbunden ist.
+Webhook-Empfang aktiviren   |  Dieser Schalter aktiviert den Empfang der Signale. Die entsprechenden Variablen werden automatisch erstellt.
+Fahrzeug verifizieren       |  Dieser Schalter aktiviert die Überprüfung, ob es sich bei den ankommenden Signale um diejenigen des Fahrzeuges handelt, welches auch über die API verbunden ist.
+Variable für Aktualisierung |  Dieser Schalter aktiviert eine Variable, wo der letze Aktualiesierungszeitpunkt der Signale erslichtlich ist.
 Application Management Token|  Entnimm diesen in der Konfiguration von Smartcar unter 'Configuration'.
 Client ID                   |  Entnimm diesen in der Konfiguration von Smartcar unter 'Configuration'.
 Client Secret               |  Entnimm diesen in der Konfiguration von Smartcar unter 'Configuration'.
@@ -137,12 +138,14 @@ SMCAR_FetchVehicleData(12345);      |   Alle im Modul aktivierten Scopes abfrage
 
 ### 8. Versionen
 
-Version 3.1 (06.10.2025)
+Version 3.1 (07.10.2025)
 - Neu ist eine automatische Prüfung auf kompatible Scopes im Konfigurationsformular verfügbar. So werden nur noch kompatible Scopes abgefragt und Fehlermeldungen und überflüssige Abfragen vermieden.
 - Fehler bei der Abfrage der Batteriekapazität behoben.
+- Ladeleistung wir jetzt korrekt dargestellt.
+- Eine Variable mit dem Zeitpunkt der letzen Signale kann im Konfigurationsformular aktiviert werden.
 
 Version 3.0 (05.10.2025)
-- Neu werden zusätzlich Signals über Webhooks unterstützt. Diese müssen über einen Plan von Smartcar erworben werden.
+- Neu werden zusätzlich Signale über Webhooks unterstützt. Diese müssen über einen Plan von Smartcar erworben werden. Die Entsprechenden Varaiblen werden automatisch erstellt.
 
 Version 2.3 (28.09.2025)
 - Der Token wird nun bei jeder Konfigurationsänderung oder auch beim Update erneuert, sobald Symcon bereit ist. Dies sollte die zeitweiligen Token-Fehler nach Neustart des Systems beheben.

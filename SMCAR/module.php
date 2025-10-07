@@ -17,6 +17,8 @@ class Smartcar extends IPSModule
         // Webhook-Optionen
         $this->RegisterPropertyBoolean('EnableWebhook', true);
         $this->RegisterPropertyBoolean('VerifyWebhookSignature', true);
+        $this->RegisterPropertyBoolean('TrackLastSignals', false);
+        
         // Smartcar "application_management_token" für HMAC (SC-Signature) & VERIFY-Challenge
         $this->RegisterPropertyString('ManagementToken', '');
 
@@ -95,15 +97,19 @@ class Smartcar extends IPSModule
             }
         }
 
-        // Speichern
         $this->WriteAttributeString('RedirectURI', $effectiveRedirect);
-
-        // WICHTIG: Webhook-Callback-URI = dieselbe URL wie RedirectURI (gleicher Pfad/gleiche Adresse)
-        // Wir unterscheiden in ProcessHookData anhand GET(OAuth)/POST(Webhook) + Payload.
         $this->WriteAttributeString('WebhookCallbackURI', $effectiveRedirect);
 
-        // Profile & Variablen
         $this->CreateProfile();
+
+        if ($this->ReadPropertyBoolean('TrackLastSignals')) {
+            if (!@$this->GetIDForIdent('LastSignalsAt')) {
+                $this->RegisterVariableInteger('LastSignalsAt', 'Letzte Fahrzeug-Signale', '~UnixTimestamp', 5);
+            }
+        } else {
+            @$this->UnregisterVariable('LastSignalsAt');
+        }
+
         $this->UpdateVariablesBasedOnScopes();
     }
 
@@ -210,8 +216,10 @@ public function GetConfigurationForm()
                 'caption' => 'Manuelle Redirect-URI überschreibt Connect-URL'
             ],
             ['type' => 'Label', 'caption' => '────────────────────────────────────────'],
-            ['type' => 'CheckBox', 'name' => 'EnableWebhook', 'caption' => 'Webhook-Empfang aktivieren'],
+            ['type' => 'CheckBox', 'name' => 'EnableWebhook', 'caption' => 'Webhook-Empfang für Signale aktivieren'],
             ['type' => 'CheckBox', 'name' => 'VerifyWebhookSignature', 'caption' => 'Fahrzeug verifizieren (Fahrzeugfilter!)'],
+            ['type' => 'CheckBox', 'name' => 'TrackLastSignals', 'caption' => 'Letze Aktualisierung der Signale anzeigen'],
+
             [
                 'type'    => 'ValidationTextBox',
                 'name'    => 'ManagementToken',
@@ -612,6 +620,12 @@ public function GetConfigurationForm()
             $skippedOut = array_filter($skipped, fn($arr) => !empty($arr));
             if (!empty($skippedOut)) {
                 $this->SendDebug('Signals/skipped', json_encode($skippedOut, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 0);
+            }
+
+            if ($this->ReadPropertyBoolean('TrackLastSignals')) {
+                if (@$this->GetIDForIdent('LastSignalsAt')) {
+                    $this->SetValue('LastSignalsAt', time());
+                }
             }
 
             http_response_code(200);
@@ -1153,7 +1167,7 @@ public function GetConfigurationForm()
 
             case 'charge-wattage':
             case 'charge-power':
-                if (isset($body['value'])) $setSafe('ChargeWattage', VARIABLETYPE_FLOAT, 'Ladeleistung (W)', '', floatval($body['value']));
+                if (isset($body['value'])) $setSafe('ChargeWattage', VARIABLETYPE_FLOAT, 'Ladeleistung', '~Power', floatval($body['value']));
                 break;
 
             case 'charge-energyadded':
