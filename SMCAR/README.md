@@ -79,7 +79,7 @@ Name     | Beschreibung
 -------- | ------------------
 Redirect & Webhhok-URI      |  Dieser Pfad gehört in der Smartcar-Kunfiguration unter 'Configuration' in die REDIRECT URIS und ebenfalls unter 'Integrations' in den entprechenden WEBHOOK.
 Manuelle Redirect-URI       |  Wird dieses Feld befüllt, wird diese URI statt der Connect-Adresse verwendet.
-Webhook-Empfang aktiviren   |  Dieser Schalter aktiviert den Empfang der Signals. Signals über Webhook sind für die simmulierten Fahrezeuge aktuell nicht verfügbar.
+Webhook-Empfang aktiviren   |  Dieser Schalter aktiviert den Empfang der Signals. Die entsprechenden Variablen werden automatisch erstellt.
 Fahrzeug verifizieren       |  Dieser Schalter aktiviert die Überprüfung, ob es sich bei den ankommenden Daten um diejenigen des Fahrezuges handelt, welches auch über die API verbunden ist.
 Variable für Aktualisierung |  Dieser Schalter aktiviert eine Variable, wo der letze Aktualiesierungszeitpunkt der Signale erslichtlich ist.
 Application Management Token|  Entnimm diesen in der Konfiguration von Smartcar unter 'Configuration'.
