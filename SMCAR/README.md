@@ -138,7 +138,7 @@ SMCAR_FetchVehicleData(12345);      |   Alle im Modul aktivierten Scopes abfrage
 
 ### 8. Versionen
 
-Version 3.1 (06.10.2025)
+Version 3.1 (07.10.2025)
 - Neu ist eine automatische Prüfung auf kompatible Scopes im Konfigurationsformular verfügbar. So werden nur noch kompatible Scopes abgefragt und Fehlermeldungen und überflüssige Abfragen vermieden.
 - Fehler bei der Abfrage der Batteriekapazität behoben.
 - Ladeleistung wir jetzt korrekt dargestellt.
