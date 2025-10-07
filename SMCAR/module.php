@@ -216,9 +216,9 @@ public function GetConfigurationForm()
                 'caption' => 'Manuelle Redirect-URI überschreibt Connect-URL'
             ],
             ['type' => 'Label', 'caption' => '────────────────────────────────────────'],
-            ['type' => 'CheckBox', 'name' => 'EnableWebhook', 'caption' => 'Webhook-Empfang aktivieren'],
+            ['type' => 'CheckBox', 'name' => 'EnableWebhook', 'caption' => 'Webhook-Empfang für Signale aktivieren'],
             ['type' => 'CheckBox', 'name' => 'VerifyWebhookSignature', 'caption' => 'Fahrzeug verifizieren (Fahrzeugfilter!)'],
-            ['type' => 'CheckBox', 'name' => 'TrackLastSignals', 'caption' => 'Variable für letze Aktualierung der Signale anzeigen'],
+            ['type' => 'CheckBox', 'name' => 'TrackLastSignals', 'caption' => 'Letze Aktualisierung der Signale anzeigen'],
 
             [
                 'type'    => 'ValidationTextBox',
