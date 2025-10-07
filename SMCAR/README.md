@@ -51,7 +51,7 @@ Aktuell sind folgende Ansteuerungen unterstützt
 
 * Abfrage der ausgewählten Fahrzeugdaten und Ausführen verschiedener Ansteuerungen am Fahrzeug.
 * Die kostenlose Version unterstützt ein Fahrzeug mit 500 API-Calls pro Monat.
-* Es gibt eine Bezahlversion für 2.99$ mit 1000 API-Calls pro Monat
+* Es gibt Bezahlversionen (Datanpläne) von 1.99$ bis 3.99$ mit 1000 API-Calls pro Monat und die aufgeführten Signale.
 * Die Testfahrzeuge der Smartcar-Plattform sind unterstützt. Zum testen sollten diese verwendet werden, um den API-Verbrauch des Live-Fahrzeuges zu schonen.
 * Vorsicht: Frag nur Endpunkte ab, die du wirklich brauchst, sonst ist das Guthaben schnell aufgebraucht. Lies dazu weiter unten die [PHP-Befehlsreferenz](#7-php-befehlsreferenz)
 * In der aktuellen Version dieses Moduls ist ein Fahrzeug unterstützt, für mehrere Fahrzeuge/Profile ist das Modul mehrmals anzulegen.

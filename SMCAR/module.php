@@ -1167,7 +1167,7 @@ public function GetConfigurationForm()
 
             case 'charge-wattage':
             case 'charge-power':
-                if (isset($body['value'])) $setSafe('ChargeWattage', VARIABLETYPE_FLOAT, 'Ladeleistung (W)', '', floatval($body['value']));
+                if (isset($body['value'])) $setSafe('ChargeWattage', VARIABLETYPE_FLOAT, 'Ladeleistung', '~Power', floatval($body['value']));
                 break;
 
             case 'charge-energyadded':
