@@ -104,6 +104,11 @@ class Smartcar extends IPSModule
 
         // Profile & Variablen
         $this->CreateProfile();
+
+        if (!@$this->GetIDForIdent('LastSignalsAt')) {
+        $this->RegisterVariableInteger('LastSignalsAt', 'Letzte Fahrzeug-Signale', '~UnixTimestamp', 5);
+        }
+
         $this->UpdateVariablesBasedOnScopes();
     }
 
@@ -613,6 +618,8 @@ public function GetConfigurationForm()
             if (!empty($skippedOut)) {
                 $this->SendDebug('Signals/skipped', json_encode($skippedOut, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 0);
             }
+
+            $this->SetValue('LastSignalsAt', time());
 
             http_response_code(200);
             echo 'ok';
