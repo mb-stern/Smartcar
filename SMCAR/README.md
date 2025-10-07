@@ -81,6 +81,7 @@ Redirect & Webhhok-URI      |  Dieser Pfad gehört in der Smartcar-Kunfiguration
 Manuelle Redirect-URI       |  Wird dieses Feld befüllt, wird diese URI statt der Connect-Adresse verwendet.
 Webhook-Empfang aktiviren   |  Dieser Schalter aktiviert den Empfang der Signals. Signals über Webhook sind für die simmulierten Fahrezeuge aktuell nicht verfügbar.
 Fahrzeug verifizieren       |  Dieser Schalter aktiviert die Überprüfung, ob es sich bei den ankommenden Daten um diejenigen des Fahrezuges handelt, welches auch über die API verbunden ist.
+Variable für Aktualisierung |  Dieser Schalter aktiviert eine Variable, wo der letze Aktualiesierungszeitpunkt der Signale erslichtlich ist.
 Application Management Token|  Entnimm diesen in der Konfiguration von Smartcar unter 'Configuration'.
 Client ID                   |  Entnimm diesen in der Konfiguration von Smartcar unter 'Configuration'.
 Client Secret               |  Entnimm diesen in der Konfiguration von Smartcar unter 'Configuration'.
@@ -143,7 +144,7 @@ Version 3.1 (06.10.2025)
 - Eine Variable mit dem Zeitpunkt der letzen Signals kann im Konfigurationsformular aktiviert werden.
 
 Version 3.0 (05.10.2025)
-- Neu werden zusätzlich Signals über Webhooks unterstützt. Diese müssen über einen Plan von Smartcar erworben werden.
+- Neu werden zusätzlich Signals über Webhooks unterstützt. Diese müssen über einen Plan von Smartcar erworben werden. Die Entsprechenden Varaiblen werden automatisch erstellt.
 
 Version 2.3 (28.09.2025)
 - Der Token wird nun bei jeder Konfigurationsänderung oder auch beim Update erneuert, sobald Symcon bereit ist. Dies sollte die zeitweiligen Token-Fehler nach Neustart des Systems beheben.
