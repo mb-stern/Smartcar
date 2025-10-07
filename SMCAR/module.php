@@ -17,6 +17,8 @@ class Smartcar extends IPSModule
         // Webhook-Optionen
         $this->RegisterPropertyBoolean('EnableWebhook', true);
         $this->RegisterPropertyBoolean('VerifyWebhookSignature', true);
+        $this->RegisterPropertyBoolean('TrackLastSignals', false);
+        
         // Smartcar "application_management_token" für HMAC (SC-Signature) & VERIFY-Challenge
         $this->RegisterPropertyString('ManagementToken', '');
 
@@ -95,18 +97,17 @@ class Smartcar extends IPSModule
             }
         }
 
-        // Speichern
         $this->WriteAttributeString('RedirectURI', $effectiveRedirect);
-
-        // WICHTIG: Webhook-Callback-URI = dieselbe URL wie RedirectURI (gleicher Pfad/gleiche Adresse)
-        // Wir unterscheiden in ProcessHookData anhand GET(OAuth)/POST(Webhook) + Payload.
         $this->WriteAttributeString('WebhookCallbackURI', $effectiveRedirect);
 
-        // Profile & Variablen
         $this->CreateProfile();
 
-        if (!@$this->GetIDForIdent('LastSignalsAt')) {
-        $this->RegisterVariableInteger('LastSignalsAt', 'Letzte Fahrzeug-Signale', '~UnixTimestamp', 5);
+        if ($this->ReadPropertyBoolean('TrackLastSignals')) {
+            if (!@$this->GetIDForIdent('LastSignalsAt')) {
+                $this->RegisterVariableInteger('LastSignalsAt', 'Letzte Fahrzeug-Signale', '~UnixTimestamp', 5);
+            }
+        } else {
+            @$this->UnregisterVariable('LastSignalsAt');
         }
 
         $this->UpdateVariablesBasedOnScopes();
@@ -217,6 +218,8 @@ public function GetConfigurationForm()
             ['type' => 'Label', 'caption' => '────────────────────────────────────────'],
             ['type' => 'CheckBox', 'name' => 'EnableWebhook', 'caption' => 'Webhook-Empfang aktivieren'],
             ['type' => 'CheckBox', 'name' => 'VerifyWebhookSignature', 'caption' => 'Fahrzeug verifizieren (Fahrzeugfilter!)'],
+            ['type' => 'CheckBox', 'name' => 'TrackLastSignals', 'caption' => 'Variable für letze Aktualierung der Signale anzeigen'],
+
             [
                 'type'    => 'ValidationTextBox',
                 'name'    => 'ManagementToken',
@@ -619,7 +622,11 @@ public function GetConfigurationForm()
                 $this->SendDebug('Signals/skipped', json_encode($skippedOut, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 0);
             }
 
-            $this->SetValue('LastSignalsAt', time());
+            if ($this->ReadPropertyBoolean('TrackLastSignals')) {
+                if (@$this->GetIDForIdent('LastSignalsAt')) {
+                    $this->SetValue('LastSignalsAt', time());
+                }
+            }
 
             http_response_code(200);
             echo 'ok';
