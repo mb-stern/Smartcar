@@ -142,7 +142,7 @@ Version 3.1 (07.10.2025)
 - Neu ist eine automatische Prüfung auf kompatible Scopes im Konfigurationsformular verfügbar. So werden nur noch kompatible Scopes abgefragt und Fehlermeldungen und überflüssige Abfragen vermieden.
 - Fehler bei der Abfrage der Batteriekapazität behoben.
 - Ladeleistung wir jetzt korrekt dargestellt.
-- Eine Variable mit dem Zeitpunkt der letzen Signale kann im Konfigurationsformular aktiviert werden.
+- Eine Variable mit dem Zeitpunkt der letzten Signale kann im Konfigurationsformular aktiviert werden.
 
 Version 3.0 (05.10.2025)
 - Neu werden zusätzlich Signale über Webhooks unterstützt. Diese müssen über einen Plan von Smartcar erworben werden. Die Entsprechenden Varaiblen werden automatisch erstellt.

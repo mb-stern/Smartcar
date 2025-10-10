@@ -846,10 +846,16 @@ public function GetConfigurationForm()
 
     private function GetVehicleID(string $accessToken, int $retryCount = 0): ?string
     {
-        $maxRetries = 2;
+        // 1) Cache zuerst nutzen
+        $cached = $this->ReadAttributeString('VehicleID');
+        if ($cached !== '') {
+            return $cached;
+        }
+
+        // 2) Erst jetzt Smartcar fragen
+        $maxRetries = 1; // kleiner halten
         if ($retryCount > $maxRetries) {
             $this->SendDebug('GetVehicleID', 'Max. Wiederholungen erreicht.', 0);
-            $this->LogMessage('GetVehicleID - Max. Wiederholungen erreicht.', KL_ERROR);
             return null;
         }
 
@@ -861,37 +867,30 @@ public function GetConfigurationForm()
                 'ignore_errors' => true
             ]
         ];
-
-        $context  = stream_context_create($options);
-        $response = @file_get_contents($url, false, $context);
-        if ($response === false) {
+        $res = @file_get_contents($url, false, stream_context_create($options));
+        if ($res === false) {
             $this->SendDebug('GetVehicleID', 'Keine Antwort von der API!', 0);
-            $this->LogMessage('GetVehicleID - Keine Antwort von der API!', KL_ERROR);
             return null;
         }
 
-        $data = json_decode($response, true);
-        $this->SendDebug('GetVehicleID', 'Antwort: ' . json_encode($data), 0);
-
+        $data = json_decode($res, true);
         if (isset($data['statusCode']) && $data['statusCode'] === 401) {
-            $this->SendDebug('GetVehicleID', '401 – Token erneuern und erneut versuchen…', 0);
+            // Token erneuern und nochmal versuchen
             $this->RefreshAccessToken();
-            $AccessToken = $this->ReadAttributeString('AccessToken');
-            if ($AccessToken !== '') {
-                return $this->GetVehicleID($AccessToken, $retryCount + 1);
+            $newToken = $this->ReadAttributeString('AccessToken');
+            if ($newToken !== '') {
+                return $this->GetVehicleID($newToken, $retryCount + 1);
             }
-            $this->SendDebug('GetVehicleID', 'Token konnte nicht erneuert werden.', 0);
             return null;
         }
 
         if (isset($data['vehicles'][0])) {
             $vehicleId = $data['vehicles'][0];
-            $this->WriteAttributeString('VehicleID', $vehicleId); // binden
+            $this->WriteAttributeString('VehicleID', $vehicleId);
             return $vehicleId;
         }
 
         $this->SendDebug('GetVehicleID', 'Keine Fahrzeug-ID gefunden!', 0);
-        $this->LogMessage('GetVehicleID - Keine Fahrzeug-ID gefunden!', KL_ERROR);
         return null;
     }
 
@@ -1561,11 +1560,14 @@ public function GetConfigurationForm()
     private function FetchSingleEndpoint(string $path)
     {
         $accessToken = $this->ReadAttributeString('AccessToken');
-        $vehicleID   = $this->GetVehicleID($accessToken);
 
+        // Cache bevorzugen
+        $vehicleID = $this->ReadAttributeString('VehicleID');
+        if ($vehicleID === '') {
+            $vehicleID = $this->GetVehicleID($accessToken);
+        }
         if ($accessToken === '' || $vehicleID === null || $vehicleID === '') {
             $this->SendDebug('FetchSingleEndpoint', '❌ Access Token oder VehicleID fehlt!', 0);
-            $this->LogMessage('FetchSingleEndpoint - Access Token oder VehicleID fehlt!', KL_ERROR);
             return;
         }
 
