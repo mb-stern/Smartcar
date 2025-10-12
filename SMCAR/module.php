@@ -344,25 +344,16 @@ public function GetConfigurationForm()
 
     public function AutoCompat(): string
     {
-        // Wenn noch nicht verbunden: beim nächsten OAuth-Redirect automatisch prüfen
-        if ($this->ReadAttributeString('AccessToken') === '') {
-            $this->WriteAttributeBoolean('PendingAutoCompat', true);
-            return 'Noch nicht verbunden. Bitte zuerst "Smartcar verbinden" ausführen.';
-        }
+        // 1) alle READ-Scopes temporär einschalten (Commands bleiben unberührt)
+        $this->SetAllReadScopes(true);
+        IPS_ApplyChanges($this->InstanceID);
 
-        $ok = $this->ProbeScopes();
-        if (!$ok) {
-            return 'Kompatibilitätsprüfung fehlgeschlagen (API/Token?).';
-        }
+        // 2) Kennzeichnen: nach OAuth-Callback automatisch prüfen & anwenden
+        $this->WriteAttributeBoolean('PendingAutoCompat', true);
 
-        $raw = $this->ReadAttributeString('CompatScopes');
-        $compat = $raw !== '' ? json_decode($raw, true) : [];
-        if (is_array($compat)) {
-            $this->ApplyCompatToProperties($compat);
-            IPS_ApplyChanges($this->InstanceID); // Variablen anlegen/löschen
-            return 'Kompatible Scopes angewendet. Formular neu öffnen.';
-        }
-        return 'Keine Kompatibilitätsdaten vorhanden.';
+        // 3) Auth-URL mit diesen Scopes generieren und zurückgeben (UI zeigt sie an)
+        $url = $this->GenerateAuthURL();
+        return is_string($url) ? $url : 'Fehler beim Erzeugen der Auth-URL';
     }
 
     private function ApplyCompatToProperties(array $compat): void 
@@ -394,7 +385,6 @@ public function GetConfigurationForm()
             return false;
         }
 
-        // Batch mit ALLEN Read-Pfaden (ohne Side-Effects)
         $paths = $this->AllReadPaths();
         $reqs  = array_map(fn($p) => ['path' => $p], $paths);
 
@@ -418,23 +408,66 @@ public function GetConfigurationForm()
         $data = json_decode($res, true);
         $this->SendDebug('ProbeScopes', "Antwort: ".json_encode($data, JSON_PRETTY_PRINT), 0);
 
-        if (!is_array($data) || !isset($data['responses']) || !is_array($data['responses'])) {
+        if (!isset($data['responses']) || !is_array($data['responses'])) {
             $this->SendDebug('ProbeScopes', '❌ Unerwartete Struktur.', 0);
             return false;
         }
 
-        // permission => true/false aufbauen
         $map = [];
+        $batterySeen200 = false;
+        $batteryOk = false;
+        $fuelOk = false;
+
         foreach ($data['responses'] as $r) {
             $path = $r['path'] ?? '';
-            $code = $r['code'] ?? 0;
+            $code = intval($r['code'] ?? 0);
             $perm = $this->PathToPermission($path);
             if (!$perm) continue;
 
-            // Erfolgskriterium: 200
-            $ok = ($code === 200);
-            // Bei mehrfachen Pfaden pro Permission (battery, charge) reicht ein true
-            $map[$perm] = ($map[$perm] ?? false) || $ok;
+            if ($perm === 'read_battery') {
+                if ($path === '/battery' && $code === 200) {
+                    $batterySeen200 = true;
+                    $b = $r['body'] ?? [];
+                    // echte EV/PHEV-Daten?
+                    if (isset($b['percentRemaining']) || isset($b['range'])) {
+                        $batteryOk = true;
+                    }
+                } elseif ($path === '/battery/nominal_capacity' && $code === 200) {
+                    $b = $r['body'] ?? [];
+                    // echte Kapazität nur, wenn eine einzelne Zahl vorliegt
+                    if (isset($b['capacity']) && is_numeric($b['capacity'])) {
+                        $batteryOk = true;
+                    }
+                    // Nur Auswahlliste? -> NICHT als kompatibel werten
+                    // if (isset($b['availableCapacities'])) { /* Ignorieren */ }
+                }
+                // wir setzen $map später, wenn wir alles gesehen haben
+                continue;
+            }
+
+            // Standard: 200 => kompatibel
+            if ($code === 200) {
+                $map[$perm] = true;
+            } else {
+                $map[$perm] = ($map[$perm] ?? false);
+            }
+
+            if ($path === '/fuel' && $code === 200) {
+                $fuelOk = true;
+            }
+        }
+
+        // Heuristik für ICE: Fuel ok, Battery nicht brauchbar -> Battery false
+        if ($batteryOk) {
+            $map['read_battery'] = true;
+        } else {
+            // Wenn /battery keine echten Werte hatte und /fuel ok ist -> klar ICE
+            if ($fuelOk && !$batteryOk) {
+                $map['read_battery'] = false;
+            } else {
+                // Falls weder Fuel noch echte Battery – konservativ: false
+                $map['read_battery'] = false;
+            }
         }
 
         $this->WriteAttributeString('CompatScopes', json_encode($map, JSON_UNESCAPED_SLASHES));
