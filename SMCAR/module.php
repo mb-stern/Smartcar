@@ -200,11 +200,11 @@ public function GetConfigurationForm()
 
     // Sichtbarkeitslogik pro Permission
     $permVisible = function (string $permission) use ($compat): bool {
-        if (!is_array($compat)) return true;              // kein Cache ⇒ alles sichtbar
-        if (!array_key_exists($permission, $compat)) return true; // unbekannt ⇒ sichtbar
-        return ($compat[$permission] !== false);          // nur false ⇒ verstecken
+        // Kein Cache → alles anzeigen
+        if (!is_array($compat)) return true;
+        // Wenn vorhanden: nur anzeigen, wenn true; unbekannt → anzeigen
+        return !array_key_exists($permission, $compat) || (bool)$compat[$permission] === true;
     };
-
 
     $form = [
         'elements' => [
@@ -365,47 +365,17 @@ public function GetConfigurationForm()
         }
 
         // permission => true/false aufbauen
-        // permission => true/false  (false NUR bei eindeutig "nicht unterstützt")
         $map = [];
-
         foreach ($data['responses'] as $r) {
             $path = $r['path'] ?? '';
-            $code = (int)($r['code'] ?? 0);
+            $code = $r['code'] ?? 0;
             $perm = $this->PathToPermission($path);
             if (!$perm) continue;
 
-            // Details (falls vorhanden)
-            $body = $r['body'] ?? [];
-            $apiCode = is_array($body) ? ($body['code'] ?? '') : '';
-
-            // 1) ECHT kompatibel
-            if ($code === 200) {
-                $map[$perm] = true;
-                continue;
-            }
-
-            // 2) Eindeutig NICHT unterstützt → als false markieren
-            //    typische Fälle: 404 Not Found, 501 Not Implemented
-            //    oder ein klarer Kompatibilitätsfehlercode vom OEM/Smartcar
-            $clearlyUnsupported =
-                in_array($code, [404, 501], true) ||
-                in_array($apiCode, [
-                    'NOT_SUPPORTED',            // beispielhafte Codes
-                    'VEHICLE_NOT_COMPATIBLE',
-                    'ENDPOINT_NOT_SUPPORTED'
-                ], true);
-
-            if ($clearlyUnsupported) {
-                // Nur setzen, wenn wir es sicher wissen
-                $map[$perm] = false;
-                continue;
-            }
-
-            // 3) Alles andere (403 wegen fehlendem Scope, 429, 5xx, 408…) → UNBEKANNT
-            //    NICHT in $map eintragen bzw. vorhandenen Wert nicht überschreiben.
-            if (!array_key_exists($perm, $map)) {
-                // bewusst leer lassen ⇒ "unbekannt" (Form zeigt weiterhin an)
-            }
+            // Erfolgskriterium: 200
+            $ok = ($code === 200);
+            // Bei mehrfachen Pfaden pro Permission (battery, charge) reicht ein true
+            $map[$perm] = ($map[$perm] ?? false) || $ok;
         }
 
         $this->WriteAttributeString('CompatScopes', json_encode($map, JSON_UNESCAPED_SLASHES));
