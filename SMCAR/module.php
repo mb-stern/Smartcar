@@ -55,7 +55,6 @@ class Smartcar extends IPSModule
         
         //Kompatiple Scopes
         $this->RegisterAttributeString('CompatScopes', ''); // JSON: {"read_battery":true,...}
-        $this->RegisterAttributeBoolean('PendingAutoCompat', false);
 
         // Timer
         $this->RegisterTimer('TokenRefreshTimer', 0, 'SMCAR_RefreshAccessToken(' . $this->InstanceID . ');');
@@ -277,8 +276,8 @@ public function GetConfigurationForm()
         'actions' => [
             ['type' => 'Button', 'caption' => 'Smartcar verbinden',     'onClick' => 'echo SMCAR_GenerateAuthURL($id);'],
             
-            ['type' => 'Button', 'caption' => 'Kompatible Scopes automatisch einrichten', 'onClick' => 'echo SMCAR_AutoCompat($id);'],
-
+            ['type' => 'Button', 'caption' => 'Scopes automatisch prüfen', 'onClick' => 'echo SMCAR_ProbeScopes($id) ? "Fertig." : "Fehlgeschlagen.";'],  
+ 
             ['type' => 'Button', 'caption' => 'Fahrzeugdaten abrufen',  'onClick' => 'SMCAR_FetchVehicleData($id);'],
 
             ['type' => 'Label',  'caption' => 'Sag danke und unterstütze den Modulentwickler:'],
@@ -307,11 +306,12 @@ public function GetConfigurationForm()
             '/location'           => 'read_location',
             '/tires/pressure'     => 'read_tires',
             '/odometer'           => 'read_odometer',
-            '/battery'            => 'read_battery',
-            '/battery/nominal_capacity' => 'read_battery_capacity',
+            '/battery', '/battery/nominal_capacity'
+                                => 'read_battery',
             '/fuel'               => 'read_fuel',
             '/security'           => 'read_security',
-            '/charge/limit', '/charge' => 'read_charge',
+            '/charge/limit', '/charge'
+                                => 'read_charge',
             '/engine/oil'         => 'read_engine_oil',
             default               => null
         };
@@ -326,56 +326,6 @@ public function GetConfigurationForm()
         ];
     }
 
-    private function SetAllReadScopes(bool $state): void 
-    {
-    IPS_SetProperty($this->InstanceID,'ScopeReadVehicleInfo',      $state);
-    IPS_SetProperty($this->InstanceID,'ScopeReadVIN',              $state);
-    IPS_SetProperty($this->InstanceID,'ScopeReadLocation',         $state);
-    IPS_SetProperty($this->InstanceID,'ScopeReadTires',            $state);
-    IPS_SetProperty($this->InstanceID,'ScopeReadOdometer',         $state);
-    IPS_SetProperty($this->InstanceID,'ScopeReadBattery',          $state);
-    IPS_SetProperty($this->InstanceID,'ScopeReadBatteryCapacity',  $state);
-    IPS_SetProperty($this->InstanceID,'ScopeReadFuel',             $state);
-    IPS_SetProperty($this->InstanceID,'ScopeReadSecurity',         $state);
-    IPS_SetProperty($this->InstanceID,'ScopeReadChargeLimit',      $state);
-    IPS_SetProperty($this->InstanceID,'ScopeReadChargeStatus',     $state);
-    IPS_SetProperty($this->InstanceID,'ScopeReadOilLife',          $state);
-    }
-
-    public function AutoCompat(): string
-    {
-        // 1) alle READ-Scopes temporär einschalten (Commands bleiben unberührt)
-        $this->SetAllReadScopes(true);
-        IPS_ApplyChanges($this->InstanceID);
-
-        // 2) Kennzeichnen: nach OAuth-Callback automatisch prüfen & anwenden
-        $this->WriteAttributeBoolean('PendingAutoCompat', true);
-
-        // 3) Auth-URL mit diesen Scopes generieren und zurückgeben (UI zeigt sie an)
-        $url = $this->GenerateAuthURL();
-        return is_string($url) ? $url : 'Fehler beim Erzeugen der Auth-URL';
-    }
-
-    private function ApplyCompatToProperties(array $compat): void 
-    {
-    $set = function(string $prop, string $perm) use ($compat) {
-        $ok = isset($compat[$perm]) ? (bool)$compat[$perm] : false;
-        IPS_SetProperty($this->InstanceID, $prop, $ok);
-    };
-    $set('ScopeReadVehicleInfo',     'read_vehicle_info');
-    $set('ScopeReadVIN',             'read_vin');
-    $set('ScopeReadLocation',        'read_location');
-    $set('ScopeReadTires',           'read_tires');
-    $set('ScopeReadOdometer',        'read_odometer');
-    $set('ScopeReadBattery',         'read_battery');
-    $set('ScopeReadBatteryCapacity', 'read_battery_capacity');
-    $set('ScopeReadFuel',            'read_fuel');
-    $set('ScopeReadSecurity',        'read_security');
-    $set('ScopeReadChargeLimit',     'read_charge');
-    $set('ScopeReadChargeStatus',    'read_charge');
-    $set('ScopeReadOilLife',         'read_engine_oil');
-    }
-
     public function ProbeScopes(): bool
     {
         $accessToken = $this->ReadAttributeString('AccessToken');
@@ -385,6 +335,7 @@ public function GetConfigurationForm()
             return false;
         }
 
+        // Batch mit ALLEN Read-Pfaden (ohne Side-Effects)
         $paths = $this->AllReadPaths();
         $reqs  = array_map(fn($p) => ['path' => $p], $paths);
 
@@ -408,66 +359,23 @@ public function GetConfigurationForm()
         $data = json_decode($res, true);
         $this->SendDebug('ProbeScopes', "Antwort: ".json_encode($data, JSON_PRETTY_PRINT), 0);
 
-        if (!isset($data['responses']) || !is_array($data['responses'])) {
+        if (!is_array($data) || !isset($data['responses']) || !is_array($data['responses'])) {
             $this->SendDebug('ProbeScopes', '❌ Unerwartete Struktur.', 0);
             return false;
         }
 
+        // permission => true/false aufbauen
         $map = [];
-        $batterySeen200 = false;
-        $batteryOk = false;
-        $fuelOk = false;
-
         foreach ($data['responses'] as $r) {
             $path = $r['path'] ?? '';
-            $code = intval($r['code'] ?? 0);
+            $code = $r['code'] ?? 0;
             $perm = $this->PathToPermission($path);
             if (!$perm) continue;
 
-            if ($perm === 'read_battery') {
-                if ($path === '/battery' && $code === 200) {
-                    $batterySeen200 = true;
-                    $b = $r['body'] ?? [];
-                    // echte EV/PHEV-Daten?
-                    if (isset($b['percentRemaining']) || isset($b['range'])) {
-                        $batteryOk = true;
-                    }
-                } elseif ($path === '/battery/nominal_capacity' && $code === 200) {
-                    $b = $r['body'] ?? [];
-                    // echte Kapazität nur, wenn eine einzelne Zahl vorliegt
-                    if (isset($b['capacity']) && is_numeric($b['capacity'])) {
-                        $batteryOk = true;
-                    }
-                    // Nur Auswahlliste? -> NICHT als kompatibel werten
-                    // if (isset($b['availableCapacities'])) { /* Ignorieren */ }
-                }
-                // wir setzen $map später, wenn wir alles gesehen haben
-                continue;
-            }
-
-            // Standard: 200 => kompatibel
-            if ($code === 200) {
-                $map[$perm] = true;
-            } else {
-                $map[$perm] = ($map[$perm] ?? false);
-            }
-
-            if ($path === '/fuel' && $code === 200) {
-                $fuelOk = true;
-            }
-        }
-
-        // Heuristik für ICE: Fuel ok, Battery nicht brauchbar -> Battery false
-        if ($batteryOk) {
-            $map['read_battery'] = true;
-        } else {
-            // Wenn /battery keine echten Werte hatte und /fuel ok ist -> klar ICE
-            if ($fuelOk && !$batteryOk) {
-                $map['read_battery'] = false;
-            } else {
-                // Falls weder Fuel noch echte Battery – konservativ: false
-                $map['read_battery'] = false;
-            }
+            // Erfolgskriterium: 200
+            $ok = ($code === 200);
+            // Bei mehrfachen Pfaden pro Permission (battery, charge) reicht ein true
+            $map[$perm] = ($map[$perm] ?? false) || $ok;
         }
 
         $this->WriteAttributeString('CompatScopes', json_encode($map, JSON_UNESCAPED_SLASHES));
@@ -527,35 +435,17 @@ public function GetConfigurationForm()
 
         $this->SendDebug('Webhook', "Request: method=$method uri=$uri qs=$qs", 0);
 
+        // --- OAuth Redirect (GET ?code=...) ---
         if ($method === 'GET' && isset($_GET['code'])) {
             $authCode = $_GET['code'];
             $state    = $_GET['state'] ?? '';
             $this->SendDebug('Webhook', "OAuth Redirect: code=$authCode state=$state", 0);
             $this->RequestAccessToken($authCode);
-
-            if ($this->ReadAttributeBoolean('PendingAutoCompat')) {
-                // direkt im Anschluss kompatible Scopes testen
-                $ok = $this->ProbeScopes();
-                $this->WriteAttributeBoolean('PendingAutoCompat', false);
-
-                if ($ok) {
-                    $raw = $this->ReadAttributeString('CompatScopes');
-                    $compat = $raw !== '' ? json_decode($raw, true) : [];
-                    if (is_array($compat)) {
-                        $this->ApplyCompatToProperties($compat);
-                        IPS_ApplyChanges($this->InstanceID); // Variablen anlegen/löschen
-                    }
-                    echo 'Kompatible Scopes ermittelt & angewendet. Formular neu öffnen.';
-                    return;
-                }
-                echo 'Tokens gespeichert, aber Kompatibilitätsprüfung fehlgeschlagen.';
-                return;
-            }
-
             echo 'Fahrzeug erfolgreich verbunden!';
             return;
         }
 
+        // --- Webhook deaktiviert? ---
         if (!$this->ReadPropertyBoolean('EnableWebhook')) {
             $this->SendDebug('Webhook', 'Empfang deaktiviert → 200/ignored', 0);
             http_response_code(200);
@@ -1041,19 +931,18 @@ public function GetConfigurationForm()
             case '/battery/nominal_capacity':
                 $nominal = null;
 
-                // Nur echte Kapazitäten akzeptieren – KEINE Auswahl-Listen!
-                if (isset($body['capacity']) && is_array($body['capacity']) && is_numeric($body['capacity']['nominal'] ?? null)) {
+                if (isset($body['capacity']) && is_array($body['capacity']) && isset($body['capacity']['nominal']) && is_numeric($body['capacity']['nominal'])) {
                     $nominal = (float)$body['capacity']['nominal'];
                 } elseif (isset($body['capacity']) && is_numeric($body['capacity'])) {
                     $nominal = (float)$body['capacity'];
+                } elseif (isset($body['availableCapacities'][0]['capacity']) && is_numeric($body['availableCapacities'][0]['capacity'])) {
+                    $nominal = (float)$body['availableCapacities'][0]['capacity'];
                 } elseif (isset($body['nominal_capacity']) && is_numeric($body['nominal_capacity'])) {
                     $nominal = (float)$body['nominal_capacity'];
                 }
 
                 if ($nominal !== null) {
                     $this->SetValue('BatteryCapacity', $nominal);
-                } else {
-                    $this->SendDebug('battery/nominal_capacity', 'Nur Auswahl/Wizard – kein Wert gesetzt.', 0);
                 }
                 break;
 
