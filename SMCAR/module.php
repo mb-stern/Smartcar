@@ -276,17 +276,8 @@ public function GetConfigurationForm()
         'actions' => [
             ['type' => 'Button', 'caption' => 'Smartcar verbinden',     'onClick' => 'echo SMCAR_GenerateAuthURL($id);'],
             
-            ['type' => 'Button',
-            'caption' => 'Scopes automatisch prüfen',
-            'onClick' => '
-                $ok = SMCAR_ProbeScopes($id);
-                if ($ok) {
-                    IPS_ApplyChanges($id); // Formular neu laden, damit die Sichtbarkeit greift
-                    echo "Fertig. Formular aktualisiert.";
-                } else {
-                    echo "Fehlgeschlagen.";
-                }
-            '],
+            ['type' => 'Button', 'caption' => 'Scopes automatisch prüfen', 'onClick' => 'echo SMCAR_ProbeScopes($id) ? "Fertig." : "Fehlgeschlagen.";'],  
+ 
             ['type' => 'Button', 'caption' => 'Fahrzeugdaten abrufen',  'onClick' => 'SMCAR_FetchVehicleData($id);'],
 
             ['type' => 'Label',  'caption' => 'Sag danke und unterstütze den Modulentwickler:'],
