@@ -307,12 +307,11 @@ public function GetConfigurationForm()
             '/location'           => 'read_location',
             '/tires/pressure'     => 'read_tires',
             '/odometer'           => 'read_odometer',
-            '/battery', '/battery/nominal_capacity'
-                                => 'read_battery',
+            '/battery'            => 'read_battery',
+            '/battery/nominal_capacity' => 'read_battery_capacity',
             '/fuel'               => 'read_fuel',
             '/security'           => 'read_security',
-            '/charge/limit', '/charge'
-                                => 'read_charge',
+            '/charge/limit', '/charge' => 'read_charge',
             '/engine/oil'         => 'read_engine_oil',
             default               => null
         };
@@ -345,26 +344,25 @@ public function GetConfigurationForm()
 
     public function AutoCompat(): string
     {
-        // Falls noch kein AccessToken da ist: nach dem Verbinden automatisch prüfen
+        // Wenn noch nicht verbunden: beim nächsten OAuth-Redirect automatisch prüfen
         if ($this->ReadAttributeString('AccessToken') === '') {
             $this->WriteAttributeBoolean('PendingAutoCompat', true);
-            return 'Bereit. Bitte zuerst "Smartcar verbinden". Nach der Rückkehr werden die kompatiblen Scopes automatisch geprüft.';
+            return 'Noch nicht verbunden. Bitte zuerst "Smartcar verbinden" ausführen.';
         }
 
-        // Sofort prüfen
         $ok = $this->ProbeScopes();
         if (!$ok) {
-            return 'Kompatibilitätsprüfung fehlgeschlagen (Token/Fahrzeug?).';
+            return 'Kompatibilitätsprüfung fehlgeschlagen (API/Token?).';
         }
 
-        // Ergebnis anwenden
         $raw = $this->ReadAttributeString('CompatScopes');
         $compat = $raw !== '' ? json_decode($raw, true) : [];
         if (is_array($compat)) {
             $this->ApplyCompatToProperties($compat);
-            IPS_ApplyChanges($this->InstanceID); // legt Variablen passend an/ab
+            IPS_ApplyChanges($this->InstanceID); // Variablen anlegen/löschen
+            return 'Kompatible Scopes angewendet. Formular neu öffnen.';
         }
-        return 'Kompatible Scopes angewendet. Formular schließen und erneut öffnen.';
+        return 'Keine Kompatibilitätsdaten vorhanden.';
     }
 
     private function ApplyCompatToProperties(array $compat): void 
@@ -379,11 +377,11 @@ public function GetConfigurationForm()
     $set('ScopeReadTires',           'read_tires');
     $set('ScopeReadOdometer',        'read_odometer');
     $set('ScopeReadBattery',         'read_battery');
-    $set('ScopeReadBatteryCapacity', 'read_battery');   // gleicher Scope
+    $set('ScopeReadBatteryCapacity', 'read_battery_capacity');
     $set('ScopeReadFuel',            'read_fuel');
     $set('ScopeReadSecurity',        'read_security');
     $set('ScopeReadChargeLimit',     'read_charge');
-    $set('ScopeReadChargeStatus',    'read_charge');    // gleicher Scope
+    $set('ScopeReadChargeStatus',    'read_charge');
     $set('ScopeReadOilLife',         'read_engine_oil');
     }
 
@@ -1010,18 +1008,19 @@ public function GetConfigurationForm()
             case '/battery/nominal_capacity':
                 $nominal = null;
 
-                if (isset($body['capacity']) && is_array($body['capacity']) && isset($body['capacity']['nominal']) && is_numeric($body['capacity']['nominal'])) {
+                // Nur echte Kapazitäten akzeptieren – KEINE Auswahl-Listen!
+                if (isset($body['capacity']) && is_array($body['capacity']) && is_numeric($body['capacity']['nominal'] ?? null)) {
                     $nominal = (float)$body['capacity']['nominal'];
                 } elseif (isset($body['capacity']) && is_numeric($body['capacity'])) {
                     $nominal = (float)$body['capacity'];
-                } elseif (isset($body['availableCapacities'][0]['capacity']) && is_numeric($body['availableCapacities'][0]['capacity'])) {
-                    $nominal = (float)$body['availableCapacities'][0]['capacity'];
                 } elseif (isset($body['nominal_capacity']) && is_numeric($body['nominal_capacity'])) {
                     $nominal = (float)$body['nominal_capacity'];
                 }
 
                 if ($nominal !== null) {
                     $this->SetValue('BatteryCapacity', $nominal);
+                } else {
+                    $this->SendDebug('battery/nominal_capacity', 'Nur Auswahl/Wizard – kein Wert gesetzt.', 0);
                 }
                 break;
 
