@@ -343,6 +343,24 @@ public function GetConfigurationForm()
     IPS_SetProperty($this->InstanceID,'ScopeReadOilLife',          $state);
     }
 
+    public function AutoCompat(): string
+    {
+        // 1) Temporär ALLE READ-Scopes aktivieren, damit die Auth-URL alle Berechtigungen anfragt
+        $this->SetAllReadScopes(true);
+        IPS_ApplyChanges($this->InstanceID);
+
+        // 2) Flag setzen: Nach dem OAuth-Redirect automatisch prüfen & anwenden
+        $this->WriteAttributeBoolean('PendingAutoCompat', true);
+
+        // 3) Auth-URL erzeugen (Fehler abfangen)
+        $url = $this->GenerateAuthURL();
+        if (!is_string($url) || stripos($url, 'http') !== 0) {
+            $this->WriteAttributeBoolean('PendingAutoCompat', false);
+            return 'Fehler: Auth-URL konnte nicht erzeugt werden. Bitte ClientID/Secret/Redirect prüfen.';
+        }
+        return $url; // Die Konsole zeigt diese URL an – draufklicken und den OAuth-Flow durchlaufen.
+    }
+
     private function ApplyCompatToProperties(array $compat): void 
     {
     $set = function(string $prop, string $perm) use ($compat) {
