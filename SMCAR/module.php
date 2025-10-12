@@ -345,20 +345,26 @@ public function GetConfigurationForm()
 
     public function AutoCompat(): string
     {
-        // 1) Temporär ALLE READ-Scopes aktivieren, damit die Auth-URL alle Berechtigungen anfragt
-        $this->SetAllReadScopes(true);
-        IPS_ApplyChanges($this->InstanceID);
-
-        // 2) Flag setzen: Nach dem OAuth-Redirect automatisch prüfen & anwenden
-        $this->WriteAttributeBoolean('PendingAutoCompat', true);
-
-        // 3) Auth-URL erzeugen (Fehler abfangen)
-        $url = $this->GenerateAuthURL();
-        if (!is_string($url) || stripos($url, 'http') !== 0) {
-            $this->WriteAttributeBoolean('PendingAutoCompat', false);
-            return 'Fehler: Auth-URL konnte nicht erzeugt werden. Bitte ClientID/Secret/Redirect prüfen.';
+        // Falls noch kein AccessToken da ist: nach dem Verbinden automatisch prüfen
+        if ($this->ReadAttributeString('AccessToken') === '') {
+            $this->WriteAttributeBoolean('PendingAutoCompat', true);
+            return 'Bereit. Bitte zuerst "Smartcar verbinden". Nach der Rückkehr werden die kompatiblen Scopes automatisch geprüft.';
         }
-        return $url; // Die Konsole zeigt diese URL an – draufklicken und den OAuth-Flow durchlaufen.
+
+        // Sofort prüfen
+        $ok = $this->ProbeScopes();
+        if (!$ok) {
+            return 'Kompatibilitätsprüfung fehlgeschlagen (Token/Fahrzeug?).';
+        }
+
+        // Ergebnis anwenden
+        $raw = $this->ReadAttributeString('CompatScopes');
+        $compat = $raw !== '' ? json_decode($raw, true) : [];
+        if (is_array($compat)) {
+            $this->ApplyCompatToProperties($compat);
+            IPS_ApplyChanges($this->InstanceID); // legt Variablen passend an/ab
+        }
+        return 'Kompatible Scopes angewendet. Formular schließen und erneut öffnen.';
     }
 
     private function ApplyCompatToProperties(array $compat): void 
