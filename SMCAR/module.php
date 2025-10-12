@@ -55,6 +55,7 @@ class Smartcar extends IPSModule
         
         //Kompatiple Scopes
         $this->RegisterAttributeString('CompatScopes', ''); // JSON: {"read_battery":true,...}
+        $this->RegisterAttributeBoolean('PendingAutoCompat', false);
 
         // Timer
         $this->RegisterTimer('TokenRefreshTimer', 0, 'SMCAR_RefreshAccessToken(' . $this->InstanceID . ');');
@@ -276,8 +277,8 @@ public function GetConfigurationForm()
         'actions' => [
             ['type' => 'Button', 'caption' => 'Smartcar verbinden',     'onClick' => 'echo SMCAR_GenerateAuthURL($id);'],
             
-            ['type' => 'Button', 'caption' => 'Scopes automatisch prüfen', 'onClick' => 'echo SMCAR_ProbeScopes($id) ? "Fertig." : "Fehlgeschlagen.";'],  
- 
+            ['type' => 'Button', 'caption' => 'Kompatible Scopes automatisch einrichten', 'onClick' => 'echo SMCAR_AutoCompat($id);'],
+
             ['type' => 'Button', 'caption' => 'Fahrzeugdaten abrufen',  'onClick' => 'SMCAR_FetchVehicleData($id);'],
 
             ['type' => 'Label',  'caption' => 'Sag danke und unterstütze den Modulentwickler:'],
@@ -324,6 +325,42 @@ public function GetConfigurationForm()
             '/battery', '/battery/nominal_capacity', '/fuel', '/security',
             '/charge/limit', '/charge', '/engine/oil'
         ];
+    }
+
+    private function SetAllReadScopes(bool $state): void 
+    {
+    IPS_SetProperty($this->InstanceID,'ScopeReadVehicleInfo',      $state);
+    IPS_SetProperty($this->InstanceID,'ScopeReadVIN',              $state);
+    IPS_SetProperty($this->InstanceID,'ScopeReadLocation',         $state);
+    IPS_SetProperty($this->InstanceID,'ScopeReadTires',            $state);
+    IPS_SetProperty($this->InstanceID,'ScopeReadOdometer',         $state);
+    IPS_SetProperty($this->InstanceID,'ScopeReadBattery',          $state);
+    IPS_SetProperty($this->InstanceID,'ScopeReadBatteryCapacity',  $state);
+    IPS_SetProperty($this->InstanceID,'ScopeReadFuel',             $state);
+    IPS_SetProperty($this->InstanceID,'ScopeReadSecurity',         $state);
+    IPS_SetProperty($this->InstanceID,'ScopeReadChargeLimit',      $state);
+    IPS_SetProperty($this->InstanceID,'ScopeReadChargeStatus',     $state);
+    IPS_SetProperty($this->InstanceID,'ScopeReadOilLife',          $state);
+    }
+
+    private function ApplyCompatToProperties(array $compat): void 
+    {
+    $set = function(string $prop, string $perm) use ($compat) {
+        $ok = isset($compat[$perm]) ? (bool)$compat[$perm] : false;
+        IPS_SetProperty($this->InstanceID, $prop, $ok);
+    };
+    $set('ScopeReadVehicleInfo',     'read_vehicle_info');
+    $set('ScopeReadVIN',             'read_vin');
+    $set('ScopeReadLocation',        'read_location');
+    $set('ScopeReadTires',           'read_tires');
+    $set('ScopeReadOdometer',        'read_odometer');
+    $set('ScopeReadBattery',         'read_battery');
+    $set('ScopeReadBatteryCapacity', 'read_battery');   // gleicher Scope
+    $set('ScopeReadFuel',            'read_fuel');
+    $set('ScopeReadSecurity',        'read_security');
+    $set('ScopeReadChargeLimit',     'read_charge');
+    $set('ScopeReadChargeStatus',    'read_charge');    // gleicher Scope
+    $set('ScopeReadOilLife',         'read_engine_oil');
     }
 
     public function ProbeScopes(): bool
@@ -435,17 +472,35 @@ public function GetConfigurationForm()
 
         $this->SendDebug('Webhook', "Request: method=$method uri=$uri qs=$qs", 0);
 
-        // --- OAuth Redirect (GET ?code=...) ---
         if ($method === 'GET' && isset($_GET['code'])) {
             $authCode = $_GET['code'];
             $state    = $_GET['state'] ?? '';
             $this->SendDebug('Webhook', "OAuth Redirect: code=$authCode state=$state", 0);
             $this->RequestAccessToken($authCode);
+
+            if ($this->ReadAttributeBoolean('PendingAutoCompat')) {
+                // direkt im Anschluss kompatible Scopes testen
+                $ok = $this->ProbeScopes();
+                $this->WriteAttributeBoolean('PendingAutoCompat', false);
+
+                if ($ok) {
+                    $raw = $this->ReadAttributeString('CompatScopes');
+                    $compat = $raw !== '' ? json_decode($raw, true) : [];
+                    if (is_array($compat)) {
+                        $this->ApplyCompatToProperties($compat);
+                        IPS_ApplyChanges($this->InstanceID); // Variablen anlegen/löschen
+                    }
+                    echo 'Kompatible Scopes ermittelt & angewendet. Formular neu öffnen.';
+                    return;
+                }
+                echo 'Tokens gespeichert, aber Kompatibilitätsprüfung fehlgeschlagen.';
+                return;
+            }
+
             echo 'Fahrzeug erfolgreich verbunden!';
             return;
         }
 
-        // --- Webhook deaktiviert? ---
         if (!$this->ReadPropertyBoolean('EnableWebhook')) {
             $this->SendDebug('Webhook', 'Empfang deaktiviert → 200/ignored', 0);
             http_response_code(200);
