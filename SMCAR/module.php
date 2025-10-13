@@ -195,8 +195,8 @@ class Smartcar extends IPSModule
         return $desired;
     }
 
-public function GetConfigurationForm()
-{
+    public function GetConfigurationForm()
+    {
     $effectiveRedirect = $this->ReadAttributeString('RedirectURI');
 
     // Kompatibilitäts-Cache laden (permission => true/false), null bedeutet: kein Filter aktiv
@@ -279,15 +279,15 @@ public function GetConfigurationForm()
                 ]
             ],
         ],
-        'actions' => [
-            ['type'=>'Button','caption'=>'Erst-Setup: Prüfen & verbinden',
-            'onClick'=>'echo SMCAR_FirstRunSetup($id);'],
+            'actions' => [
+                ['type' => 'Button', 'caption' => 'Immer verbinden (alle Read-Scopes)',
+                'onClick' => 'echo SMCAR_ConnectAllRead($id);'],
 
-            ['type'=>'Button','caption'=>'Scopes erneut prüfen',
-            'onClick'=>'echo SMCAR_ProbeScopes($id) ? "Fertig." : "Fehlgeschlagen.";'],
+                ['type' => 'Button', 'caption' => 'Scopes erneut prüfen',
+                'onClick' => 'echo SMCAR_ProbeScopes($id) ? "Fertig." : "Fehlgeschlagen.";'],
 
-            ['type'=>'Button','caption'=>'Mit Smartcar verbinden (ausgewählte Scopes)',
-            'onClick'=>'echo SMCAR_GenerateAuthURL($id);'],
+                ['type' => 'Button', 'caption' => 'Mit Smartcar verbinden (ausgewählte Scopes)',
+                'onClick' => 'echo SMCAR_GenerateAuthURL($id);'],
 
             ['type' => 'Label',  'caption' => 'Sag danke und unterstütze den Modulentwickler:'],
             [
@@ -343,6 +343,12 @@ public function GetConfigurationForm()
         }
         return false;
     }
+
+    public function ConnectAllRead(): string
+    {
+        return $this->GenerateAuthURLForScopes($this->AllReadPermissions());
+    }
+
 
     private function ApplyCompatToProperties(array $compat): void {
         $setTrue = function(string $prop, string $perm) use ($compat) {
@@ -566,8 +572,12 @@ public function GetConfigurationForm()
         if ($this->ReadPropertyBoolean('SetLockStatus')) $scopes[] = 'control_security';
 
         if (empty($scopes)) {
-            $this->SendDebug('GenerateAuthURL', 'Fehler: Keine Scopes ausgewählt!', 0);
-            return 'Fehler: Keine Scopes ausgewählt!';
+            $compatRaw = $this->ReadAttributeString('CompatScopes');
+            if ($compatRaw === '') {
+                $scopes = $this->AllReadPermissions(); // Erst-Auth → alle Read-Scopes
+            } else {
+                return 'Fehler: Keine Scopes ausgewählt!';
+            }
         }
 
         $authURL = "https://connect.smartcar.com/oauth/authorize?" .
@@ -841,6 +851,9 @@ public function GetConfigurationForm()
             $this->SendDebug('RequestAccessToken', '❌ Token-Austausch fehlgeschlagen! Antwort: ' . $response, 0);
             $this->LogMessage('RequestAccessToken - Token-Austausch fehlgeschlagen.', KL_ERROR);
         }
+
+        $this->ProbeScopes();   // füllt CompatScopes und hakt true-Scopes automatisch an
+        $this->ApplyChanges();
     }
 
     public function MessageSink($TimeStamp, $SenderID, $Message, $Data)
