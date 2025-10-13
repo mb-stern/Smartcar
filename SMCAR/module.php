@@ -332,15 +332,20 @@ class Smartcar extends IPSModule
 
     public function StartFullReauthAndProbe()
     {
-        // setze Marker, damit ProcessHookData nach der Auth direkt prüft
+        // nach Rückkehr soll automatisch geprüft werden
         $this->WriteAttributeString('NextAction', 'probe_after_auth');
 
-        $allReadScopes = $this->AllReadScopesList();
-        $url = $this->BuildAuthURLWithScopes($allReadScopes, 'probe');
+        // immer ALLE Read-Scopes benutzen
+        $allScopes = [
+            'read_vehicle_info', 'read_vin', 'read_location', 'read_tires',
+            'read_odometer', 'read_battery', 'read_fuel',
+            'read_security', 'read_charge', 'read_engine_oil'
+        ];
 
-        $this->SendDebug('StartFullReauthAndProbe', 'Auth-URL (alle Read-Scopes): ' . $url, 0);
-        echo "Bitte autorisieren (alle Read-Scopes). Danach komme ich automatisch zurück und prüfe die Kompatibilität.\n\n{$url}";
+        $url = $this->BuildAuthURLWithScopes($allScopes, 'probe'); 
+        echo $url; 
     }
+
 
     private function AllReadScopeNames(): array {
     return [
@@ -706,21 +711,16 @@ public function ProbeScopes(): bool
 
         // --- OAuth Redirect (GET ?code=...) ---
         if ($method === 'GET' && isset($_GET['code'])) {
-            $authCode = $_GET['code'];
-            $state    = $_GET['state'] ?? '';
-            $this->SendDebug('Webhook', "OAuth Redirect: code=$authCode state=$state", 0);
+            $this->RequestAccessToken($_GET['code']);
+            $state = $_GET['state'] ?? '';
+            $next  = $this->ReadAttributeString('NextAction');
 
-            $this->RequestAccessToken($authCode); // speichert Tokens
-            $next = $this->ReadAttributeString('NextAction');
-
-            // Wenn von "Scopes prüfen" initiiert → sofort prüfen
             if (stripos($state, 'probe_') === 0 || $next === 'probe_after_auth') {
                 $this->WriteAttributeString('NextAction', '');
-                // ProbeScopes speichert CompatScopes und setzt Properties + ApplyChanges
                 $ok = $this->ProbeScopes();
                 echo $ok
-                    ? 'Kompatible Scopes wurden nach der Autorisierung automatisch geprüft. Bitte Formular schliessen & erneut öffnen.'
-                    : 'Autorisiert, aber die Kompatibilitätsprüfung ist fehlgeschlagen. Siehe Debug-Log.';
+                    ? 'Kompatible Scopes geprüft. Formular schließen & erneut öffnen.'
+                    : 'Autorisiert, aber Prüfung fehlgeschlagen – bitte Debug ansehen.';
                 return;
             }
 
