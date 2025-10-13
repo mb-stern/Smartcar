@@ -424,6 +424,8 @@ class Smartcar extends IPSModule
 
     public function GenerateAuthURLAllRead(): string
     {
+        $this->WriteAttributeString('NextAction', 'probe_after_auth');
+
         $url = $this->BuildAuthURLWithScopes(self::READ_SCOPES, 'allread');
         $this->SendDebug('GenerateAuthURLAllRead', "URL: $url", 0);
         return $url;
@@ -614,20 +616,20 @@ class Smartcar extends IPSModule
         // --- OAuth Redirect (GET ?code=...) ---
         if ($method === 'GET' && isset($_GET['code'])) {
             $this->RequestAccessToken($_GET['code']);
-            $state = $_GET['state'] ?? '';
-            $next  = $this->ReadAttributeString('NextAction');
+        $state = $_GET['state'] ?? '';
+        $next  = $this->ReadAttributeString('NextAction');
 
-            if (stripos($state, 'probe_') === 0 || $next === 'probe_after_auth') {
-                $this->WriteAttributeString('NextAction', '');
-                $ok = $this->ProbeScopes();
-                echo $ok
-                    ? 'Kompatible Scopes geprüft.'
-                    : 'Autorisiert, aber Prüfung fehlgeschlagen – bitte Debug ansehen.';
-                return;
-            }
-
-            echo 'Fahrzeug erfolgreich verbunden!';
+        if (preg_match('~^(probe|allread)_~i', $state) || $next === 'probe_after_auth') {
+            $this->WriteAttributeString('NextAction', '');
+            $ok = $this->ProbeScopes();
+            echo $ok
+                ? 'Kompatible Scopes geprüft.'
+                : 'Autorisiert, aber Prüfung fehlgeschlagen – bitte Debug ansehen.';
             return;
+        }
+
+        echo 'Fahrzeug erfolgreich verbunden!';
+        return;
         }
 
         // --- Webhook deaktiviert? ---
@@ -882,15 +884,22 @@ class Smartcar extends IPSModule
             $mask = fn($t) => substr($t, 0, 6) . '...' . substr($t, -4);
             $this->SendDebug('RequestAccessToken', '✅ Tokens gespeichert (acc=' . $mask($data['access_token']) . ', ref=' . $mask($data['refresh_token']) . ')', 0);
 
-            // Achtung: VehicleID kann von vorherigem Account stammen → löschen, damit frisch gezogen wird
+            // VehicleID von evtl. vorherigem Account verwerfen
             $this->WriteAttributeString('VehicleID', '');
-            
+
+            // Zustand/Variablen sofort harmonisieren
+            $this->ApplyChanges();
+
+            // Prüfen nur, wenn NICHT gleich nach dem Redirect geplant
             $doImmediateProbe = ($this->ReadAttributeString('NextAction') !== 'probe_after_auth');
             if ($doImmediateProbe) {
+                $this->SendDebug('RequestAccessToken', 'Starte sofortige Scope-Probe (kein pending probe_after_auth).', 0);
                 $this->ProbeScopes();
+                // Nach der Probe können Properties toggeln → nochmal anwenden
                 $this->ApplyChanges();
+            } else {
+                $this->SendDebug('RequestAccessToken', 'Überspringe sofortige Scope-Probe (pending probe_after_auth aktiv).', 0);
             }
-
         } else {
             $this->SendDebug('RequestAccessToken', '❌ Token-Austausch fehlgeschlagen! Antwort: ' . ($response ?: '(leer)'), 0);
             $this->LogMessage('RequestAccessToken - Token-Austausch fehlgeschlagen.', KL_ERROR);
