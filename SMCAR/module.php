@@ -2,6 +2,34 @@
 
 class Smartcar extends IPSModule
 {
+    private const READ_SCOPES = [
+        'read_vehicle_info',
+        'read_vin',
+        'read_location',
+        'read_tires',
+        'read_odometer',
+        'read_battery',
+        'read_fuel',
+        'read_security',
+        'read_charge',
+        'read_engine_oil'
+    ];
+
+    private const READ_PATHS = [
+        '/',                 // read_vehicle_info
+        '/vin',              // read_vin
+        '/location',         // read_location
+        '/tires/pressure',   // read_tires
+        '/odometer',         // read_odometer
+        '/battery',          // read_battery
+        '/battery/nominal_capacity', // read_battery (Capacity)
+        '/fuel',             // read_fuel
+        '/security',         // read_security
+        '/charge/limit',     // read_charge
+        '/charge',           // read_charge
+        '/engine/oil'        // read_engine_oil
+    ];
+
     public function Create()
     {
         parent::Create();
@@ -168,6 +196,43 @@ class Smartcar extends IPSModule
 
         $this->WriteAttributeString('CurrentHook', $desired);
         return $desired;
+    }
+
+    private function BuildConnectURL(string $hookPath): string
+    {
+        // Sicherstellen, dass der Pfad wie /hook/... beginnt
+        if ($hookPath === '' || strpos($hookPath, '/hook/') !== 0) {
+            $hookPath = '/hook/' . ltrim($hookPath, '/');
+        }
+
+        // IP-Symcon Connect-Instanz suchen
+        $connectAddress = '';
+        $ids = @IPS_GetInstanceListByModuleID('{9486D575-BE8C-4ED8-B5B5-20930E26DE6F}');
+        if (!empty($ids)) {
+            // CC_GetUrl/CC_GetURL – je nach Version unterschiedlich geschrieben
+            if (function_exists('CC_GetUrl')) {
+                $connectAddress = @CC_GetUrl($ids[0]);
+            } elseif (function_exists('CC_GetURL')) {
+                $connectAddress = @CC_GetURL($ids[0]);
+            }
+        }
+
+        if (is_string($connectAddress) && $connectAddress !== '') {
+            return rtrim($connectAddress, '/') . $hookPath;
+        }
+        return '';
+    }
+
+    public function MessageSink($TimeStamp, $SenderID, $Message, $Data)
+    {
+        if ($Message === IPS_KERNELMESSAGE) {
+            $runlevel = $Data[0] ?? -1;
+            if ($runlevel === KR_READY) {
+                if ($this->ReadAttributeString('RefreshToken') !== '') {
+                    $this->RefreshAccessToken();
+                }
+            }
+        }
     }
 
     public function GetConfigurationForm()
@@ -751,6 +816,13 @@ class Smartcar extends IPSModule
             http_response_code(200);
             echo 'ok';
             return;
+
+            default:
+            // Unbekannter/anderer Event-Typ → nicht fehlschlagen
+            $this->SendDebug('Webhook', "Unbekannter eventType: $eventType", 0);
+            http_response_code(200);
+            echo 'ok';
+            return;
         }
     }
 
@@ -816,7 +888,6 @@ class Smartcar extends IPSModule
 
             // Direkt Scopes prüfen (füllt CompatScopes)
             $this->ProbeScopes();
-            $this->ApplyChanges();
         } else {
             $this->SendDebug('RequestAccessToken', '❌ Token-Austausch fehlgeschlagen! Antwort: ' . ($response ?: '(leer)'), 0);
             $this->LogMessage('RequestAccessToken - Token-Austausch fehlgeschlagen.', KL_ERROR);
