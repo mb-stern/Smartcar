@@ -54,7 +54,8 @@ class Smartcar extends IPSModule
         $this->RegisterAttributeString('WebhookCallbackURI', '');
         
         //Kompatiple Scopes
-        $this->RegisterAttributeString('CompatScopes', ''); // JSON: {"read_battery":true,...}
+        $this->RegisterAttributeString('CompatScopes', '');
+        $this->RegisterAttributeString('NextAction', '');
 
         // Timer
         $this->RegisterTimer('TokenRefreshTimer', 0, 'SMCAR_RefreshAccessToken(' . $this->InstanceID . ');');
@@ -271,9 +272,9 @@ class Smartcar extends IPSModule
             ],
         ],
         'actions' => [
-            ['type'=>'Button','caption'=>'Auf kompatible Scopes prüfen','onClick'=>'echo SMCAR_ProbeScopes($id);'],
-            ['type'=>'Button','caption'=>'Mit Smartcar verbinden','onClick'=>'echo SMCAR_GenerateAuthURL($id);'],
-            ['type'=>'Button','caption'=>'Fahrzeugdaten abrufen','onClick'=>'SMCAR_FetchVehicleData($id);'],
+            ['type' => 'Button', 'caption' => 'Auf kompatible Scopes prüfen', 'onClick' => 'SMCAR_StartFullReauthAndProbe($id);'],
+            ['type' => 'Button', 'caption' => 'Mit Smartcar verbinden', 'onClick' => 'echo SMCAR_GenerateAuthURL($id);'],
+            ['type' => 'Button', 'caption' => 'Fahrzeugdaten abrufen', 'onClick' => 'SMCAR_FetchVehicleData($id);'],
             ['type' => 'Label',  'caption' => 'Sag danke und unterstütze den Modulentwickler:'],
             [
                 'type'  => 'RowLayout',
@@ -327,6 +328,18 @@ class Smartcar extends IPSModule
             if ($k === 'capacity.nominal' && isset($a['capacity']['nominal']) && is_numeric($a['capacity']['nominal'])) return true;
         }
         return false;
+    }
+
+    public function StartFullReauthAndProbe()
+    {
+        // setze Marker, damit ProcessHookData nach der Auth direkt prüft
+        $this->WriteAttributeString('NextAction', 'probe_after_auth');
+
+        $allReadScopes = $this->AllReadScopesList();
+        $url = $this->BuildAuthURLWithScopes($allReadScopes, 'probe');
+
+        $this->SendDebug('StartFullReauthAndProbe', 'Auth-URL (alle Read-Scopes): ' . $url, 0);
+        echo "Bitte autorisieren (alle Read-Scopes). Danach komme ich automatisch zurück und prüfe die Kompatibilität.\n\n{$url}";
     }
 
     private function AllReadScopeNames(): array {
@@ -426,6 +439,37 @@ class Smartcar extends IPSModule
         $setTrue('ScopeReadOilLife',         'read_engine_oil');
     }
 
+    private function AllReadScopesList(): array {
+    return [
+        'read_vehicle_info','read_vin','read_location','read_tires','read_odometer',
+        'read_battery','read_fuel','read_security','read_charge','read_engine_oil'
+    ];
+    }
+
+    private function BuildAuthURLWithScopes(array $scopes, string $stateTag = ''): string
+    {
+        $clientID     = $this->ReadPropertyString('ClientID');
+        $clientSecret = $this->ReadPropertyString('ClientSecret');
+        $mode         = $this->ReadPropertyString('Mode');
+        $redirectURI  = $this->ReadAttributeString('RedirectURI');
+
+        if ($clientID === '' || $clientSecret === '' || $redirectURI === '') {
+            return 'Fehler: Client ID / Client Secret / Redirect-URI fehlt!';
+        }
+
+        $state = ($stateTag !== '' ? $stateTag . '_' : '') . bin2hex(random_bytes(8));
+        $authURL = "https://connect.smartcar.com/oauth/authorize?" .
+            "response_type=code" .
+            "&client_id=" . urlencode($clientID) .
+            "&redirect_uri=" . urlencode($redirectURI) .
+            "&scope=" . urlencode(implode(' ', array_unique($scopes))) .
+            "&state=" . $state .
+            "&mode=" . urlencode($mode);
+
+        return $authURL;
+    }
+
+
     private function AllReadPermissions(): array {
     return [
         'read_vehicle_info','read_vin','read_location','read_tires','read_odometer',
@@ -474,6 +518,29 @@ class Smartcar extends IPSModule
 
         $this->SendDebug('GenerateAuthURLAllRead', "URL: $authURL", 0);
         return $authURL;
+    }
+
+    public function GenerateAuthURL()
+    {
+        $scopes = [];
+        if ($this->ReadPropertyBoolean('ScopeReadVehicleInfo')) $scopes[] = 'read_vehicle_info';
+        if ($this->ReadPropertyBoolean('ScopeReadLocation'))    $scopes[] = 'read_location';
+        if ($this->ReadPropertyBoolean('ScopeReadOdometer'))    $scopes[] = 'read_odometer';
+        if ($this->ReadPropertyBoolean('ScopeReadTires'))       $scopes[] = 'read_tires';
+        if ($this->ReadPropertyBoolean('ScopeReadBattery') || $this->ReadPropertyBoolean('ScopeReadBatteryCapacity')) $scopes[] = 'read_battery';
+        if ($this->ReadPropertyBoolean('ScopeReadFuel'))        $scopes[] = 'read_fuel';
+        if ($this->ReadPropertyBoolean('ScopeReadSecurity'))    $scopes[] = 'read_security';
+        if ($this->ReadPropertyBoolean('ScopeReadChargeLimit') || $this->ReadPropertyBoolean('ScopeReadChargeStatus')) $scopes[] = 'read_charge';
+        if ($this->ReadPropertyBoolean('ScopeReadVIN'))         $scopes[] = 'read_vin';
+        if ($this->ReadPropertyBoolean('ScopeReadOilLife'))     $scopes[] = 'read_engine_oil';
+        if ($this->ReadPropertyBoolean('SetChargeLimit') || $this->ReadPropertyBoolean('SetChargeStatus')) $scopes[] = 'control_charge';
+        if ($this->ReadPropertyBoolean('SetLockStatus'))        $scopes[] = 'control_security';
+
+        if (empty($scopes)) return 'Fehler: Keine Scopes ausgewählt!';
+
+        $url = $this->BuildAuthURLWithScopes($scopes, 'manual');
+        $this->SendDebug('GenerateAuthURL', 'Auth-URL (ausgewählte Scopes): ' . $url, 0);
+        return $url;
     }
 
     public function FirstRunSetup(): string
@@ -642,7 +709,21 @@ public function ProbeScopes(): bool
             $authCode = $_GET['code'];
             $state    = $_GET['state'] ?? '';
             $this->SendDebug('Webhook', "OAuth Redirect: code=$authCode state=$state", 0);
-            $this->RequestAccessToken($authCode);
+
+            $this->RequestAccessToken($authCode); // speichert Tokens
+            $next = $this->ReadAttributeString('NextAction');
+
+            // Wenn von "Scopes prüfen" initiiert → sofort prüfen
+            if (stripos($state, 'probe_') === 0 || $next === 'probe_after_auth') {
+                $this->WriteAttributeString('NextAction', '');
+                // ProbeScopes speichert CompatScopes und setzt Properties + ApplyChanges
+                $ok = $this->ProbeScopes();
+                echo $ok
+                    ? 'Kompatible Scopes wurden nach der Autorisierung automatisch geprüft. Bitte Formular schliessen & erneut öffnen.'
+                    : 'Autorisiert, aber die Kompatibilitätsprüfung ist fehlgeschlagen. Siehe Debug-Log.';
+                return;
+            }
+
             echo 'Fahrzeug erfolgreich verbunden!';
             return;
         }
