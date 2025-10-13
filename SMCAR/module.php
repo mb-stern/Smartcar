@@ -884,10 +884,13 @@ class Smartcar extends IPSModule
 
             // Achtung: VehicleID kann von vorherigem Account stammen → löschen, damit frisch gezogen wird
             $this->WriteAttributeString('VehicleID', '');
-            $this->ApplyChanges();
+            
+            $doImmediateProbe = ($this->ReadAttributeString('NextAction') !== 'probe_after_auth');
+            if ($doImmediateProbe) {
+                $this->ProbeScopes();
+                $this->ApplyChanges();
+            }
 
-            // Direkt Scopes prüfen (füllt CompatScopes)
-            $this->ProbeScopes();
         } else {
             $this->SendDebug('RequestAccessToken', '❌ Token-Austausch fehlgeschlagen! Antwort: ' . ($response ?: '(leer)'), 0);
             $this->LogMessage('RequestAccessToken - Token-Austausch fehlgeschlagen.', KL_ERROR);
