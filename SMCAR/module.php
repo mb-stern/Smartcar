@@ -428,7 +428,12 @@ class Smartcar extends IPSModule
         }
 
         // 1) ALLE Read-Pfade (hart codiert über Konstante)
-        $paths = self::READ_PATHS;
+        $paths = [
+            '/', '/vin', '/location', '/tires/pressure', '/odometer',
+            '/battery', '/battery/nominal_capacity', '/fuel', '/security',
+            '/charge/limit', '/charge', '/engine/oil'
+        ];
+
         $reqs  = array_map(fn($p) => ['path' => $p], $paths);
 
         $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID/batch";
