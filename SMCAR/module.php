@@ -619,38 +619,27 @@ class Smartcar extends IPSModule
 
         // --- OAuth Redirect (GET ?code=...) ---
         if ($method === 'GET' && isset($_GET['code'])) {
-            // Gegen doppelte Aufrufe absichern (keine extra Properties nötig)
-            $sem = 'SMCAR.Auth_' . $this->InstanceID;
-            if (!IPS_SemaphoreEnter($sem, 5000)) {
-                $this->SendDebug('Webhook', 'Auth-Semaphore belegt → 200/OK (duplicate ignored)', 0);
-                http_response_code(200);
-                echo 'OK';
+            $authCode = $_GET['code'];
+            $state    = $_GET['state'] ?? '';
+            $this->SendDebug('Webhook', "OAuth Redirect: code=<hidden> state=$state", 0);
+
+            $this->RequestAccessToken($authCode);
+            $ok = ($this->ReadAttributeString('AccessToken') !== '' && $this->ReadAttributeString('RefreshToken') !== '');
+
+            if (!$ok) {
+                http_response_code(500);
+                echo 'Token-Austausch fehlgeschlagen – bitte Debug ansehen.';
                 return;
             }
-            try {
-                $authCode = (string)$_GET['code'];
-                $state    = (string)($_GET['state'] ?? '');
-                $this->SendDebug('Webhook', "OAuth Redirect: code=<hidden> state=$state", 0);
 
-                $ok = $this->RequestAccessToken($authCode);
-                if (!$ok) {
-                    http_response_code(500);
-                    echo 'Token-Austausch fehlgeschlagen – bitte Debug ansehen.';
-                    return;
-                }
-
-                // Optional: direkt kompatible Scopes prüfen, wenn im State angefordert
-                if (preg_match('~^(probe|allread)_~i', $state)) {
-                    $probeOK = $this->ProbeScopes();
-                    echo $probeOK ? 'Kompatible Scopes geprüft.' : 'Prüfung fehlgeschlagen – bitte Debug ansehen.';
-                    return;
-                }
-
-                echo 'Fahrzeug erfolgreich verbunden!';
+            if (preg_match('~^(probe|allread)_~i', $state)) {
+                $okProbe = $this->ProbeScopes();
+                echo $okProbe ? 'Kompatible Scopes geprüft.' : 'Prüfung fehlgeschlagen – bitte Debug ansehen.';
                 return;
-            } finally {
-                IPS_SemaphoreLeave($sem);
             }
+
+            echo 'Fahrzeug erfolgreich verbunden!';
+            return;
         }
 
         // --- Webhook deaktiviert? ---
