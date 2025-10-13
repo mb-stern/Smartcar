@@ -151,6 +151,11 @@ class Smartcar extends IPSModule
             default:
                 throw new Exception('Invalid ident');
         }
+
+        if (isset($responseData['access_token'], $responseData['refresh_token'])) {
+
+        $this->ProbeScopes();        // <-- gleich prüfen
+        $this->ApplyChanges();       // Variablen/Profiles ziehen nach
     }
 
     private function RegisterHook()
@@ -274,11 +279,14 @@ public function GetConfigurationForm()
             ],
         ],
         'actions' => [
-            ['type' => 'Button', 'caption' => 'Smartcar verbinden',     'onClick' => 'echo SMCAR_GenerateAuthURL($id);'],
-            
-            ['type' => 'Button', 'caption' => 'Scopes automatisch prüfen', 'onClick' => 'echo SMCAR_ProbeScopes($id) ? "Fertig." : "Fehlgeschlagen.";'],  
- 
-            ['type' => 'Button', 'caption' => 'Fahrzeugdaten abrufen',  'onClick' => 'SMCAR_FetchVehicleData($id);'],
+            ['type'=>'Button','caption'=>'Erst-Setup: Prüfen & verbinden',
+            'onClick'=>'echo SMCAR_FirstRunSetup($id);'],
+
+            ['type'=>'Button','caption'=>'Scopes erneut prüfen',
+            'onClick'=>'echo SMCAR_ProbeScopes($id) ? "Fertig." : "Fehlgeschlagen.";'],
+
+            ['type'=>'Button','caption'=>'Mit Smartcar verbinden (ausgewählte Scopes)',
+            'onClick'=>'echo SMCAR_GenerateAuthURL($id);'],
 
             ['type' => 'Label',  'caption' => 'Sag danke und unterstütze den Modulentwickler:'],
             [
@@ -336,22 +344,82 @@ public function GetConfigurationForm()
     }
 
     private function ApplyCompatToProperties(array $compat): void {
-        $set = function(string $prop, string $perm) use ($compat) {
-            $ok = isset($compat[$perm]) ? (bool)$compat[$perm] : false;
-            IPS_SetProperty($this->InstanceID, $prop, $ok);
+        $setTrue = function(string $prop, string $perm) use ($compat) {
+            if (array_key_exists($perm, $compat) && $compat[$perm] === true) {
+                IPS_SetProperty($this->InstanceID, $prop, true);
+            }
+            // bei false/unknown: nichts ändern → Nutzer kann später manuell aktivieren
         };
-        $set('ScopeReadVehicleInfo',     'read_vehicle_info');
-        $set('ScopeReadVIN',             'read_vin');
-        $set('ScopeReadLocation',        'read_location');
-        $set('ScopeReadTires',           'read_tires');
-        $set('ScopeReadOdometer',        'read_odometer');
-        $set('ScopeReadBattery',         'read_battery');
-        $set('ScopeReadBatteryCapacity', 'read_battery');      // gleicher Scope
-        $set('ScopeReadFuel',            'read_fuel');
-        $set('ScopeReadSecurity',        'read_security');
-        $set('ScopeReadChargeLimit',     'read_charge');
-        $set('ScopeReadChargeStatus',    'read_charge');       // gleicher Scope
-        $set('ScopeReadOilLife',         'read_engine_oil');
+        $setTrue('ScopeReadVehicleInfo',     'read_vehicle_info');
+        $setTrue('ScopeReadVIN',             'read_vin');
+        $setTrue('ScopeReadLocation',        'read_location');
+        $setTrue('ScopeReadTires',           'read_tires');
+        $setTrue('ScopeReadOdometer',        'read_odometer');
+        $setTrue('ScopeReadBattery',         'read_battery');
+        $setTrue('ScopeReadBatteryCapacity', 'read_battery');     // gleicher Scope
+        $setTrue('ScopeReadFuel',            'read_fuel');
+        $setTrue('ScopeReadSecurity',        'read_security');
+        $setTrue('ScopeReadChargeLimit',     'read_charge');
+        $setTrue('ScopeReadChargeStatus',    'read_charge');      // gleicher Scope
+        $setTrue('ScopeReadOilLife',         'read_engine_oil');
+    }
+
+    private function AllReadPermissions(): array {
+    return [
+        'read_vehicle_info','read_vin','read_location','read_tires','read_odometer',
+        'read_battery','read_fuel','read_security','read_charge','read_engine_oil'
+    ];
+    }
+    private function GenerateAuthURLForScopes(array $scopes): string
+    {
+        $clientID     = $this->ReadPropertyString('ClientID');
+        $clientSecret = $this->ReadPropertyString('ClientSecret');
+        $mode         = $this->ReadPropertyString('Mode');
+        $redirectURI  = $this->ReadAttributeString('RedirectURI');
+
+        if ($clientID === '' || $clientSecret === '' || $redirectURI === '') {
+            return 'Fehler: Client ID / Client Secret / Redirect-URI fehlt!';
+        }
+        $authURL = "https://connect.smartcar.com/oauth/authorize?" .
+            "response_type=code" .
+            "&client_id=" . urlencode($clientID) .
+            "&redirect_uri=" . urlencode($redirectURI) .
+            "&scope=" . urlencode(implode(' ', $scopes)) .
+            "&state=" . bin2hex(random_bytes(8)) .
+            "&mode=" . urlencode($mode);
+        return $authURL;
+    }
+    
+    public function GenerateAuthURLAllRead(): string {
+        return $this->GenerateAuthURLForScopes($this->AllReadPermissions());
+    }
+
+    public function FirstRunSetup(): string
+    {
+        // 1) Wenn noch kein Token → gleich All-Read-Scopes-Auth-URL ausgeben
+        if ($this->ReadAttributeString('AccessToken') === '') {
+            return "Bitte zuerst mit allen Read-Scopes verbinden:\n".$this->GenerateAuthURLAllRead();
+        }
+
+        // 2) Token vorhanden → alle Read-Pfad-Endpunkte im Batch prüfen
+        $ok = $this->ProbeScopes(); // nutzt deine strenge Heuristik
+        if (!$ok) {
+            return "Scope-Prüfung fehlgeschlagen. Du kannst eine Neu-Autorisierung mit allen Read-Scopes starten:\n".$this->GenerateAuthURLAllRead();
+        }
+
+        // 3) Nach Probe ggf. fehlende Scopes → Reauth vorschlagen
+        $raw = $this->ReadAttributeString('CompatScopes');
+        $compat = $raw !== '' ? json_decode($raw, true) : [];
+        $needsReauth = false;
+        foreach ($this->AllReadPermissions() as $perm) {
+            if (!array_key_exists($perm, $compat) || $compat[$perm] !== true) {
+                $needsReauth = true; break;
+            }
+        }
+        if ($needsReauth) {
+            return "Einige Read-Scopes fehlen noch. Optional neu verbinden (alle Read-Scopes):\n".$this->GenerateAuthURLAllRead();
+        }
+        return "Fertig. Alle Read-Scopes geprüft und kompatible automatisch aktiviert.";
     }
 
     public function ProbeScopes(): bool
