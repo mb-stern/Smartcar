@@ -272,8 +272,8 @@ class Smartcar extends IPSModule
         ],
         'actions' => [
             ['type'=>'Button','caption'=>'Auf kompatible Scopes prüfen','onClick'=>'echo SMCAR_ProbeScopes($id);'],
-            ['type'=>'Button','caption'=>'Mit Smartcar verbinden','onClick'=>'echo SMCAR_GenerateAuthURLAllRead($id);'],
-            ['type' => 'Button', 'caption' => 'Fahrzeugdaten abrufen', 'onClick' => 'SMCAR_FetchVehicleData($id);'],
+            ['type'=>'Button','caption'=>'Mit Smartcar verbinden','onClick'=>'echo SMCAR_GenerateAuthURL($id);'],
+            ['type'=>'Button','caption'=>'Fahrzeugdaten abrufen','onClick'=>'SMCAR_FetchVehicleData($id);'],
             ['type' => 'Label',  'caption' => 'Sag danke und unterstütze den Modulentwickler:'],
             [
                 'type'  => 'RowLayout',
@@ -612,12 +612,7 @@ class Smartcar extends IPSModule
         if ($this->ReadPropertyBoolean('SetLockStatus')) $scopes[] = 'control_security';
 
         if (empty($scopes)) {
-            $compatRaw = $this->ReadAttributeString('CompatScopes');
-            if ($compatRaw === '') {
-                $scopes = $this->AllReadPermissions(); // Erst-Auth → alle Read-Scopes
-            } else {
-                return 'Fehler: Keine Scopes ausgewählt!';
-            }
+            return 'Fehler: Keine Scopes ausgewählt! Bitte gewünschte Scopes anhaken und erneut verbinden.';
         }
 
         $authURL = "https://connect.smartcar.com/oauth/authorize?" .
