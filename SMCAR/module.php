@@ -198,19 +198,10 @@ class Smartcar extends IPSModule
     public function GetConfigurationForm()
     {
     $effectiveRedirect = $this->ReadAttributeString('RedirectURI');
-
-    // Kompatibilitäts-Cache laden (permission => true/false), null bedeutet: kein Filter aktiv
     $compatRaw = $this->ReadAttributeString('CompatScopes');
     $compat    = $compatRaw !== '' ? json_decode($compatRaw, true) : null;
     $hasCompat = is_array($compat) && !empty($compat);
-
-    // Sichtbarkeitslogik pro Permission
-    $permVisible = function (string $permission) use ($compat): bool {
-        // Kein Cache → alles anzeigen
-        if (!is_array($compat)) return true;
-        // Wenn vorhanden: nur anzeigen, wenn true; unbekannt → anzeigen
-        return !array_key_exists($permission, $compat) || (bool)$compat[$permission] === true;
-    };
+    $permVisible = fn (string $permission): bool => true;
 
     $form = [
         'elements' => [
@@ -280,12 +271,9 @@ class Smartcar extends IPSModule
             ],
         ],
         'actions' => [
-            ['type' => 'Button', 'caption' => 'Auf kompatible Scopes prüfen',
-            'onClick' => 'echo SMCAR_ProbeScopes($id) ? "Fertig." : "Fehlgeschlagen.";'],
-            ['type' => 'Button', 'caption' => 'Mit Smartcar verbinden',
-            'onClick' => 'echo SMCAR_GenerateAuthURL($id);'],
-            ['type' => 'Button', 'caption' => 'Fahrzeugdaten abrufen',
-            'onClick' => 'SMCAR_FetchVehicleData($id);'],
+            ['type' => 'Button', 'caption' => 'Auf kompatible Scopes prüfen', 'onClick' => 'echo SMCAR_ProbeScopes($id) ? "Fertig." : "Fehlgeschlagen.";'],
+            ['type' => 'Button', 'caption' => 'Mit Smartcar verbinden',       'onClick' => 'echo SMCAR_GenerateAuthURL($id);'],
+            ['type' => 'Button', 'caption' => 'Fahrzeugdaten abrufen',        'onClick' => 'SMCAR_FetchVehicleData($id);'],
             ['type' => 'Label',  'caption' => 'Sag danke und unterstütze den Modulentwickler:'],
             [
                 'type'  => 'RowLayout',
@@ -352,7 +340,7 @@ class Smartcar extends IPSModule
             if (isset($compat[$perm]) && $compat[$perm] === true) {
                 IPS_SetProperty($this->InstanceID, $prop, true);
             }
-            // wenn false oder nicht vorhanden → NICHT anfassen
+            // false/unknown: NICHT anfassen
         };
         $setTrue('ScopeReadVehicleInfo',     'read_vehicle_info');
         $setTrue('ScopeReadVIN',             'read_vin');
@@ -428,6 +416,7 @@ class Smartcar extends IPSModule
 
     public function ProbeScopes(): bool
     {
+        $this->WriteAttributeString('CompatScopes', '');
         $accessToken = $this->ReadAttributeString('AccessToken');
         $vehicleID   = $this->GetVehicleID($accessToken);
         if ($accessToken === '' || !$vehicleID) {
