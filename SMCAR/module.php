@@ -618,61 +618,59 @@ class Smartcar extends IPSModule
         $this->SendDebug('Webhook', "Request: method=$method uri=$uri qs=$qs", 0);
 
         // --- OAuth Redirect (GET ?code=...) ---
- if ($method === 'GET' && isset($_GET['code'])) {
-    // Reentrancy-Guard: verhindert Doppelverarbeitung ohne zusätzliche Attribute
-    $sem = 'SMCAR_OAuth_' . $this->InstanceID;
-    if (!IPS_SemaphoreEnter($sem, 5000)) {
-        // Ein zweiter identischer Aufruf "trifft" während der erste noch verarbeitet
-        $this->SendDebug('Webhook', 'Duplicate OAuth redirect ignored (semaphore busy).', 0);
-        http_response_code(200);
-        echo 'OK';
-        return;
-    }
-
-    try {
-        $code  = $_GET['code'];
-        $state = $_GET['state'] ?? '';
-
-        $ok = $this->RequestAccessToken($code);
-
-        // Wenn der Code bereits verbraucht ist (invalid_grant) kommt ok=false zurück.
-        // Falls wir aber inzwischen schon ein AccessToken haben, behandeln wir das
-        // als "schon erfolgreich verarbeitet" und antworten freundlich.
-        if (!$ok && $this->ReadAttributeString('AccessToken') !== '') {
-            $this->SendDebug('Webhook', 'Token-Austausch meldet Fehler, aber AccessToken existiert -> treat as duplicate.', 0);
-            // Optional: gleich Probe anschieben, wenn gewünscht
-            $next  = $this->ReadAttributeString('NextAction');
-            if (preg_match('~^(probe|allread)_~i', $state) || $next === 'probe_after_auth') {
-                $this->WriteAttributeString('NextAction', '');
-                $probeOK = $this->ProbeScopes();
-                echo $probeOK ? 'Kompatible Scopes geprüft.' : 'Autorisiert, aber Prüfung fehlgeschlagen – bitte Debug ansehen.';
+        if ($method === 'GET' && isset($_GET['code'])) {
+            // Reentrancy-Guard: verhindert Doppelverarbeitung ohne zusätzliche Attribute
+            $sem = 'SMCAR_OAuth_' . $this->InstanceID;
+            if (!IPS_SemaphoreEnter($sem, 5000)) {
+                // Ein zweiter identischer Aufruf "trifft" während der erste noch verarbeitet
+                $this->SendDebug('Webhook', 'Duplicate OAuth redirect ignored (semaphore busy).', 0);
+                http_response_code(200);
+                echo 'OK';
                 return;
             }
-            echo 'Fahrzeug erfolgreich verbunden!';
-            return;
-        }
 
-        if (!$ok) {
-            echo 'Autorisiert, aber Token-Austausch fehlgeschlagen – bitte Debug ansehen.';
-            return;
-        }
+            try {
+                $code  = $_GET['code'];
+                $state = $_GET['state'] ?? '';
 
-        // Erfolgreich: je nach NextAction/State direkt probe oder "verbunden" melden
-        $next  = $this->ReadAttributeString('NextAction');
-        if (preg_match('~^(probe|allread)_~i', $state) || $next === 'probe_after_auth') {
-            $this->WriteAttributeString('NextAction', '');
-            $probeOK = $this->ProbeScopes();
-            echo $probeOK ? 'Kompatible Scopes geprüft.' : 'Autorisiert, aber Prüfung fehlgeschlagen – bitte Debug ansehen.';
-            return;
-        }
+                $ok = $this->RequestAccessToken($code);
 
-        echo 'Fahrzeug erfolgreich verbunden!';
-        return;
-    } finally {
-        IPS_SemaphoreLeave($sem);
-    }
-}
+                // Wenn der Code bereits verbraucht ist (invalid_grant) kommt ok=false zurück.
+                // Falls wir aber inzwischen schon ein AccessToken haben, behandeln wir das
+                // als "schon erfolgreich verarbeitet" und antworten freundlich.
+                if (!$ok && $this->ReadAttributeString('AccessToken') !== '') {
+                    $this->SendDebug('Webhook', 'Token-Austausch meldet Fehler, aber AccessToken existiert -> treat as duplicate.', 0);
+                    // Optional: gleich Probe anschieben, wenn gewünscht
+                    $next  = $this->ReadAttributeString('NextAction');
+                    if (preg_match('~^(probe|allread)_~i', $state) || $next === 'probe_after_auth') {
+                        $this->WriteAttributeString('NextAction', '');
+                        $probeOK = $this->ProbeScopes();
+                        echo $probeOK ? 'Kompatible Scopes geprüft.' : 'Autorisiert, aber Prüfung fehlgeschlagen – bitte Debug ansehen.';
+                        return;
+                    }
+                    echo 'Fahrzeug erfolgreich verbunden!';
+                    return;
+                }
 
+                if (!$ok) {
+                    echo 'Autorisiert, aber Token-Austausch fehlgeschlagen – bitte Debug ansehen.';
+                    return;
+                }
+
+                // Erfolgreich: je nach NextAction/State direkt probe oder "verbunden" melden
+                $next  = $this->ReadAttributeString('NextAction');
+                if (preg_match('~^(probe|allread)_~i', $state) || $next === 'probe_after_auth') {
+                    $this->WriteAttributeString('NextAction', '');
+                    $probeOK = $this->ProbeScopes();
+                    echo $probeOK ? 'Kompatible Scopes geprüft.' : 'Autorisiert, aber Prüfung fehlgeschlagen – bitte Debug ansehen.';
+                    return;
+                }
+
+                echo 'Fahrzeug erfolgreich verbunden!';
+                return;
+            } finally {
+                IPS_SemaphoreLeave($sem);
+            }
         }
 
         // --- Webhook deaktiviert? ---
