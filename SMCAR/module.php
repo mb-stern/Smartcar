@@ -76,10 +76,6 @@ class Smartcar extends IPSModule
         $this->SetTimerInterval('TokenRefreshTimer', 90 * 60 * 1000);
         $this->SendDebug('ApplyChanges', 'Token-Erneuerungs-Timer auf 90 min gestellt.', 0);
 
-        if (IPS_GetKernelRunlevel() === KR_READY && $this->ReadAttributeString('RefreshToken') !== '') {
-            $this->RefreshAccessToken();
-        }
-
         // Effektive Redirect-URI festlegen (manuell oder ipmagic-Connect + Hook)
         $manual = trim($this->ReadPropertyString('ManualRedirectURI'));
         if ($manual !== '') {
@@ -99,6 +95,7 @@ class Smartcar extends IPSModule
         }
 
         $this->WriteAttributeString('RedirectURI', $effectiveRedirect);
+        // Optional rausnehmen, falls nicht gebraucht:
         $this->WriteAttributeString('WebhookCallbackURI', $effectiveRedirect);
 
         $this->CreateProfile();
@@ -112,23 +109,6 @@ class Smartcar extends IPSModule
         }
 
         $this->UpdateVariablesBasedOnScopes();
-    }
-
-    private function BuildConnectURL(string $hookPath): string
-    {
-        if ($hookPath === '' || strpos($hookPath, '/hook/') !== 0) {
-            $hookPath = '/hook/' . ltrim($hookPath, '/');
-        }
-
-        $connectAddress = '';
-        $ids = @IPS_GetInstanceListByModuleID('{9486D575-BE8C-4ED8-B5B5-20930E26DE6F}');
-        if (!empty($ids)) {
-            $connectAddress = @CC_GetUrl($ids[0]);
-        }
-        if (is_string($connectAddress) && $connectAddress !== '') {
-            return rtrim($connectAddress, '/') . $hookPath;
-        }
-        return '';
     }
 
     public function RequestAction($ident, $value)
@@ -151,12 +131,6 @@ class Smartcar extends IPSModule
 
             default:
                 throw new Exception('Invalid ident');
-        }
-
-        if (isset($responseData['access_token'], $responseData['refresh_token'])) {
-
-        $this->ProbeScopes();   
-        $this->ApplyChanges();   
         }
     }
 
@@ -198,91 +172,92 @@ class Smartcar extends IPSModule
 
     public function GetConfigurationForm()
     {
-    $effectiveRedirect = $this->ReadAttributeString('RedirectURI');
-    $compatRaw = $this->ReadAttributeString('CompatScopes');
-    $compat    = $compatRaw !== '' ? json_decode($compatRaw, true) : null;
-    $hasCompat = is_array($compat) && !empty($compat);
-    $permVisible = fn (string $permission): bool => true;
+        $effectiveRedirect = $this->ReadAttributeString('RedirectURI');
+        $compatRaw = $this->ReadAttributeString('CompatScopes');
+        $compat    = $compatRaw !== '' ? json_decode($compatRaw, true) : null;
+        $hasCompat = is_array($compat) && !empty($compat);
 
-    $form = [
-        'elements' => [
-            // Redirect/Webhook Info + Einstellungen
-            ['type' => 'Label', 'caption' => 'Redirect- & Webhook-URI: ' . $effectiveRedirect],
-            [
-                'type'    => 'ValidationTextBox',
-                'name'    => 'ManualRedirectURI',
-                'caption' => 'Manuelle Redirect-URI überschreibt Connect-URL'
+        $permVisible = function (string $permission) use ($compat, $hasCompat): bool {
+            if (!$hasCompat) return true; // vor erster Probe alles zeigen
+            return ($compat[$permission] ?? false) === true;
+        };
+
+        $form = [
+            'elements' => [
+                ['type' => 'Label', 'caption' => 'Redirect- & Webhook-URI: ' . $effectiveRedirect],
+                [
+                    'type' => 'ValidationTextBox',
+                    'name' => 'ManualRedirectURI',
+                    'caption' => 'Manuelle Redirect-URI überschreibt Connect-URL'
+                ],
+                ['type' => 'Label', 'caption' => '────────────────────────────────────────'],
+                ['type' => 'CheckBox', 'name' => 'EnableWebhook', 'caption' => 'Webhook-Empfang für Signale aktivieren'],
+                ['type' => 'CheckBox', 'name' => 'VerifyWebhookSignature', 'caption' => 'Fahrzeug verifizieren (Fahrzeugfilter!)'],
+                ['type' => 'CheckBox', 'name' => 'TrackLastSignals', 'caption' => 'Letze Aktualisierung der Signale anzeigen'],
+
+                [
+                    'type'    => 'ValidationTextBox',
+                    'name'    => 'ManagementToken',
+                    'caption' => 'Application Management Token (HMAC & VERIFY)'
+                ],
+                ['type' => 'Label', 'caption' => '────────────────────────────────────────'],
+
+                ['type' => 'ValidationTextBox', 'name' => 'ClientID',     'caption' => 'Client ID'],
+                ['type' => 'ValidationTextBox', 'name' => 'ClientSecret', 'caption' => 'Client Secret'],
+                [
+                    'type'    => 'Select',
+                    'name'    => 'Mode',
+                    'caption' => 'Verbindungsmodus',
+                    'options' => [
+                        ['caption' => 'Simuliert', 'value' => 'simulated'],
+                        ['caption' => 'Live',      'value' => 'live']
+                    ]
+                ],
+
+                ['type' => 'Label', 'caption' => $hasCompat
+                    ? 'Scope-Filter aktiv (Ergebnis der automatischen Prüfung wird angewendet).'
+                    : 'Noch keine automatische Prüfung – alle Scopes werden gelistet. Kompatible Scopes mit Button prüfen und auf OK warten. Danach Formular schliessen und wieder öffnen.'],
+                ['type' => 'Label',  'caption' => $hasCompat ? ('Gefundene kompatible Scopes: ' . implode(', ', array_keys(array_filter($compat ?? [])))) : ''],
+
+                [
+                    'type'    => 'ExpansionPanel',
+                    'caption' => 'Berechtigungen (Scopes)',
+                    'items'   => [
+                        ['type' => 'Label', 'caption' => 'Zugehörige Variablen werden automatisch erstellt bzw. gelöscht.'],
+
+                        // READ (sichtbar je Kompatibilität)
+                        ['type'=>'CheckBox','name'=>'ScopeReadVehicleInfo',     'caption'=>'Fahrzeuginformationen lesen (/)','visible'=>$permVisible('read_vehicle_info')],
+                        ['type'=>'CheckBox','name'=>'ScopeReadVIN',             'caption'=>'VIN lesen (/vin)','visible'=>$permVisible('read_vin')],
+                        ['type'=>'CheckBox','name'=>'ScopeReadLocation',        'caption'=>'Standort lesen (/location)','visible'=>$permVisible('read_location')],
+                        ['type'=>'CheckBox','name'=>'ScopeReadTires',           'caption'=>'Reifendruck lesen (/tires/pressure)','visible'=>$permVisible('read_tires')],
+                        ['type'=>'CheckBox','name'=>'ScopeReadOdometer',        'caption'=>'Kilometerstand lesen (/odometer)','visible'=>$permVisible('read_odometer')],
+                        ['type'=>'CheckBox','name'=>'ScopeReadBattery',         'caption'=>'Batterielevel lesen (/battery)','visible'=>$permVisible('read_battery')],
+                        ['type'=>'CheckBox','name'=>'ScopeReadBatteryCapacity', 'caption'=>'Batteriekapazität lesen (/battery/nominal_capacity)','visible'=>$permVisible('read_battery')],
+                        ['type'=>'CheckBox','name'=>'ScopeReadFuel',            'caption'=>'Kraftstoffstand lesen (/fuel)','visible'=>$permVisible('read_fuel')],
+                        ['type'=>'CheckBox','name'=>'ScopeReadSecurity',        'caption'=>'Verriegelungsstatus lesen (/security)','visible'=>$permVisible('read_security')],
+                        ['type'=>'CheckBox','name'=>'ScopeReadChargeLimit',     'caption'=>'Ladelimit lesen (/charge/limit)','visible'=>$permVisible('read_charge')],
+                        ['type'=>'CheckBox','name'=>'ScopeReadChargeStatus',    'caption'=>'Ladestatus lesen (/charge)','visible'=>$permVisible('read_charge')],
+                        ['type'=>'CheckBox','name'=>'ScopeReadOilLife',         'caption'=>'Motoröl lesen (/engine/oil)','visible'=>$permVisible('read_engine_oil')],
+
+                        // Commands
+                        ['type'=>'CheckBox','name'=>'SetChargeLimit',  'caption'=>'Ladelimit setzen (/charge/limit) – (Kompatibilität kann nicht geprüft werden)'],
+                        ['type'=>'CheckBox','name'=>'SetChargeStatus', 'caption'=>'Ladestatus setzen (/charge) – (Kompatibilität kann nicht geprüft werden)'],
+                        ['type'=>'CheckBox','name'=>'SetLockStatus',   'caption'=>'Zentralverriegelung setzen (/security) – (Kompatibilität kann nicht geprüft werden)']
+                    ]
+                ],
             ],
-            ['type' => 'Label', 'caption' => '────────────────────────────────────────'],
-            ['type' => 'CheckBox', 'name' => 'EnableWebhook', 'caption' => 'Webhook-Empfang für Signale aktivieren'],
-            ['type' => 'CheckBox', 'name' => 'VerifyWebhookSignature', 'caption' => 'Fahrzeug verifizieren (Fahrzeugfilter!)'],
-            ['type' => 'CheckBox', 'name' => 'TrackLastSignals', 'caption' => 'Letze Aktualisierung der Signale anzeigen'],
-
-            [
-                'type'    => 'ValidationTextBox',
-                'name'    => 'ManagementToken',
-                'caption' => 'Application Management Token (HMAC & VERIFY)'
-            ],
-            ['type' => 'Label', 'caption' => '────────────────────────────────────────'],
-
-            // Verbindungsdaten
-            ['type' => 'ValidationTextBox', 'name' => 'ClientID',     'caption' => 'Client ID'],
-            ['type' => 'ValidationTextBox', 'name' => 'ClientSecret', 'caption' => 'Client Secret'],
-            [
-                'type'    => 'Select',
-                'name'    => 'Mode',
-                'caption' => 'Verbindungsmodus',
-                'options' => [
-                    ['caption' => 'Simuliert', 'value' => 'simulated'],
-                    ['caption' => 'Live',      'value' => 'live']
-                ]
-            ],
-
-            // Hinweis zur Scope-Filterung
-            ['type' => 'Label', 'caption' => $hasCompat
-                ? 'Scope-Filter aktiv (Ergebnis der automatischen Prüfung wird angewendet).'
-                : 'Noch keine automatische Prüfung – alle Scopes werden gelistet. Kompatible Scopes mit Button prüfen und auf OK warten. Danach Formular schliessen und wieder öffnen.'],
-            ['type' => 'Label',  'caption' => $hasCompat ? ('Gefundene kompatible Scopes: ' . implode(', ', array_keys(array_filter($compat ?? [])))) : ''],
-            
-            // Scopes (sichtbar je nach Kompatibilität)
-            [
-                'type'    => 'ExpansionPanel',
-                'caption' => 'Berechtigungen (Scopes)',
-                'items'   => [
-                    ['type' => 'Label', 'caption' => 'Zugehörige Variablen werden automatisch erstellt bzw. gelöscht.'],
-                    // READ
-                    ['type'=>'CheckBox','name'=>'ScopeReadVehicleInfo',     'caption'=>'Fahrzeuginformationen lesen (/)','visible'=>$permVisible('read_vehicle_info')],
-                    ['type'=>'CheckBox','name'=>'ScopeReadVIN',             'caption'=>'VIN lesen (/vin)','visible'=>$permVisible('read_vin')],
-                    ['type'=>'CheckBox','name'=>'ScopeReadLocation',        'caption'=>'Standort lesen (/location)','visible'=>$permVisible('read_location')],
-                    ['type'=>'CheckBox','name'=>'ScopeReadTires',           'caption'=>'Reifendruck lesen (/tires/pressure)','visible'=>$permVisible('read_tires')],
-                    ['type'=>'CheckBox','name'=>'ScopeReadOdometer',        'caption'=>'Kilometerstand lesen (/odometer)','visible'=>$permVisible('read_odometer')],
-                    ['type'=>'CheckBox','name'=>'ScopeReadBattery',         'caption'=>'Batterielevel lesen (/battery)','visible'=>$permVisible('read_battery')],
-                    ['type'=>'CheckBox','name'=>'ScopeReadBatteryCapacity', 'caption'=>'Batteriekapazität lesen (/battery/nominal_capacity)','visible'=>$permVisible('read_battery')],
-                    ['type'=>'CheckBox','name'=>'ScopeReadFuel',            'caption'=>'Kraftstoffstand lesen (/fuel)','visible'=>$permVisible('read_fuel')],
-                    ['type'=>'CheckBox','name'=>'ScopeReadSecurity',        'caption'=>'Verriegelungsstatus lesen (/security)','visible'=>$permVisible('read_security')],
-                    ['type'=>'CheckBox','name'=>'ScopeReadChargeLimit',     'caption'=>'Ladelimit lesen (/charge/limit)','visible'=>$permVisible('read_charge')],
-                    ['type'=>'CheckBox','name'=>'ScopeReadChargeStatus',    'caption'=>'Ladestatus lesen (/charge)','visible'=>$permVisible('read_charge')],
-                    ['type'=>'CheckBox','name'=>'ScopeReadOilLife',         'caption'=>'Motoröl lesen (/engine/oil)','visible'=>$permVisible('read_engine_oil')],
-
-                    // Commands (nicht aktiv probiert; optional sichtbar lassen)
-                    ['type'=>'CheckBox','name'=>'SetChargeLimit',  'caption'=>'Ladelimit setzen (/charge/limit) – (Kompatibilität kann nicht geprüft werden)'],
-                    ['type'=>'CheckBox','name'=>'SetChargeStatus', 'caption'=>'Ladestatus setzen (/charge) – (Kompatibilität kann nicht geprüft werden)'],
-                    ['type'=>'CheckBox','name'=>'SetLockStatus',   'caption'=>'Zentralverriegelung setzen (/security) – (Kompatibilität kann nicht geprüft werden)']
-                ]
-            ],
-        ],
-        'actions' => [
-            ['type' => 'Button', 'caption' => 'Auf kompatible Scopes prüfen', 'onClick' => 'echo SMCAR_StartFullReauthAndProbe($id);'],
-            ['type' => 'Button', 'caption' => 'Mit Smartcar verbinden', 'onClick' => 'echo SMCAR_GenerateAuthURL($id);'],
-            ['type' => 'Button', 'caption' => 'Fahrzeugdaten abrufen', 'onClick' => 'SMCAR_FetchVehicleData($id);'],
-            ['type' => 'Label',  'caption' => 'Sag danke und unterstütze den Modulentwickler:'],
-            [
-                'type'  => 'RowLayout',
-                'items' => [
+            'actions' => [
+                ['type' => 'Button', 'caption' => 'Auf kompatible Scopes prüfen', 'onClick' => 'echo SMCAR_StartFullReauthAndProbe($id);'],
+                ['type' => 'Button', 'caption' => 'Mit Smartcar verbinden', 'onClick' => 'echo SMCAR_GenerateAuthURL($id);'],
+                ['type' => 'Button', 'caption' => 'Fahrzeugdaten abrufen', 'onClick' => 'SMCAR_FetchVehicleData($id);'],
+                ['type' => 'Label',  'caption' => 'Sag danke und unterstütze den Modulentwickler:'],
+                [
+                    'type'  => 'RowLayout',
+                    'items' => [
                         [
                             'type'   => 'Image',
                             'onClick'=> "echo 'https://paypal.me/mbstern';",
-                            "image"=> "data:image/jpeg;base64,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"
+                            "image"=> "data:image/jpeg;base64,/9j/4QAYRXhpZgAASUkqAAgAAAAAAAAAAAAAAP/sABFEdWNreQABAAQAAAA8AAD/7gAOQWRvYmUAZMAAAAAB/9sAhAAGBAQEBQQGBQUGCQYFBgkLCAYGCAsMCgoLCgoMEAwMDAwMDBAMDg8QDw4MExMUFBMTHBsbGxwfHx8fHx8fHx8fHx8fAQcHBw0MDRgQEBgaFREVGh8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx//wAARCABLAGQDAREAAhEBAxEB/..."
                         ],
                         ['type' => 'Label', 'caption' => '']
                     ]
@@ -312,15 +287,6 @@ class Smartcar extends IPSModule
         };
     }
 
-    private function AllReadPaths(): array
-    {
-        return [
-            '/', '/vin', '/location', '/tires/pressure', '/odometer',
-            '/battery', '/battery/nominal_capacity', '/fuel', '/security',
-            '/charge/limit', '/charge', '/engine/oil'
-        ];
-    }
-
     private function bodyHasNumeric($a, array $keys): bool {
         foreach ($keys as $k) {
             if (isset($a[$k]) && is_numeric($a[$k])) return true;
@@ -346,83 +312,6 @@ class Smartcar extends IPSModule
         echo $url; 
     }
 
-
-    private function AllReadScopeNames(): array {
-    return [
-        'read_vehicle_info','read_vin','read_location','read_tires',
-        'read_odometer','read_battery','read_fuel',
-        'read_security','read_charge','read_engine_oil'
-    ];
-    }
-
-    private function BuildAllReadAuthURL(): string {
-        $clientID     = $this->ReadPropertyString('ClientID');
-        $clientSecret = $this->ReadPropertyString('ClientSecret');
-        $redirectURI  = $this->ReadAttributeString('RedirectURI');
-        $mode         = $this->ReadPropertyString('Mode');
-
-        if ($clientID === '' || $clientSecret === '' || $redirectURI === '') {
-            return 'Fehler: ClientID/ClientSecret/Redirect-URI fehlt!';
-        }
-        $scopes = $this->AllReadScopeNames();
-        return "https://connect.smartcar.com/oauth/authorize?"
-            . "response_type=code"
-            . "&client_id=" . urlencode($clientID)
-            . "&redirect_uri=" . urlencode($redirectURI)
-            . "&scope=" . urlencode(implode(' ', $scopes))
-            . "&state=" . bin2hex(random_bytes(8))
-            . "&mode=" . urlencode($mode);
-    }
-
-    private function allReadScopes(): array
-    {
-    return [
-        'read_vehicle_info','read_vin','read_location','read_tires','read_odometer',
-        'read_battery','read_fuel','read_security','read_charge','read_engine_oil'
-    ];
-    }
-
-    public function ConnectAllRead(): string
-    {
-        return $this->GenerateAuthURLForScopes($this->AllReadPermissions());
-    }
-
-    private function GenerateAuthURLForAllReadScopes(): string
-    {
-        $clientID     = $this->ReadPropertyString('ClientID');
-        $clientSecret = $this->ReadPropertyString('ClientSecret');
-        $redirectURI  = $this->ReadAttributeString('RedirectURI');
-        $mode         = $this->ReadPropertyString('Mode');
-
-        if ($clientID === '' || $clientSecret === '' || $redirectURI === '') {
-            return 'Fehler: Client ID / Client Secret / Redirect-URI fehlt!';
-        }
-
-        // Alle READ-Scopes explizit:
-        $scopes = [
-            'read_vehicle_info',
-            'read_vin',
-            'read_location',
-            'read_tires',
-            'read_odometer',
-            'read_battery',
-            'read_fuel',
-            'read_security',
-            'read_charge',
-            'read_engine_oil'
-        ];
-
-        $authURL = "https://connect.smartcar.com/oauth/authorize?" .
-            "response_type=code" .
-            "&client_id=" . urlencode($clientID) .
-            "&redirect_uri=" . urlencode($redirectURI) .
-            "&scope=" . urlencode(implode(' ', $scopes)) .
-            "&state=" . bin2hex(random_bytes(8)) .
-            "&mode=" . urlencode($mode);
-
-        return $authURL;
-    }
-
     private function ApplyCompatToProperties(array $compat): void {
         $setTrue = function(string $prop, string $perm) use ($compat) {
             if (isset($compat[$perm]) && $compat[$perm] === true) {
@@ -444,13 +333,6 @@ class Smartcar extends IPSModule
         $setTrue('ScopeReadOilLife',         'read_engine_oil');
     }
 
-    private function AllReadScopesList(): array {
-    return [
-        'read_vehicle_info','read_vin','read_location','read_tires','read_odometer',
-        'read_battery','read_fuel','read_security','read_charge','read_engine_oil'
-    ];
-    }
-
     private function BuildAuthURLWithScopes(array $scopes, string $stateTag = ''): string
     {
         $clientID     = $this->ReadPropertyString('ClientID');
@@ -463,66 +345,23 @@ class Smartcar extends IPSModule
         }
 
         $state = ($stateTag !== '' ? $stateTag . '_' : '') . bin2hex(random_bytes(8));
-        $authURL = "https://connect.smartcar.com/oauth/authorize?" .
-            "response_type=code" .
-            "&client_id=" . urlencode($clientID) .
-            "&redirect_uri=" . urlencode($redirectURI) .
-            "&scope=" . urlencode(implode(' ', array_unique($scopes))) .
-            "&state=" . $state .
-            "&mode=" . urlencode($mode);
-
-        return $authURL;
-    }
-
-
-    private function AllReadPermissions(): array {
-    return [
-        'read_vehicle_info','read_vin','read_location','read_tires','read_odometer',
-        'read_battery','read_fuel','read_security','read_charge','read_engine_oil'
-    ];
-    }
-    private function GenerateAuthURLForScopes(array $scopes): string
-    {
-        $clientID     = $this->ReadPropertyString('ClientID');
-        $clientSecret = $this->ReadPropertyString('ClientSecret');
-        $mode         = $this->ReadPropertyString('Mode');
-        $redirectURI  = $this->ReadAttributeString('RedirectURI');
-
-        if ($clientID === '' || $clientSecret === '' || $redirectURI === '') {
-            return 'Fehler: Client ID / Client Secret / Redirect-URI fehlt!';
-        }
-        $authURL = "https://connect.smartcar.com/oauth/authorize?" .
-            "response_type=code" .
-            "&client_id=" . urlencode($clientID) .
-            "&redirect_uri=" . urlencode($redirectURI) .
-            "&scope=" . urlencode(implode(' ', $scopes)) .
-            "&state=" . bin2hex(random_bytes(8)) .
-            "&mode=" . urlencode($mode);
-        return $authURL;
-    }
-    
-    public function GenerateAuthURLAllRead(): string {
-        $clientID     = $this->ReadPropertyString('ClientID');
-        $clientSecret = $this->ReadPropertyString('ClientSecret');
-        $redirectURI  = $this->ReadAttributeString('RedirectURI');
-        $mode         = $this->ReadPropertyString('Mode');
-
-        if ($clientID==='' || $clientSecret==='' || $redirectURI==='') {
-            return 'Fehler: Client ID / Client Secret / Redirect-URI fehlt!';
-        }
-
-        $scopes = $this->allReadScopes(); // <-- immer alle Read-Scopes
-
         $authURL = "https://connect.smartcar.com/oauth/authorize?"
             . "response_type=code"
-            . "&client_id="   . urlencode($clientID)
-            . "&redirect_uri=". urlencode($redirectURI)
-            . "&scope="       . urlencode(implode(' ', $scopes))
-            . "&state="       . bin2hex(random_bytes(8))
-            . "&mode="        . urlencode($mode);
+            . "&client_id=" . urlencode($clientID)
+            . "&redirect_uri=" . urlencode($redirectURI)
+            . "&scope=" . urlencode(implode(' ', array_unique($scopes)))
+            . "&state=" . $state
+            . "&mode=" . urlencode($mode);
 
-        $this->SendDebug('GenerateAuthURLAllRead', "URL: $authURL", 0);
         return $authURL;
+    }
+
+
+    public function GenerateAuthURLAllRead(): string
+    {
+        $url = $this->BuildAuthURLWithScopes(self::READ_SCOPES, 'allread');
+        $this->SendDebug('GenerateAuthURLAllRead', "URL: $url", 0);
+        return $url;
     }
 
     public function GenerateAuthURL()
@@ -552,154 +391,139 @@ class Smartcar extends IPSModule
     {
         // 1) Wenn noch kein Token → gleich All-Read-Scopes-Auth-URL ausgeben
         if ($this->ReadAttributeString('AccessToken') === '') {
-            return "Bitte zuerst mit allen Read-Scopes verbinden:\n".$this->GenerateAuthURLAllRead();
+            return "Bitte zuerst mit allen Read-Scopes verbinden:\n" . $this->GenerateAuthURLAllRead();
         }
 
         // 2) Token vorhanden → alle Read-Pfad-Endpunkte im Batch prüfen
-        $ok = $this->ProbeScopes(); // nutzt deine strenge Heuristik
+        $ok = $this->ProbeScopes(); // nutzt Heuristik
         if (!$ok) {
-            return "Scope-Prüfung fehlgeschlagen. Du kannst eine Neu-Autorisierung mit allen Read-Scopes starten:\n".$this->GenerateAuthURLAllRead();
+            return "Scope-Prüfung fehlgeschlagen. Du kannst eine Neu-Autorisierung mit allen Read-Scopes starten:\n" . $this->GenerateAuthURLAllRead();
         }
 
         // 3) Nach Probe ggf. fehlende Scopes → Reauth vorschlagen
         $raw = $this->ReadAttributeString('CompatScopes');
         $compat = $raw !== '' ? json_decode($raw, true) : [];
         $needsReauth = false;
-        foreach ($this->AllReadPermissions() as $perm) {
+        foreach (self::READ_SCOPES as $perm) {
             if (!array_key_exists($perm, $compat) || $compat[$perm] !== true) {
                 $needsReauth = true; break;
             }
         }
         if ($needsReauth) {
-            return "Einige Read-Scopes fehlen noch. Optional neu verbinden (alle Read-Scopes):\n".$this->GenerateAuthURLAllRead();
+            return "Einige Read-Scopes fehlen noch. Optional neu verbinden (alle Read-Scopes):\n" . $this->GenerateAuthURLAllRead();
         }
         return "Fertig. Alle Read-Scopes geprüft und kompatible automatisch aktiviert.";
     }
 
-public function ProbeScopes(): bool
-{
-    $accessToken = $this->ReadAttributeString('AccessToken');
-    $vehicleID   = $this->GetVehicleID($accessToken);
+    public function ProbeScopes(): bool
+    {
+        $accessToken = $this->ReadAttributeString('AccessToken');
+        $vehicleID   = $this->GetVehicleID($accessToken);
 
-    if ($accessToken === '' || !$vehicleID) {
-        $url = $this->BuildAllReadAuthURL();
-        $this->SendDebug('ProbeScopes', 'Nicht verbunden → volle Autorisierung nötig: ' . $url, 0);
-        echo "Nicht verbunden. Bitte einmal verbinden, um die Kompatibilität zu prüfen:\n" . $url;
-        return false;
-    }
-
-    // 1) ALLE Read-Pfade (hart codiert), unabhängig von Häkchen/Cache
-    $paths = $this->AllReadPaths();
-    $reqs  = array_map(fn($p) => ['path' => $p], $paths);
-
-    $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID/batch";
-    $postData = json_encode(['requests' => $reqs]);
-    $ctx = stream_context_create([
-        'http' => [
-            'header'        => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
-            'method'        => 'POST',
-            'content'       => $postData,
-            'ignore_errors' => true
-        ]
-    ]);
-
-    $raw = @file_get_contents($url, false, $ctx);
-    if ($raw === false) {
-        $this->SendDebug('ProbeScopes', '❌ Keine Antwort.', 0);
-        echo "Fehlgeschlagen: Keine Antwort der Smartcar API.";
-        return false;
-    }
-    $data = json_decode($raw, true);
-    $this->SendDebug('ProbeScopes/raw', $raw, 0);
-
-    if (!isset($data['responses']) || !is_array($data['responses'])) {
-        $this->SendDebug('ProbeScopes', '❌ Unerwartete Struktur.', 0);
-        echo "Fehlgeschlagen: Unerwartete Antwortstruktur.";
-        return false;
-    }
-
-    // 2) Auswertung
-    $map = [];
-    $missingScopes = false; // wenn irgendein Pfad 403 „insufficient_permissions“ hat
-    $perPathLog = [];
-
-    $fuelOK = false;
-    $batteryOK = false;
-    $oilOK = false;
-
-    foreach ($data['responses'] as $r) {
-        $path = $r['path'] ?? '';
-        $code = intval($r['code'] ?? 0);
-        $perm = $this->PathToPermission($path) ?? 'unknown';
-        $body = is_array($r['body'] ?? null) ? $r['body'] : [];
-        $perPathLog[] = ['path'=>$path,'perm'=>$perm,'code'=>$code,'body_keys'=>implode(',', array_keys($body))];
-
-        // fehlende Berechtigungen detektieren
-        if ($code === 403) {
-            $missingScopes = true;
+        if ($accessToken === '' || !$vehicleID) {
+            $url = $this->GenerateAuthURLAllRead();
+            $this->SendDebug('ProbeScopes', 'Nicht verbunden → volle Autorisierung nötig: ' . $url, 0);
+            echo "Nicht verbunden. Bitte einmal verbinden, um die Kompatibilität zu prüfen:\n" . $url;
+            return false;
         }
 
-        // Standardfall: 200 bedeutet grundsätzlich kompatibel
-        if (!isset($map[$perm])) $map[$perm] = false;
-        if ($code === 200 && $perm !== 'read_battery' && $perm !== 'read_engine_oil') {
-            $map[$perm] = true;
+        // 1) ALLE Read-Pfade (hart codiert über Konstante)
+        $paths = self::READ_PATHS;
+        $reqs  = array_map(fn($p) => ['path' => $p], $paths);
+
+        $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID/batch";
+        $postData = json_encode(['requests' => $reqs]);
+        $ctx = stream_context_create([
+            'http' => [
+                'header'        => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
+                'method'        => 'POST',
+                'content'       => $postData,
+                'ignore_errors' => true
+            ]
+        ]);
+
+        $raw = @file_get_contents($url, false, $ctx);
+        if ($raw === false) {
+            $this->SendDebug('ProbeScopes', '❌ Keine Antwort.', 0);
+            echo "Fehlgeschlagen: Keine Antwort der Smartcar API.";
+            return false;
+        }
+        $data = json_decode($raw, true);
+        $this->SendDebug('ProbeScopes/raw', $raw, 0);
+
+        if (!isset($data['responses']) || !is_array($data['responses'])) {
+            $this->SendDebug('ProbeScopes', '❌ Unerwartete Struktur.', 0);
+            echo "Fehlgeschlagen: Unerwartete Antwortstruktur.";
+            return false;
         }
 
-        // Details
-        if ($perm === 'read_fuel' && $code === 200) {
-            $fuelOK = true;
-            $map['read_fuel'] = true; // <<< WICHTIG
-        }
+        $map = [];
+        $missingScopes = false;
+        $perPathLog = [];
 
-        if ($perm === 'read_battery' && $code === 200) {
-            // echte Nutzdaten?
-            if ($path === '/battery') {
-                if ($this->bodyHasNumeric($body, ['percentRemaining','range'])) {
-                    $batteryOK = true;
+        $fuelOK = false;
+        $batteryOK = false;
+        $oilOK = false;
+
+        foreach ($data['responses'] as $r) {
+            $path = $r['path'] ?? '';
+            $code = intval($r['code'] ?? 0);
+            $perm = $this->PathToPermission($path) ?? 'unknown';
+            $body = is_array($r['body'] ?? null) ? $r['body'] : [];
+            $perPathLog[] = ['path'=>$path,'perm'=>$perm,'code'=>$code,'body_keys'=>implode(',', array_keys($body))];
+
+            if ($code === 403) {
+                $missingScopes = true;
+            }
+
+            if (!isset($map[$perm])) $map[$perm] = false;
+            if ($code === 200 && $perm !== 'read_battery' && $perm !== 'read_engine_oil') {
+                $map[$perm] = true;
+            }
+
+            if ($perm === 'read_fuel' && $code === 200) {
+                $fuelOK = true;
+                $map['read_fuel'] = true;
+            }
+
+            if ($perm === 'read_battery' && $code === 200) {
+                if ($path === '/battery') {
+                    if ($this->bodyHasNumeric($body, ['percentRemaining','range'])) $batteryOK = true;
+                } elseif ($path === '/battery/nominal_capacity') {
+                    if ($this->bodyHasNumeric($body, ['capacity','capacity.nominal','nominal_capacity'])) $batteryOK = true;
                 }
-            } elseif ($path === '/battery/nominal_capacity') {
-                if ($this->bodyHasNumeric($body, ['capacity','capacity.nominal','nominal_capacity'])) {
-                    $batteryOK = true;
+            }
+
+            if ($perm === 'read_engine_oil' && $code === 200) {
+                if ($this->bodyHasNumeric($body, ['lifeRemaining','remainingLifePercent','percentRemaining','value'])) {
+                    $oilOK = true;
                 }
             }
         }
 
-        if ($perm === 'read_engine_oil' && $code === 200) {
-            if ($this->bodyHasNumeric($body, ['lifeRemaining','remainingLifePercent','percentRemaining','value'])) {
-                $oilOK = true;
-            }
+        $map['read_battery']    = $batteryOK;
+        $map['read_engine_oil'] = $oilOK;
+
+        $this->SendDebug('ProbeScopes/perPath', json_encode($perPathLog, JSON_UNESCAPED_UNICODE), 0);
+        $this->SendDebug('ProbeScopes/summary', json_encode($map, JSON_UNESCAPED_SLASHES), 0);
+
+        $this->WriteAttributeString('CompatScopes', json_encode($map, JSON_UNESCAPED_SLASHES));
+
+        $this->ApplyCompatToProperties($map);
+        IPS_ApplyChanges($this->InstanceID);
+
+        if ($missingScopes) {
+            $authURL = $this->GenerateAuthURLAllRead();
+            $this->SendDebug('ProbeScopes', '403 erkannt → volle Re-Auth empfohlen: ' . $authURL, 0);
+            echo "Einige Endpunkte konnten wegen fehlender Berechtigungen nicht geprüft werden.\n"
+            . "Bitte einmal mit *allen Read-Scopes* autorisieren und dann erneut prüfen:\n"
+            . $authURL;
+            return true;
         }
-    }
 
-    // Battery/Oil streng setzen
-    $map['read_battery']    = $batteryOK;
-    $map['read_engine_oil'] = $oilOK;
-
-    // 3) Debug & Persist
-    $this->SendDebug('ProbeScopes/perPath', json_encode($perPathLog, JSON_UNESCAPED_UNICODE), 0);
-    $this->SendDebug('ProbeScopes/summary', json_encode($map, JSON_UNESCAPED_SLASHES), 0);
-
-    $this->WriteAttributeString('CompatScopes', json_encode($map, JSON_UNESCAPED_SLASHES));
-
-    // Nur TRUE automatisch anhaken (false/unknown bleibt unverändert)
-    $this->ApplyCompatToProperties($map);
-    IPS_ApplyChanges($this->InstanceID);
-
-    // 4) Falls Berechtigungen fehlen → volle Re-Auth vorschlagen
-    if ($missingScopes) {
-        $authURL = $this->BuildAllReadAuthURL();
-        $this->SendDebug('ProbeScopes', '403 erkannt → volle Re-Auth empfohlen: ' . $authURL, 0);
-        echo "Einige Endpunkte konnten wegen fehlender Berechtigungen nicht geprüft werden.\n"
-           . "Bitte einmal mit *allen Read-Scopes* autorisieren und dann erneut prüfen:\n"
-           . $authURL;
-        // trotzdem true, weil wir ein Ergebnis (Teilmenge) gespeichert haben:
+        echo "Fertig.";
         return true;
     }
-
-    echo "Fertig.";
-    return true;
-}
-
 
     public function ProcessHookData()
     {
@@ -719,7 +543,7 @@ public function ProbeScopes(): bool
                 $this->WriteAttributeString('NextAction', '');
                 $ok = $this->ProbeScopes();
                 echo $ok
-                    ? 'Kompatible Scopes geprüft. Formular schließen & erneut öffnen.'
+                    ? 'Kompatible Scopes geprüft.'
                     : 'Autorisiert, aber Prüfung fehlgeschlagen – bitte Debug ansehen.';
                 return;
             }
@@ -959,19 +783,6 @@ public function ProbeScopes(): bool
         $context  = stream_context_create($options);
         $response = @file_get_contents($url, false, $context);
         $responseData = json_decode($response, true);
-
-        if (isset($responseData['access_token'], $responseData['refresh_token'])) {
-            $this->WriteAttributeString('AccessToken',  $responseData['access_token']);
-            $this->WriteAttributeString('RefreshToken', $responseData['refresh_token']);
-            $this->SendDebug('RequestAccessToken', 'Access & Refresh Token gespeichert.', 0);
-            $this->ApplyChanges();
-        } else {
-            $this->SendDebug('RequestAccessToken', '❌ Token-Austausch fehlgeschlagen! Antwort: ' . $response, 0);
-            $this->LogMessage('RequestAccessToken - Token-Austausch fehlgeschlagen.', KL_ERROR);
-        }
-
-        $this->ProbeScopes();   // füllt CompatScopes und hakt true-Scopes automatisch an
-        $this->ApplyChanges();
     }
 
     public function MessageSink($TimeStamp, $SenderID, $Message, $Data)
@@ -1240,18 +1051,54 @@ public function ProbeScopes(): bool
             case '/security':
                 $this->SetValue('DoorsLocked', $body['isLocked'] ?? false);
 
-                foreach ($body['doors'] ?? [] as $door) {
-                    $ident = ucfirst($door['type']) . 'Door';
-                    $this->SetValue($ident, $door['status'] ?? 'UNKNOWN');
+                // Türen
+                if (isset($body['doors']) && is_array($body['doors'])) {
+                    foreach ($body['doors'] as $door) {
+                        $type = $door['type'] ?? '';
+                        $status = $door['status'] ?? 'UNKNOWN';
+                        if ($type !== '') {
+                            $ident = ucfirst($type) . 'Door';
+                            $this->SetValue($ident, $status);
+                        }
+                    }
                 }
-                foreach ($body['windows'] ?? [] as $window) {
-                    $ident = ucfirst($window['type']) . 'Window';
-                    $this->SetValue($ident, $window['status'] ?? 'UNKNOWN');
+
+                // Fenster
+                if (isset($body['windows']) && is_array($body['windows'])) {
+                    foreach ($body['windows'] as $window) {
+                        $type = $window['type'] ?? '';
+                        $status = $window['status'] ?? 'UNKNOWN';
+                        if ($type !== '') {
+                            $ident = ucfirst($type) . 'Window';
+                            $this->SetValue($ident, $status);
+                        }
+                    }
                 }
-                $this->SetValue('Sunroof',      $body['sunroof'][0]['status']      ?? 'UNKNOWN');
-                $this->SetValue('RearStorage',  $body['storage'][0]['status']      ?? 'UNKNOWN');
-                $this->SetValue('FrontStorage', $body['storage'][1]['status']      ?? 'UNKNOWN');
-                $this->SetValue('ChargingPort', $body['chargingPort'][0]['status'] ?? 'UNKNOWN');
+
+                // Optionale Felder mit Indexen sicher prüfen
+                if (isset($body['sunroof'][0]['status'])) {
+                    $this->SetValue('Sunroof', $body['sunroof'][0]['status']);
+                } else {
+                    $this->SetValue('Sunroof', 'UNKNOWN');
+                }
+
+                if (isset($body['storage'][0]['status'])) {
+                    $this->SetValue('RearStorage', $body['storage'][0]['status']);
+                } else {
+                    $this->SetValue('RearStorage', 'UNKNOWN');
+                }
+
+                if (isset($body['storage'][1]['status'])) {
+                    $this->SetValue('FrontStorage', $body['storage'][1]['status']);
+                } else {
+                    $this->SetValue('FrontStorage', 'UNKNOWN');
+                }
+
+                if (isset($body['chargingPort'][0]['status'])) {
+                    $this->SetValue('ChargingPort', $body['chargingPort'][0]['status']);
+                } else {
+                    $this->SetValue('ChargingPort', 'UNKNOWN');
+                }
                 break;
 
             case '/charge/limit':
@@ -1264,7 +1111,6 @@ public function ProbeScopes(): bool
                 break;
 
             case '/engine/oil':
-                // verschiedene OEMs liefern unterschiedliche Felder – wir nehmen, was da ist
                 if (isset($body['lifeRemaining']) && is_numeric($body['lifeRemaining'])) {
                     $this->SetValue('OilLife', floatval($body['lifeRemaining']) * 100);
                 } elseif (isset($body['remainingLifePercent']) && is_numeric($body['remainingLifePercent'])) {
@@ -1272,21 +1118,16 @@ public function ProbeScopes(): bool
                 } elseif (isset($body['percentRemaining']) && is_numeric($body['percentRemaining'])) {
                     $this->SetValue('OilLife', floatval($body['percentRemaining']) * 100);
                 } elseif (isset($body['value']) && is_numeric($body['value'])) {
-                    // Fallback, falls direkt Prozentwert kommt
                     $v = floatval($body['value']);
                     $this->SetValue('OilLife', ($v <= 1.0) ? $v * 100 : $v);
                 }
                 break;
-
 
             default:
                 $this->SendDebug('ProcessResponse', "Unbekannter Scope: $path", 0);
         }
     }
 
-    // -------------------------
-    // Webhook Signal → Variablen
-    // -------------------------
     private function prettyName(string $ident): string {
         return preg_replace('/([a-z])([A-Z])/', '$1 $2', $ident);
     }
