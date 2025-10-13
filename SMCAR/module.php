@@ -271,9 +271,9 @@ class Smartcar extends IPSModule
             ],
         ],
         'actions' => [
-            ['type' => 'Button', 'caption' => 'Auf kompatible Scopes prüfen', 'onClick' => 'echo SMCAR_ProbeScopes($id);'],
-            ['type' => 'Button', 'caption' => 'Mit Smartcar verbinden',      'onClick' => 'echo SMCAR_GenerateAuthURL($id);'],
-            ['type' => 'Button', 'caption' => 'Fahrzeugdaten abrufen',       'onClick' => 'SMCAR_FetchVehicleData($id);'],
+            ['type'=>'Button','caption'=>'Auf kompatible Scopes prüfen','onClick'=>'echo SMCAR_ProbeScopes($id);'],
+            ['type'=>'Button','caption'=>'Mit Smartcar verbinden','onClick'=>'echo SMCAR_GenerateAuthURLAllRead($id);'],
+            ['type' => 'Button', 'caption' => 'Fahrzeugdaten abrufen', 'onClick' => 'SMCAR_FetchVehicleData($id);'],
             ['type' => 'Label',  'caption' => 'Sag danke und unterstütze den Modulentwickler:'],
             [
                 'type'  => 'RowLayout',
@@ -329,6 +329,14 @@ class Smartcar extends IPSModule
         return false;
     }
 
+    private function allReadScopes(): array
+    {
+    return [
+        'read_vehicle_info','read_vin','read_location','read_tires','read_odometer',
+        'read_battery','read_fuel','read_security','read_charge','read_engine_oil'
+    ];
+    }
+
     public function ConnectAllRead(): string
     {
         return $this->GenerateAuthURLForScopes($this->AllReadPermissions());
@@ -370,25 +378,25 @@ class Smartcar extends IPSModule
         return $authURL;
     }
 
-    private function ApplyCompatToProperties(array $compat): void {
-        $setTrue = function(string $prop, string $perm) use ($compat) {
+    private function ApplyCompatToPropertiesTrueOnly(array $compat): void {
+        $setIfTrue = function(string $prop, string $perm) use ($compat) {
             if (isset($compat[$perm]) && $compat[$perm] === true) {
                 IPS_SetProperty($this->InstanceID, $prop, true);
             }
-            // false/unknown: NICHT anfassen
+            // bei false/unknown NICHT anfassen
         };
-        $setTrue('ScopeReadVehicleInfo',     'read_vehicle_info');
-        $setTrue('ScopeReadVIN',             'read_vin');
-        $setTrue('ScopeReadLocation',        'read_location');
-        $setTrue('ScopeReadTires',           'read_tires');
-        $setTrue('ScopeReadOdometer',        'read_odometer');
-        $setTrue('ScopeReadBattery',         'read_battery');
-        $setTrue('ScopeReadBatteryCapacity', 'read_battery');
-        $setTrue('ScopeReadFuel',            'read_fuel');
-        $setTrue('ScopeReadSecurity',        'read_security');
-        $setTrue('ScopeReadChargeLimit',     'read_charge');
-        $setTrue('ScopeReadChargeStatus',    'read_charge');
-        $setTrue('ScopeReadOilLife',         'read_engine_oil');
+        $setIfTrue('ScopeReadVehicleInfo',     'read_vehicle_info');
+        $setIfTrue('ScopeReadVIN',             'read_vin');
+        $setIfTrue('ScopeReadLocation',        'read_location');
+        $setIfTrue('ScopeReadTires',           'read_tires');
+        $setIfTrue('ScopeReadOdometer',        'read_odometer');
+        $setIfTrue('ScopeReadBattery',         'read_battery');
+        $setIfTrue('ScopeReadBatteryCapacity', 'read_battery');
+        $setIfTrue('ScopeReadFuel',            'read_fuel');
+        $setIfTrue('ScopeReadSecurity',        'read_security');
+        $setIfTrue('ScopeReadChargeLimit',     'read_charge');
+        $setIfTrue('ScopeReadChargeStatus',    'read_charge');
+        $setIfTrue('ScopeReadOilLife',         'read_engine_oil');
     }
 
     private function AllReadPermissions(): array {
@@ -418,7 +426,27 @@ class Smartcar extends IPSModule
     }
     
     public function GenerateAuthURLAllRead(): string {
-        return $this->GenerateAuthURLForScopes($this->AllReadPermissions());
+        $clientID     = $this->ReadPropertyString('ClientID');
+        $clientSecret = $this->ReadPropertyString('ClientSecret');
+        $redirectURI  = $this->ReadAttributeString('RedirectURI');
+        $mode         = $this->ReadPropertyString('Mode');
+
+        if ($clientID==='' || $clientSecret==='' || $redirectURI==='') {
+            return 'Fehler: Client ID / Client Secret / Redirect-URI fehlt!';
+        }
+
+        $scopes = $this->allReadScopes(); // <-- immer alle Read-Scopes
+
+        $authURL = "https://connect.smartcar.com/oauth/authorize?"
+            . "response_type=code"
+            . "&client_id="   . urlencode($clientID)
+            . "&redirect_uri=". urlencode($redirectURI)
+            . "&scope="       . urlencode(implode(' ', $scopes))
+            . "&state="       . bin2hex(random_bytes(8))
+            . "&mode="        . urlencode($mode);
+
+        $this->SendDebug('GenerateAuthURLAllRead', "URL: $authURL", 0);
+        return $authURL;
     }
 
     public function FirstRunSetup(): string
@@ -452,29 +480,29 @@ class Smartcar extends IPSModule
     public function ProbeScopes(): string
     {
         $accessToken = $this->ReadAttributeString('AccessToken');
-
-        // 1) Noch nicht verbunden? → Onboarding-Link für Probe mit ALLEN Read-Scopes liefern
         if ($accessToken === '') {
-            $url = $this->GenerateAuthURLForAllReadScopes();
-            return "Nicht verbunden. Bitte einmal verbinden, um die Kompatibilität zu prüfen:\n" . $url;
+            // Kein Token → verhalten wie „Verbinden“, aber eben automatisch für alle Read-Scopes
+            return $this->GenerateAuthURLAllRead();
         }
 
         $vehicleID = $this->GetVehicleID($accessToken);
         if (!$vehicleID) {
-            // Token evtl. alt → einmal Refresh versuchen
+            // Token alt? Versuch Refresh:
             $this->RefreshAccessToken();
             $accessToken = $this->ReadAttributeString('AccessToken');
-            $vehicleID   = $accessToken ? $this->GetVehicleID($accessToken) : null;
-
+            $vehicleID   = $this->GetVehicleID($accessToken);
             if (!$vehicleID) {
-                $url = $this->GenerateAuthURLForAllReadScopes();
-                return "Konnte keine VehicleID ermitteln. Bitte neu verbinden:\n" . $url;
+                return 'Fehler: Fahrzeug-ID konnte nicht ermittelt werden.';
             }
         }
 
-        // 2) ECHTE Prüfung: immer ALLE Read-Pfade anfragen
-        $paths = $this->AllReadPaths(); // '/', '/vin', '/location', '/tires/pressure', ... (alle)
-        $reqs  = array_map(fn($p) => ['path' => $p], $paths);
+        // IMMER alle Read-Pfade prüfen – unabhängig von Häkchen oder Cache
+        $paths = [
+            '/', '/vin', '/location', '/tires/pressure', '/odometer',
+            '/battery', '/battery/nominal_capacity', '/fuel', '/security',
+            '/charge/limit', '/charge', '/engine/oil'
+        ];
+        $reqs = array_map(fn($p) => ['path' => $p], $paths);
 
         $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID/batch";
         $postData = json_encode(['requests' => $reqs]);
@@ -488,20 +516,14 @@ class Smartcar extends IPSModule
             ]
         ]);
         $res  = @file_get_contents($url, false, $ctx);
-        if ($res === false) {
-            return "Prüfung fehlgeschlagen: Keine Antwort von der API.";
-        }
-        $data = json_decode($res, true);
-        if (!isset($data['responses']) || !is_array($data['responses'])) {
-            return "Prüfung fehlgeschlagen: Unerwartete Antwortstruktur.";
-        }
+        if ($res === false) return 'Fehler: Keine Antwort von der API.';
 
-        // 3) Mapping & Heuristiken (wie bisher)
+        $data = json_decode($res, true);
+        if (!isset($data['responses']) || !is_array($data['responses'])) return 'Fehler: Unerwartete Antwort.';
+
+        // Map aufbauen (200 => true; Battery & Oil mit Plausibilitätscheck)
         $map = [];
-        $fuelOK = false;
-        $batteryOK = false;
-        $batteryReason = 'none';
-        $oilOK = false;
+        $fuelOK = false; $batteryOK = false; $oilOK = false;
 
         foreach ($data['responses'] as $r) {
             $path = $r['path'] ?? '';
@@ -510,21 +532,26 @@ class Smartcar extends IPSModule
             $body = is_array($r['body'] ?? null) ? $r['body'] : [];
 
             if (!$perm) continue;
+            if (!isset($map[$perm])) $map[$perm] = false;
 
-            // generisch (OR, falls mehrere Pfade auf eine Permission mappen)
             if ($perm !== 'read_battery' && $perm !== 'read_engine_oil') {
-                $map[$perm] = ($map[$perm] ?? false) || ($code === 200);
+                if ($code === 200) $map[$perm] = true;
             }
 
-            if ($path === '/fuel' && $code === 200) $fuelOK = true;
+            if ($path === '/fuel' && $code === 200) {
+                $fuelOK = true;            // für ICE-Heuristik
+            }
 
             if ($perm === 'read_battery' && $code === 200) {
-                $hasBatteryData =
+                if (
                     (isset($body['percentRemaining']) && is_numeric($body['percentRemaining'])) ||
                     (isset($body['range']) && is_numeric($body['range'])) ||
-                    (isset($body['capacity']) && (is_numeric($body['capacity']) || (isset($body['capacity']['nominal']) && is_numeric($body['capacity']['nominal'])))) ||
-                    (isset($body['nominal_capacity']) && is_numeric($body['nominal_capacity']));
-                if ($hasBatteryData) { $batteryOK = true; $batteryReason = 'battery fields present'; }
+                    (isset($body['capacity']['nominal']) && is_numeric($body['capacity']['nominal'])) ||
+                    (isset($body['capacity']) && is_numeric($body['capacity'])) ||
+                    (isset($body['nominal_capacity']) && is_numeric($body['nominal_capacity']))
+                ) {
+                    $batteryOK = true;
+                }
             }
 
             if ($perm === 'read_engine_oil' && $code === 200) {
@@ -539,20 +566,22 @@ class Smartcar extends IPSModule
             }
         }
 
-        // Battery streng
+        // Battery streng setzen (ggf. ICE-Heuristik)
         $map['read_battery'] = $batteryOK ? true : false;
-        // Oil streng
+
+        // Engine Oil streng
         $map['read_engine_oil'] = $oilOK;
 
-        // Persistieren und (nur true) automatisch anhaken
+        // Persistieren
         $this->WriteAttributeString('CompatScopes', json_encode($map, JSON_UNESCAPED_SLASHES));
-        $this->ApplyCompatToProperties($map); // in deiner Version: nur true setzen
+
+        // Nur TRUE auto-aktiv setzen, FALSE/unknown unverändert lassen
+        $this->ApplyCompatToPropertiesTrueOnly($map);
         IPS_ApplyChanges($this->InstanceID);
 
-        // Kurze Zusammenfassung zurückgeben
-        $okList  = implode(', ', array_keys(array_filter($map)));
-        $nokList = implode(', ', array_keys(array_filter($map, fn($v)=>!$v)));
-        return "Fertig.\nKompatibel: " . ($okList ?: '–') . "\nNicht kompatibel/ohne Nutzdaten: " . ($nokList ?: '–');
+        // Kurze Zusammenfassung als Button-Output
+        $trues = implode(', ', array_keys(array_filter($map)));
+        return $trues !== '' ? ("Gefundene kompatible Scopes: " . $trues) : "Keine kompatiblen Read-Scopes gefunden.";
     }
 
     public function GenerateAuthURL()
