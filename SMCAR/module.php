@@ -617,40 +617,30 @@ class Smartcar extends IPSModule
 
         $this->SendDebug('Webhook', "Request: method=$method uri=$uri qs=$qs", 0);
 
-        // --- OAuth Redirect (GET ?code=...) ---
         if ($method === 'GET' && isset($_GET['code'])) {
-            // Reentrancy-Guard: verhindert Doppelverarbeitung ohne zusätzliche Attribute
-            $sem = 'SMCAR_OAuth_' . $this->InstanceID;
-            if (!IPS_SemaphoreEnter($sem, 5000)) {
-                // Ein zweiter identischer Aufruf "trifft" während der erste noch verarbeitet
-                $this->SendDebug('Webhook', 'Duplicate OAuth redirect ignored (semaphore busy).', 0);
-                http_response_code(200);
-                echo 'OK';
+            $okToken = $this->RequestAccessToken($_GET['code']);
+            if (!$okToken) {
+                http_response_code(500);
+                echo 'Token-Austausch fehlgeschlagen – bitte Debug ansehen.';
                 return;
             }
 
-            try {
-                $code  = $_GET['code'];
-                $state = $_GET['state'] ?? '';
+            $state = $_GET['state'] ?? '';
+            $next  = $this->ReadAttributeString('NextAction');
 
-                $ok = $this->RequestAccessToken($code);
+            if (preg_match('~^(probe|allread)_~i', $state) || $next === 'probe_after_auth') {
+                $this->WriteAttributeString('NextAction', '');
+                $ok = $this->ProbeScopes();
+                echo $ok
+                    ? 'Kompatible Scopes geprüft.'
+                    : 'Prüfung fehlgeschlagen – bitte Debug ansehen.';
+                return;
+            }
 
-                // Wenn der Code bereits verbraucht ist (invalid_grant) kommt ok=false zurück.
-                // Falls wir aber inzwischen schon ein AccessToken haben, behandeln wir das
-                // als "schon erfolgreich verarbeitet" und antworten freundlich.
-                if (!$ok && $this->ReadAttributeString('AccessToken') !== '') {
-                    $this->SendDebug('Webhook', 'Token-Austausch meldet Fehler, aber AccessToken existiert -> treat as duplicate.', 0);
-                    // Optional: gleich Probe anschieben, wenn gewünscht
-                    $next  = $this->ReadAttributeString('NextAction');
-                    if (preg_match('~^(probe|allread)_~i', $state) || $next === 'probe_after_auth') {
-                        $this->WriteAttributeString('NextAction', '');
-                        $probeOK = $this->ProbeScopes();
-                        echo $probeOK ? 'Kompatible Scopes geprüft.' : 'Autorisiert, aber Prüfung fehlgeschlagen – bitte Debug ansehen.';
-                        return;
-                    }
-                    echo 'Fahrzeug erfolgreich verbunden!';
-                    return;
-                }
+            echo 'Fahrzeug erfolgreich verbunden!';
+            return;
+        }
+
 
                 if (!$ok) {
                     echo 'Autorisiert, aber Token-Austausch fehlgeschlagen – bitte Debug ansehen.';
@@ -868,27 +858,25 @@ class Smartcar extends IPSModule
         return null;
     }
 
-    private function RequestAccessToken(string $authCode)
+    private function RequestAccessToken(string $authCode): bool
     {
         $clientID     = $this->ReadPropertyString('ClientID');
         $clientSecret = $this->ReadPropertyString('ClientSecret');
-        $redirectURI  = $this->ReadAttributeString('RedirectURI'); // manuell ODER Connect+Hook
+        $redirectURI  = $this->ReadAttributeString('RedirectURI');
 
         if ($clientID === '' || $clientSecret === '' || $redirectURI === '') {
             $this->SendDebug('RequestAccessToken', '❌ Fehlende Client-Daten oder Redirect-URI!', 0);
-            return;
+            return false;
         }
 
         $url = 'https://auth.smartcar.com/oauth/token';
-
         $postData = http_build_query([
             'grant_type'   => 'authorization_code',
             'code'         => $authCode,
             'redirect_uri' => $redirectURI
         ]);
-
         $basic = base64_encode($clientID . ':' . $clientSecret);
-        $options = [
+        $ctx = stream_context_create([
             'http' => [
                 'header'        => "Content-Type: application/x-www-form-urlencoded\r\n"
                                 . "Accept: application/json\r\n"
@@ -897,40 +885,37 @@ class Smartcar extends IPSModule
                 'content'       => $postData,
                 'ignore_errors' => true
             ]
-        ];
-
-        $context  = stream_context_create($options);
-        $response = @file_get_contents($url, false, $context);
+        ]);
+        $response = @file_get_contents($url, false, $ctx);
         $data     = json_decode($response ?? '', true);
 
-        if (isset($data['access_token'], $data['refresh_token'])) {
-            $this->WriteAttributeString('AccessToken',  $data['access_token']);
-            $this->WriteAttributeString('RefreshToken', $data['refresh_token']);
-
-            $mask = fn($t) => substr($t, 0, 6) . '...' . substr($t, -4);
-            $this->SendDebug('RequestAccessToken', '✅ Tokens gespeichert (acc=' . $mask($data['access_token']) . ', ref=' . $mask($data['refresh_token']) . ')', 0);
-
-            // VehicleID von evtl. vorherigem Account verwerfen
-            $this->WriteAttributeString('VehicleID', '');
-
-            // Zustand/Variablen sofort harmonisieren
-            $this->ApplyChanges();
-
-            // Prüfen nur, wenn NICHT gleich nach dem Redirect geplant
-            $doImmediateProbe = ($this->ReadAttributeString('NextAction') !== 'probe_after_auth');
-            if ($doImmediateProbe) {
-                $this->SendDebug('RequestAccessToken', 'Starte sofortige Scope-Probe (kein pending probe_after_auth).', 0);
-                $this->ProbeScopes(true);   // STUMM prüfen
-                // Nach der Probe können Properties toggeln → nochmal anwenden
-                $this->ApplyChanges();
-            } else {
-                $this->SendDebug('RequestAccessToken', 'Überspringe sofortige Scope-Probe (pending probe_after_auth aktiv).', 0);
-            }
-        } else {
+        if (!isset($data['access_token'], $data['refresh_token'])) {
             $this->SendDebug('RequestAccessToken', '❌ Token-Austausch fehlgeschlagen! Antwort: ' . ($response ?: '(leer)'), 0);
             $this->LogMessage('RequestAccessToken - Token-Austausch fehlgeschlagen.', KL_ERROR);
-            echo 'Autorisiert, aber Token-Austausch fehlgeschlagen – bitte Debug ansehen.';
+            return false;
         }
+
+        $this->WriteAttributeString('AccessToken',  $data['access_token']);
+        $this->WriteAttributeString('RefreshToken', $data['refresh_token']);
+        $this->WriteAttributeString('VehicleID', ''); // evtl. Altbestand löschen
+
+        $mask = fn($t) => substr($t, 0, 6) . '...' . substr($t, -4);
+        $this->SendDebug('RequestAccessToken', '✅ Tokens gespeichert (acc=' . $mask($data['access_token']) . ', ref=' . $mask($data['refresh_token']) . ')', 0);
+
+        // Zustand synchronisieren, aber noch nichts echo’n
+        $this->ApplyChanges();
+
+        // Sofort-Probe nur, wenn NICHT „probe_after_auth“ geplant ist
+        $doImmediateProbe = ($this->ReadAttributeString('NextAction') !== 'probe_after_auth');
+        if ($doImmediateProbe) {
+            $this->SendDebug('RequestAccessToken', 'Starte sofortige Scope-Probe (kein pending probe_after_auth).', 0);
+            $this->ProbeScopes();
+            $this->ApplyChanges();
+        } else {
+            $this->SendDebug('RequestAccessToken', 'Überspringe sofortige Scope-Probe (pending probe_after_auth aktiv).', 0);
+        }
+
+        return true;
     }
 
     public function RefreshAccessToken()
