@@ -326,6 +326,34 @@ public function GetConfigurationForm()
         ];
     }
 
+    private function bodyHasNumeric($a, array $keys): bool {
+        foreach ($keys as $k) {
+            if (isset($a[$k]) && is_numeric($a[$k])) return true;
+            // verschachtelt: capacity.nominal
+            if ($k === 'capacity.nominal' && isset($a['capacity']['nominal']) && is_numeric($a['capacity']['nominal'])) return true;
+        }
+        return false;
+    }
+
+    private function ApplyCompatToProperties(array $compat): void {
+        $set = function(string $prop, string $perm) use ($compat) {
+            $ok = isset($compat[$perm]) ? (bool)$compat[$perm] : false;
+            IPS_SetProperty($this->InstanceID, $prop, $ok);
+        };
+        $set('ScopeReadVehicleInfo',     'read_vehicle_info');
+        $set('ScopeReadVIN',             'read_vin');
+        $set('ScopeReadLocation',        'read_location');
+        $set('ScopeReadTires',           'read_tires');
+        $set('ScopeReadOdometer',        'read_odometer');
+        $set('ScopeReadBattery',         'read_battery');
+        $set('ScopeReadBatteryCapacity', 'read_battery');      // gleicher Scope
+        $set('ScopeReadFuel',            'read_fuel');
+        $set('ScopeReadSecurity',        'read_security');
+        $set('ScopeReadChargeLimit',     'read_charge');
+        $set('ScopeReadChargeStatus',    'read_charge');       // gleicher Scope
+        $set('ScopeReadOilLife',         'read_engine_oil');
+    }
+
     public function ProbeScopes(): bool
     {
         $accessToken = $this->ReadAttributeString('AccessToken');
@@ -335,7 +363,6 @@ public function GetConfigurationForm()
             return false;
         }
 
-        // Batch mit ALLEN Read-Pfaden (ohne Side-Effects)
         $paths = $this->AllReadPaths();
         $reqs  = array_map(fn($p) => ['path' => $p], $paths);
 
@@ -358,27 +385,86 @@ public function GetConfigurationForm()
         }
         $data = json_decode($res, true);
         $this->SendDebug('ProbeScopes', "Antwort: ".json_encode($data, JSON_PRETTY_PRINT), 0);
-
-        if (!is_array($data) || !isset($data['responses']) || !is_array($data['responses'])) {
+        if (!isset($data['responses']) || !is_array($data['responses'])) {
             $this->SendDebug('ProbeScopes', '❌ Unerwartete Struktur.', 0);
             return false;
         }
 
-        // permission => true/false aufbauen
         $map = [];
+        $fuelOK = false;
+        $batteryOK = false;
+        $batteryReason = 'none';
+        $oilOK = false;
+        $oilReason = 'none';
+
         foreach ($data['responses'] as $r) {
             $path = $r['path'] ?? '';
-            $code = $r['code'] ?? 0;
+            $code = intval($r['code'] ?? 0);
             $perm = $this->PathToPermission($path);
+            $body = is_array($r['body'] ?? null) ? $r['body'] : [];
+
             if (!$perm) continue;
 
-            // Erfolgskriterium: 200
-            $ok = ($code === 200);
-            // Bei mehrfachen Pfaden pro Permission (battery, charge) reicht ein true
-            $map[$perm] = ($map[$perm] ?? false) || $ok;
+            // Standard: 200 => true (wird später für battery/oil überschrieben)
+            if (!isset($map[$perm])) $map[$perm] = false;
+            if ($perm !== 'read_battery' && $perm !== 'read_engine_oil') {
+                if ($code === 200) $map[$perm] = true;
+            }
+
+            // Fuel merken (für ICE-Heuristik)
+            if ($path === '/fuel' && $code === 200) {
+                $fuelOK = true;
+            }
+
+            // Batterie: nur „echt“, wenn plausible Nutzdaten
+            if ($perm === 'read_battery' && $code === 200) {
+                if ($path === '/battery') {
+                    if ($this->bodyHasNumeric($body, ['percentRemaining','range'])) {
+                        $batteryOK = true; $batteryReason = 'battery fields';
+                    }
+                } elseif ($path === '/battery/nominal_capacity') {
+                    if ($this->bodyHasNumeric($body, ['capacity','capacity.nominal','nominal_capacity'])) {
+                        $batteryOK = true; $batteryReason = 'numeric capacity';
+                    } else {
+                        // Nur Auswahlliste? -> nicht als kompatibel werten
+                        if (isset($body['availableCapacities'])) {
+                            $this->SendDebug('ProbeScopes', 'Battery nominal_capacity liefert nur availableCapacities → nicht kompatibel.', 0);
+                        }
+                    }
+                }
+            }
+
+            // Oil: nur „echt“, wenn plausible Nutzdaten
+            if ($perm === 'read_engine_oil' && $code === 200) {
+                if ($this->bodyHasNumeric($body, ['lifeRemaining','remainingLifePercent','percentRemaining','value'])) {
+                    $oilOK = true; $oilReason = 'oil percent/value';
+                }
+            }
         }
 
+        // Setze Battery streng
+        if ($batteryOK) {
+            $map['read_battery'] = true;
+        } else {
+            // ICE-Heuristik
+            if ($fuelOK) {
+                $map['read_battery'] = false;
+                $this->SendDebug('ProbeScopes', 'Heuristik: Fuel ok, Battery ohne Nutzdaten → read_battery=false (ICE).', 0);
+            } else {
+                $map['read_battery'] = false; // konservativ
+            }
+        }
+        $this->SendDebug('ProbeScopes', 'Battery result=' . ($map['read_battery']?'true':'false') . ' reason=' . $batteryReason, 0);
+
+        // Setze Oil streng
+        $map['read_engine_oil'] = $oilOK;
+        $this->SendDebug('ProbeScopes', 'Oil result=' . ($oilOK?'true':'false') . ' reason=' . $oilReason, 0);
+
+        // Persistieren + Properties synchronisieren
         $this->WriteAttributeString('CompatScopes', json_encode($map, JSON_UNESCAPED_SLASHES));
+        $this->ApplyCompatToProperties($map);
+        IPS_ApplyChanges($this->InstanceID);
+
         $this->SendDebug('ProbeScopes', 'CompatScopes=' . json_encode($map), 0);
         return true;
     }
@@ -976,6 +1062,22 @@ public function GetConfigurationForm()
                 $this->SetValue('ChargeStatus', $body['state'] ?? 'UNKNOWN');
                 $this->SetValue('PluggedIn',    $body['isPluggedIn'] ?? false);
                 break;
+
+            case '/engine/oil':
+                // verschiedene OEMs liefern unterschiedliche Felder – wir nehmen, was da ist
+                if (isset($body['lifeRemaining']) && is_numeric($body['lifeRemaining'])) {
+                    $this->SetValue('OilLife', floatval($body['lifeRemaining']) * 100);
+                } elseif (isset($body['remainingLifePercent']) && is_numeric($body['remainingLifePercent'])) {
+                    $this->SetValue('OilLife', floatval($body['remainingLifePercent']));
+                } elseif (isset($body['percentRemaining']) && is_numeric($body['percentRemaining'])) {
+                    $this->SetValue('OilLife', floatval($body['percentRemaining']) * 100);
+                } elseif (isset($body['value']) && is_numeric($body['value'])) {
+                    // Fallback, falls direkt Prozentwert kommt
+                    $v = floatval($body['value']);
+                    $this->SetValue('OilLife', ($v <= 1.0) ? $v * 100 : $v);
+                }
+                break;
+
 
             default:
                 $this->SendDebug('ProcessResponse', "Unbekannter Scope: $path", 0);
