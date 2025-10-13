@@ -617,6 +617,7 @@ class Smartcar extends IPSModule
 
         $this->SendDebug('Webhook', "Request: method=$method uri=$uri qs=$qs", 0);
 
+        // --- OAuth Redirect (GET ?code=...) ---
         if ($method === 'GET' && isset($_GET['code'])) {
             $okToken = $this->RequestAccessToken($_GET['code']);
             if (!$okToken) {
@@ -631,36 +632,12 @@ class Smartcar extends IPSModule
             if (preg_match('~^(probe|allread)_~i', $state) || $next === 'probe_after_auth') {
                 $this->WriteAttributeString('NextAction', '');
                 $ok = $this->ProbeScopes();
-                echo $ok
-                    ? 'Kompatible Scopes geprüft.'
-                    : 'Prüfung fehlgeschlagen – bitte Debug ansehen.';
+                echo $ok ? 'Kompatible Scopes geprüft.' : 'Prüfung fehlgeschlagen – bitte Debug ansehen.';
                 return;
             }
 
             echo 'Fahrzeug erfolgreich verbunden!';
             return;
-        }
-
-
-                if (!$ok) {
-                    echo 'Autorisiert, aber Token-Austausch fehlgeschlagen – bitte Debug ansehen.';
-                    return;
-                }
-
-                // Erfolgreich: je nach NextAction/State direkt probe oder "verbunden" melden
-                $next  = $this->ReadAttributeString('NextAction');
-                if (preg_match('~^(probe|allread)_~i', $state) || $next === 'probe_after_auth') {
-                    $this->WriteAttributeString('NextAction', '');
-                    $probeOK = $this->ProbeScopes();
-                    echo $probeOK ? 'Kompatible Scopes geprüft.' : 'Autorisiert, aber Prüfung fehlgeschlagen – bitte Debug ansehen.';
-                    return;
-                }
-
-                echo 'Fahrzeug erfolgreich verbunden!';
-                return;
-            } finally {
-                IPS_SemaphoreLeave($sem);
-            }
         }
 
         // --- Webhook deaktiviert? ---
@@ -776,18 +753,13 @@ class Smartcar extends IPSModule
                 $signals = $payload['data']['signals'] ?? [];
                 if (!is_array($signals)) $signals = [];
 
+                // synthetische vehicle-Felder
                 $veh = $payload['data']['vehicle'] ?? [];
                 $synthetic = [];
                 if (is_array($veh)) {
-                    if (array_key_exists('make', $veh)) {
-                        $synthetic[] = ['code' => 'vehicleidentification-make',  'body' => ['value' => (string)$veh['make']]];
-                    }
-                    if (array_key_exists('model', $veh)) {
-                        $synthetic[] = ['code' => 'vehicleidentification-model', 'body' => ['value' => (string)$veh['model']]];
-                    }
-                    if (array_key_exists('year', $veh)) {
-                        $synthetic[] = ['code' => 'vehicleidentification-year',  'body' => ['value' => (int)$veh['year']]];
-                    }
+                    if (array_key_exists('make', $veh))  $synthetic[] = ['code' => 'vehicleidentification-make',  'body' => ['value' => (string)$veh['make']]];
+                    if (array_key_exists('model', $veh)) $synthetic[] = ['code' => 'vehicleidentification-model', 'body' => ['value' => (string)$veh['model']]];
+                    if (array_key_exists('year', $veh))  $synthetic[] = ['code' => 'vehicleidentification-year',  'body' => ['value' => (int)$veh['year']]];
                 }
                 if (!empty($synthetic)) {
                     $this->SendDebug('Webhook', 'Synthetische Signals: ' . json_encode($synthetic), 0);
