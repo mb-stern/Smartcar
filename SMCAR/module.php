@@ -482,7 +482,7 @@ class Smartcar extends IPSModule
         return "Fertig. Alle Read-Scopes geprüft und kompatible automatisch aktiviert.";
     }
 
-    public function ProbeScopes(): bool
+    public function ProbeScopes(bool $silent = false): bool
     {
         $accessToken = $this->ReadAttributeString('AccessToken');
         $vehicleID   = $this->GetVehicleID($accessToken);
@@ -490,7 +490,9 @@ class Smartcar extends IPSModule
         if ($accessToken === '' || !$vehicleID) {
             $url = $this->GenerateAuthURLAllRead();
             $this->SendDebug('ProbeScopes', 'Nicht verbunden → volle Autorisierung nötig: ' . $url, 0);
-            echo "Nicht verbunden. Bitte einmal verbinden, um die Kompatibilität zu prüfen:\n" . $url;
+            if (!$silent) {
+                echo "Nicht verbunden. Bitte einmal verbinden, um die Kompatibilität zu prüfen:\n" . $url;
+            }
             return false;
         }
 
@@ -529,24 +531,24 @@ class Smartcar extends IPSModule
 
         if ($raw === false || $raw === null) {
             $this->SendDebug('ProbeScopes', '❌ Keine Antwort.', 0);
-            echo "Fehlgeschlagen: Keine Antwort der Smartcar API.";
+            if (!$silent) echo "Fehlgeschlagen: Keine Antwort der Smartcar API.";
             return false;
         }
         $this->SendDebug('ProbeScopes/raw', $raw, 0);
 
         if ($status !== 200) {
             $this->SendDebug('ProbeScopes', '❌ Unerwartete Struktur / HTTP ' . $status, 0);
-            echo "Fehlgeschlagen: HTTP $status – bitte Debug ansehen.";
+            if (!$silent) echo "Fehlgeschlagen: HTTP $status – bitte Debug ansehen.";
             return false;
         }
 
         if (!isset($data['responses']) || !is_array($data['responses'])) {
             $this->SendDebug('ProbeScopes', '❌ Unerwartete Struktur.', 0);
-            echo "Fehlgeschlagen: Unerwartete Antwortstruktur.";
+            if (!$silent) echo "Fehlgeschlagen: Unerwartete Antwortstruktur.";
             return false;
         }
 
-        // … dein bestehender Auswertungs-Block ab hier unverändert …
+        // Auswertung
         $map = [];
         $missingScopes = false;
         $perPathLog = [];
@@ -595,13 +597,15 @@ class Smartcar extends IPSModule
         if ($missingScopes) {
             $authURL = $this->GenerateAuthURLAllRead();
             $this->SendDebug('ProbeScopes', '403 erkannt → volle Re-Auth empfohlen: ' . $authURL, 0);
-            echo "Einige Endpunkte konnten wegen fehlender Berechtigungen nicht geprüft werden.\n"
-            . "Bitte einmal mit *allen Read-Scopes* autorisieren und dann erneut prüfen:\n"
-            . $authURL;
+            if (!$silent) {
+                echo "Einige Endpunkte konnten wegen fehlender Berechtigungen nicht geprüft werden.\n"
+                . "Bitte einmal mit *allen Read-Scopes* autorisieren und dann erneut prüfen:\n"
+                . $authURL;
+            }
             return true;
         }
 
-        echo "Fertig.";
+        if (!$silent) echo "Fertig.";
         return true;
     }
 
@@ -616,20 +620,20 @@ class Smartcar extends IPSModule
         // --- OAuth Redirect (GET ?code=...) ---
         if ($method === 'GET' && isset($_GET['code'])) {
             $this->RequestAccessToken($_GET['code']);
-        $state = $_GET['state'] ?? '';
-        $next  = $this->ReadAttributeString('NextAction');
+            $state = $_GET['state'] ?? '';
+            $next  = $this->ReadAttributeString('NextAction');
 
-        if (preg_match('~^(probe|allread)_~i', $state) || $next === 'probe_after_auth') {
-            $this->WriteAttributeString('NextAction', '');
-            $ok = $this->ProbeScopes();
-            echo $ok
-                ? 'Kompatible Scopes geprüft.'
-                : 'Autorisiert, aber Prüfung fehlgeschlagen – bitte Debug ansehen.';
+            if (preg_match('~^(probe|allread)_~i', $state) || $next === 'probe_after_auth') {
+                $this->WriteAttributeString('NextAction', '');
+                $ok = $this->ProbeScopes(true); // STUMM prüfen
+                echo $ok
+                    ? 'Kompatible Scopes geprüft.'
+                    : 'Autorisiert, aber Prüfung fehlgeschlagen – bitte Debug ansehen.';
+                return;
+            }
+
+            echo 'Fahrzeug erfolgreich verbunden!';
             return;
-        }
-
-        echo 'Fahrzeug erfolgreich verbunden!';
-        return;
         }
 
         // --- Webhook deaktiviert? ---
@@ -669,7 +673,6 @@ class Smartcar extends IPSModule
 
         // --- VERIFY-Challenge ---
         if (($payload['eventType'] ?? '') === 'VERIFY') {
-            // Wichtig: challenge steckt in data.challenge (Fallback: top-level, falls Smartcar das mal ändert)
             $challenge = $payload['data']['challenge'] ?? ($payload['challenge'] ?? '');
             if ($challenge === '') {
                 $this->SendDebug('Webhook', '❌ VERIFY: challenge fehlt (erwartet data.challenge).', 0);
@@ -678,10 +681,6 @@ class Smartcar extends IPSModule
                 return;
             }
 
-            $verifyEnabled = $this->ReadPropertyBoolean('VerifyWebhookSignature');
-            $mgmtToken     = trim($this->ReadPropertyString('ManagementToken'));
-
-            // Testmodus: Verifizierung AUS → plain challenge zurückgeben
             if (!$verifyEnabled) {
                 $this->SendDebug('Webhook', "VERIFY (Testmodus): gebe plain challenge zurück: {$challenge}", 0);
                 header('Content-Type: application/json');
@@ -689,7 +688,6 @@ class Smartcar extends IPSModule
                 return;
             }
 
-            // Verifizierung AN → HMAC über die challenge mit ManagementToken bilden
             if ($mgmtToken === '') {
                 $this->SendDebug('Webhook', '❌ VERIFY: VerifyWebhookSignature=true aber ManagementToken leer.', 0);
                 http_response_code(401);
@@ -697,7 +695,6 @@ class Smartcar extends IPSModule
                 return;
             }
 
-            // Smartcar erwartet HMAC-SHA256 (hex) über die challenge mit dem Application Management Token
             $hmac = hash_hmac('sha256', $challenge, $mgmtToken);
             $this->SendDebug('Webhook', "✅ VERIFY HMAC gebildet: {$hmac}", 0);
             header('Content-Type: application/json');
@@ -748,83 +745,75 @@ class Smartcar extends IPSModule
         $this->SendDebug('Webhook', "eventType=$eventType", 0);
 
         switch ($eventType) {
-        case 'VEHICLE_STATE':
-            // Original-Signals
-            $signals = $payload['data']['signals'] ?? [];
-            if (!is_array($signals)) $signals = [];
+            case 'VEHICLE_STATE':
+                $signals = $payload['data']['signals'] ?? [];
+                if (!is_array($signals)) $signals = [];
 
-            // Top-Level vehicle → als synthetische Signals hinzufügen,
-            // damit make/model/year über ApplySignal() laufen
-            $veh = $payload['data']['vehicle'] ?? [];
-            $synthetic = [];
-            if (is_array($veh)) {
-                if (array_key_exists('make', $veh)) {
-                    $synthetic[] = ['code' => 'vehicleidentification-make',  'body' => ['value' => (string)$veh['make']]];
+                $veh = $payload['data']['vehicle'] ?? [];
+                $synthetic = [];
+                if (is_array($veh)) {
+                    if (array_key_exists('make', $veh)) {
+                        $synthetic[] = ['code' => 'vehicleidentification-make',  'body' => ['value' => (string)$veh['make']]];
+                    }
+                    if (array_key_exists('model', $veh)) {
+                        $synthetic[] = ['code' => 'vehicleidentification-model', 'body' => ['value' => (string)$veh['model']]];
+                    }
+                    if (array_key_exists('year', $veh)) {
+                        $synthetic[] = ['code' => 'vehicleidentification-year',  'body' => ['value' => (int)$veh['year']]];
+                    }
                 }
-                if (array_key_exists('model', $veh)) {
-                    $synthetic[] = ['code' => 'vehicleidentification-model', 'body' => ['value' => (string)$veh['model']]];
+                if (!empty($synthetic)) {
+                    $this->SendDebug('Webhook', 'Synthetische Signals: ' . json_encode($synthetic), 0);
+                    $signals = array_merge($synthetic, $signals);
                 }
-                if (array_key_exists('year', $veh)) {
-                    $synthetic[] = ['code' => 'vehicleidentification-year',  'body' => ['value' => (int)$veh['year']]];
+
+                $created = [];
+                $skipped = [
+                    'COMPATIBILITY' => [],
+                    'PERMISSION'    => [],
+                    'UPSTREAM'      => [],
+                    'STATUS_ONLY'   => [],
+                    'OTHER'         => []
+                ];
+
+                foreach ($signals as $sig) {
+                    $code   = $sig['code']   ?? '';
+                    $body   = $sig['body']   ?? [];
+                    $status = $sig['status'] ?? null;
+                    if ($code === '') continue;
+
+                    $this->ApplySignal(
+                        $code,
+                        is_array($body) ? $body : [],
+                        $status,
+                        $created,
+                        $skipped
+                    );
                 }
-            }
-            if (!empty($synthetic)) {
-                $this->SendDebug('Webhook', 'Synthetische Signals: ' . json_encode($synthetic), 0);
-                $signals = array_merge($synthetic, $signals);
-            }
 
-            // Sammelstrukturen für ein aufgeräumtes Debug
-            $created = []; // neu angelegte Variablen: ident => value
-            $skipped = [
-                'COMPATIBILITY' => [],
-                'PERMISSION'    => [],
-                'UPSTREAM'      => [],
-                'STATUS_ONLY'   => [],
-                'OTHER'         => []
-            ];
-
-            // Alle Signals einheitlich über ApplySignal()
-            foreach ($signals as $sig) {
-                $code   = $sig['code']   ?? '';
-                $body   = $sig['body']   ?? [];
-                $status = $sig['status'] ?? null;
-                if ($code === '') continue;
-
-                $this->ApplySignal(
-                    $code,
-                    is_array($body) ? $body : [],
-                    $status,
-                    $created,
-                    $skipped
-                );
-            }
-
-            // genau EIN Eintrag für alle neu angelegten Variablen
-            if (!empty($created)) {
-                $this->SendDebug('Signals/created', json_encode($created, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 0);
-            }
-            // genau EIN Eintrag für alle übersprungenen (nur Status/keine Daten)
-            $skippedOut = array_filter($skipped, fn($arr) => !empty($arr));
-            if (!empty($skippedOut)) {
-                $this->SendDebug('Signals/skipped', json_encode($skippedOut, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 0);
-            }
-
-            if ($this->ReadPropertyBoolean('TrackLastSignals')) {
-                if (@$this->GetIDForIdent('LastSignalsAt')) {
-                    $this->SetValue('LastSignalsAt', time());
+                if (!empty($created)) {
+                    $this->SendDebug('Signals/created', json_encode($created, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 0);
                 }
-            }
+                $skippedOut = array_filter($skipped, fn($arr) => !empty($arr));
+                if (!empty($skippedOut)) {
+                    $this->SendDebug('Signals/skipped', json_encode($skippedOut, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 0);
+                }
 
-            http_response_code(200);
-            echo 'ok';
-            return;
+                if ($this->ReadPropertyBoolean('TrackLastSignals')) {
+                    if (@$this->GetIDForIdent('LastSignalsAt')) {
+                        $this->SetValue('LastSignalsAt', time());
+                    }
+                }
+
+                http_response_code(200);
+                echo 'ok';
+                return;
 
             default:
-            // Unbekannter/anderer Event-Typ → nicht fehlschlagen
-            $this->SendDebug('Webhook', "Unbekannter eventType: $eventType", 0);
-            http_response_code(200);
-            echo 'ok';
-            return;
+                $this->SendDebug('Webhook', "Unbekannter eventType: $eventType", 0);
+                http_response_code(200);
+                echo 'ok';
+                return;
         }
     }
 
@@ -894,7 +883,7 @@ class Smartcar extends IPSModule
             $doImmediateProbe = ($this->ReadAttributeString('NextAction') !== 'probe_after_auth');
             if ($doImmediateProbe) {
                 $this->SendDebug('RequestAccessToken', 'Starte sofortige Scope-Probe (kein pending probe_after_auth).', 0);
-                $this->ProbeScopes();
+                $this->ProbeScopes(true);   // STUMM prüfen
                 // Nach der Probe können Properties toggeln → nochmal anwenden
                 $this->ApplyChanges();
             } else {
