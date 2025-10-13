@@ -156,6 +156,7 @@ class Smartcar extends IPSModule
 
         $this->ProbeScopes();        // <-- gleich prüfen
         $this->ApplyChanges();       // Variablen/Profiles ziehen nach
+        }
     }
 
     private function RegisterHook()
