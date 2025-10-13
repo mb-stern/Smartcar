@@ -154,8 +154,8 @@ class Smartcar extends IPSModule
 
         if (isset($responseData['access_token'], $responseData['refresh_token'])) {
 
-        $this->ProbeScopes();        // <-- gleich prüfen
-        $this->ApplyChanges();       // Variablen/Profiles ziehen nach
+        $this->ProbeScopes();   
+        $this->ApplyChanges();   
         }
     }
 
@@ -279,16 +279,13 @@ class Smartcar extends IPSModule
                 ]
             ],
         ],
-            'actions' => [
-                ['type' => 'Button', 'caption' => 'Immer verbinden (alle Read-Scopes)',
-                'onClick' => 'echo SMCAR_ConnectAllRead($id);'],
-
-                ['type' => 'Button', 'caption' => 'Scopes erneut prüfen',
-                'onClick' => 'echo SMCAR_ProbeScopes($id) ? "Fertig." : "Fehlgeschlagen.";'],
-
-                ['type' => 'Button', 'caption' => 'Mit Smartcar verbinden (ausgewählte Scopes)',
-                'onClick' => 'echo SMCAR_GenerateAuthURL($id);'],
-
+        'actions' => [
+            ['type' => 'Button', 'caption' => 'Auf kompatible Scopes prüfen',
+            'onClick' => 'echo SMCAR_ProbeScopes($id) ? "Fertig." : "Fehlgeschlagen.";'],
+            ['type' => 'Button', 'caption' => 'Mit Smartcar verbinden',
+            'onClick' => 'echo SMCAR_GenerateAuthURL($id);'],
+            ['type' => 'Button', 'caption' => 'Fahrzeugdaten abrufen',
+            'onClick' => 'SMCAR_FetchVehicleData($id);'],
             ['type' => 'Label',  'caption' => 'Sag danke und unterstütze den Modulentwickler:'],
             [
                 'type'  => 'RowLayout',
@@ -352,10 +349,10 @@ class Smartcar extends IPSModule
 
     private function ApplyCompatToProperties(array $compat): void {
         $setTrue = function(string $prop, string $perm) use ($compat) {
-            if (array_key_exists($perm, $compat) && $compat[$perm] === true) {
+            if (isset($compat[$perm]) && $compat[$perm] === true) {
                 IPS_SetProperty($this->InstanceID, $prop, true);
             }
-            // bei false/unknown: nichts ändern → Nutzer kann später manuell aktivieren
+            // wenn false oder nicht vorhanden → NICHT anfassen
         };
         $setTrue('ScopeReadVehicleInfo',     'read_vehicle_info');
         $setTrue('ScopeReadVIN',             'read_vin');
@@ -363,11 +360,11 @@ class Smartcar extends IPSModule
         $setTrue('ScopeReadTires',           'read_tires');
         $setTrue('ScopeReadOdometer',        'read_odometer');
         $setTrue('ScopeReadBattery',         'read_battery');
-        $setTrue('ScopeReadBatteryCapacity', 'read_battery');     // gleicher Scope
+        $setTrue('ScopeReadBatteryCapacity', 'read_battery');
         $setTrue('ScopeReadFuel',            'read_fuel');
         $setTrue('ScopeReadSecurity',        'read_security');
         $setTrue('ScopeReadChargeLimit',     'read_charge');
-        $setTrue('ScopeReadChargeStatus',    'read_charge');      // gleicher Scope
+        $setTrue('ScopeReadChargeStatus',    'read_charge');
         $setTrue('ScopeReadOilLife',         'read_engine_oil');
     }
 
