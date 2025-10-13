@@ -272,7 +272,7 @@ class Smartcar extends IPSModule
             ],
         ],
         'actions' => [
-            ['type' => 'Button', 'caption' => 'Auf kompatible Scopes prüfen', 'onClick' => 'SMCAR_StartFullReauthAndProbe($id);'],
+            ['type' => 'Button', 'caption' => 'Auf kompatible Scopes prüfen', 'onClick' => 'echo SMCAR_StartFullReauthAndProbe($id);'],
             ['type' => 'Button', 'caption' => 'Mit Smartcar verbinden', 'onClick' => 'echo SMCAR_GenerateAuthURL($id);'],
             ['type' => 'Button', 'caption' => 'Fahrzeugdaten abrufen', 'onClick' => 'SMCAR_FetchVehicleData($id);'],
             ['type' => 'Label',  'caption' => 'Sag danke und unterstütze den Modulentwickler:'],
