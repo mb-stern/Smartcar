@@ -278,9 +278,6 @@ class Smartcar extends IPSModule
                         ['caption' => 'Live',      'value' => 'live']
                     ]
                 ],
-
-                ['type' => 'Label',  'caption' => $hasCompat ? ('Gefundene kompatible Scopes: ' . implode(', ', array_keys(array_filter($compat ?? [])))) : ''],
-
                 [
                     'type'    => 'ExpansionPanel',
                     'caption' => 'Berechtigungen (Scopes)',
@@ -289,6 +286,7 @@ class Smartcar extends IPSModule
                         ['type' => 'Label', 'caption' => $hasCompat
                         ? 'Scope-Filter aktiv (Ergebnis der automatischen Prüfung wird angewendet).'
                         : 'Noch keine automatische Prüfung – alle Scopes werden gelistet. Kompatible Scopes mit Button prüfen und auf OK warten.'],
+                        ['type' => 'Label',  'caption' => $hasCompat ? ('Gefundene kompatible Scopes: ' . implode(', ', array_keys(array_filter($compat ?? [])))) : ''],
 
                         // READ (sichtbar je Kompatibilität)
                         ['type'=>'CheckBox','name'=>'ScopeReadVehicleInfo',     'caption'=>'Fahrzeuginformationen lesen (/)','visible'=>$permVisible('read_vehicle_info')],
