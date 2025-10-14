@@ -86,11 +86,10 @@ Application Management Token|  Entnimm diesen in der Konfiguration von Smartcar 
 Client ID                   |  Entnimm diesen in der Konfiguration von Smartcar unter 'Configuration'.
 Client Secret               |  Entnimm diesen in der Konfiguration von Smartcar unter 'Configuration'.
 Verbindungsmodus            |  Hier definierst du, ob es sich um ein Simuliertes oder ein Live-Fahrzeug handelt. Die Fahrzeuge verwaltest du im Dashboard von Smartcar. Es kann auch zwischen simuliertem und Live-Fahrzeug gewechselt werden, jedoch muss danach 'Smartcar verbinden' erneut gewählt werden. Signals über Webhook sind für die simmulierten Fahrezeuge aktuell nicht verfügbar.
-Berechtigungen (Scopes)     |  Hier sind die aktuell vom Modul unterstützten Scopes zur Auswahl. Wichtig ist, dass alle angewählt werden, die später abgefragt werden, sonst werden hier keine Werte geliefert und keine Varaiblen erstellt. Über den Button 'Scopes automtisch prüfen' kann die Auswahl der Scopes auf die vom Fahrezug unterstützen eingegrenzt werden.
-Smartcar verbinden         |  Es öffnet sich ein Browserfenster, wo du dich mit deinen Zugangsdaten vom Fahrzeughersteller anmeldest und die gewählten Berechtigungen bei Smartcar noch genehmigst. Am Anschluss erscheint eine Erfolgsmeldung und die Zugriff-Token werden über die Redirect-URI an das Modul übertragen.
-Scopes automatisch prüfen  |  Dieser Button prüft alle verfügbaren Scopes und blendet die nicht mit dem Fahrzeug kompatiblen aus. Diese Funktion muss in der Regel nur erstmalig bei der Inbetriebnahme des Moduls durchgeführt werden
-Fahrzeugdaten abrufen       |  Hier rufst du alle aktivierten Scopes ab. Sei vorsichtig bei einem Live-Fahrzeug. Fünf aktivierte Scopes ergeben 5 API-Calls. Lies hier [PHP-Befehlsreferenz](#7-php-befehlsreferenz), wie du exklusiv die gewünschten Scopes aktualisierst. Erstmalig sollten die Scopes über den Button 'Fahrzeugdaten abrufen' aktualisiert werden, danach können die Variablen automatisch über die Signals aus dem Webhook aktualisiert werden.
-
+Berechtigungen (Scopes)     |  Hier sind die aktuell vom Modul unterstützten Scopes zur Auswahl. Wichtig ist, dass alle angewählt werden, die später abgefragt werden, sonst werden hier keine Werte geliefert und keine Variablen erstellt. Über den Button 'AUf kompatible Scopes prüfen' kann die Auswahl der Scopes eingegrenzt werden aufdiejenigen, welceh vom Fahrzeug unterstützt sind.
+Auf kompatible Scopes prüfen |  Dieser Button prüft alle verfügbaren Scopes und blendet die nicht mit dem Fahrzeug kompatiblen aus. Diese Funktion muss in der Regel nur erstmalig bei der Inbetriebnahme des Moduls durchgeführt werden. Danach öffnet sich ein Browserfenster zur Authetifizierung. Es werden alle existierenden Scopes abgefragt. Nur die kompatiblen werden dann in der Berechtigungsübersicht gespeichert. Dies Berechtigungsübersicht kann weiter bearbeitet werden, um allenfalls noch Scopes auszuschliesen. Ist die Auswahl einmal gemacht, diese mit dem Button 'Mit Smartcar verbinden' abschliessen. Danach werden nur noch diese Scopes abgefragt.
+Mit Smartcar verbinden       |  Es öffnet sich ein Browserfenster, wo du dich mit deinen Zugangsdaten vom Fahrzeughersteller anmeldest und die gewählten Berechtigungen bei Smartcar noch genehmigst. Im Anschluss erscheint eine Erfolgsmeldung und die Zugriff-Token werden über die Redirect-URI an das Modul übertragen. Die Variablen werden entsprechend den Scopes erstellt.
+Fahrzeugdaten abrufen       |  Hier rufst du alle aktivierten Scopes ab. Sei vorsichtig bei einem Live-Fahrzeug. Fünf aktivierte Scopes ergeben 5 API-Calls. Lies hier [PHP-Befehlsreferenz](#7-php-befehlsreferenz), wie du exklusiv die gewünschten Scopes aktualisierst. Erstmalig sollten die Scopes über den Button 'Fahrzeugdaten abrufen' aktualisiert werden, danach können die Variablen automatisch über die Signals aus dem Webhook aktualisiert werden. Es werden je nach Auswahl der Anzahl Signale (in der Smartcar-Konfiguration) entsprechend Variablen erstellt.
 
 ### 5. Statusvariablen und Profile
 
@@ -139,8 +138,7 @@ SMCAR_FetchVehicleData(12345);      |   Alle im Modul aktivierten Scopes abfrage
 ### 8. Versionen
 
 Version 3.2 (14.10.2025)
-- Automatische Scopeerkennung verbessert
-- Ablauf zum erkennen, wählen und abfragen der Scopes angepasst
+- Automatische Scopeerkennung verbessert.
 
 Version 3.1 (07.10.2025)
 - Neu ist eine automatische Prüfung auf kompatible Scopes im Konfigurationsformular verfügbar. So werden nur noch kompatible Scopes abgefragt und Fehlermeldungen und überflüssige Abfragen vermieden.
