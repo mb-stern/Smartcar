@@ -526,7 +526,8 @@ class Smartcar extends IPSModule
                     }
                 }
                 // $this ist im Methoden-Closure verfügbar
-                $this->SendDebug('RateLimit', '429 RATE_LIMIT – Retry-After: ' . ($retryAfter ?? '(kein Header)'), 0);
+                $msg = 'RateLimit | 429 RATE_LIMIT – Erneuter Versuch in: ' . (isset($retryAfter) ? (is_numeric($retryAfter) ? ($retryAfter . ' sec') : $retryAfter) : '(kein Header)');
+                $this->SendDebug('RateLimit', $msg, 0); $this->LogMessage($msg, KL_ERROR);
             }
 
             return [$statusCode, $raw, $data];
@@ -1032,7 +1033,8 @@ class Smartcar extends IPSModule
                     break;
                 }
             }
-            $this->SendDebug('RateLimit', '429 RATE_LIMIT – Retry-After: ' . ($retryAfter ?? '(kein Header)'), 0);
+            $msg = 'RateLimit | 429 RATE_LIMIT – Erneuter Versuch in: ' . (isset($retryAfter) ? (is_numeric($retryAfter) ? ($retryAfter . ' sec') : $retryAfter) : '(kein Header)');
+            $this->SendDebug('RateLimit', $msg, 0); $this->LogMessage($msg, KL_ERROR);
         }
 
         $data = json_decode($response, true);
@@ -1099,7 +1101,8 @@ class Smartcar extends IPSModule
                     break;
                 }
             }
-            $this->SendDebug('RateLimit', '429 RATE_LIMIT – Retry-After: ' . ($retryAfter ?? '(kein Header)'), 0);
+            $msg = 'RateLimit | 429 RATE_LIMIT – Erneuter Versuch in: ' . (isset($retryAfter) ? (is_numeric($retryAfter) ? ($retryAfter . ' sec') : $retryAfter) : '(kein Header)');
+            $this->SendDebug('RateLimit', $msg, 0); $this->LogMessage($msg, KL_ERROR);
         }
 
         if ($statusCode === 401 && $retryCount < $maxRetries) {
@@ -1883,7 +1886,8 @@ class Smartcar extends IPSModule
                     break;
                 }
             }
-            $this->SendDebug('RateLimit', '429 RATE_LIMIT – Retry-After: ' . ($retryAfter ?? '(kein Header)'), 0);
+            $msg = 'RateLimit | 429 RATE_LIMIT – Erneuter Versuch in: ' . (isset($retryAfter) ? (is_numeric($retryAfter) ? ($retryAfter . ' sec') : $retryAfter) : '(kein Header)');
+            $this->SendDebug('RateLimit', $msg, 0); $this->LogMessage($msg, KL_ERROR);
         }
 
         $data = json_decode($response, true);
