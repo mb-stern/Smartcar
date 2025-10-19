@@ -1243,8 +1243,6 @@ class Smartcar extends IPSModule
         ];
         $res = @file_get_contents($url, false, stream_context_create($options));
 
-        $this->DebugJsonAntwort('GetVehicleID', $res, $statusCode);
-
         $data = json_decode($res ?? '', true);
 
         // Statuscode lesen
@@ -1253,6 +1251,8 @@ class Smartcar extends IPSModule
             if (preg_match('#HTTP/\d+\.\d+\s+(\d+)#', $h, $m)) { $statusCode = (int)$m[1]; break; }
         }
 
+        $this->DebugJsonAntwort('GetVehicleID', $res, $statusCode);
+        
         $this->LogRateLimitIfAny($statusCode, $http_response_header ?? []);
         if ($statusCode !== 200) {
             $this->DebugHttpHeaders($http_response_header ?? [], $statusCode);
