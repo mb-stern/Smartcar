@@ -402,21 +402,23 @@ class Smartcar extends IPSModule
 
     private function ScheduleHttpRetry(array $job, int $delaySeconds): void
     {
-        // Versuchs-Counter hochzählen (siehe Punkt 2)
+        // Versuchszähler robust erhöhen
+        $job['attempt'] = (int)($job['attempt'] ?? 0) + 1;
+
         if ($job['attempt'] > self::MAX_RETRY_ATTEMPTS) {
             $this->SendDebug('Retry', 'Abgebrochen (max attempts erreicht).', 0);
-            // HIER erst ins Log (siehe Punkt 3)
-            $this->LogMessage('HTTP 429: Max. Wiederholversuche erreicht für '.json_encode($job), KL_ERROR);
+            // Erst jetzt als Error ins Log
+            $this->LogMessage('HTTP 429: Max. Wiederholversuche erreicht für '.json_encode($job, JSON_UNESCAPED_SLASHES), KL_ERROR);
             return;
         }
 
-        // optional: konfigurierbare Obergrenze, z.B. 1 Stunde
-        $maxCap = 3600; // oder 0 = keine Kappung
+        // optionale Obergrenze, z. B. 1h
+        $maxCap = 3600;
         if ($maxCap > 0) {
             $delaySeconds = min($delaySeconds, $maxCap);
         }
 
-        // nur noch Minimalgrenze + kleiner Jitter, KEINE 60s-Kappung
+        // kleiner Jitter, keine 60s-Kappung
         $delaySeconds = max(1, (int)round($delaySeconds) + random_int(0, 2));
 
         $job['dueAt'] = time() + $delaySeconds;
@@ -424,8 +426,10 @@ class Smartcar extends IPSModule
         $this->WriteAttributeString('PendingHttpRetry', json_encode($job, JSON_UNESCAPED_SLASHES));
         $this->SetTimerInterval('HttpRetryTimer', $delaySeconds * 1000);
 
-        $this->SendDebug('Retry', sprintf('Job geplant: kind=%s in %ds (Attempt %d)',
-            $job['kind'] ?? '?', $delaySeconds, $job['attempt']), 0);
+        $this->SendDebug('Retry', sprintf(
+            'Job geplant: kind=%s in %ds (Attempt %d)',
+            $job['kind'] ?? '?', $delaySeconds, $job['attempt']
+        ), 0);
     }
 
     private function ParseRetryAfter(?string $h): ?int 
@@ -460,27 +464,32 @@ class Smartcar extends IPSModule
 
         $attempt = (int)($job['attempt'] ?? 0);
 
-        // Passenden Aufruf erneut starten
         switch ($job['kind'] ?? '') {
             case 'batch':
-                $this->FetchVehicleData(); // ruft selbst wieder Schedule bei 429
+                $this->FetchVehicleData();
                 break;
 
             case 'single':
                 $path = (string)($job['path'] ?? '/');
-                $this->FetchSingleEndpoint($path); // dito
+                $this->FetchSingleEndpoint($path);
+                break;
+
+            case 'getVehicleID':
+                // Triggert nur das Caching; Aufrufer liest später aus Attribut
+                $token = $this->ReadAttributeString('AccessToken');
+                $this->GetVehicleID($token);
                 break;
 
             case 'command':
                 switch ($job['action'] ?? '') {
                     case 'SetChargeLimit':
-                        $this->SetChargeLimit((float)$job['limit']);
+                        $this->SetChargeLimit((float)($job['limit'] ?? 0.8));
                         break;
                     case 'SetChargeStatus':
-                        $this->SetChargeStatus((bool)$job['status']);
+                        $this->SetChargeStatus((bool)($job['status'] ?? false));
                         break;
                     case 'SetLockStatus':
-                        $this->SetLockStatus((bool)$job['status']);
+                        $this->SetLockStatus((bool)($job['status'] ?? true));
                         break;
                 }
                 break;
@@ -918,10 +927,14 @@ class Smartcar extends IPSModule
 
     private function DebugHttpHeaders(array $headers, ?int $statusCode = null): void 
     {
-    if (empty($headers)) return;
-    $line = implode(' | ', array_map('trim', $headers));
-    $this->SendDebug('HTTP-Headers' . ($statusCode ? " ($statusCode)" : ''), $line, 0);
-    $this->LogMessage('HTTP-Headers' . ($statusCode ? " ($statusCode)" : '') . ' | ' . $line, KL_ERROR);
+        if (empty($headers)) return;
+        $line = implode(' | ', array_map('trim', $headers));
+        $this->SendDebug('HTTP-Headers' . ($statusCode ? " ($statusCode)" : ''), $line, 0);
+
+        // Nur echte Fehler loggen – 429 ist erwartbar und wird retried
+        if ($statusCode !== null && $statusCode >= 400 && $statusCode !== 429) {
+            $this->LogMessage('HTTP-Headers' . " ($statusCode) | " . $line, KL_ERROR);
+        }
     }
 
     private function GetStatusCodeFromHeaders(array $headers): int {
@@ -1150,7 +1163,7 @@ class Smartcar extends IPSModule
 
         if ($statusCode === 429) {
             $delay = $this->ParseRetryAfter($this->GetRetryAfterFromHeaders($http_response_header ?? [])) ?? 2;
-            $this->ScheduleHttpRetry(['kind' => 'single', 'path' => $path, 'attempt' => $attempt], $delay);
+            $this->ScheduleHttpRetry(['kind' => 'batch'], $delay);
             return;
         }
 
@@ -1217,8 +1230,8 @@ class Smartcar extends IPSModule
 
         if ($statusCode === 429) {
             $delay = $this->ParseRetryAfter($this->GetRetryAfterFromHeaders($http_response_header ?? [])) ?? 2;
-            $this->ScheduleHttpRetry(['kind' => 'single', 'path' => $path, 'attempt' => $attempt], $delay);
-            return;
+            $this->ScheduleHttpRetry(['kind' => 'getVehicleID'], $delay);
+            return null;
         }
 
         if ($statusCode === 401 && $retryCount < $maxRetries) {
@@ -1870,9 +1883,16 @@ class Smartcar extends IPSModule
 
         if ($statusCode === 429) {
             $delay = $this->ParseRetryAfter($this->GetRetryAfterFromHeaders($http_response_header ?? [])) ?? 2;
-            $this->ScheduleHttpRetry(['kind' => 'single', 'path' => $path, 'attempt' => $attempt], $delay);
+            $this->ScheduleHttpRetry([
+                'kind'   => 'command',
+                'action' => 'SetChargeLimit', // bzw. SetChargeStatus / SetLockStatus
+                'limit'  => $limit            // nur bei SetChargeLimit
+                // bei SetChargeStatus: 'status' => $status
+                // bei SetLockStatus:   'status' => $status
+            ], $delay);
             return;
         }
+
 
         $data = json_decode($response, true);
         if (isset($data['statusCode']) && $data['statusCode'] !== 200) {
@@ -1920,7 +1940,13 @@ class Smartcar extends IPSModule
 
         if ($statusCode === 429) {
             $delay = $this->ParseRetryAfter($this->GetRetryAfterFromHeaders($http_response_header ?? [])) ?? 2;
-            $this->ScheduleHttpRetry(['kind' => 'single', 'path' => $path, 'attempt' => $attempt], $delay);
+            $this->ScheduleHttpRetry([
+                'kind'   => 'command',
+                'action' => 'SetChargeLimit', // bzw. SetChargeStatus / SetLockStatus
+                'limit'  => $limit            // nur bei SetChargeLimit
+                // bei SetChargeStatus: 'status' => $status
+                // bei SetLockStatus:   'status' => $status
+            ], $delay);
             return;
         }
 
@@ -1970,7 +1996,13 @@ class Smartcar extends IPSModule
 
         if ($statusCode === 429) {
             $delay = $this->ParseRetryAfter($this->GetRetryAfterFromHeaders($http_response_header ?? [])) ?? 2;
-            $this->ScheduleHttpRetry(['kind' => 'single', 'path' => $path, 'attempt' => $attempt], $delay);
+            $this->ScheduleHttpRetry([
+                'kind'   => 'command',
+                'action' => 'SetChargeLimit', // bzw. SetChargeStatus / SetLockStatus
+                'limit'  => $limit            // nur bei SetChargeLimit
+                // bei SetChargeStatus: 'status' => $status
+                // bei SetLockStatus:   'status' => $status
+            ], $delay);
             return;
         }
 
@@ -2050,9 +2082,9 @@ class Smartcar extends IPSModule
 
         if ($statusCode === 429) {
             $delay = $this->ParseRetryAfter($this->GetRetryAfterFromHeaders($http_response_header ?? [])) ?? 2;
-            $this->ScheduleHttpRetry(['kind' => 'single', 'path' => $path, 'attempt' => $attempt], $delay);
+            $this->ScheduleHttpRetry(['kind' => 'single', 'path' => $path], $delay);
             return;
-            }
+        }
 
         $data = json_decode($response, true);
         $this->SendDebug('FetchSingleEndpoint', "Antwort: " . json_encode($data, JSON_PRETTY_PRINT), 0);
