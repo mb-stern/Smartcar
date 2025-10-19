@@ -640,6 +640,7 @@ class Smartcar extends IPSModule
             if (!$silent) echo "Fehlgeschlagen: Keine Antwort der Smartcar API.";
             return false;
         }
+
         $this->SendDebug('ProbeScopes/raw', $raw, 0);
 
         if ($status !== 200) {
@@ -769,7 +770,8 @@ class Smartcar extends IPSModule
         $this->SendDebug('Webhook', 'Header SC-Signature: ' . ($sigHeader !== '' ? $sigHeader : '(leer)'), 0);
 
         $raw = file_get_contents('php://input') ?: '';
-        $this->SendDebug('Webhook', 'RAW Body: ' . $raw, 0);
+
+        $this->DebugJsonAntwort('Webhook', $raw, 200);
 
         $payload = json_decode($raw, true);
         if (!is_array($payload)) {
@@ -778,7 +780,6 @@ class Smartcar extends IPSModule
             echo 'Bad Request';
             return;
         }
-        $this->SendDebug('Webhook', 'JSON: ' . json_encode($payload, JSON_PRETTY_PRINT), 0);
 
         $verifyEnabled = $this->ReadPropertyBoolean('VerifyWebhookSignature');
         $mgmtToken     = trim($this->ReadPropertyString('ManagementToken'));
@@ -937,45 +938,28 @@ class Smartcar extends IPSModule
         }
     }
 
-    private function DebugJsonAntwort(string $tag, $response, ?int $statusCode = null, bool $alsoPrettyIfDifferent = true): void
+    private function DebugJsonAntwort(string $context, $response, ?int $statusCode = null): void
     {
-        // Rohstring ermitteln
-        $raw = ($response !== false && $response !== null && $response !== '') ? (string)$response : '(leer)';
-        // Immer mindestens EIN Eintrag im Stil: "Antwort: String"
-        $this->SendDebug($tag, 'Antwort: ' . $raw, 0);
-
-        // Optional: wenn valides JSON -> pretty drucken, aber nur wenn es sich vom Rohstring unterscheidet
-        if ($alsoPrettyIfDifferent && $raw !== '(leer)') {
-            $decoded = json_decode($raw, true);
-            if (is_array($decoded)) {
-                $pretty = json_encode($decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-                // Nur zweiten Eintrag schreiben, wenn die Darstellung sich sichtbar unterscheidet
-                if ($pretty !== $raw) {
-                    $this->SendDebug($tag, $pretty, 0);
-                }
-            }
+        $txt = ($response !== false && $response !== null && $response !== '') ? (string)$response : '';
+        if ($txt === '') {
+            $this->SendDebug($context, 'Antwort: (leer)', 0);
+            return;
         }
 
-        // Falls du den Statuscode im selben Rutsch markieren willst:
-        if ($statusCode !== null) {
-            $this->SendDebug($tag, "HTTP-Status: {$statusCode}", 0);
-        }
-    }
+        $decoded = json_decode($txt, true);
+        if (is_array($decoded)) {
+            $isError = ($statusCode !== null && $statusCode >= 400)
+                || (isset($decoded['statusCode']) && is_numeric($decoded['statusCode']) && (int)$decoded['statusCode'] >= 400);
 
-    private function GetStatusCodeFromHeaders(array $headers): int {
-    foreach ($headers as $h) {
-        if (preg_match('#HTTP/\d+\.\d+\s+(\d+)#', $h, $m)) return (int)$m[1];
-    }
-    return 0;
-    }
+            $payload = $isError
+                ? json_encode($decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+                : json_encode($decoded, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); // eine Zeile
 
-    private function GetRetryAfterFromHeaders(array $headers): ?string {
-        foreach ($headers as $h) {
-            if (stripos($h, 'Retry-After:') === 0) {
-                return trim(substr($h, strlen('Retry-After:')));
-            }
+            $this->SendDebug($context, 'Antwort: ' . $payload, 0);
+            return;
         }
-        return null;
+
+        $this->SendDebug($context, 'Antwort: ' . $txt, 0);
     }
 
     private function LogRateLimitIfAny(int $statusCode, array $headers): void 
@@ -1897,8 +1881,6 @@ class Smartcar extends IPSModule
         $context  = stream_context_create($options);
         $response = @file_get_contents($url, false, $context);
 
-        $this->DebugJsonAntwort('SetChargeLimit', $response, $statusCode);
-
         if ($response === false) {
             $this->SendDebug('SetChargeLimit', 'Keine Antwort.', 0);
             return;
@@ -1909,6 +1891,9 @@ class Smartcar extends IPSModule
         foreach ($httpHeaders as $h) {
             if (preg_match('#HTTP/\d+\.\d+\s+(\d+)#', $h, $m)) { $statusCode = (int)$m[1]; break; }
         }
+
+        $this->DebugJsonAntwort('SetChargeLimit', $response, $statusCode);
+
         $this->LogRateLimitIfAny($statusCode, $httpHeaders);
         if ($statusCode !== 200) {
             $this->DebugHttpHeaders($httpHeaders, $statusCode);
@@ -1958,13 +1943,14 @@ class Smartcar extends IPSModule
         $context  = stream_context_create($options);
         $response = @file_get_contents($url, false, $context);
 
-        $this->DebugJsonAntwort('SetChargeStatus', $response, $statusCode);
-
         $httpHeaders = $http_response_header ?? [];
         $statusCode = 0;
         foreach ($httpHeaders as $h) {
             if (preg_match('#HTTP/\d+\.\d+\s+(\d+)#', $h, $m)) { $statusCode = (int)$m[1]; break; }
         }
+
+        $this->DebugJsonAntwort('SetChargeStatus', $response, $statusCode);
+
         $this->LogRateLimitIfAny($statusCode, $httpHeaders);
         if ($statusCode !== 200) {
             $this->DebugHttpHeaders($httpHeaders, $statusCode);
@@ -2014,13 +2000,14 @@ class Smartcar extends IPSModule
         $context  = stream_context_create($options);
         $response = @file_get_contents($url, false, $context);
 
-        $this->DebugJsonAntwort('SetLockStatus', $response, $statusCode);
-
         $httpHeaders = $http_response_header ?? [];
         $statusCode = 0;
         foreach ($httpHeaders as $h) {
             if (preg_match('#HTTP/\d+\.\d+\s+(\d+)#', $h, $m)) { $statusCode = (int)$m[1]; break; }
         }
+
+        $this->DebugJsonAntwort('SetLockStatus', $response, $statusCode);
+        
         $this->LogRateLimitIfAny($statusCode, $httpHeaders);
         if ($statusCode !== 200) {
             $this->DebugHttpHeaders($httpHeaders, $statusCode);
