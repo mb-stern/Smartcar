@@ -46,12 +46,13 @@ class Smartcar extends IPSModule
         'ScopeReadChargeStatus'    => 'read_charge',    // gleicher Scope
         'ScopeReadOilLife'         => 'read_engine_oil',
 
-        // CONTROL (separat; falls du sie mit-autorisieren willst)
+        // CONTROL
         'SetChargeLimit'           => 'control_charge',
         'SetChargeStatus'          => 'control_charge',
         'SetLockStatus'            => 'control_security',
     ];
 
+    // Anzahl Wiederholungen bei 429 Fehler (Rate-Limit)
     private const MAX_RETRY_ATTEMPTS = 3;
 
     public function Create()
@@ -103,9 +104,7 @@ class Smartcar extends IPSModule
         
         // Effektive OAuth-Redirect-URI (manuell ODER Connect+Hook)
         $this->RegisterAttributeString('RedirectURI', '');
-        
-        // Nur Info/Anzeige: unter dieser URL ist dein Webhook erreichbar (Connect + Hook)
-        $this->RegisterAttributeString('WebhookCallbackURI', '');
+
         
         //Kompatiple Scopes
         $this->RegisterAttributeString('CompatScopes', '');
@@ -150,8 +149,6 @@ class Smartcar extends IPSModule
         }
 
         $this->WriteAttributeString('RedirectURI', $effectiveRedirect);
-        // Optional rausnehmen, falls nicht gebraucht:
-        $this->WriteAttributeString('WebhookCallbackURI', $effectiveRedirect);
 
         $this->CreateProfile();
 
