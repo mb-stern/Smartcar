@@ -1167,8 +1167,6 @@ class Smartcar extends IPSModule
         $context  = stream_context_create($options);
         $response = @file_get_contents($url, false, $context);
         
-        $this->DebugJsonAntwort('FetchVehicleData', $response, $statusCode);
-        
         if ($response === false) {
             $this->SendDebug('FetchVehicleData', '❌ Keine Antwort von der API!', 0);
             $this->LogMessage('FetchVehicleData - Keine Antwort von der API!', KL_ERROR);
@@ -1183,6 +1181,8 @@ class Smartcar extends IPSModule
                 break;
             }
         }
+
+        $this->DebugJsonAntwort('FetchVehicleData', $response, $statusCode);
 
         $this->LogRateLimitIfAny($statusCode, $httpResponseHeader);
         if ($statusCode !== 200) {
@@ -1924,7 +1924,6 @@ class Smartcar extends IPSModule
             return;
         }
 
-
         $data = json_decode($response, true);
         if (isset($data['statusCode']) && $data['statusCode'] !== 200) {
             $this->SendDebug('SetChargeLimit', "Fehler: " . json_encode($data), 0);
@@ -2093,7 +2092,7 @@ class Smartcar extends IPSModule
         $context  = stream_context_create($options);
         $response = @file_get_contents($url, false, $context);
 
-        $this->DebugJsonAntwort('FetchSingleEndpoint', $response, $statusCode);
+        
 
         if ($response === false) {
             $this->SendDebug('FetchSingleEndpoint', '❌ Keine Antwort von der API!', 0);
@@ -2108,6 +2107,8 @@ class Smartcar extends IPSModule
                 break;
             }
         }
+
+        $this->DebugJsonAntwort('FetchSingleEndpoint', $response, $statusCode);
 
         $this->LogRateLimitIfAny($statusCode, $http_response_header ?? []);
         if ($statusCode !== 200) {
