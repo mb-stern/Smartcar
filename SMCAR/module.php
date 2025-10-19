@@ -99,6 +99,7 @@ class Smartcar extends IPSModule
         $this->RegisterAttributeString('RefreshToken', '');
         $this->RegisterAttributeString('VehicleID', '');
         $this->RegisterAttributeString('PendingHttpRetry', '');
+        $this->RegisterAttributeString('LastProbeAt', '');
         
         // Effektive OAuth-Redirect-URI (manuell ODER Connect+Hook)
         $this->RegisterAttributeString('RedirectURI', '');
@@ -627,6 +628,14 @@ class Smartcar extends IPSModule
 
     public function ProbeScopes(bool $silent = false): bool
     {
+        // Reentrancy-Guard (10s Debounce)
+        $last = (int)$this->ReadAttributeString('LastProbeAt');
+        if ($last && (time() - $last) < 10) {
+            $this->SendDebug('ProbeScopes', 'Debounced (called again too soon)', 0);
+            return true; // oder false – je nach gewünschter Semantik
+        }
+        $this->WriteAttributeString('LastProbeAt', (string)time());
+        
         $accessToken = $this->ReadAttributeString('AccessToken');
         $vehicleID   = $this->GetVehicleID($accessToken);
 
@@ -740,7 +749,7 @@ class Smartcar extends IPSModule
 
         $this->WriteAttributeString('CompatScopes', json_encode($map, JSON_UNESCAPED_SLASHES));
         $this->ApplyCompatToProperties($map);
-        //IPS_ApplyChanges($this->InstanceID);
+        IPS_ApplyChanges($this->InstanceID);
 
         if ($missingScopes) {
             $authURL = $this->GenerateAuthURLAllRead();
