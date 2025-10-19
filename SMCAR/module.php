@@ -496,7 +496,7 @@ class Smartcar extends IPSModule
 
         $doBatch = function(string $token) use ($vehicleID) {
             $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID/batch";
-            $reqs  = array_map(fn($p) => ['path' => $p], self::READ_PATHS);
+            $reqs = array_map(fn($p) => ['path' => $p], self::READ_PATHS);
             $postData = json_encode(['requests' => $reqs]);
 
             $ctx = stream_context_create([
@@ -507,26 +507,16 @@ class Smartcar extends IPSModule
                     'ignore_errors' => true
                 ]
             ]);
+
             $raw  = @file_get_contents($url, false, $ctx);
             $data = json_decode($raw ?? '', true);
 
-            // Statuscode ermitteln
-             $statusCode = 0;
-            foreach ($http_response_header ?? [] as $h) {
-                if (preg_match('#HTTP/\d+\.\d+\s+(\d+)#', $h, $m)) { $statusCode = (int)$m[1]; break; }
-            }
+            // Statuscode ermitteln (nutzt deinen Helfer)
+            $statusCode = $this->GetStatusCodeFromHeaders($http_response_header ?? []);
 
-            // INSERT: 429 Retry-After debug
-            if ($statusCode === 429) {
-                $retryAfter = null;
-                foreach (($http_response_header ?? []) as $h) {
-                    if (stripos($h, 'Retry-After:') === 0) {
-                        $retryAfter = trim(substr($h, strlen('Retry-After:')));
-                        break;
-                    }
-                }
-                $msg = 'RateLimit | 429 RATE_LIMIT – Erneuter Versuch in: ' . (isset($retryAfter) ? (is_numeric($retryAfter) ? ($retryAfter . ' sec') : $retryAfter) : '(kein Header)');
-                $this->SendDebug('RateLimit', $msg, 0); $this->LogMessage($msg, KL_ERROR);
+            $this->LogRateLimitIfAny($statusCode, $http_response_header ?? []);
+            if ($statusCode !== 200) {
+                $this->DebugHttpHeaders($http_response_header ?? [], $statusCode);
             }
 
             return [$statusCode, $raw, $data];
@@ -831,6 +821,39 @@ class Smartcar extends IPSModule
         }
     }
 
+    private function DebugHttpHeaders(array $headers, ?int $statusCode = null): void 
+    {
+    if (empty($headers)) return;
+    $line = implode(' | ', array_map('trim', $headers));
+    $this->SendDebug('HTTP-Headers' . ($statusCode ? " ($statusCode)" : ''), $line, 0);
+    $this->LogMessage('HTTP-Headers' . ($statusCode ? " ($statusCode)" : '') . ' | ' . $line, KL_ERROR);
+    }
+
+    private function GetStatusCodeFromHeaders(array $headers): int {
+    foreach ($headers as $h) {
+        if (preg_match('#HTTP/\d+\.\d+\s+(\d+)#', $h, $m)) return (int)$m[1];
+    }
+    return 0;
+    }
+
+    private function GetRetryAfterFromHeaders(array $headers): ?string {
+        foreach ($headers as $h) {
+            if (stripos($h, 'Retry-After:') === 0) {
+                return trim(substr($h, strlen('Retry-After:')));
+            }
+        }
+        return null;
+    }
+
+    private function LogRateLimitIfAny(int $statusCode, array $headers): void {
+        if ($statusCode !== 429) return;
+        $retryAfter = $this->GetRetryAfterFromHeaders($headers);
+        $txt = 'RateLimit | 429 RATE_LIMIT – Erneuter Versuch in: ' .
+            ($retryAfter !== null ? (is_numeric($retryAfter) ? ($retryAfter . ' sec') : $retryAfter) : '(kein Header)');
+        $this->SendDebug('RateLimit', $txt, 0);
+        $this->LogMessage($txt, KL_ERROR);
+    }
+
     private function getRequestHeader(string $name): ?string
     {
         // Robust alle Varianten: getallheaders & $_SERVER
@@ -1024,16 +1047,9 @@ class Smartcar extends IPSModule
             }
         }
 
-                if ($statusCode === 429) {
-            $retryAfter = null;
-            foreach (($http_response_header ?? []) as $h) {
-                if (stripos($h, 'Retry-After:') === 0) {
-                    $retryAfter = trim(substr($h, strlen('Retry-After:')));
-                    break;
-                }
-            }
-            $msg = 'RateLimit | 429 RATE_LIMIT – Erneuter Versuch in: ' . (isset($retryAfter) ? (is_numeric($retryAfter) ? ($retryAfter . ' sec') : $retryAfter) : '(kein Header)');
-            $this->SendDebug('RateLimit', $msg, 0); $this->LogMessage($msg, KL_ERROR);
+        $this->LogRateLimitIfAny($statusCode, $httpResponseHeader);
+        if ($statusCode !== 200) {
+            $this->DebugHttpHeaders($httpResponseHeader, $statusCode);
         }
 
         $data = json_decode($response, true);
@@ -1092,16 +1108,9 @@ class Smartcar extends IPSModule
             if (preg_match('#HTTP/\d+\.\d+\s+(\d+)#', $h, $m)) { $statusCode = (int)$m[1]; break; }
         }
 
-        if ($statusCode === 429) {
-            $retryAfter = null;
-            foreach (($http_response_header ?? []) as $h) {
-                if (stripos($h, 'Retry-After:') === 0) {
-                    $retryAfter = trim(substr($h, strlen('Retry-After:')));
-                    break;
-                }
-            }
-            $msg = 'RateLimit | 429 RATE_LIMIT – Erneuter Versuch in: ' . (isset($retryAfter) ? (is_numeric($retryAfter) ? ($retryAfter . ' sec') : $retryAfter) : '(kein Header)');
-            $this->SendDebug('RateLimit', $msg, 0); $this->LogMessage($msg, KL_ERROR);
+        $this->LogRateLimitIfAny($statusCode, $http_response_header ?? []);
+        if ($statusCode !== 200) {
+            $this->DebugHttpHeaders($http_response_header ?? [], $statusCode);
         }
 
         if ($statusCode === 401 && $retryCount < $maxRetries) {
@@ -1877,16 +1886,9 @@ class Smartcar extends IPSModule
             }
         }
 
-                if ($statusCode === 429) {
-            $retryAfter = null;
-            foreach (($http_response_header ?? []) as $h) {
-                if (stripos($h, 'Retry-After:') === 0) {
-                    $retryAfter = trim(substr($h, strlen('Retry-After:')));
-                    break;
-                }
-            }
-            $msg = 'RateLimit | 429 RATE_LIMIT – Erneuter Versuch in: ' . (isset($retryAfter) ? (is_numeric($retryAfter) ? ($retryAfter . ' sec') : $retryAfter) : '(kein Header)');
-            $this->SendDebug('RateLimit', $msg, 0); $this->LogMessage($msg, KL_ERROR);
+        $this->LogRateLimitIfAny($statusCode, $http_response_header ?? []);
+        if ($statusCode !== 200) {
+            $this->DebugHttpHeaders($http_response_header ?? [], $statusCode);
         }
 
         $data = json_decode($response, true);
@@ -1965,13 +1967,22 @@ class Smartcar extends IPSModule
             IPS_SetVariableProfileAssociation('SMCAR.Charge', 'CHARGING', 'Laden', '', -1);
             IPS_SetVariableProfileAssociation('SMCAR.Charge', 'FULLY_CHARGED', 'Voll geladen', '', -1);
             IPS_SetVariableProfileAssociation('SMCAR.Charge', 'NOT_CHARGING', 'Lädt nicht', '', -1);
+            IPS_SetVariableProfileAssociation('SMCAR.Charge', 'UNKNOWN', 'Unbekannt', '', -1);
         }
+        
         if (!IPS_VariableProfileExists('SMCAR.Health')) {
-        IPS_CreateVariableProfile('SMCAR.Health', VARIABLETYPE_STRING);
-        IPS_SetVariableProfileAssociation('SMCAR.Health', 'OK',      'OK',        '', -1);
-        IPS_SetVariableProfileAssociation('SMCAR.Health', 'WARN',    'Warnung',   '', -1);
-        IPS_SetVariableProfileAssociation('SMCAR.Health', 'ERROR',   'Fehler',    '', -1);
-        IPS_SetVariableProfileAssociation('SMCAR.Health', 'UNKNOWN', 'Unbekannt', '', -1);
+            IPS_CreateVariableProfile('SMCAR.Health', VARIABLETYPE_STRING);
+            IPS_SetVariableProfileAssociation('SMCAR.Health', 'OK',      'OK',        '', -1);
+            IPS_SetVariableProfileAssociation('SMCAR.Health', 'WARN',    'Warnung',   '', -1);
+            IPS_SetVariableProfileAssociation('SMCAR.Health', 'ERROR',   'Fehler',    '', -1);
+            IPS_SetVariableProfileAssociation('SMCAR.Health', 'UNKNOWN', 'Unbekannt', '', -1);
+        }
+
+        if (!IPS_VariableProfileExists('SMCAR.ChargeLimitSet')) {
+            IPS_CreateVariableProfile('SMCAR.ChargeLimitSet', VARIABLETYPE_FLOAT);
+            IPS_SetVariableProfileText('SMCAR.ChargeLimitSet', '', ' %');
+            IPS_SetVariableProfileDigits('SMCAR.ChargeLimitSet', 0);
+            IPS_SetVariableProfileValues('SMCAR.ChargeLimitSet', 50, 100, 5);
         }
     }
 
@@ -2106,7 +2117,7 @@ class Smartcar extends IPSModule
 
         // Commands
         if ($this->ReadPropertyBoolean('SetChargeLimit')) {
-            $this->RegisterVariableFloat('SetChargeLimit', 'Ladelimit setzen', 'SMCAR.Progress', 110);
+        $this->RegisterVariableFloat('SetChargeLimit', 'Ladelimit setzen', 'SMCAR.ChargeLimitSet', 110);
             $this->EnableAction('SetChargeLimit');
         } else {
             @$this->UnregisterVariable('SetChargeLimit');
