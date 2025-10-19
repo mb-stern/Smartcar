@@ -1363,7 +1363,6 @@ class Smartcar extends IPSModule
         return preg_replace('/([a-z])([A-Z])/', '$1 $2', $ident);
     }
 
-    // Legt Variablen bei Bedarf an und schreibt den Wert – nur wenn erlaubt.
     private function setSafe(string $ident, int $varType, $value, string $profile = '', int $pos = 0, bool $createIfMissing = true): void
     {
         $id = @($this->GetIDForIdent($ident));
@@ -1852,7 +1851,6 @@ class Smartcar extends IPSModule
             $this->DebugHttpHeaders($httpHeaders, $statusCode);
         }
 
-        // === NEU: 429 -> Retry über Timer ===
         if ($statusCode === 429) {
             $retryAfter = $this->GetRetryAfterFromHeaders($httpHeaders);
             $delay = is_numeric($retryAfter) ? (int)$retryAfter : 2;
