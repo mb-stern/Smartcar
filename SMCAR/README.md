@@ -154,21 +154,6 @@ Sobald ein Signal eintrifft, legt das Modul automatisch passende Variablen an un
 > Es gibt weit über 100 mögliche Signaltypen.  
 > Das Modul legt Variablen **automatisch** an, sobald ein neues Signal empfangen wird.
 
-### Beispiel-Payload
-
-```json
-{
-  "eventType": "VEHICLE_STATE",
-  "data": {
-    "vehicle": { "id": "xxxx", "make": "VW", "model": "ID.4", "year": 2023 },
-    "signals": [
-      { "code": "tractionbattery-stateofcharge", "body": { "value": 72.0 } },
-      { "code": "charge-ischarging", "body": { "value": true } },
-      { "code": "closure-islocked", "body": { "value": false } }
-    ]
-  }
-}
-```
 
 ### Hinweise
 
