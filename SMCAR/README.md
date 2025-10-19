@@ -103,12 +103,13 @@ Es werden Variablen/Typen je nach Wahl der Scopes erstellt. Es können pro Scope
 
 Name   | Typ
 ------ | ------- 
-SMCAR.Odometer   |  Float  
-SMCAR.Pressure   |  Float   
-SMCAR.Progress   |  Float  
-SMCAR.Status     |  String   
-SMCAR.Charge     |  String
-SMCAR.Health     |  String
+SMCAR.Odometer          |  Float  
+SMCAR.Pressure          |  Float   
+SMCAR.Progress          |  Float  
+SMCAR.Status            |  String   
+SMCAR.Charge            |  String
+SMCAR.Health            |  String
+SMCAR.ChargeLimitSet    |  Float
 
 ### 6. WebFront
 
