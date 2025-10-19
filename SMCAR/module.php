@@ -525,7 +525,6 @@ class Smartcar extends IPSModule
                         break;
                     }
                 }
-                // $this ist im Methoden-Closure verfügbar
                 $msg = 'RateLimit | 429 RATE_LIMIT – Erneuter Versuch in: ' . (isset($retryAfter) ? (is_numeric($retryAfter) ? ($retryAfter . ' sec') : $retryAfter) : '(kein Header)');
                 $this->SendDebug('RateLimit', $msg, 0); $this->LogMessage($msg, KL_ERROR);
             }
