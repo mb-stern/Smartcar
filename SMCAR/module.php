@@ -2,6 +2,7 @@
 
 class Smartcar extends IPSModule
 {
+    /** Primäre Read-Scopes (ohne Control) */
     private const READ_SCOPES = [
         'read_vehicle_info',
         'read_vin',
@@ -12,22 +13,43 @@ class Smartcar extends IPSModule
         'read_fuel',
         'read_security',
         'read_charge',
-        'read_engine_oil'
+        'read_engine_oil',
     ];
 
-    private const READ_PATHS = [
-        '/',                 // read_vehicle_info
-        '/vin',              // read_vin
-        '/location',         // read_location
-        '/tires/pressure',   // read_tires
-        '/odometer',         // read_odometer
-        '/battery',          // read_battery
-        '/battery/nominal_capacity', // read_battery (Capacity)
-        '/fuel',             // read_fuel
-        '/security',         // read_security
-        '/charge/limit',     // read_charge
-        '/charge',           // read_charge
-        '/engine/oil'        // read_engine_oil
+    /** Mapping: Scope -> API-Paths (alle Paths, die zur Prüfung/Abfrage dieses Scopes gehören) */
+    private const SCOPE_TO_PATHS = [
+        'read_vehicle_info' => ['/'],
+        'read_vin'          => ['/vin'],
+        'read_location'     => ['/location'],
+        'read_tires'        => ['/tires/pressure'],
+        'read_odometer'     => ['/odometer'],
+        'read_battery'      => ['/battery', '/battery/nominal_capacity'],
+        'read_fuel'         => ['/fuel'],
+        'read_security'     => ['/security'],
+        'read_charge'       => ['/charge/limit', '/charge'],
+        'read_engine_oil'   => ['/engine/oil'],
+    ];
+
+    /** Mapping: Property-Name (Form-Checkbox) -> benötigter Scope */
+    private const PROP_TO_SCOPE = [
+        // READ
+        'ScopeReadVehicleInfo'     => 'read_vehicle_info',
+        'ScopeReadVIN'             => 'read_vin',
+        'ScopeReadLocation'        => 'read_location',
+        'ScopeReadTires'           => 'read_tires',
+        'ScopeReadOdometer'        => 'read_odometer',
+        'ScopeReadBattery'         => 'read_battery',
+        'ScopeReadBatteryCapacity' => 'read_battery',   // gleicher Scope
+        'ScopeReadFuel'            => 'read_fuel',
+        'ScopeReadSecurity'        => 'read_security',
+        'ScopeReadChargeLimit'     => 'read_charge',
+        'ScopeReadChargeStatus'    => 'read_charge',    // gleicher Scope
+        'ScopeReadOilLife'         => 'read_engine_oil',
+
+        // CONTROL (separat; falls du sie mit-autorisieren willst)
+        'SetChargeLimit'           => 'control_charge',
+        'SetChargeStatus'          => 'control_charge',
+        'SetLockStatus'            => 'control_security',
     ];
 
     private const MAX_RETRY_ATTEMPTS = 3;
@@ -354,6 +376,55 @@ class Smartcar extends IPSModule
         };
     }
 
+    /** Liefert alle vom User aktivierten Scopes (inkl. Control falls gewählt). */
+    private function getEnabledScopes(): array
+    {
+        $scopes = [];
+        foreach (self::PROP_TO_SCOPE as $prop => $scope) {
+            if ($this->ReadPropertyBoolean($prop)) {
+                $scopes[$scope] = true; // Set wie Map
+            }
+        }
+        return array_keys($scopes);
+    }
+
+    /** Liefert NUR aktivierte Read-Scopes (ohne control_*). */
+    private function getEnabledReadScopes(): array
+    {
+        return array_values(array_filter(
+            $this->getEnabledScopes(),
+            fn($s) => str_starts_with($s, 'read_')
+        ));
+    }
+
+    /** Liefert alle API-Paths, die aus den aktivierten Read-Scopes resultieren (für Batch). */
+    private function getEnabledReadPaths(): array
+    {
+        $paths = [];
+        foreach ($this->getEnabledReadScopes() as $scope) {
+            foreach (self::SCOPE_TO_PATHS[$scope] ?? [] as $p) {
+                $paths[$p] = true;
+            }
+        }
+        return array_keys($paths);
+    }
+
+    /** Alle Read-Scopes (voll) – bequem für Reauth/Probe-All. */
+    private function getAllReadScopes(): array
+    {
+        return self::READ_SCOPES;
+    }
+
+    /** Alle Read-Paths (voll) – bequem für ProbeScopes(). */
+    private function getAllReadPaths(): array
+    {
+        $set = [];
+        foreach (self::SCOPE_TO_PATHS as $paths) {
+            foreach ($paths as $p) $set[$p] = true;
+        }
+        return array_keys($set);
+    }
+
     private function bodyHasNumeric($a, array $keys): bool {
         foreach ($keys as $k) {
             if (isset($a[$k]) && is_numeric($a[$k])) return true;
@@ -365,18 +436,9 @@ class Smartcar extends IPSModule
 
     public function StartFullReauthAndProbe()
     {
-        // nach Rückkehr soll automatisch geprüft werden
         $this->WriteAttributeString('NextAction', 'probe_after_auth');
-
-        // immer ALLE Read-Scopes benutzen
-        $allScopes = [
-            'read_vehicle_info', 'read_vin', 'read_location', 'read_tires',
-            'read_odometer', 'read_battery', 'read_fuel',
-            'read_security', 'read_charge', 'read_engine_oil'
-        ];
-
-        $url = $this->BuildAuthURLWithScopes($allScopes, 'probe'); 
-        echo $url; 
+        $url = $this->BuildAuthURLWithScopes($this->getAllReadScopes(), 'probe');
+        echo $url;
     }
 
     private function ApplyCompatToProperties(array $compat): void {
@@ -527,30 +589,15 @@ class Smartcar extends IPSModule
     public function GenerateAuthURLAllRead(): string
     {
         $this->WriteAttributeString('NextAction', 'probe_after_auth');
-
-        $url = $this->BuildAuthURLWithScopes(self::READ_SCOPES, 'allread');
+        $url = $this->BuildAuthURLWithScopes($this->getAllReadScopes(), 'allread');
         $this->SendDebug('GenerateAuthURLAllRead', "URL: $url", 0);
         return $url;
     }
 
     public function GenerateAuthURL()
     {
-        $scopes = [];
-        if ($this->ReadPropertyBoolean('ScopeReadVehicleInfo')) $scopes[] = 'read_vehicle_info';
-        if ($this->ReadPropertyBoolean('ScopeReadLocation'))    $scopes[] = 'read_location';
-        if ($this->ReadPropertyBoolean('ScopeReadOdometer'))    $scopes[] = 'read_odometer';
-        if ($this->ReadPropertyBoolean('ScopeReadTires'))       $scopes[] = 'read_tires';
-        if ($this->ReadPropertyBoolean('ScopeReadBattery') || $this->ReadPropertyBoolean('ScopeReadBatteryCapacity')) $scopes[] = 'read_battery';
-        if ($this->ReadPropertyBoolean('ScopeReadFuel'))        $scopes[] = 'read_fuel';
-        if ($this->ReadPropertyBoolean('ScopeReadSecurity'))    $scopes[] = 'read_security';
-        if ($this->ReadPropertyBoolean('ScopeReadChargeLimit') || $this->ReadPropertyBoolean('ScopeReadChargeStatus')) $scopes[] = 'read_charge';
-        if ($this->ReadPropertyBoolean('ScopeReadVIN'))         $scopes[] = 'read_vin';
-        if ($this->ReadPropertyBoolean('ScopeReadOilLife'))     $scopes[] = 'read_engine_oil';
-        if ($this->ReadPropertyBoolean('SetChargeLimit') || $this->ReadPropertyBoolean('SetChargeStatus')) $scopes[] = 'control_charge';
-        if ($this->ReadPropertyBoolean('SetLockStatus'))        $scopes[] = 'control_security';
-
+        $scopes = $this->getEnabledScopes();
         if (empty($scopes)) return 'Fehler: Keine Scopes ausgewählt!';
-
         $url = $this->BuildAuthURLWithScopes($scopes, 'manual');
         $this->SendDebug('GenerateAuthURL', 'Auth-URL (ausgewählte Scopes): ' . $url, 0);
         return $url;
@@ -600,7 +647,7 @@ class Smartcar extends IPSModule
 
         $doBatch = function(string $token) use ($vehicleID) {
             $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID/batch";
-            $reqs = array_map(fn($p) => ['path' => $p], self::READ_PATHS);
+            $reqs = array_map(fn($p) => ['path' => $p], $this->getAllReadPaths());
             $postData = json_encode(['requests' => $reqs]);
 
             $ctx = stream_context_create([
@@ -926,6 +973,26 @@ class Smartcar extends IPSModule
         }
     }
 
+    private function GetStatusCodeFromHeaders(array $headers): int
+    {
+        foreach ($headers as $h) {
+            if (preg_match('#HTTP/\d+\.\d+\s+(\d+)#', $h, $m)) {
+                return (int)$m[1];
+            }
+        }
+        return 0;
+    }
+
+    private function GetRetryAfterFromHeaders(array $headers): ?string
+    {
+        foreach ($headers as $h) {
+            if (stripos($h, 'Retry-After:') === 0) {
+                return trim(substr($h, strlen('Retry-After:')));
+            }
+        }
+        return null;
+    }
+
     private function DebugHttpHeaders(array $headers, ?int $statusCode = null): void 
     {
         if (empty($headers)) return;
@@ -1109,25 +1176,13 @@ class Smartcar extends IPSModule
             return false;
         }
 
-        $endpoints = [];
-        if ($this->ReadPropertyBoolean('ScopeReadVehicleInfo'))     $endpoints[] = ['path' => '/'];
-        if ($this->ReadPropertyBoolean('ScopeReadVIN'))             $endpoints[] = ['path' => '/vin'];
-        if ($this->ReadPropertyBoolean('ScopeReadLocation'))        $endpoints[] = ['path' => '/location'];
-        if ($this->ReadPropertyBoolean('ScopeReadTires'))           $endpoints[] = ['path' => '/tires/pressure'];
-        if ($this->ReadPropertyBoolean('ScopeReadOdometer'))        $endpoints[] = ['path' => '/odometer'];
-        if ($this->ReadPropertyBoolean('ScopeReadBattery'))         $endpoints[] = ['path' => '/battery'];
-        if ($this->ReadPropertyBoolean('ScopeReadBatteryCapacity')) $endpoints[] = ['path' => '/battery/nominal_capacity'];
-        if ($this->ReadPropertyBoolean('ScopeReadFuel'))            $endpoints[] = ['path' => '/fuel'];
-        if ($this->ReadPropertyBoolean('ScopeReadSecurity'))        $endpoints[] = ['path' => '/security'];
-        if ($this->ReadPropertyBoolean('ScopeReadChargeLimit'))     $endpoints[] = ['path' => '/charge/limit'];
-        if ($this->ReadPropertyBoolean('ScopeReadChargeStatus'))    $endpoints[] = ['path' => '/charge'];
-        if ($this->ReadPropertyBoolean('ScopeReadOilLife'))         $endpoints[] = ['path' => '/engine/oil'];
-
-        if (empty($endpoints)) {
-            $this->SendDebug('FetchVehicleData', 'Keine Scopes aktiviert!', 0);
-            $this->LogMessage('FetchVehicleData - Keine Scopes aktiviert!', KL_WARNING);
+        $paths = $this->getEnabledReadPaths();
+        if (empty($paths)) {
+            $this->SendDebug('FetchVehicleData', 'Keine Read-Scopes aktiviert!', 0);
+            $this->LogMessage('FetchVehicleData - Keine Read-Scopes aktiviert!', KL_WARNING);
             return false;
         }
+        $endpoints = array_map(fn($p) => ['path' => $p], $paths);
 
         $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID/batch";
         $postData = json_encode(['requests' => $endpoints]);
@@ -1158,7 +1213,7 @@ class Smartcar extends IPSModule
         }
 
         $httpResponseHeader = $http_response_header ?? [];
-        $statusCode = 0;
+        $statusCode = $this->GetStatusCodeFromHeaders($httpResponseHeader);
         foreach ($httpResponseHeader as $header) {
             if (preg_match('#HTTP/\d+\.\d+\s+(\d+)#', $header, $matches)) {
                 $statusCode = (int)$matches[1];
@@ -1230,7 +1285,7 @@ class Smartcar extends IPSModule
         $data = json_decode($res ?? '', true);
 
         // Statuscode lesen
-        $statusCode = 0;
+        $statusCode = $this->GetStatusCodeFromHeaders($httpResponseHeader);
         foreach ($http_response_header ?? [] as $h) {
             if (preg_match('#HTTP/\d+\.\d+\s+(\d+)#', $h, $m)) { $statusCode = (int)$m[1]; break; }
         }
@@ -1887,7 +1942,7 @@ class Smartcar extends IPSModule
         }
 
         $httpHeaders = $http_response_header ?? [];
-        $statusCode = 0;
+        $statusCode = $this->GetStatusCodeFromHeaders($httpResponseHeader);
         foreach ($httpHeaders as $h) {
             if (preg_match('#HTTP/\d+\.\d+\s+(\d+)#', $h, $m)) { $statusCode = (int)$m[1]; break; }
         }
@@ -1944,7 +1999,7 @@ class Smartcar extends IPSModule
         $response = @file_get_contents($url, false, $context);
 
         $httpHeaders = $http_response_header ?? [];
-        $statusCode = 0;
+        $statusCode = $this->GetStatusCodeFromHeaders($httpResponseHeader);
         foreach ($httpHeaders as $h) {
             if (preg_match('#HTTP/\d+\.\d+\s+(\d+)#', $h, $m)) { $statusCode = (int)$m[1]; break; }
         }
@@ -2001,7 +2056,7 @@ class Smartcar extends IPSModule
         $response = @file_get_contents($url, false, $context);
 
         $httpHeaders = $http_response_header ?? [];
-        $statusCode = 0;
+        $statusCode = $this->GetStatusCodeFromHeaders($httpResponseHeader);
         foreach ($httpHeaders as $h) {
             if (preg_match('#HTTP/\d+\.\d+\s+(\d+)#', $h, $m)) { $statusCode = (int)$m[1]; break; }
         }
@@ -2087,7 +2142,7 @@ class Smartcar extends IPSModule
             return;
         }
 
-        $statusCode = 0;
+        $statusCode = $this->GetStatusCodeFromHeaders($httpResponseHeader);
         foreach ($http_response_header ?? [] as $header) {
             if (preg_match('#HTTP/\d+\.\d+\s+(\d+)#', $header, $m)) {
                 $statusCode = (int)$m[1];
