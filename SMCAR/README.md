@@ -1,190 +1,186 @@
-# Modul für Smartcar für IP-Symcon
-Dieses Modul ermöglicht, Daten von Fahrzeugen über die Smartcar-Plattform abzufragen. 
-Erstelle ein Profil und verbinde dein Fahrzeug oder ein Testfahrzeug (https://smartcar.com/de)
-Smartcar unterstützt aktuell 43 Fahrzeugmarken. Prüfe hier welche Endpunkte dein Fahrzeug unterstützt. (https://smartcar.com/de/product/compatible-vehicles)
 
+Diesen Pfad trägst du in der Smartcar-Konfiguration unter  
+**Configuration → Redirect URIs** ein, und ebenso unter  
+**Integrations → Webhook** für die Signale.
 
-### Wichtig zu wissen zur Konfiguration von Smartcar
-Das Modul verbindet sich über OAuth 2.0 mit der Smartcar API. 
-Daher ist es erforderlich, eine Redirect URI in der Smartcar-Konfiguration einzutragen. 
-Die Redirect URI ist der Pfad zum Webhook, welchen das Modul automatisch anlegt. 
-Dieser Pfad setzt sich aus deiner Connect-Adresse und dem Pfad des Webhooks zusammen.
-Der Pfad der Redirect-URI wird oben im Konfigurationsformular angezeigt. 
-Diesen hinterlegst du dann in der Konfiguration von Smartcar unter 'REDIRECT URIS' Dies sieht zB so aus: https://hruw8ehwWERUOwehrWWoiuh.ipmagic.de/hook/smartcar_15583
-Wenn du im Konfigurationsformular die Scopes gewählt oder geändert hast, sind diese erneut über den Button 'Smartcar verbinden' bei Smartcar zu registrieren.
+> ⚠️ Wenn du im Konfigurationsformular Scopes änderst, musst du die Berechtigungen erneut über den Button **„Mit Smartcar verbinden“** autorisieren.
 
+---
 
-Aktuell sind folgende Scopes (Endpunkte) durch das Modul unterstützt:
-* "Fahrzeuginformationen lesen (/)"
-* "VIN lesen (/vin)"
-* "Standort lesen (/location)"
-* "Reifendruck lesen (/tires/pressure)"
-* "Kilometerstand lesen (/odometer)"
-* "Batterielevel lesen (/battery)"
-* "Batteriestatus lesen (/battery/capacity)"
-* "Motoröl lesen (/oil)"
-* "Kraftstoffstand lesen (/fuel)"
-* "Sicherheitsstatus lesen (/security)"
-* "Ladelimit lesen (/charge/limit)"
-* "Ladestatus lesen (/charge)"
+## 🚗 Unterstützte Scopes (Endpunkte)
 
-Aktuell sind folgende Ansteuerungen unterstützt
-* "Ladelimit setzen (/charge/limit)"
-* "Ladestatus setzen (/charge)"
-* "Zentralverriegelung setzen (/security)"
+| Beschreibung | API-Pfad |
+|--------------|-----------|
+| Fahrzeuginformationen lesen | `/` |
+| VIN lesen | `/vin` |
+| Standort lesen | `/location` |
+| Reifendruck lesen | `/tires/pressure` |
+| Kilometerstand lesen | `/odometer` |
+| Batterielevel lesen | `/battery` |
+| Batteriekapazität lesen | `/battery/nominal_capacity` |
+| Motoröl lesen | `/engine/oil` |
+| Kraftstoffstand lesen | `/fuel` |
+| Sicherheitsstatus lesen | `/security` |
+| Ladelimit lesen | `/charge/limit` |
+| Ladestatus lesen | `/charge` |
 
-![alt text](image.png)
+### Unterstützte Steuerungen
+| Beschreibung | API-Pfad |
+|--------------|-----------|
+| Ladelimit setzen | `/charge/limit` |
+| Ladevorgang starten/stoppen | `/charge` |
+| Zentralverriegelung setzen | `/security` |
 
+---
 
-### Inhaltsverzeichnis
+## Inhaltsverzeichnis
 
-1. [Funktionsumfang](#1-funktionsumfang)
-2. [Voraussetzungen](#2-voraussetzungen)
-3. [Software-Installation](#3-software-installation)
-4. [Einrichten der Instanzen in IP-Symcon](#4-einrichten-der-instanzen-in-ip-symcon)
-5. [Statusvariablen und Profile](#5-statusvariablen-und-profile)
-6. [WebFront](#6-webfront)
-7. [PHP-Befehlsreferenz](#7-php-befehlsreferenz)
-8. [Versionen](#8-versionen)
+1. [Funktionsumfang](#1-funktionsumfang)  
+2. [Voraussetzungen](#2-voraussetzungen)  
+3. [Software-Installation](#3-software-installation)  
+4. [Einrichten der Instanzen in IP-Symcon](#4-einrichten-der-instanzen-in-ip-symcon)  
+5. [Statusvariablen und Profile](#5-statusvariablen-und-profile)  
+6. [WebFront](#6-webfront)  
+7. [PHP-Befehlsreferenz](#7-php-befehlsreferenz)  
+8. [Bekannte Einschränkungen](#8-bekannte-einschränkungen)  
+9. [Versionen](#9-versionen)  
 
-### 1. Funktionsumfang
+---
 
-* Abfrage der ausgewählten Fahrzeugdaten und Ausführen verschiedener Ansteuerungen am Fahrzeug.
-* Die kostenlose Version unterstützt ein Fahrzeug mit 500 API-Calls pro Monat.
-* Es gibt Bezahlversionen (Datanpläne) von 1.99$ bis 3.99$ mit 1000 API-Calls pro Monat und die aufgeführten Signale.
-* Die Testfahrzeuge der Smartcar-Plattform sind unterstützt. Zum testen sollten diese verwendet werden, um den API-Verbrauch des Live-Fahrzeuges zu schonen.
-* Vorsicht: Frag nur Endpunkte ab, die du wirklich brauchst, sonst ist das Guthaben schnell aufgebraucht. Lies dazu weiter unten die [PHP-Befehlsreferenz](#7-php-befehlsreferenz)
-* In der aktuellen Version dieses Moduls ist ein Fahrzeug unterstützt, für mehrere Fahrzeuge/Profile ist das Modul mehrmals anzulegen.
-* Im Smartcar-Profil können mehrere Redirect-URI's und mehrere Fahrzeuge angelegt werden, womit auch mehrere Modul-Instanzen mit Zugriff auf dasselbe Smartcar-Konto unterstützt sind.
-* Nicht unterstützt ist ein Benutzerprofil bei einem Fahrzeug-Hersteller, wo mehrere Fahrzeuge verknüpft sind. Dies ist aber nur ein Thema, wenn mehrere Fahrzeuge desselben Herstellers gehalten werden. Hier muss dann jedes Fahrzeug auf ein anderes Profil lauten.
-* Signals über Webhook sind unterstützt, sofern ein entsprechender (kostenpflichtiger) Plan bei Smartcar gewählt wurde. Die Webhooks sind unter 'Integration' in der Smartcar Konfiguration zu konfigurieren. Achte darauf, dass jeweils ein Webhook mit Signals einem bestimmten Fahrzeug zugewiesen ist. Es können verschiedene Trigger und Datenpunkte gewählt werden, ja nach erworbenem Smartcar-Plan. Es sind bei weitem nicht alle Signals für alle Fahrzeugen verfügbar. Bei eintreffen der Signals im Webhook werden automatisch Variablen dazu angelegt. Daher sind hier nur Signals zu wählen, welche auch effektiv benötigt werden. Das Modul filtert automatisch fehlerhafte Signals, so dass dazu keine Variablen angelegt werden. Das Konfigurationsformular im Modul ist komplett zu konfigurieren, da einige Signals auch die Daten der entsprechenden Variablen der Scopes aktualisieren (z.B. SOC).
+## 1. Funktionsumfang
 
-### 2. Voraussetzungen
+- Abfrage der ausgewählten Fahrzeugdaten und Ausführung von Steuerbefehlen.  
+- Die kostenlose Version von Smartcar unterstützt 1 Fahrzeug mit 500 API-Calls pro Monat.  
+- Bezahlpläne bieten bis zu 1000 API-Calls/Monat (ab 1,99 $).  
+- Das Modul unterstützt auch **Testfahrzeuge** von Smartcar.  
+  → Diese eignen sich besonders zum Testen, um API-Verbrauch beim Live-Fahrzeug zu sparen.  
+- Frag nur Endpunkte ab, die du wirklich brauchst, um dein monatliches Kontingent zu schonen.  
+- Pro Instanz wird ein Fahrzeug verwaltet.  
+- Mehrere Fahrzeuge kannst du über mehrere Modul-Instanzen anbinden.  
+- Unterstützt **Smartcar Signals** (Webhook-Integration, kostenpflichtiger Plan erforderlich).  
+  Diese aktualisieren automatisch die Variablen beim Eintreffen der Daten.  
 
-- IP-Symcon ab Version 7.0
-- Smartcar Profil mit einem Test-Fahrzeug oder einem Live-Fahrzeug.
+---
 
-### 3. Software-Installation
+## 2. Voraussetzungen
 
-* Über den Module Store kann das Modul installiert werden.
+- IP-Symcon ab Version **7.0**
+- Ein gültiges **Smartcar-Profil** mit Test- oder Live-Fahrzeug.
 
-### 4. Einrichten der Instanzen in IP-Symcon
+---
 
-- Unter 'Instanz hinzufügen' kann das 'Smartcar'-Modul mithilfe des Schnellfilters gefunden werden.  
-- Weitere Informationen zum Hinzufügen von Instanzen in der [Dokumentation der Instanzen](https://www.symcon.de/service/dokumentation/konzepte/instanzen/#Instanz_hinzufügen)
+## 3. Software-Installation
 
-__Konfigurationsseite__:
+Über den **Module Store** in IP-Symcon kann das Modul installiert werden.
 
-Name     | Beschreibung
--------- | ------------------
-Redirect & Webhhok-URI      |  Dieser Pfad gehört in der Smartcar-Kunfiguration unter 'Configuration' in die REDIRECT URIS und ebenfalls unter 'Integrations' in den entprechenden WEBHOOK.
-Manuelle Redirect-URI       |  Wird dieses Feld befüllt, wird diese URI statt der Connect-Adresse verwendet.
-Webhook-Empfang aktiviren   |  Dieser Schalter aktiviert den Empfang der Signale. Die entsprechenden Variablen werden automatisch erstellt.
-Fahrzeug verifizieren       |  Dieser Schalter aktiviert die Überprüfung, ob es sich bei den ankommenden Signale um diejenigen des Fahrzeuges handelt, welches auch über die API verbunden ist.
-Variable für Aktualisierung |  Dieser Schalter aktiviert eine Variable, wo der letze Aktualiesierungszeitpunkt der Signale erslichtlich ist.
-Application Management Token|  Entnimm diesen in der Konfiguration von Smartcar unter 'Configuration'.
-Client ID                   |  Entnimm diesen in der Konfiguration von Smartcar unter 'Configuration'.
-Client Secret               |  Entnimm diesen in der Konfiguration von Smartcar unter 'Configuration'.
-Verbindungsmodus            |  Hier definierst du, ob es sich um ein Simuliertes oder ein Live-Fahrzeug handelt. Die Fahrzeuge verwaltest du im Dashboard von Smartcar. Es kann auch zwischen simuliertem und Live-Fahrzeug gewechselt werden, jedoch muss danach 'Smartcar verbinden' erneut gewählt werden. Signals über Webhook sind für die simmulierten Fahrezeuge aktuell nicht verfügbar.
-Berechtigungen (Scopes)     |  Hier sind die aktuell vom Modul unterstützten Scopes zur Auswahl. Wichtig ist, dass alle angewählt werden, die später abgefragt werden, sonst werden hier keine Werte geliefert und keine Variablen erstellt. Über den Button 'AUf kompatible Scopes prüfen' kann die Auswahl der Scopes eingegrenzt werden aufdiejenigen, welceh vom Fahrzeug unterstützt sind.
-Auf kompatible Scopes prüfen |  Dieser Button prüft alle verfügbaren Scopes und blendet die nicht mit dem Fahrzeug kompatiblen aus. Diese Funktion muss in der Regel nur erstmalig bei der Inbetriebnahme des Moduls durchgeführt werden. Danach öffnet sich ein Browserfenster zur Authetifizierung. Es werden alle existierenden Scopes abgefragt. Nur die kompatiblen werden dann in der Berechtigungsübersicht gespeichert. Dies Berechtigungsübersicht kann weiter bearbeitet werden, um allenfalls noch Scopes auszuschliesen. Ist die Auswahl einmal gemacht, diese mit dem Button 'Mit Smartcar verbinden' abschliessen. Danach werden nur noch diese Scopes abgefragt.
-Mit Smartcar verbinden       |  Es öffnet sich ein Browserfenster, wo du dich mit deinen Zugangsdaten vom Fahrzeughersteller anmeldest und die gewählten Berechtigungen bei Smartcar noch genehmigst. Im Anschluss erscheint eine Erfolgsmeldung und die Zugriff-Token werden über die Redirect-URI an das Modul übertragen. Die Variablen werden entsprechend den Scopes erstellt.
-Fahrzeugdaten abrufen       |  Hier rufst du alle aktivierten Scopes ab. Sei vorsichtig bei einem Live-Fahrzeug. Fünf aktivierte Scopes ergeben 5 API-Calls. Lies hier [PHP-Befehlsreferenz](#7-php-befehlsreferenz), wie du exklusiv die gewünschten Scopes aktualisierst. Erstmalig sollten die Scopes über den Button 'Fahrzeugdaten abrufen' aktualisiert werden, danach können die Variablen automatisch über die Signals aus dem Webhook aktualisiert werden. Es werden je nach Auswahl der Anzahl Signale (in der Smartcar-Konfiguration) entsprechend Variablen erstellt.
+---
 
-### 5. Statusvariablen und Profile
+## 4. Einrichten der Instanzen in IP-Symcon
 
-Die Statusvariablen/Kategorien werden automatisch angelegt. Das Löschen einzelner kann zu Fehlfunktionen führen.
+Unter *Instanz hinzufügen* das Modul **Smartcar** wählen.
 
-#### Statusvariablen
+### Konfigurationsseite
 
-Es werden Variablen/Typen je nach Wahl der Scopes erstellt. Es können pro Scope mehrere Variablen erstellt werden. Beim Deaktivieren des jeweiligen Scope werden die Variablen wieder gelöscht.
+| Name | Beschreibung |
+|------|---------------|
+| **Redirect-/Webhook-URI** | Diese URI muss in Smartcar unter *Configuration → Redirect URIs* und *Integrations → Webhook* eingetragen werden. |
+| **Manuelle Redirect-URI** | Falls vorhanden, wird diese statt der automatisch ermittelten Connect-Adresse verwendet. |
+| **Webhook-Empfang aktivieren** | Aktiviert die Verarbeitung eingehender Smartcar-Signale. |
+| **Fahrzeug verifizieren** | Prüft, ob eingehende Signale zum aktuell verbundenen Fahrzeug gehören. |
+| **Variable für Aktualisierung** | Erstellt eine Variable, die den letzten Zeitpunkt eines empfangenen Signals anzeigt. |
+| **Application Management Token** | Aus Smartcar → *Configuration*. |
+| **Client ID** | Aus Smartcar → *Configuration*. |
+| **Client Secret** | Aus Smartcar → *Configuration*. |
+| **Verbindungsmodus** | *Simuliert* oder *Live*. Bei Wechsel neu verbinden. |
+| **Berechtigungen (Scopes)** | Auswahl der gewünschten API-Endpunkte. Nur aktivierte Scopes werden abgefragt und als Variablen angelegt. |
+| **Auf kompatible Scopes prüfen** | Prüft, welche Scopes dein Fahrzeug tatsächlich unterstützt. In der Regel nur einmal nötig. |
+| **Mit Smartcar verbinden** | Öffnet ein Browserfenster zur Authentifizierung und Autorisierung. |
+| **Fahrzeugdaten abrufen** | Liest alle aktivierten Scopes. Vorsicht: Jeder Scope = 1 API-Call. |
 
-#### Profile
+---
 
-Name   | Typ
------- | ------- 
-SMCAR.Odometer          |  Float  
-SMCAR.Pressure          |  Float   
-SMCAR.Progress          |  Float  
-SMCAR.Status            |  String   
-SMCAR.Charge            |  String
-SMCAR.Health            |  String
-SMCAR.ChargeLimitSet    |  Float
+## 5. Statusvariablen und Profile
 
-### 6. WebFront
+Die Variablen werden automatisch erstellt und beim Deaktivieren des Scopes wieder entfernt.  
+Das manuelle Löschen kann zu Fehlfunktionen führen.
 
-Die Variablen zur Steuerung der Fahrzeugfunktion können aus der Visualisierung heraus gesteuert werden.
+### Profile
 
-### 7. PHP-Befehlsreferenz
+| Name | Typ | Beschreibung |
+|------|-----|---------------|
+| `SMCAR.Odometer` | Float | Kilometerstand |
+| `SMCAR.Pressure` | Float | Reifendruck |
+| `SMCAR.Progress` | Float | Prozentwerte (z. B. Ladezustand) |
+| `SMCAR.Status` | String | Statusanzeige |
+| `SMCAR.Charge` | String | Ladezustand (Text) |
+| `SMCAR.Health` | String | Batteriezustand |
+| `SMCAR.ChargeLimitSet` | Float | Soll-Ladelimit |
 
-Hier findest du die Info, wie gezielt (z.B. über einen Ablaufplan) nur bestimmte Endpunkte (Scopes) abgefragt werden, um API-Calls zu sparen. 
-Ein Szenario wäre, dass der SOC nur bei aktiviertem Ladevorgang alle 15 Minuten über einen Ablaufplan aktualisiert wird.
-Beachte, dass nur im Konfigurationsformular (Berechtigungen) freigegebene Scopes abgefragt werden können. Falls über einen Ablaufplan mehrere Scopes nacheinander abgerufen werden, ist ein Abstand von ca 2 Minuten empfehlenswert, da Smartcar bei häufigerer Abfragefrequenz diese blockiert.
+---
 
-Befehl   | Beschreibung
------- | -------
-SMCAR_FetchBatteryCapacity(12345);  |   Abfrage der Batteriekapazität
-SMCAR_FetchBatteryLevel(12345);     |   Abfrage des Batterieladestand (SOC) und der Reichweite Batterie
-SMCAR_FetchChargeLimit(12345);      |   Abfrage des Ladelimits
-SMCAR_FetchChargeStatus(12345);     |   Abfrage des Ladestatus
-SMCAR_FetchEngineOil(12345);        |   Abfrage der restlichen Öllebensdauer
-SMCAR_FetchFuel(12345);             |   Abfrage des Tankvolumens und der Reichweite Tank    
-SMCAR_FetchLocation(12345);         |   Abfragen der GPS-Koordinaten
-SMCAR_FetchOdometer(12345);         |   Abfragen des Kilometerstandes
-SMCAR_FetchSecurity(12345);         |   Abfrage des Verriegelungsstatus der Türen, Klappen und Fenster
-SMCAR_FetchTires(12345);            |   Abfrage des Reifendruckes
-SMCAR_FetchVIN(12345);              |   Abfrage der Fahrgestellnummer
-SMCAR_FetchVehicleData(12345);      |   Alle im Modul aktivierten Scopes abfragen. Vorsicht, es könnten sehr viele API-Calls verbraucht werden
+## 6. WebFront
 
-### 8. Versionen
+Die Variablen zur Steuerung der Fahrzeugfunktionen können direkt aus dem WebFront bedient werden (z. B. Zentralverriegelung oder Ladung starten/stoppen).
 
-Version 3.3 (19.10.2025)
-- Beim erreichen des Rate-Limit wird nach der vorgegebenen Wartezeit der Scope erneut abgefragt.
-- Verbesserung der Debug- und Error-Ausgabe.
-- Code überarbeitet.
+---
 
-Version 3.2 (14.10.2025)
-- Automatische Scopeerkennung verbessert.
+## 7. PHP-Befehlsreferenz
 
-Version 3.1 (07.10.2025)
-- Neu ist eine automatische Prüfung auf kompatible Scopes im Konfigurationsformular verfügbar. So werden nur noch kompatible Scopes abgefragt und Fehlermeldungen und überflüssige Abfragen vermieden.
-- Fehler bei der Abfrage der Batteriekapazität behoben.
-- Ladeleistung wir jetzt korrekt dargestellt.
-- Eine Variable mit dem Zeitpunkt der letzten Signale kann im Konfigurationsformular aktiviert werden.
+Über Skripte oder Ablaufpläne können gezielt einzelne Endpunkte abgefragt werden, um API-Aufrufe zu sparen.
 
-Version 3.0 (05.10.2025)
-- Neu werden zusätzlich Signale über Webhooks unterstützt. Diese müssen über einen Plan von Smartcar erworben werden. Die Entsprechenden Varaiblen werden automatisch erstellt.
+| Befehl | Beschreibung |
+|--------|---------------|
+| `SMCAR_FetchBatteryCapacity(12345);` | Batteriekapazität abrufen |
+| `SMCAR_FetchBatteryLevel(12345);` | Batterieladestand (SOC) & Reichweite abrufen |
+| `SMCAR_FetchChargeLimit(12345);` | Ladelimit abrufen |
+| `SMCAR_FetchChargeStatus(12345);` | Ladestatus abrufen |
+| `SMCAR_FetchEngineOil(12345);` | Öllebensdauer abrufen |
+| `SMCAR_FetchFuel(12345);` | Tankvolumen & Reichweite abrufen |
+| `SMCAR_FetchLocation(12345);` | GPS-Koordinaten abrufen |
+| `SMCAR_FetchOdometer(12345);` | Kilometerstand abrufen |
+| `SMCAR_FetchSecurity(12345);` | Tür-, Klappen- & Fensterstatus abrufen |
+| `SMCAR_FetchTires(12345);` | Reifendruck abrufen |
+| `SMCAR_FetchVIN(12345);` | Fahrgestellnummer abrufen |
+| `SMCAR_FetchVehicleData(12345);` | ⚠️ Alle aktivierten Scopes abrufen (hoher API-Verbrauch) |
 
-Version 2.3 (28.09.2025)
-- Der Token wird nun bei jeder Konfigurationsänderung oder auch beim Update erneuert, sobald Symcon bereit ist. Dies sollte die zeitweiligen Token-Fehler nach Neustart des Systems beheben.
+> Tipp: In Ablaufplänen sollte zwischen API-Aufrufen ein Abstand von ca. **2 Minuten** liegen, da Smartcar zu häufige Abfragen blockiert.
 
-Version 2.2 (26.07.2025)
-- Verbesserung der Fehlerausgabe im Debug und Statusdialog von Symcon
+---
 
-Version 2.1 (15.06.2025)
-- Rechtschreibekorrektur
-- Codeanpassungen für Ladestatus
+## 8. Bekannte Einschränkungen
 
-Version 2.0 (02.01.2025)
-- Code und Readme angepasst
-- Version um die Store-Kompatibilität zu erlangen
+- Smartcar erlaubt pro Authorization-Flow nur **ein Fahrzeug**.  
+- Webhooks (Smartcar Signals) sind nur mit **echten Fahrzeugen** nutzbar, nicht mit Simulationen.  
+- Bei häufigen API-Abfragen kann Smartcar mit `429 (Rate Limit)` antworten. Das Modul wiederholt dann den Aufruf automatisch nach der vorgegebenen Wartezeit.  
+- Wenn Variablen fehlen, prüfe bitte:
+  - Scopes korrekt aktiviert?
+  - Token gültig?
+  - Verbindung erfolgreich hergestellt?
 
-Version 1.3 (26.12.2024)
-- Timer für Token-Erneuerung auf 90 min fixiert.
-- Token wird nun zusätzlich bei jeder Konfigurationsänderung erneuert.
-- Abhandlung bei 401-Fehler (Authentication) während der Datenabfrage hinzugefügt, so dass der Access-Token erneuert und die Abfrage erneut ausgeführt wird.
-- Fehlerausgabe in Log aktiviert
+---
 
-Version 1.2 (22.12.2024)
-- Anpassungen einiger Variablennamen
-- Anpassung des Readme
-- Anpassung Modulname
-- Anpassung Konfigurationsformular
-- Einige Code Modifikationen
-- Variablenprofil für Zentralverriegelung geändert
+## 9. Versionen
 
-Version 1.1 (17.12.2024)
-- Fehlermeldung BackLeftWindow und BackRightWindow behoben, Variablen hinzugefügt
+| Version | Datum | Änderungen |
+|----------|--------|------------|
+| **3.3** | 19.10.2025 | - Wiederholte Abfrage bei Erreichen des Rate-Limits<br>- Verbesserte Debug- und Fehlerausgabe<br>- Code-Optimierungen |
+| **3.2** | 14.10.2025 | - Verbesserte automatische Scope-Erkennung |
+| **3.1** | 07.10.2025 | - Automatische Prüfung auf kompatible Scopes im Formular<br>- Fehler bei Batteriekapazität behoben<br>- Ladeleistung korrekt dargestellt<br>- Variable für letzte Signalzeit ergänzt |
+| **3.0** | 05.10.2025 | - Unterstützung von Webhooks (Smartcar Signals) |
+| **2.3** | 28.09.2025 | - Token-Erneuerung bei Änderungen/Neustart verbessert |
+| **2.2** | 26.07.2025 | - Verbesserte Fehlerausgabe im Debug und Statusdialog |
+| **2.1** | 15.06.2025 | - Codeanpassungen & Rechtschreibkorrekturen |
+| **2.0** | 02.01.2025 | - Kompatibilität für Module Store hergestellt |
+| **1.3** | 26.12.2024 | - Token-Handling verbessert<br>- Fehlerbehandlung bei 401-Authentifizierung ergänzt |
+| **1.2** | 22.12.2024 | - Variablen- & Profilanpassungen<br>- Modulname & Formular überarbeitet |
+| **1.1** | 17.12.2024 | - Fehler bei Fensterstatus behoben |
+| **1.0** | 15.12.2024 | - Initiale Version |
 
-Version 1.0 (15.12.2024)
-- Initiale Version
+---
+
+## 🧾 Lizenz
+
+Dieses Modul steht unter der **MIT-Lizenz**.  
+Copyright © 2025  
+**Stefan Künzli**
+
