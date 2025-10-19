@@ -1218,6 +1218,9 @@ class Smartcar extends IPSModule
             ]
         ];
         $res = @file_get_contents($url, false, stream_context_create($options));
+
+        $this->SendDebug('GetVehicleID', 'API-Antwort: ' . ($res !== false ? $res : '(leer)'), 0);
+
         $data = json_decode($res ?? '', true);
 
         // Statuscode lesen
