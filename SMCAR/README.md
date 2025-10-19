@@ -138,7 +138,7 @@ SMCAR_FetchVehicleData(12345);      |   Alle im Modul aktivierten Scopes abfrage
 ### 8. Versionen
 
 Version 3.3 (19.10.2025)
-- Beim erreichen des Rate-Limit wird nun die Wartezeit im Log und Debug ausgegeben.
+- Beim erreichen des Rate-Limit wird nun nach der vorgegebenen Wartezeit erneut vresucht, den Scope abzufragen.
 
 Version 3.2 (14.10.2025)
 - Automatische Scopeerkennung verbessert.
