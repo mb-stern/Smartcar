@@ -30,6 +30,8 @@ class Smartcar extends IPSModule
         '/engine/oil'        // read_engine_oil
     ];
 
+    private const MAX_RETRY_ATTEMPTS = 3;
+
     public function Create()
     {
         parent::Create();
@@ -399,23 +401,39 @@ class Smartcar extends IPSModule
     }
 
     private function ScheduleHttpRetry(array $job, int $delaySeconds): void
-{
-    // max. 3 Versuche pro Job
-    $job['attempt'] = ($job['attempt'] ?? 0) + 1;
-    if ($job['attempt'] > 3) {
-        $this->SendDebug('Retry', 'Abgebrochen (max attempts erreicht).', 0);
-        return;
+    {
+        // Versuchs-Counter hochzählen (siehe Punkt 2)
+        if ($job['attempt'] > self::MAX_RETRY_ATTEMPTS) {
+            $this->SendDebug('Retry', 'Abgebrochen (max attempts erreicht).', 0);
+            // HIER erst ins Log (siehe Punkt 3)
+            $this->LogMessage('HTTP 429: Max. Wiederholversuche erreicht für '.json_encode($job), KL_ERROR);
+            return;
+        }
+
+        // optional: konfigurierbare Obergrenze, z.B. 1 Stunde
+        $maxCap = 3600; // oder 0 = keine Kappung
+        if ($maxCap > 0) {
+            $delaySeconds = min($delaySeconds, $maxCap);
+        }
+
+        // nur noch Minimalgrenze + kleiner Jitter, KEINE 60s-Kappung
+        $delaySeconds = max(1, (int)round($delaySeconds) + random_int(0, 2));
+
+        $job['dueAt'] = time() + $delaySeconds;
+
+        $this->WriteAttributeString('PendingHttpRetry', json_encode($job, JSON_UNESCAPED_SLASHES));
+        $this->SetTimerInterval('HttpRetryTimer', $delaySeconds * 1000);
+
+        $this->SendDebug('Retry', sprintf('Job geplant: kind=%s in %ds (Attempt %d)',
+            $job['kind'] ?? '?', $delaySeconds, $job['attempt']), 0);
     }
 
-    // fällig in delaySeconds (+ minimaler Jitter)
-    $delaySeconds = max(1, min(60, $delaySeconds + random_int(0, 2)));
-    $job['dueAt'] = time() + $delaySeconds;
-
-    $this->WriteAttributeString('PendingHttpRetry', json_encode($job, JSON_UNESCAPED_SLASHES));
-    $this->SetTimerInterval('HttpRetryTimer', $delaySeconds * 1000);
-
-    $this->SendDebug('Retry', sprintf('Job geplant: kind=%s in %ds (Attempt %d)',
-        $job['kind'] ?? '?', $delaySeconds, $job['attempt']), 0);
+    private function ParseRetryAfter(?string $h): ?int 
+    {
+        if ($h === null || $h === '') return null;
+        if (ctype_digit($h)) return (int)$h;
+        $ts = strtotime($h);
+        return $ts !== false ? max(1, $ts - time()) : null;
     }
 
     public function HandleHttpRetry(): void
@@ -439,6 +457,8 @@ class Smartcar extends IPSModule
         // Fällig: Timer stoppen & Job leeren
         $this->SetTimerInterval('HttpRetryTimer', 0);
         $this->WriteAttributeString('PendingHttpRetry', '');
+
+        $attempt = (int)($job['attempt'] ?? 0);
 
         // Passenden Aufruf erneut starten
         switch ($job['kind'] ?? '') {
@@ -920,14 +940,15 @@ class Smartcar extends IPSModule
         return null;
     }
 
-    private function LogRateLimitIfAny(int $statusCode, array $headers): void {
+    private function LogRateLimitIfAny(int $statusCode, array $headers): void 
+    {
         if ($statusCode !== 429) return;
         $retryAfter = $this->GetRetryAfterFromHeaders($headers);
         $txt = 'RateLimit | 429 RATE_LIMIT – Erneuter Versuch in: ' .
-            ($retryAfter !== null ? (is_numeric($retryAfter) ? ($retryAfter . ' sec') : $retryAfter) : '(kein Header)');
+            ($retryAfter !== null ? (ctype_digit($retryAfter) ? ($retryAfter . ' sec') : $retryAfter) : '(kein Header)');
         $this->SendDebug('RateLimit', $txt, 0);
-        $this->LogMessage($txt, KL_ERROR);
     }
+
 
     private function getRequestHeader(string $name): ?string
     {
@@ -1128,10 +1149,9 @@ class Smartcar extends IPSModule
         }
 
         if ($statusCode === 429) {
-            $retryAfter = $this->GetRetryAfterFromHeaders($httpResponseHeader ?? []);
-            $delay = is_numeric($retryAfter) ? (int)$retryAfter : 2;
-            $this->ScheduleHttpRetry(['kind' => 'batch'], $delay);
-            return false; // sofort raus, NICHT blockieren
+            $delay = $this->ParseRetryAfter($this->GetRetryAfterFromHeaders($http_response_header ?? [])) ?? 2;
+            $this->ScheduleHttpRetry(['kind' => 'single', 'path' => $path, 'attempt' => $attempt], $delay);
+            return;
         }
 
         $data = json_decode($response, true);
@@ -1196,12 +1216,9 @@ class Smartcar extends IPSModule
         }
 
         if ($statusCode === 429) {
-            $retryAfter = $this->GetRetryAfterFromHeaders($http_response_header ?? []);
-            $delay = is_numeric($retryAfter) ? (int)$retryAfter : 2;
-            // Plane einen Batch-Retry; der ruft später FetchVehicleData() auf,
-            // welche sich dann die VehicleID erneut holt.
-            $this->ScheduleHttpRetry(['kind' => 'batch'], $delay);
-            return null; // Rückgabetyp passt
+            $delay = $this->ParseRetryAfter($this->GetRetryAfterFromHeaders($http_response_header ?? [])) ?? 2;
+            $this->ScheduleHttpRetry(['kind' => 'single', 'path' => $path, 'attempt' => $attempt], $delay);
+            return;
         }
 
         if ($statusCode === 401 && $retryCount < $maxRetries) {
@@ -1852,13 +1869,8 @@ class Smartcar extends IPSModule
         }
 
         if ($statusCode === 429) {
-            $retryAfter = $this->GetRetryAfterFromHeaders($httpHeaders);
-            $delay = is_numeric($retryAfter) ? (int)$retryAfter : 2;
-            $this->ScheduleHttpRetry([
-                'kind'   => 'command',
-                'action' => 'SetChargeLimit',
-                'limit'  => $limit
-            ], $delay);
+            $delay = $this->ParseRetryAfter($this->GetRetryAfterFromHeaders($http_response_header ?? [])) ?? 2;
+            $this->ScheduleHttpRetry(['kind' => 'single', 'path' => $path, 'attempt' => $attempt], $delay);
             return;
         }
 
@@ -1907,13 +1919,8 @@ class Smartcar extends IPSModule
         }
 
         if ($statusCode === 429) {
-            $retryAfter = $this->GetRetryAfterFromHeaders($httpHeaders);
-            $delay = is_numeric($retryAfter) ? (int)$retryAfter : 2;
-            $this->ScheduleHttpRetry([
-                'kind'   => 'command',
-                'action' => 'SetChargeStatus',
-                'status' => $status
-            ], $delay);
+            $delay = $this->ParseRetryAfter($this->GetRetryAfterFromHeaders($http_response_header ?? [])) ?? 2;
+            $this->ScheduleHttpRetry(['kind' => 'single', 'path' => $path, 'attempt' => $attempt], $delay);
             return;
         }
 
@@ -1962,13 +1969,8 @@ class Smartcar extends IPSModule
         }
 
         if ($statusCode === 429) {
-            $retryAfter = $this->GetRetryAfterFromHeaders($httpHeaders);
-            $delay = is_numeric($retryAfter) ? (int)$retryAfter : 2;
-            $this->ScheduleHttpRetry([
-                'kind'   => 'command',
-                'action' => 'SetLockStatus',
-                'status' => $status
-            ], $delay);
+            $delay = $this->ParseRetryAfter($this->GetRetryAfterFromHeaders($http_response_header ?? [])) ?? 2;
+            $this->ScheduleHttpRetry(['kind' => 'single', 'path' => $path, 'attempt' => $attempt], $delay);
             return;
         }
 
@@ -2047,11 +2049,10 @@ class Smartcar extends IPSModule
         }
 
         if ($statusCode === 429) {
-            $retryAfter = $this->GetRetryAfterFromHeaders($http_response_header ?? []);
-            $delay = is_numeric($retryAfter) ? (int)$retryAfter : 2;
-            $this->ScheduleHttpRetry(['kind' => 'single', 'path' => $path], $delay);
-            return; // nichts weiter tun
-        }
+            $delay = $this->ParseRetryAfter($this->GetRetryAfterFromHeaders($http_response_header ?? [])) ?? 2;
+            $this->ScheduleHttpRetry(['kind' => 'single', 'path' => $path, 'attempt' => $attempt], $delay);
+            return;
+            }
 
         $data = json_decode($response, true);
         $this->SendDebug('FetchSingleEndpoint', "Antwort: " . json_encode($data, JSON_PRETTY_PRINT), 0);
