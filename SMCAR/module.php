@@ -937,6 +937,31 @@ class Smartcar extends IPSModule
         }
     }
 
+    private function DebugJsonAntwort(string $tag, $response, ?int $statusCode = null, bool $alsoPrettyIfDifferent = true): void
+    {
+        // Rohstring ermitteln
+        $raw = ($response !== false && $response !== null && $response !== '') ? (string)$response : '(leer)';
+        // Immer mindestens EIN Eintrag im Stil: "Antwort: String"
+        $this->SendDebug($tag, 'Antwort: ' . $raw, 0);
+
+        // Optional: wenn valides JSON -> pretty drucken, aber nur wenn es sich vom Rohstring unterscheidet
+        if ($alsoPrettyIfDifferent && $raw !== '(leer)') {
+            $decoded = json_decode($raw, true);
+            if (is_array($decoded)) {
+                $pretty = json_encode($decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+                // Nur zweiten Eintrag schreiben, wenn die Darstellung sich sichtbar unterscheidet
+                if ($pretty !== $raw) {
+                    $this->SendDebug($tag, $pretty, 0);
+                }
+            }
+        }
+
+        // Falls du den Statuscode im selben Rutsch markieren willst:
+        if ($statusCode !== null) {
+            $this->SendDebug($tag, "HTTP-Status: {$statusCode}", 0);
+        }
+    }
+
     private function GetStatusCodeFromHeaders(array $headers): int {
     foreach ($headers as $h) {
         if (preg_match('#HTTP/\d+\.\d+\s+(\d+)#', $h, $m)) return (int)$m[1];
@@ -1142,7 +1167,7 @@ class Smartcar extends IPSModule
         $context  = stream_context_create($options);
         $response = @file_get_contents($url, false, $context);
         
-        $this->SendDebug('FetchVehicleData/raw', 'API-Antwort: ' . ($response !== false ? $response : '(leer)'), 0);
+        $this->DebugJsonAntwort('FetchVehicleData', $response, $statusCode);
         
         if ($response === false) {
             $this->SendDebug('FetchVehicleData', '❌ Keine Antwort von der API!', 0);
@@ -1171,7 +1196,6 @@ class Smartcar extends IPSModule
         }
 
         $data = json_decode($response, true);
-        $this->SendDebug('FetchVehicleData', "Antwort: " . json_encode($data, JSON_PRETTY_PRINT), 0);
 
         if ($statusCode !== 200) {
             $fullMsg = $this->GetHttpErrorDetails($statusCode, $data);
@@ -1219,7 +1243,7 @@ class Smartcar extends IPSModule
         ];
         $res = @file_get_contents($url, false, stream_context_create($options));
 
-        $this->SendDebug('GetVehicleID', 'API-Antwort: ' . ($res !== false ? $res : '(leer)'), 0);
+        $this->DebugJsonAntwort('GetVehicleID', $res, $statusCode);
 
         $data = json_decode($res ?? '', true);
 
@@ -1873,7 +1897,7 @@ class Smartcar extends IPSModule
         $context  = stream_context_create($options);
         $response = @file_get_contents($url, false, $context);
 
-        $this->SendDebug('SetChargeLimit/raw', 'API-Antwort: ' . ($response !== false ? $response : '(leer)'), 0);
+        $this->DebugJsonAntwort('SetChargeLimit', $response, $statusCode);
 
         if ($response === false) {
             $this->SendDebug('SetChargeLimit', 'Keine Antwort.', 0);
@@ -1894,10 +1918,8 @@ class Smartcar extends IPSModule
             $delay = $this->ParseRetryAfter($this->GetRetryAfterFromHeaders($http_response_header ?? [])) ?? 2;
             $this->ScheduleHttpRetry([
                 'kind'   => 'command',
-                'action' => 'SetChargeLimit', // bzw. SetChargeStatus / SetLockStatus
-                'limit'  => $limit            // nur bei SetChargeLimit
-                // bei SetChargeStatus: 'status' => $status
-                // bei SetLockStatus:   'status' => $status
+                'action' => 'SetChargeLimit',
+                'limit'  => $limit 
             ], $delay);
             return;
         }
@@ -1937,7 +1959,7 @@ class Smartcar extends IPSModule
         $context  = stream_context_create($options);
         $response = @file_get_contents($url, false, $context);
 
-        $this->SendDebug('SetChargeLimit/raw', 'API-Antwort: ' . ($response !== false ? $response : '(leer)'), 0);
+        $this->DebugJsonAntwort('SetChargeStatus', $response, $statusCode);
 
         $httpHeaders = $http_response_header ?? [];
         $statusCode = 0;
@@ -1953,10 +1975,8 @@ class Smartcar extends IPSModule
             $delay = $this->ParseRetryAfter($this->GetRetryAfterFromHeaders($http_response_header ?? [])) ?? 2;
             $this->ScheduleHttpRetry([
                 'kind'   => 'command',
-                'action' => 'SetChargeLimit', // bzw. SetChargeStatus / SetLockStatus
-                'limit'  => $limit            // nur bei SetChargeLimit
-                // bei SetChargeStatus: 'status' => $status
-                // bei SetLockStatus:   'status' => $status
+                'action' => 'SetChargeStatus',
+                'status' => $status
             ], $delay);
             return;
         }
@@ -1995,7 +2015,7 @@ class Smartcar extends IPSModule
         $context  = stream_context_create($options);
         $response = @file_get_contents($url, false, $context);
 
-        $this->SendDebug('SetChargeLimit/raw', 'API-Antwort: ' . ($response !== false ? $response : '(leer)'), 0);
+        $$this->DebugJsonAntwort('SetLockStatus', $response, $statusCode);
 
         $httpHeaders = $http_response_header ?? [];
         $statusCode = 0;
@@ -2011,10 +2031,8 @@ class Smartcar extends IPSModule
             $delay = $this->ParseRetryAfter($this->GetRetryAfterFromHeaders($http_response_header ?? [])) ?? 2;
             $this->ScheduleHttpRetry([
                 'kind'   => 'command',
-                'action' => 'SetChargeLimit', // bzw. SetChargeStatus / SetLockStatus
-                'limit'  => $limit            // nur bei SetChargeLimit
-                // bei SetChargeStatus: 'status' => $status
-                // bei SetLockStatus:   'status' => $status
+                'action' => 'SetLockStatus',
+                'status' => $status
             ], $delay);
             return;
         }
@@ -2075,8 +2093,8 @@ class Smartcar extends IPSModule
         $context  = stream_context_create($options);
         $response = @file_get_contents($url, false, $context);
 
-        $this->SendDebug('FetchSingleEndpoint/raw', 'API-Antwort: ' . ($response !== false ? $response : '(leer)'), 0);
-        
+        $this->DebugJsonAntwort('FetchSingleEndpoint', $response, $statusCode);
+
         if ($response === false) {
             $this->SendDebug('FetchSingleEndpoint', '❌ Keine Antwort von der API!', 0);
             $this->LogMessage('FetchSingleEndpoint - Keine Antwort von der API!', KL_ERROR);
@@ -2103,7 +2121,6 @@ class Smartcar extends IPSModule
         }
 
         $data = json_decode($response, true);
-        $this->SendDebug('FetchSingleEndpoint', "Antwort: " . json_encode($data, JSON_PRETTY_PRINT), 0);
 
         if ($statusCode !== 200) {
             $msg = $this->GetHttpErrorDetails($statusCode, $data);
