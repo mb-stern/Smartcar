@@ -740,7 +740,7 @@ class Smartcar extends IPSModule
 
         $this->WriteAttributeString('CompatScopes', json_encode($map, JSON_UNESCAPED_SLASHES));
         $this->ApplyCompatToProperties($map);
-        IPS_ApplyChanges($this->InstanceID);
+        //IPS_ApplyChanges($this->InstanceID);
 
         if ($missingScopes) {
             $authURL = $this->GenerateAuthURLAllRead();
