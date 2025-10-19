@@ -1198,10 +1198,11 @@ class Smartcar extends IPSModule
         if ($statusCode === 429) {
             $retryAfter = $this->GetRetryAfterFromHeaders($http_response_header ?? []);
             $delay = is_numeric($retryAfter) ? (int)$retryAfter : 2;
-            $this->ScheduleHttpRetry(['kind' => 'single', 'path' => $path], $delay);
-            return; // NICHT weiterparsen
+            // Plane einen Batch-Retry; der ruft später FetchVehicleData() auf,
+            // welche sich dann die VehicleID erneut holt.
+            $this->ScheduleHttpRetry(['kind' => 'batch'], $delay);
+            return null; // Rückgabetyp passt
         }
-
 
         if ($statusCode === 401 && $retryCount < $maxRetries) {
             $this->SendDebug('GetVehicleID', '401 → versuche Refresh + Retry', 0);
@@ -2045,6 +2046,13 @@ class Smartcar extends IPSModule
         $this->LogRateLimitIfAny($statusCode, $http_response_header ?? []);
         if ($statusCode !== 200) {
             $this->DebugHttpHeaders($http_response_header ?? [], $statusCode);
+        }
+
+        if ($statusCode === 429) {
+            $retryAfter = $this->GetRetryAfterFromHeaders($http_response_header ?? []);
+            $delay = is_numeric($retryAfter) ? (int)$retryAfter : 2;
+            $this->ScheduleHttpRetry(['kind' => 'single', 'path' => $path], $delay);
+            return; // nichts weiter tun
         }
 
         $data = json_decode($response, true);
