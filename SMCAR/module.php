@@ -1141,6 +1141,9 @@ class Smartcar extends IPSModule
 
         $context  = stream_context_create($options);
         $response = @file_get_contents($url, false, $context);
+        
+        $this->SendDebug('FetchVehicleData/raw', $response !== false ? $response : '(leer)', 0);
+        
         if ($response === false) {
             $this->SendDebug('FetchVehicleData', '❌ Keine Antwort von der API!', 0);
             $this->LogMessage('FetchVehicleData - Keine Antwort von der API!', KL_ERROR);
@@ -1866,6 +1869,9 @@ class Smartcar extends IPSModule
 
         $context  = stream_context_create($options);
         $response = @file_get_contents($url, false, $context);
+
+        $this->SendDebug('SetChargeLimit/raw', $response !== false ? $response : '(leer)', 0);
+
         if ($response === false) {
             $this->SendDebug('SetChargeLimit', 'Keine Antwort.', 0);
             return;
@@ -1928,6 +1934,8 @@ class Smartcar extends IPSModule
         $context  = stream_context_create($options);
         $response = @file_get_contents($url, false, $context);
 
+        $this->SendDebug('SetChargeLimit/raw', $response !== false ? $response : '(leer)', 0);
+
         $httpHeaders = $http_response_header ?? [];
         $statusCode = 0;
         foreach ($httpHeaders as $h) {
@@ -1983,6 +1991,8 @@ class Smartcar extends IPSModule
 
         $context  = stream_context_create($options);
         $response = @file_get_contents($url, false, $context);
+
+        $this->SendDebug('SetChargeLimit/raw', $response !== false ? $response : '(leer)', 0);
 
         $httpHeaders = $http_response_header ?? [];
         $statusCode = 0;
@@ -2061,6 +2071,9 @@ class Smartcar extends IPSModule
 
         $context  = stream_context_create($options);
         $response = @file_get_contents($url, false, $context);
+
+        $this->SendDebug('FetchSingleEndpoint/raw', $response !== false ? $response : '(leer)', 0);
+        
         if ($response === false) {
             $this->SendDebug('FetchSingleEndpoint', '❌ Keine Antwort von der API!', 0);
             $this->LogMessage('FetchSingleEndpoint - Keine Antwort von der API!', KL_ERROR);
