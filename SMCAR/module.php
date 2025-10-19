@@ -273,11 +273,11 @@ class Smartcar extends IPSModule
 
         $form = [
             'elements' => [
-                ['type' => 'Label', 'caption' => 'Redirect- & Webhook-URI: ' . $effectiveRedirect],
+                ['type' => 'Label', 'caption' => 'Redirect-/Callback-URI: ' . $effectiveRedirect],
                 [
                     'type' => 'ValidationTextBox',
                     'name' => 'ManualRedirectURI',
-                    'caption' => 'Manuelle Redirect-URI überschreibt Connect-URL'
+                    'caption' => 'Redirect-/Callback-URI überschreiben'
                 ],
                 ['type' => 'Label', 'caption' => '────────────────────────────────────────'],
                 ['type' => 'CheckBox', 'name' => 'EnableWebhook', 'caption' => 'Webhook-Empfang für Signale aktivieren'],
