@@ -358,26 +358,31 @@ class Smartcar extends IPSModule
         return json_encode($form);
     }
 
-    private function PathToPermission(string $path): ?string
+    private function canonicalizePath(string $path): string
     {
-        return match ($path) {
-            '/'                   => 'read_vehicle_info',
-            '/vin'                => 'read_vin',
-            '/location'           => 'read_location',
-            '/tires/pressure'     => 'read_tires',
-            '/odometer'           => 'read_odometer',
-            '/battery', '/battery/nominal_capacity'
-                                => 'read_battery',
-            '/fuel'               => 'read_fuel',
-            '/security'           => 'read_security',
-            '/charge/limit', '/charge'
-                                => 'read_charge',
-            '/engine/oil'         => 'read_engine_oil',
-            default               => null
-        };
+        $path = trim($path);
+        if ($path === '' || $path === '/') return '/';
+        $path = '/' . ltrim($path, '/');        
+        return rtrim($path, '/');           
     }
 
-    /** Liefert alle vom User aktivierten Scopes (inkl. Control falls gewählt). */
+    private function PathToPermission(string $path): ?string
+    {
+        static $PATH_TO_SCOPE = null;
+
+        if ($PATH_TO_SCOPE === null) {
+            $PATH_TO_SCOPE = [];
+            foreach (self::SCOPE_TO_PATHS as $scope => $paths) {
+                foreach ($paths as $p) {
+                    $PATH_TO_SCOPE[$this->canonicalizePath($p)] = $scope;
+                }
+            }
+        }
+
+        $key = $this->canonicalizePath($path);
+        return $PATH_TO_SCOPE[$key] ?? null;
+    }
+
     private function getEnabledScopes(): array
     {
         $scopes = [];
