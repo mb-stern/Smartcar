@@ -511,10 +511,24 @@ class Smartcar extends IPSModule
             $data = json_decode($raw ?? '', true);
 
             // Statuscode ermitteln
-            $statusCode = 0;
+             $statusCode = 0;
             foreach ($http_response_header ?? [] as $h) {
                 if (preg_match('#HTTP/\d+\.\d+\s+(\d+)#', $h, $m)) { $statusCode = (int)$m[1]; break; }
             }
+
+            // INSERT: 429 Retry-After debug
+            if ($statusCode === 429) {
+                $retryAfter = null;
+                foreach (($http_response_header ?? []) as $h) {
+                    if (stripos($h, 'Retry-After:') === 0) {
+                        $retryAfter = trim(substr($h, strlen('Retry-After:')));
+                        break;
+                    }
+                }
+                // $this ist im Methoden-Closure verfügbar
+                $this->SendDebug('RateLimit', '429 RATE_LIMIT – Retry-After: ' . ($retryAfter ?? '(kein Header)'), 0);
+            }
+
             return [$statusCode, $raw, $data];
         };
 
@@ -1010,6 +1024,17 @@ class Smartcar extends IPSModule
             }
         }
 
+                if ($statusCode === 429) {
+            $retryAfter = null;
+            foreach (($http_response_header ?? []) as $h) {
+                if (stripos($h, 'Retry-After:') === 0) {
+                    $retryAfter = trim(substr($h, strlen('Retry-After:')));
+                    break;
+                }
+            }
+            $this->SendDebug('RateLimit', '429 RATE_LIMIT – Retry-After: ' . ($retryAfter ?? '(kein Header)'), 0);
+        }
+
         $data = json_decode($response, true);
         $this->SendDebug('FetchVehicleData', "Antwort: " . json_encode($data, JSON_PRETTY_PRINT), 0);
 
@@ -1064,6 +1089,17 @@ class Smartcar extends IPSModule
         $statusCode = 0;
         foreach ($http_response_header ?? [] as $h) {
             if (preg_match('#HTTP/\d+\.\d+\s+(\d+)#', $h, $m)) { $statusCode = (int)$m[1]; break; }
+        }
+
+        if ($statusCode === 429) {
+            $retryAfter = null;
+            foreach (($http_response_header ?? []) as $h) {
+                if (stripos($h, 'Retry-After:') === 0) {
+                    $retryAfter = trim(substr($h, strlen('Retry-After:')));
+                    break;
+                }
+            }
+            $this->SendDebug('RateLimit', '429 RATE_LIMIT – Retry-After: ' . ($retryAfter ?? '(kein Header)'), 0);
         }
 
         if ($statusCode === 401 && $retryCount < $maxRetries) {
@@ -1837,6 +1873,17 @@ class Smartcar extends IPSModule
                 $statusCode = (int)$m[1];
                 break;
             }
+        }
+
+                if ($statusCode === 429) {
+            $retryAfter = null;
+            foreach (($http_response_header ?? []) as $h) {
+                if (stripos($h, 'Retry-After:') === 0) {
+                    $retryAfter = trim(substr($h, strlen('Retry-After:')));
+                    break;
+                }
+            }
+            $this->SendDebug('RateLimit', '429 RATE_LIMIT – Retry-After: ' . ($retryAfter ?? '(kein Header)'), 0);
         }
 
         $data = json_decode($response, true);
