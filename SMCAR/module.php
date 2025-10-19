@@ -1252,7 +1252,7 @@ class Smartcar extends IPSModule
         }
 
         $this->DebugJsonAntwort('GetVehicleID', $res, $statusCode);
-        
+
         $this->LogRateLimitIfAny($statusCode, $http_response_header ?? []);
         if ($statusCode !== 200) {
             $this->DebugHttpHeaders($http_response_header ?? [], $statusCode);
@@ -2014,7 +2014,7 @@ class Smartcar extends IPSModule
         $context  = stream_context_create($options);
         $response = @file_get_contents($url, false, $context);
 
-        $$this->DebugJsonAntwort('SetLockStatus', $response, $statusCode);
+        $this->DebugJsonAntwort('SetLockStatus', $response, $statusCode);
 
         $httpHeaders = $http_response_header ?? [];
         $statusCode = 0;
