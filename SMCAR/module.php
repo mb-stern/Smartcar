@@ -52,8 +52,11 @@ class Smartcar extends IPSModule
         'SetLockStatus'            => 'control_security',
     ];
 
-    // Anzahl Wiederholungen bei 429 Fehler (Rate-Limit)
+    // Anzahl Wiederholungen bei Fehler 
     private const MAX_RETRY_ATTEMPTS = 3;
+
+    /** Statuscodes, die automatisch wiederholt werden */
+    private const RETRYABLE_STATUS = [429, 500, 502, 503, 504];
 
     public function Create()
     {
@@ -355,52 +358,37 @@ class Smartcar extends IPSModule
         return json_encode($form);
     }
 
-    private function GetRetryAfterFromHeaders(array $headers): ?string
+    private function HandleRetriableHttp(string $kind, array $jobFields, int $statusCode, array $headers, ?int $attempt = null): bool
     {
-        foreach ($headers as $line) {
-            if (stripos($line, 'Retry-After:') === 0) {
-                return trim(substr($line, 12));
-            }
+        if (!in_array($statusCode, self::RETRYABLE_STATUS, true)) {
+            return false;
         }
-        return null;
-    }
 
-    private function ParseRetryAfter(?string $retryAfter): ?int
-    {
-        if (!$retryAfter) {
-            return null;
-        }
-        if (is_numeric($retryAfter)) {
-            return max(1, (int)$retryAfter);
-        }
-        $ts = strtotime($retryAfter);
-        if ($ts === false) {
-            return null;
-        }
-        $delta = $ts - time();
-        return ($delta > 0) ? $delta : null;
-    }
-
-    private function ComputeRetryDelay(int $statusCode, array $headers, ?array $body): ?int
-    {
-        $retryAfterHeader = $this->GetRetryAfterFromHeaders($headers);
-        $retryAfterSecs   = $this->ParseRetryAfter($retryAfterHeader);
-
+        // Logging (429 separat, 5xx gemeinsam)
         if ($statusCode === 429) {
-            return $retryAfterSecs ?? 2;
+            $this->LogRateLimitIfAny($statusCode, $headers);
+        } else {
+            $this->DebugHttpHeaders($headers, $statusCode); // bereits vorhanden; loggt Fehlerzeile kompakt
+            $this->SendDebug('Retry', "Retrybarer 5xx erkannt ($statusCode).", 0);
         }
 
-        if (in_array($statusCode, [500, 502, 503, 504], true)) {
-            $code = strtoupper((string)($body['code'] ?? ($body['body']['code'] ?? '')));
-            if ($code === 'RATE_LIMIT') {
-                return $retryAfterSecs ?? 5;
-            }
-            if ($retryAfterSecs !== null) {
-                return $retryAfterSecs;
-            }
+        // Retry-After respektieren; sonst kurzer exponentieller Backoff (gekappte Sekunden)
+        $retryAfter = $this->GetRetryAfterFromHeaders($headers);
+        $delay = $this->ParseRetryAfter($retryAfter);
+        if ($delay === null) {
+            $baseAttempt = max(1, (int)($attempt ?? 0));
+            // 2, 4, 8, 16 … (hart auf 60s gedeckelt; die Schedule-Funktion deckelt zusätzlich global)
+            $delay = min(60, 2 ** $baseAttempt);
         }
 
-        return null;
+        $job = array_merge(['kind' => $kind], $jobFields);
+        if ($attempt !== null) {
+            // Falls der Aufrufer schon einen Zähler pflegt, mitgeben, damit Schedule robust weiterzählt
+            $job['attempt'] = (int)$attempt;
+        }
+
+        $this->ScheduleHttpRetry($job, (int)$delay);
+        return true;
     }
 
     private function canonicalizePath(string $path): string
@@ -678,14 +666,6 @@ class Smartcar extends IPSModule
 
     public function ProbeScopes(bool $silent = false): bool
     {
-        // Reentrancy-Guard (10s Debounce)
-        $last = (int)$this->ReadAttributeString('LastProbeAt');
-        if ($last && (time() - $last) < 10) {
-            $this->SendDebug('ProbeScopes', 'Debounced (called again too soon)', 0);
-            return true; // oder false – je nach gewünschter Semantik
-        }
-        $this->WriteAttributeString('LastProbeAt', (string)time());
-        
         $accessToken = $this->ReadAttributeString('AccessToken');
         $vehicleID   = $this->GetVehicleID($accessToken);
 
@@ -699,15 +679,15 @@ class Smartcar extends IPSModule
         }
 
         $doBatch = function(string $token) use ($vehicleID) {
-            $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID/batch";
-            $reqs = array_map(fn($p) => ['path' => $p], $this->getAllReadPaths());
-            $postData = json_encode(['requests' => $reqs]);
+            $url  = "https://api.smartcar.com/v2.0/vehicles/$vehicleID/batch";
+            $reqs = array_map(fn($p) => ['path' => $p], self::READ_PATHS);
+            $post = json_encode(['requests' => $reqs]);
 
             $ctx = stream_context_create([
                 'http' => [
                     'header'        => "Authorization: Bearer {$token}\r\nContent-Type: application/json\r\n",
                     'method'        => 'POST',
-                    'content'       => $postData,
+                    'content'       => $post,
                     'ignore_errors' => true
                 ]
             ]);
@@ -715,40 +695,51 @@ class Smartcar extends IPSModule
             $raw  = @file_get_contents($url, false, $ctx);
             $data = json_decode($raw ?? '', true);
 
-            // Statuscode ermitteln (nutzt deinen Helfer)
+            // Statuscode aus Headern ziehen (dein vorhandener Helper)
             $statusCode = $this->GetStatusCodeFromHeaders($http_response_header ?? []);
 
-            $this->LogRateLimitIfAny($statusCode, $http_response_header ?? []);
-            if ($statusCode !== 200) {
-                $this->DebugHttpHeaders($http_response_header ?? [], $statusCode);
-            }
+            // Optionales Debug (wie bei dir vorhanden)
+            $this->DebugJsonAntwort('ProbeScopes/batch', $raw, $statusCode);
 
             return [$statusCode, $raw, $data];
         };
 
-        // 1. Versuch
+        // 1) Erster Versuch
         [$status, $raw, $data] = $doBatch($accessToken);
+
+        // >>> NEU: zentraler Retry (429 + 5xx) – nicht blockierend
+        $httpHeaders = $http_response_header ?? [];
+        if ($this->HandleRetriableHttp('batch', [], (int)$status, $httpHeaders)) {
+            if (!$silent) echo "Automatisch erneut versuchen (RATE LIMIT / 5xx).";
+            return false; // hier Schluss – Timer übernimmt
+        }
+
+        // 2) Bei 401 einmal Refresh + erneuter Versuch (wie bisher)
         if ($status === 401) {
             $this->SendDebug('ProbeScopes', '401 beim Batch → versuche Refresh + Retry', 0);
             $this->RefreshAccessToken();
             $accessToken = $this->ReadAttributeString('AccessToken');
             [$status, $raw, $data] = $doBatch($accessToken);
+
+            // >>> NEU: auch beim erneuten Call zentraler Retry
+            $httpHeaders = $http_response_header ?? [];
+            if ($this->HandleRetriableHttp('batch', [], (int)$status, $httpHeaders)) {
+                if (!$silent) echo "Automatisch erneut versuchen (RATE LIMIT / 5xx).";
+                return false;
+            }
         }
 
+        // 3) Fehler-/Erfolgsprüfung wie gehabt …
         if ($raw === false || $raw === null) {
             $this->SendDebug('ProbeScopes', '❌ Keine Antwort.', 0);
             if (!$silent) echo "Fehlgeschlagen: Keine Antwort der Smartcar API.";
             return false;
         }
-
-        $this->SendDebug('ProbeScopes/raw', $raw, 0);
-
         if ($status !== 200) {
             $this->SendDebug('ProbeScopes', '❌ Unerwartete Struktur / HTTP ' . $status, 0);
             if (!$silent) echo "Fehlgeschlagen: HTTP $status – bitte Debug ansehen.";
             return false;
         }
-
         if (!isset($data['responses']) || !is_array($data['responses'])) {
             $this->SendDebug('ProbeScopes', '❌ Unerwartete Struktur.', 0);
             if (!$silent) echo "Fehlgeschlagen: Unerwartete Antwortstruktur.";
@@ -1274,9 +1265,7 @@ class Smartcar extends IPSModule
             $this->DebugHttpHeaders($httpHeaders, $statusCode);
         }
 
-        if ($statusCode === 429) {
-            $delay = $this->ParseRetryAfter($this->GetRetryAfterFromHeaders($httpHeaders)) ?? 2;
-            $this->ScheduleHttpRetry(['kind' => 'batch'], $delay);
+        if ($this->HandleRetriableHttp('batch', [], $statusCode, $httpHeaders)) {
             return;
         }
 
@@ -1338,9 +1327,7 @@ class Smartcar extends IPSModule
             $this->DebugHttpHeaders($httpHeaders, $statusCode);
         }
 
-        if ($statusCode === 429) {
-            $delay = $this->ParseRetryAfter($this->GetRetryAfterFromHeaders($httpHeaders)) ?? 2;
-            $this->ScheduleHttpRetry(['kind' => 'getVehicleID'], $delay);
+        if ($this->HandleRetriableHttp('getVehicleID', [], $statusCode, $httpHeaders)) {
             return null;
         }
 
@@ -1947,158 +1934,179 @@ class Smartcar extends IPSModule
 
     // -------- Commands --------
 
-    public function SetChargeLimit(float $limit): void
+    public function SetChargeLimit(float $limit)
     {
-        $token     = $this->ReadAttributeString('AccessToken');
-        $vehicleID = $this->ReadAttributeString('VehicleID');
-        if ($token === '' || $vehicleID === '') {
-            $this->SendDebug('SetChargeLimit', '❌ Kein AccessToken oder VehicleID gesetzt!', 0);
+        $accessToken = $this->ReadAttributeString('AccessToken');
+        $vehicleID   = $this->GetVehicleID($accessToken);
+
+        if ($limit < 0.5 || $limit > 1.0) {
+            $this->SendDebug('SetChargeLimit', 'Ungültiges Limit (0.5–1.0).', 0);
+            $this->LogMessage('SetChargeLimit - Ungültiges Limit!', KL_ERROR);
+            return;
+        }
+        if ($accessToken === '' || $vehicleID === null || $vehicleID === '') {
+            $this->SendDebug('SetChargeLimit', 'Access Token oder VehicleID fehlt.', 0);
             return;
         }
 
-        $url = "https://api.smartcar.com/v2.0/vehicles/{$vehicleID}/charge/limit";
-        $body = json_encode(['percent' => $limit]);
+        $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID/charge/limit";
+        $postData = json_encode(['limit' => $limit]);
 
-        $opts = [
+        $options = [
             'http' => [
-                'method'  => 'POST',
-                'header'  => "Authorization: Bearer {$token}\r\nContent-Type: application/json\r\n",
-                'content' => $body
+                'header'        => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
+                'method'        => 'POST',
+                'content'       => $postData,
+                'ignore_errors' => true
             ]
         ];
 
-        $ctx      = stream_context_create($opts);
-        $response = @file_get_contents($url, false, $ctx);
-        $statusCode = 0;
-        foreach ($http_response_header ?? [] as $h) {
-            if (preg_match('#HTTP/\d+\.\d+\s+(\d+)#', $h, $m)) {
-                $statusCode = (int)$m[1];
-                break;
-            }
+        $context  = stream_context_create($options);
+        $response = @file_get_contents($url, false, $context);
+        if ($response === false) {
+            $this->SendDebug('SetChargeLimit', 'Keine Antwort.', 0);
+            return;
         }
 
-        $data = json_decode($response, true);
+        $httpHeaders = $http_response_header ?? [];
+        $statusCode  = $this->GetStatusCodeFromHeaders($httpHeaders);
 
-        $retryDelay = $this->ComputeRetryDelay($statusCode, $http_response_header ?? [], $data);
-        if ($retryDelay !== null) {
-            $this->SendDebug('RateLimit', sprintf('HTTP %d → Retry in %ds (nicht blockierend)', $statusCode, $retryDelay), 0);
+        $this->DebugJsonAntwort('SetChargeLimit', $response, $statusCode);
+        $this->LogRateLimitIfAny($statusCode, $httpHeaders);
+        if ($statusCode !== 200) {
+            $this->DebugHttpHeaders($httpHeaders, $statusCode);
+        }
+
+        if ($statusCode === 429) {
+            $delay = $this->ParseRetryAfter($this->GetRetryAfterFromHeaders($httpHeaders)) ?? 2;
             $this->ScheduleHttpRetry([
                 'kind'   => 'command',
                 'action' => 'SetChargeLimit',
                 'limit'  => $limit
-            ], $retryDelay);
+            ], $delay);
             return;
-        }
-
-        if ($statusCode !== 200) {
-            $this->SendDebug('SetChargeLimit', "❌ Fehler: " . json_encode($data), 0);
-            $this->LogMessage("SetChargeLimit - Fehler: " . json_encode($data), KL_ERROR);
-            return;
-        }
-
-        $this->SendDebug('SetChargeLimit', '✅ Ladelimit erfolgreich gesetzt.', 0);
-    }
-
-    public function SetChargeStatus(bool $status): void
-    {
-        $token     = $this->ReadAttributeString('AccessToken');
-        $vehicleID = $this->ReadAttributeString('VehicleID');
-        if ($token === '' || $vehicleID === '') {
-            $this->SendDebug('SetChargeStatus', '❌ Kein AccessToken oder VehicleID gesetzt!', 0);
-            return;
-        }
-
-        $url = "https://api.smartcar.com/v2.0/vehicles/{$vehicleID}/charge";
-        $body = json_encode(['action' => $status ? 'START' : 'STOP']);
-
-        $opts = [
-            'http' => [
-                'method'  => 'POST',
-                'header'  => "Authorization: Bearer {$token}\r\nContent-Type: application/json\r\n",
-                'content' => $body
-            ]
-        ];
-
-        $ctx      = stream_context_create($opts);
-        $response = @file_get_contents($url, false, $ctx);
-        $statusCode = 0;
-        foreach ($http_response_header ?? [] as $h) {
-            if (preg_match('#HTTP/\d+\.\d+\s+(\d+)#', $h, $m)) {
-                $statusCode = (int)$m[1];
-                break;
-            }
         }
 
         $data = json_decode($response, true);
+        if (isset($data['statusCode']) && (int)$data['statusCode'] !== 200) {
+            $this->SendDebug('SetChargeLimit', "Fehler: " . json_encode($data), 0);
+        } else {
+            $this->SendDebug('SetChargeLimit', '✅ Ladelimit gesetzt.', 0);
+        }
+    }
 
-        $retryDelay = $this->ComputeRetryDelay($statusCode, $http_response_header ?? [], $data);
-        if ($retryDelay !== null) {
+    public function SetChargeStatus(bool $status)
+    {
+        $accessToken = $this->ReadAttributeString('AccessToken');
+        $vehicleID   = $this->GetVehicleID($accessToken);
+
+        if ($accessToken === '' || $vehicleID === null || $vehicleID === '') {
+            $this->SendDebug('SetChargeStatus', 'Access Token oder VehicleID fehlt.', 0);
+            return;
+        }
+
+        $action   = $status ? 'START' : 'STOP';
+        $url      = "https://api.smartcar.com/v2.0/vehicles/$vehicleID/charge";
+        $postData = json_encode(['action' => $action]);
+
+        $options = [
+            'http' => [
+                'header'        => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
+                'method'        => 'POST',
+                'content'       => $postData,
+                'ignore_errors' => true
+            ]
+        ];
+
+        $context  = stream_context_create($options);
+        $response = @file_get_contents($url, false, $context);
+        if ($response === false) {
+            $this->SendDebug('SetChargeStatus', 'Keine Antwort.', 0);
+            return;
+        }
+
+        $httpHeaders = $http_response_header ?? [];
+        $statusCode  = $this->GetStatusCodeFromHeaders($httpHeaders);
+
+        $this->DebugJsonAntwort('SetChargeStatus', $response, $statusCode);
+        $this->LogRateLimitIfAny($statusCode, $httpHeaders);
+        if ($statusCode !== 200) {
+            $this->DebugHttpHeaders($httpHeaders, $statusCode);
+        }
+
+        if ($statusCode === 429) {
+            $delay = $this->ParseRetryAfter($this->GetRetryAfterFromHeaders($httpHeaders)) ?? 2;
             $this->ScheduleHttpRetry([
                 'kind'   => 'command',
                 'action' => 'SetChargeStatus',
                 'status' => $status
-            ], $retryDelay);
+            ], $delay);
             return;
-        }
-
-        if ($statusCode !== 200) {
-            $this->SendDebug('SetChargeStatus', "❌ Fehler: " . json_encode($data), 0);
-            $this->LogMessage("SetChargeStatus - Fehler: " . json_encode($data), KL_ERROR);
-            return;
-        }
-
-        $this->SendDebug('SetChargeStatus', '✅ Ladevorgang geändert.', 0);
-    }
-
-    public function SetLockStatus(bool $status): void
-    {
-        $token     = $this->ReadAttributeString('AccessToken');
-        $vehicleID = $this->ReadAttributeString('VehicleID');
-        if ($token === '' || $vehicleID === '') {
-            $this->SendDebug('SetLockStatus', '❌ Kein AccessToken oder VehicleID gesetzt!', 0);
-            return;
-        }
-
-        $url = "https://api.smartcar.com/v2.0/vehicles/{$vehicleID}/security";
-        $body = json_encode(['action' => $status ? 'LOCK' : 'UNLOCK']);
-
-        $opts = [
-            'http' => [
-                'method'  => 'POST',
-                'header'  => "Authorization: Bearer {$token}\r\nContent-Type: application/json\r\n",
-                'content' => $body
-            ]
-        ];
-
-        $ctx      = stream_context_create($opts);
-        $response = @file_get_contents($url, false, $ctx);
-        $statusCode = 0;
-        foreach ($http_response_header ?? [] as $h) {
-            if (preg_match('#HTTP/\d+\.\d+\s+(\d+)#', $h, $m)) {
-                $statusCode = (int)$m[1];
-                break;
-            }
         }
 
         $data = json_decode($response, true);
+        if (isset($data['statusCode']) && (int)$data['statusCode'] !== 200) {
+            $this->SendDebug('SetChargeStatus', "Fehler: " . json_encode($data), 0);
+        } else {
+            $this->SendDebug('SetChargeStatus', '✅ Ladestatus gesetzt.', 0);
+        }
+    }
 
-        $retryDelay = $this->ComputeRetryDelay($statusCode, $http_response_header ?? [], $data);
-        if ($retryDelay !== null) {
+    public function SetLockStatus(bool $status)
+    {
+        $accessToken = $this->ReadAttributeString('AccessToken');
+        $vehicleID   = $this->GetVehicleID($accessToken);
+
+        if ($accessToken === '' || $vehicleID === null || $vehicleID === '') {
+            $this->SendDebug('SetLockStatus', 'Access Token oder VehicleID fehlt.', 0);
+            return;
+        }
+
+        $action   = $status ? 'LOCK' : 'UNLOCK';
+        $url      = "https://api.smartcar.com/v2.0/vehicles/$vehicleID/security";
+        $postData = json_encode(['action' => $action]);
+
+        $options = [
+            'http' => [
+                'header'        => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
+                'method'        => 'POST',
+                'content'       => $postData,
+                'ignore_errors' => true
+            ]
+        ];
+
+        $context  = stream_context_create($options);
+        $response = @file_get_contents($url, false, $context);
+        if ($response === false) {
+            $this->SendDebug('SetLockStatus', 'Keine Antwort.', 0);
+            return;
+        }
+
+        $httpHeaders = $http_response_header ?? [];
+        $statusCode  = $this->GetStatusCodeFromHeaders($httpHeaders);
+
+        $this->DebugJsonAntwort('SetLockStatus', $response, $statusCode);
+        $this->LogRateLimitIfAny($statusCode, $httpHeaders);
+        if ($statusCode !== 200) {
+            $this->DebugHttpHeaders($httpHeaders, $statusCode);
+        }
+
+        if ($statusCode === 429) {
+            $delay = $this->ParseRetryAfter($this->GetRetryAfterFromHeaders($httpHeaders)) ?? 2;
             $this->ScheduleHttpRetry([
                 'kind'   => 'command',
                 'action' => 'SetLockStatus',
                 'status' => $status
-            ], $retryDelay);
+            ], $delay);
             return;
         }
 
-        if ($statusCode !== 200) {
-            $this->SendDebug('SetLockStatus', "❌ Fehler: " . json_encode($data), 0);
-            $this->LogMessage("SetLockStatus - Fehler: " . json_encode($data), KL_ERROR);
-            return;
+        $data = json_decode($response, true);
+        if (isset($data['statusCode']) && (int)$data['statusCode'] !== 200) {
+            $this->SendDebug('SetLockStatus', "Fehler: " . json_encode($data), 0);
+        } else {
+            $this->SendDebug('SetLockStatus', '✅ Zentralverriegelung gesetzt.', 0);
         }
-
-        $this->SendDebug('SetLockStatus', '✅ Fahrzeugverriegelung geändert.', 0);
     }
 
     public function FetchVehicleInfo()  { $this->FetchSingleEndpoint('/'); }
@@ -2116,52 +2124,69 @@ class Smartcar extends IPSModule
 
     private function FetchSingleEndpoint(string $path)
     {
-        $token     = $this->ReadAttributeString('AccessToken');
+        $accessToken = $this->ReadAttributeString('AccessToken');
+
+        // Cache bevorzugen
         $vehicleID = $this->ReadAttributeString('VehicleID');
-        if ($token === '' || $vehicleID === '') {
-            $this->SendDebug('FetchSingleEndpoint', '❌ Kein AccessToken oder VehicleID gesetzt!', 0);
+        if ($vehicleID === '') {
+            $vehicleID = $this->GetVehicleID($accessToken);
+        }
+        if ($accessToken === '' || $vehicleID === null || $vehicleID === '') {
+            $this->SendDebug('FetchSingleEndpoint', '❌ Access Token oder VehicleID fehlt!', 0);
             return;
         }
 
-        $url = "https://api.smartcar.com/v2.0/vehicles/{$vehicleID}{$path}";
-        $this->SendDebug('FetchSingleEndpoint', "URL: $url", 0);
-
-        $opts = [
+        $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID$path";
+        $options = [
             'http' => [
-                'method'  => 'GET',
-                'header'  => "Authorization: Bearer {$token}\r\nAccept: application/json\r\n"
+                'header'        => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
+                'method'        => 'GET',
+                'ignore_errors' => true
             ]
         ];
 
-        $ctx      = stream_context_create($opts);
-        $response = @file_get_contents($url, false, $ctx);
-        $statusCode = 0;
-        foreach ($http_response_header ?? [] as $h) {
-            if (preg_match('#HTTP/\d+\.\d+\s+(\d+)#', $h, $m)) {
-                $statusCode = (int)$m[1];
-                break;
-            }
-        }
+        $this->SendDebug('FetchSingleEndpoint', "API-Anfrage: " . json_encode([
+            'url'    => $url,
+            'method' => $options['http']['method'],
+            'header' => $options['http']['header'],
+            'body'   => null
+        ], JSON_PRETTY_PRINT), 0);
 
-        $data = json_decode($response, true);
-
-        // === Vereinheitlichte Rate-Limit-Behandlung ===
-        $retryDelay = $this->ComputeRetryDelay($statusCode, $http_response_header ?? [], $data);
-        if ($retryDelay !== null) {
-            $this->SendDebug('RateLimit', sprintf('HTTP %d → Retry in %ds (nicht blockierend)', $statusCode, $retryDelay), 0);
-            $this->ScheduleHttpRetry(['kind' => 'single', 'path' => $path], $retryDelay);
+        $context  = stream_context_create($options);
+        $response = @file_get_contents($url, false, $context);
+        if ($response === false) {
+            $this->SendDebug('FetchSingleEndpoint', '❌ Keine Antwort von der API!', 0);
+            $this->LogMessage('FetchSingleEndpoint - Keine Antwort von der API!', KL_ERROR);
             return;
         }
 
+        $httpHeaders = $http_response_header ?? [];
+        $statusCode  = $this->GetStatusCodeFromHeaders($httpHeaders);
+
+        $this->DebugJsonAntwort('FetchSingleEndpoint', $response, $statusCode);
+        $this->LogRateLimitIfAny($statusCode, $httpHeaders);
         if ($statusCode !== 200) {
-            $msg = $this->GetHttpErrorDetails($statusCode, $data);
+            $this->DebugHttpHeaders($httpHeaders, $statusCode);
+        }
+
+        if ($this->HandleRetriableHttp('single', ['path' => $path], $statusCode, $httpHeaders)) {
+            return;
+        }
+
+        $data = json_decode($response, true);
+        if ($statusCode !== 200) {
+            $msg = $this->GetHttpErrorDetails($statusCode, $data ?? []);
             $this->SendDebug('FetchSingleEndpoint', "❌ Fehler: $msg", 0);
             $this->LogMessage("FetchSingleEndpoint - $msg", KL_ERROR);
             return;
         }
 
-        $this->SendDebug('FetchSingleEndpoint', '✅ Daten empfangen.', 0);
-        return $data;
+        if (!empty($data)) {
+            $this->ProcessResponse($path, $data);
+        } else {
+            $this->SendDebug('FetchSingleEndpoint', '❌ Unerwartete Antwortstruktur.', 0);
+            $this->LogMessage('FetchSingleEndpoint - Unerwartete Antwortstruktur', KL_ERROR);
+        }
     }
 
     private function GetHttpErrorDetails(int $statusCode, array $data): string
