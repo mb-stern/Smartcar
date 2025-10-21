@@ -52,8 +52,11 @@ class Smartcar extends IPSModule
         'SetLockStatus'            => 'control_security',
     ];
 
-    // Anzahl Wiederholungen bei 429 Fehler (Rate-Limit)
+    // Anzahl Wiederholungen bei Fehler 
     private const MAX_RETRY_ATTEMPTS = 3;
+
+    /** Statuscodes, die automatisch wiederholt werden */
+    private const RETRYABLE_STATUS = [429, 500, 502, 503, 504];
 
     public function Create()
     {
@@ -355,6 +358,39 @@ class Smartcar extends IPSModule
         return json_encode($form);
     }
 
+    private function HandleRetriableHttp(string $kind, array $jobFields, int $statusCode, array $headers, ?int $attempt = null): bool
+    {
+        if (!in_array($statusCode, self::RETRYABLE_STATUS, true)) {
+            return false;
+        }
+
+        // Logging (429 separat, 5xx gemeinsam)
+        if ($statusCode === 429) {
+            $this->LogRateLimitIfAny($statusCode, $headers);
+        } else {
+            $this->DebugHttpHeaders($headers, $statusCode); // bereits vorhanden; loggt Fehlerzeile kompakt
+            $this->SendDebug('Retry', "Retrybarer 5xx erkannt ($statusCode).", 0);
+        }
+
+        // Retry-After respektieren; sonst kurzer exponentieller Backoff (gekappte Sekunden)
+        $retryAfter = $this->GetRetryAfterFromHeaders($headers);
+        $delay = $this->ParseRetryAfter($retryAfter);
+        if ($delay === null) {
+            $baseAttempt = max(1, (int)($attempt ?? 0));
+            // 2, 4, 8, 16 … (hart auf 60s gedeckelt; die Schedule-Funktion deckelt zusätzlich global)
+            $delay = min(60, 2 ** $baseAttempt);
+        }
+
+        $job = array_merge(['kind' => $kind], $jobFields);
+        if ($attempt !== null) {
+            // Falls der Aufrufer schon einen Zähler pflegt, mitgeben, damit Schedule robust weiterzählt
+            $job['attempt'] = (int)$attempt;
+        }
+
+        $this->ScheduleHttpRetry($job, (int)$delay);
+        return true;
+    }
+
     private function canonicalizePath(string $path): string
     {
         $path = trim($path);
@@ -630,14 +666,6 @@ class Smartcar extends IPSModule
 
     public function ProbeScopes(bool $silent = false): bool
     {
-        // Reentrancy-Guard (10s Debounce)
-        $last = (int)$this->ReadAttributeString('LastProbeAt');
-        if ($last && (time() - $last) < 10) {
-            $this->SendDebug('ProbeScopes', 'Debounced (called again too soon)', 0);
-            return true; // oder false – je nach gewünschter Semantik
-        }
-        $this->WriteAttributeString('LastProbeAt', (string)time());
-        
         $accessToken = $this->ReadAttributeString('AccessToken');
         $vehicleID   = $this->GetVehicleID($accessToken);
 
@@ -651,15 +679,15 @@ class Smartcar extends IPSModule
         }
 
         $doBatch = function(string $token) use ($vehicleID) {
-            $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID/batch";
-            $reqs = array_map(fn($p) => ['path' => $p], $this->getAllReadPaths());
-            $postData = json_encode(['requests' => $reqs]);
+            $url  = "https://api.smartcar.com/v2.0/vehicles/$vehicleID/batch";
+            $reqs = array_map(fn($p) => ['path' => $p], self::READ_PATHS);
+            $post = json_encode(['requests' => $reqs]);
 
             $ctx = stream_context_create([
                 'http' => [
                     'header'        => "Authorization: Bearer {$token}\r\nContent-Type: application/json\r\n",
                     'method'        => 'POST',
-                    'content'       => $postData,
+                    'content'       => $post,
                     'ignore_errors' => true
                 ]
             ]);
@@ -667,40 +695,51 @@ class Smartcar extends IPSModule
             $raw  = @file_get_contents($url, false, $ctx);
             $data = json_decode($raw ?? '', true);
 
-            // Statuscode ermitteln (nutzt deinen Helfer)
+            // Statuscode aus Headern ziehen (dein vorhandener Helper)
             $statusCode = $this->GetStatusCodeFromHeaders($http_response_header ?? []);
 
-            $this->LogRateLimitIfAny($statusCode, $http_response_header ?? []);
-            if ($statusCode !== 200) {
-                $this->DebugHttpHeaders($http_response_header ?? [], $statusCode);
-            }
+            // Optionales Debug (wie bei dir vorhanden)
+            $this->DebugJsonAntwort('ProbeScopes/batch', $raw, $statusCode);
 
             return [$statusCode, $raw, $data];
         };
 
-        // 1. Versuch
+        // 1) Erster Versuch
         [$status, $raw, $data] = $doBatch($accessToken);
+
+        // >>> NEU: zentraler Retry (429 + 5xx) – nicht blockierend
+        $httpHeaders = $http_response_header ?? [];
+        if ($this->HandleRetriableHttp('batch', [], (int)$status, $httpHeaders)) {
+            if (!$silent) echo "Automatisch erneut versuchen (RATE LIMIT / 5xx).";
+            return false; // hier Schluss – Timer übernimmt
+        }
+
+        // 2) Bei 401 einmal Refresh + erneuter Versuch (wie bisher)
         if ($status === 401) {
             $this->SendDebug('ProbeScopes', '401 beim Batch → versuche Refresh + Retry', 0);
             $this->RefreshAccessToken();
             $accessToken = $this->ReadAttributeString('AccessToken');
             [$status, $raw, $data] = $doBatch($accessToken);
+
+            // >>> NEU: auch beim erneuten Call zentraler Retry
+            $httpHeaders = $http_response_header ?? [];
+            if ($this->HandleRetriableHttp('batch', [], (int)$status, $httpHeaders)) {
+                if (!$silent) echo "Automatisch erneut versuchen (RATE LIMIT / 5xx).";
+                return false;
+            }
         }
 
+        // 3) Fehler-/Erfolgsprüfung wie gehabt …
         if ($raw === false || $raw === null) {
             $this->SendDebug('ProbeScopes', '❌ Keine Antwort.', 0);
             if (!$silent) echo "Fehlgeschlagen: Keine Antwort der Smartcar API.";
             return false;
         }
-
-        $this->SendDebug('ProbeScopes/raw', $raw, 0);
-
         if ($status !== 200) {
             $this->SendDebug('ProbeScopes', '❌ Unerwartete Struktur / HTTP ' . $status, 0);
             if (!$silent) echo "Fehlgeschlagen: HTTP $status – bitte Debug ansehen.";
             return false;
         }
-
         if (!isset($data['responses']) || !is_array($data['responses'])) {
             $this->SendDebug('ProbeScopes', '❌ Unerwartete Struktur.', 0);
             if (!$silent) echo "Fehlgeschlagen: Unerwartete Antwortstruktur.";
@@ -1226,9 +1265,7 @@ class Smartcar extends IPSModule
             $this->DebugHttpHeaders($httpHeaders, $statusCode);
         }
 
-        if ($statusCode === 429) {
-            $delay = $this->ParseRetryAfter($this->GetRetryAfterFromHeaders($httpHeaders)) ?? 2;
-            $this->ScheduleHttpRetry(['kind' => 'batch'], $delay);
+        if ($this->HandleRetriableHttp('batch', [], $statusCode, $httpHeaders)) {
             return;
         }
 
@@ -1290,9 +1327,7 @@ class Smartcar extends IPSModule
             $this->DebugHttpHeaders($httpHeaders, $statusCode);
         }
 
-        if ($statusCode === 429) {
-            $delay = $this->ParseRetryAfter($this->GetRetryAfterFromHeaders($httpHeaders)) ?? 2;
-            $this->ScheduleHttpRetry(['kind' => 'getVehicleID'], $delay);
+        if ($this->HandleRetriableHttp('getVehicleID', [], $statusCode, $httpHeaders)) {
             return null;
         }
 
@@ -2134,9 +2169,7 @@ class Smartcar extends IPSModule
             $this->DebugHttpHeaders($httpHeaders, $statusCode);
         }
 
-        if ($statusCode === 429) {
-            $delay = $this->ParseRetryAfter($this->GetRetryAfterFromHeaders($httpHeaders)) ?? 2;
-            $this->ScheduleHttpRetry(['kind' => 'single', 'path' => $path], $delay);
+        if ($this->HandleRetriableHttp('single', ['path' => $path], $statusCode, $httpHeaders)) {
             return;
         }
 
