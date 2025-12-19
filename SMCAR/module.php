@@ -301,13 +301,6 @@ class Smartcar extends IPSModule
                     'type'    => 'ExpansionPanel',
                     'caption' => 'Berechtigungen (Scopes)',
                     'items'   => [
-                        ['type' => 'Label', 'caption' => 'Zugehörige Variablen werden automatisch erstellt bzw. gelöscht.'],
-                        ['type' => 'Label', 'caption' => $hasCompat
-                        ? 'Scope-Filter aktiv (Ergebnis der automatischen Prüfung wird angewendet).'
-                        : 'Noch keine automatische Prüfung – alle Scopes werden gelistet. Kompatible Scopes mit Button prüfen und auf OK warten.'],
-                        ['type' => 'Label',  'caption' => $hasCompat ? ('Gefundene kompatible Scopes: ' . implode(', ', array_keys(array_filter($compat ?? [])))) : ''],
-
-                        
                         ['type'=>'CheckBox','name'=>'ScopeReadVehicleInfo',     'caption'=>'Fahrzeuginformationen lesen (/)'],
                         ['type'=>'CheckBox','name'=>'ScopeReadVIN',             'caption'=>'VIN lesen (/vin)'],
                         ['type'=>'CheckBox','name'=>'ScopeReadLocation',        'caption'=>'Standort lesen (/location)'],
