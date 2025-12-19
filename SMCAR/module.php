@@ -313,9 +313,9 @@ class Smartcar extends IPSModule
                         ['type'=>'CheckBox','name'=>'ScopeReadChargeLimit',     'caption'=>'Ladelimit lesen (/charge/limit)'],
                         ['type'=>'CheckBox','name'=>'ScopeReadChargeStatus',    'caption'=>'Ladestatus lesen (/charge)'],
                         ['type'=>'CheckBox','name'=>'ScopeReadOilLife',         'caption'=>'Motoröl lesen (/engine/oil)'],
-                        ['type'=>'CheckBox','name'=>'SetChargeLimit',  'caption'=>'Ladelimit setzen (/charge/limit)'],
-                        ['type'=>'CheckBox','name'=>'SetChargeStatus', 'caption'=>'Ladestatus setzen (/charge)'],
-                        ['type'=>'CheckBox','name'=>'SetLockStatus',   'caption'=>'Zentralverriegelung setzen (/security)']
+                        ['type'=>'CheckBox','name'=>'SetChargeLimit',           'caption'=>'Ladelimit setzen (/charge/limit)'],
+                        ['type'=>'CheckBox','name'=>'SetChargeStatus',          'caption'=>'Ladestatus setzen (/charge)'],
+                        ['type'=>'CheckBox','name'=>'SetLockStatus',            'caption'=>'Zentralverriegelung setzen (/security)']
                     ]
                 ],
             ],
@@ -681,32 +681,42 @@ class Smartcar extends IPSModule
         $verifyEnabled = $this->ReadPropertyBoolean('VerifyWebhookSignature');
         $mgmtToken     = trim($this->ReadPropertyString('ManagementToken'));
 
-        // --- VERIFY-Challenge ---
+        // --- VERIFY-Challenge (Callback URI Verification) ---
         if (($payload['eventType'] ?? '') === 'VERIFY') {
-            $challenge = $payload['data']['challenge'] ?? ($payload['challenge'] ?? '');
+
+            // v4: data.challenge | v2: challenge
+            $challenge = '';
+            if (isset($payload['data']) && is_array($payload['data']) && isset($payload['data']['challenge'])) {
+                $challenge = (string)$payload['data']['challenge'];
+            } elseif (isset($payload['challenge'])) {
+                $challenge = (string)$payload['challenge'];
+            }
+
             if ($challenge === '') {
-                $this->SendDebug('Webhook', '❌ VERIFY: challenge fehlt (erwartet data.challenge).', 0);
+                $this->SendDebug('Webhook', '❌ VERIFY: challenge fehlt (erwartet data.challenge oder challenge).', 0);
                 http_response_code(400);
-                echo 'Bad Request';
-                return;
-            }
-
-            if (!$verifyEnabled) {
-                $this->SendDebug('Webhook', "VERIFY (Testmodus): gebe plain challenge zurück: {$challenge}", 0);
                 header('Content-Type: application/json');
-                echo json_encode(['challenge' => $challenge]);
+                echo json_encode(['error' => 'missing_challenge']);
                 return;
             }
 
+            $verifyEnabled = $this->ReadPropertyBoolean('VerifyWebhookSignature');
+            $mgmtToken     = trim($this->ReadPropertyString('ManagementToken'));
+
+            // Smartcar erwartet IMMER HMAC, wenn du in der Dashboard-Verifikation bist.
+            // (Testmodus nur, wenn du bewusst ohne HMAC testen willst.)
             if ($mgmtToken === '') {
-                $this->SendDebug('Webhook', '❌ VERIFY: VerifyWebhookSignature=true aber ManagementToken leer.', 0);
+                $this->SendDebug('Webhook', '❌ VERIFY: ManagementToken leer (Application Management Token erforderlich).', 0);
                 http_response_code(401);
-                echo 'Unauthorized';
+                header('Content-Type: application/json');
+                echo json_encode(['error' => 'missing_management_token']);
                 return;
             }
 
-            $hmac = hash_hmac('sha256', $challenge, $mgmtToken);
-            $this->SendDebug('Webhook', "✅ VERIFY HMAC gebildet: {$hmac}", 0);
+            $hmac = hash_hmac('sha256', $challenge, $mgmtToken); // hex-encoded
+            $this->SendDebug('Webhook', "✅ VERIFY: challenge erhalten, HMAC gebildet.", 0);
+
+            http_response_code(200);
             header('Content-Type: application/json');
             echo json_encode(['challenge' => $hmac]);
             return;
