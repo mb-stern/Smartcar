@@ -680,7 +680,9 @@ class Smartcar extends IPSModule
 
         $doBatch = function(string $token) use ($vehicleID) {
             $url  = "https://api.smartcar.com/v2.0/vehicles/$vehicleID/batch";
-            $reqs = array_map(fn($p) => ['path' => $p], self::READ_PATHS);
+            $allPaths = $this->getAllReadPaths();
+            $reqs = array_map(fn($p) => ['path' => $p], $allPaths);
+
             $post = json_encode(['requests' => $reqs]);
 
             $ctx = stream_context_create([
