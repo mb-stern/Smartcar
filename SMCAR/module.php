@@ -482,16 +482,17 @@ class Smartcar extends IPSModule
 
     private function ApplyCompatToProperties(array $compat): void
     {
-        // Nur READ-Scopes automatisch setzen (control_* kann Smartcar nicht "proben")
         foreach (self::PROP_TO_SCOPE as $prop => $scope) {
+
+            // nur READ-Scopes automatisch verwalten
             if (!str_starts_with($scope, 'read_')) {
-                continue; // control_* überspringen
+                continue;
             }
 
-            // Nur auf TRUE setzen; false/unknown bleibt unberührt (User kann manuell aktivieren)
-            if (($compat[$scope] ?? false) === true) {
-                IPS_SetProperty($this->InstanceID, $prop, true);
-            }
+            $isCompatible = ($compat[$scope] ?? false) === true;
+
+            // 🔴 WICHTIG: explizit TRUE ODER FALSE setzen
+            IPS_SetProperty($this->InstanceID, $prop, $isCompatible);
         }
     }
 
