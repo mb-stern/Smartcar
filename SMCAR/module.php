@@ -1063,6 +1063,104 @@ class Smartcar extends IPSModule
                 echo 'ok';
                 return;
 
+            case 'VEHICLE_ERROR':
+
+                // Nur Debug – keine Variablen, keine Logik, keine Änderungen an State
+                $eventId   = (string)($payload['eventId'] ?? '');
+                $eventType = (string)($payload['eventType'] ?? 'VEHICLE_ERROR');
+
+                $meta = $payload['meta'] ?? [];
+                if (!is_array($meta)) $meta = [];
+
+                $deliveredAtMs = (int)($meta['deliveredAt'] ?? 0);
+                $deliveredAt   = $deliveredAtMs > 0 ? (int)floor($deliveredAtMs / 1000) : time();
+
+                $data = $payload['data'] ?? [];
+                if (!is_array($data)) $data = [];
+
+                $veh = $data['vehicle'] ?? [];
+                if (!is_array($veh)) $veh = [];
+
+                $vehText = trim(
+                    (string)($veh['make'] ?? '') . ' ' . (string)($veh['model'] ?? '')
+                );
+                if (isset($veh['year']) && $veh['year'] !== '') {
+                    $vehText .= ' (' . (string)$veh['year'] . ')';
+                }
+
+                $errors = $data['errors'] ?? [];
+                if (!is_array($errors)) $errors = [];
+
+                // Kurze Zusammenfassung + Flags nur fürs Debug
+                $reauthRequired = false;
+                $notCapable     = false;
+                $types = [];
+                $codes = [];
+                $signals = [];
+
+                foreach ($errors as $e) {
+                    if (!is_array($e)) continue;
+
+                    $type = (string)($e['type'] ?? '');
+                    $code = (string)($e['code'] ?? '');
+                    if ($type !== '') $types[$type] = true;
+                    if ($code !== '') $codes[$code] = true;
+
+                    if ((string)($e['resolution']['type'] ?? '') === 'REAUTHENTICATE') {
+                        $reauthRequired = true;
+                    }
+                    if ($code === 'VEHICLE_NOT_CAPABLE') {
+                        $notCapable = true;
+                    }
+
+                    $sigArr = $e['signals'] ?? [];
+                    if (is_array($sigArr)) {
+                        foreach ($sigArr as $s) {
+                            if (!is_array($s)) continue;
+                            $name  = (string)($s['name'] ?? '');
+                            $group = (string)($s['group'] ?? '');
+                            $sig = trim(($group !== '' ? $group . '.' : '') . $name);
+                            if ($sig !== '') $signals[$sig] = true;
+                        }
+                    }
+                }
+
+                // Primärer Fehler fürs Debug (erster)
+                $primary = (count($errors) > 0 && is_array($errors[0])) ? $errors[0] : [];
+                $pType       = (string)($primary['type'] ?? '');
+                $pCode       = (string)($primary['code'] ?? '');
+                $pDesc       = (string)($primary['description'] ?? '');
+                $pUserMsg    = (string)($primary['suggestedUserMessage'] ?? '');
+                $pDoc        = (string)($primary['docURL'] ?? '');
+                $pResolution = (string)($primary['resolution']['type'] ?? '');
+
+                $summary = trim("$pType/$pCode/$pResolution");
+                if ($summary === '') $summary = 'VEHICLE_ERROR';
+                if ($pUserMsg !== '') $summary .= " | $pUserMsg";
+                elseif ($pDesc !== '') $summary .= " | $pDesc";
+
+                $this->SendDebug('Webhook VEHICLE_ERROR', json_encode([
+                    'eventId'      => $eventId,
+                    'eventType'    => $eventType,
+                    'deliveredAt'  => $deliveredAt,
+                    'vehicle'      => $vehText,
+                    'errorCount'   => count($errors),
+                    'summary'      => $summary,
+                    'reauth'       => $reauthRequired,
+                    'notCapable'   => $notCapable,
+                    'types'        => array_keys($types),
+                    'codes'        => array_keys($codes),
+                    'signals'      => array_keys($signals),
+                    'docURL'       => $pDoc
+                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 0);
+
+                // Optional: komplettes Payload nur wenn du es wirklich willst (kann groß werden)
+                $this->SendDebug('Webhook VEHICLE_ERROR/raw', json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 0);
+
+                http_response_code(200);
+                echo 'ok';
+                return;
+
             default:
                 $this->SendDebug('Webhook', "Unbekannter eventType: $eventType", 0);
                 http_response_code(200);
