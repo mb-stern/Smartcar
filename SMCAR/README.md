@@ -87,8 +87,7 @@ Unter *Instanz hinzufügen* das Modul **Smartcar** auswählen.
 | **Application Management Token** | Aus Smartcar (*Configuration*). Wird für VERIFY und Signaturprüfung benötigt. |
 | **Client ID / Secret** | Aus Smartcar (*Configuration*). |
 | **Verbindungsmodus** | *Simuliert* oder *Live*. Bei Wechsel neu verbinden. |
-| **Berechtigungen (Scopes)** | Auswahl der gewünschten API-Endpunkte. |
-| **Auf kompatible Scopes prüfen** | Prüft, welche Scopes das Fahrzeug unterstützt. |
+| **Berechtigungen (Scopes)** | Auswahl der gewünschten API-Endpunkte. Am besten immer alle Berechtigungen holen. Danach können einzelne Scopes von der Abfrage deaktiviert werden, um Fehlermelungen im Log zu vermeiden.|
 | **Mit Smartcar verbinden** | Startet den OAuth-Prozess. |
 | **Fahrzeugdaten abrufen** | Ruft aktiv alle gewählten Scopes ab. (Achtung: API-Limits beachten) |
 
