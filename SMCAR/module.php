@@ -41,10 +41,10 @@ class Smartcar extends IPSModule
         'ScopeReadTires'           => 'read_tires',
         'ScopeReadOdometer'        => 'read_odometer',
         'ScopeReadBattery'         => 'read_battery',
-        'ScopeReadBatteryCapacity' => '/battery/nominal_capacity', 
+        'ScopeReadBatteryCapacity' => 'battery/nominal_capacity', 
         'ScopeReadFuel'            => 'read_fuel',
         'ScopeReadSecurity'        => 'read_security',
-        'ScopeReadChargeLimit'     => '/charge/limit',
+        'ScopeReadChargeLimit'     => 'charge/limit',
         'ScopeReadChargeStatus'    => 'read_charge',
         'ScopeReadOilLife'         => 'read_engine_oil',
 
