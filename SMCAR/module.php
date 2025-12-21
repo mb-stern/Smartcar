@@ -301,29 +301,6 @@ class Smartcar extends IPSModule
             return ($compatPaths[$this->canonicalizePath($path)] ?? false) === true;
         };
 
-        // 🔒 Regel: Unsichtbare Schalter werden automatisch deaktiviert
-        foreach (self::PROP_TO_SCOPE as $prop => $scope) {
-
-            if (!str_starts_with($scope, 'read_')) {
-                continue;
-            }
-
-            // gleiche Logik wie visible= im Formular
-            $scopeOK = $scopeVisible($scope);
-
-            $pathOK = true;
-            if (isset(self::PROP_TO_PATH[$prop])) {
-                $pathOK = $pathVisible(self::PROP_TO_PATH[$prop]);
-            }
-
-            // ❗ UNSICHTBAR = FALSE
-            if (!($scopeOK && $pathOK)) {
-                if ($this->ReadPropertyBoolean($prop)) {
-                    IPS_SetProperty($this->InstanceID, $prop, false);
-                }
-            }
-        }
-
         $form = [
             'elements' => [
                 ['type' => 'Label', 'caption' => 'Redirect-/Callback-URI: ' . $effectiveRedirect],
@@ -856,7 +833,7 @@ class Smartcar extends IPSModule
             $pathOK = true;
             if (isset(self::PROP_TO_PATH[$prop])) {
                 $canon = $this->canonicalizePath(self::PROP_TO_PATH[$prop]);
-                $pathOK = ($pathMap[$canon] ?? true) === true;
+                $pathOK = ($pathMap[$canon] ?? false) === true;
             }
 
             // 🔥 NICHT sichtbar = FALSE, sichtbar = TRUE
