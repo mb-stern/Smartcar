@@ -298,10 +298,7 @@ class Smartcar extends IPSModule
 
         $pathVisible = function (string $path) use ($compatPaths, $hasCompatPaths): bool {
             if (!$hasCompatPaths) return true; // vor erster Probe alles zeigen
-            $canon = $this->canonicalizePath($path);
-            if (!$hasCompatPaths) return true;                 // wie bisher
-            if (!array_key_exists($canon, $compatPaths)) return true;  // unknown => NICHT ausblenden
-            return $compatPaths[$canon] === true;
+            return ($compatPaths[$this->canonicalizePath($path)] ?? false) === true;
         };
 
         $form = [
@@ -787,26 +784,10 @@ class Smartcar extends IPSModule
             } elseif ($code === 403) {
                 $missingScopes = true;
                 // nicht als "unsupported path" werten (könnte nur fehlender Scope sein)
-           } elseif ($code === 409) {
-
-                // 409 ist oft temporär (VEHICLE_STATE / RETRY_LATER) → NICHT ausblenden
-                // Wir lassen den Path-Status "unbekannt" (kein Eintrag in pathMap).
-                // Optional: Debug für die Diagnose
-                $body = is_array($r['body'] ?? null) ? $r['body'] : [];
-                $this->SendDebug('ProbeScopes/temp', json_encode([
-                    'path' => $path,
-                    'code' => $code,
-                    'type' => $body['type'] ?? null,
-                    'resolution' => $body['resolution']['type'] ?? null,
-                    'msg'  => $body['suggestedUserMessage'] ?? null
-                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 0);
-
-            } elseif (in_array($code, [404, 400, 422, 501], true)) {
-
+            } elseif (in_array($code, [404, 400, 409, 422, 501], true)) {
                 // diese Codes sind typischerweise: endpoint nicht unterstützt / nicht verfügbar
                 $pathMap[$canonPath] = false;
             }
-
             $perm = $this->PathToPermission($path) ?? 'unknown';
             $body = is_array($r['body'] ?? null) ? $r['body'] : [];
             $perPathLog[] = ['path'=>$path,'perm'=>$perm,'code'=>$code,'body_keys'=>implode(',', array_keys($body))];
@@ -852,11 +833,7 @@ class Smartcar extends IPSModule
             $pathOK = true;
             if (isset(self::PROP_TO_PATH[$prop])) {
                 $canon = $this->canonicalizePath(self::PROP_TO_PATH[$prop]);
-                if (!array_key_exists($canon, $pathMap)) {
-                    $pathOK = true;              // unknown => NICHT sperren
-                } else {
-                    $pathOK = ($pathMap[$canon] === true);
-                }
+                $pathOK = ($pathMap[$canon] ?? false) === true;
             }
 
             // 🔥 NICHT sichtbar = FALSE, sichtbar = TRUE
@@ -1081,104 +1058,6 @@ class Smartcar extends IPSModule
                         $this->SetValue('LastSignalsAt', time());
                     }
                 }
-
-                http_response_code(200);
-                echo 'ok';
-                return;
-
-            case 'VEHICLE_ERROR':
-
-                // Nur Debug – keine Variablen, keine Logik, keine Änderungen an State
-                $eventId   = (string)($payload['eventId'] ?? '');
-                $eventType = (string)($payload['eventType'] ?? 'VEHICLE_ERROR');
-
-                $meta = $payload['meta'] ?? [];
-                if (!is_array($meta)) $meta = [];
-
-                $deliveredAtMs = (int)($meta['deliveredAt'] ?? 0);
-                $deliveredAt   = $deliveredAtMs > 0 ? (int)floor($deliveredAtMs / 1000) : time();
-
-                $data = $payload['data'] ?? [];
-                if (!is_array($data)) $data = [];
-
-                $veh = $data['vehicle'] ?? [];
-                if (!is_array($veh)) $veh = [];
-
-                $vehText = trim(
-                    (string)($veh['make'] ?? '') . ' ' . (string)($veh['model'] ?? '')
-                );
-                if (isset($veh['year']) && $veh['year'] !== '') {
-                    $vehText .= ' (' . (string)$veh['year'] . ')';
-                }
-
-                $errors = $data['errors'] ?? [];
-                if (!is_array($errors)) $errors = [];
-
-                // Kurze Zusammenfassung + Flags nur fürs Debug
-                $reauthRequired = false;
-                $notCapable     = false;
-                $types = [];
-                $codes = [];
-                $signals = [];
-
-                foreach ($errors as $e) {
-                    if (!is_array($e)) continue;
-
-                    $type = (string)($e['type'] ?? '');
-                    $code = (string)($e['code'] ?? '');
-                    if ($type !== '') $types[$type] = true;
-                    if ($code !== '') $codes[$code] = true;
-
-                    if ((string)($e['resolution']['type'] ?? '') === 'REAUTHENTICATE') {
-                        $reauthRequired = true;
-                    }
-                    if ($code === 'VEHICLE_NOT_CAPABLE') {
-                        $notCapable = true;
-                    }
-
-                    $sigArr = $e['signals'] ?? [];
-                    if (is_array($sigArr)) {
-                        foreach ($sigArr as $s) {
-                            if (!is_array($s)) continue;
-                            $name  = (string)($s['name'] ?? '');
-                            $group = (string)($s['group'] ?? '');
-                            $sig = trim(($group !== '' ? $group . '.' : '') . $name);
-                            if ($sig !== '') $signals[$sig] = true;
-                        }
-                    }
-                }
-
-                // Primärer Fehler fürs Debug (erster)
-                $primary = (count($errors) > 0 && is_array($errors[0])) ? $errors[0] : [];
-                $pType       = (string)($primary['type'] ?? '');
-                $pCode       = (string)($primary['code'] ?? '');
-                $pDesc       = (string)($primary['description'] ?? '');
-                $pUserMsg    = (string)($primary['suggestedUserMessage'] ?? '');
-                $pDoc        = (string)($primary['docURL'] ?? '');
-                $pResolution = (string)($primary['resolution']['type'] ?? '');
-
-                $summary = trim("$pType/$pCode/$pResolution");
-                if ($summary === '') $summary = 'VEHICLE_ERROR';
-                if ($pUserMsg !== '') $summary .= " | $pUserMsg";
-                elseif ($pDesc !== '') $summary .= " | $pDesc";
-
-                $this->SendDebug('Webhook VEHICLE_ERROR', json_encode([
-                    'eventId'      => $eventId,
-                    'eventType'    => $eventType,
-                    'deliveredAt'  => $deliveredAt,
-                    'vehicle'      => $vehText,
-                    'errorCount'   => count($errors),
-                    'summary'      => $summary,
-                    'reauth'       => $reauthRequired,
-                    'notCapable'   => $notCapable,
-                    'types'        => array_keys($types),
-                    'codes'        => array_keys($codes),
-                    'signals'      => array_keys($signals),
-                    'docURL'       => $pDoc
-                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 0);
-
-                // Optional: komplettes Payload nur wenn du es wirklich willst (kann groß werden)
-                $this->SendDebug('Webhook VEHICLE_ERROR/raw', json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 0);
 
                 http_response_code(200);
                 echo 'ok';
