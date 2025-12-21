@@ -758,6 +758,43 @@ class Smartcar extends IPSModule
                 echo 'ok';
                 return;
 
+            case 'VEHICLE_ERROR':
+                // ✅ NUR DEBUG, KEINE Variablen anlegen!
+                $data = $payload['data'] ?? [];
+                if (!is_array($data)) $data = [];
+
+                $vehId = $data['vehicle']['id'] ?? ($data['vehicleId'] ?? '');
+                $ts    = $payload['timestamp'] ?? ($data['timestamp'] ?? '');
+
+                // Viele Smartcar-Fehler sind wie API-Errors strukturiert (type/code/description/requestId/resolution)
+                $err = $data['error'] ?? ($data['errors'][0] ?? $data);
+                if (!is_array($err)) $err = [];
+
+                $type        = $err['type'] ?? '';
+                $code        = $err['code'] ?? '';
+                $desc        = $err['description'] ?? ($err['message'] ?? '');
+                $requestId   = $err['requestId'] ?? ($err['requestID'] ?? '');
+                $docURL      = $err['docURL'] ?? ($err['docUrl'] ?? '');
+                $resolution  = $err['resolution'] ?? null;
+
+                $this->SendDebug('VEHICLE_ERROR', 'Empfangen: ' . json_encode([
+                    'timestamp' => $ts,
+                    'vehicleId' => $vehId,
+                    'type'      => $type,
+                    'code'      => $code,
+                    'description' => $desc,
+                    'requestId' => $requestId,
+                    'docURL'    => $docURL,
+                    'resolution'=> $resolution
+                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 0);
+
+                // Optional: kompletten data-Block einmal dumpen (hilft beim weiteren Mapping)
+                $this->SendDebug('VEHICLE_ERROR/data', json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 0);
+
+                http_response_code(200);
+                echo 'ok';
+                return;
+
             default:
                 $this->SendDebug('Webhook', "Unbekannter eventType: $eventType", 0);
                 http_response_code(200);
