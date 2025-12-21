@@ -421,6 +421,14 @@ class Smartcar extends IPSModule
         return array_keys($paths);
     }
 
+    private function canonicalizePath(string $path): string
+    {
+        $path = trim($path);
+        if ($path === '' || $path === '/') return '/';
+        $path = '/' . ltrim($path, '/');
+        return rtrim($path, '/');
+    }
+
     private function ScheduleHttpRetry(array $job, int $delaySeconds): void
     {
         // Versuchszähler robust erhöhen
