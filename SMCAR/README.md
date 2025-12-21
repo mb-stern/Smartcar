@@ -224,7 +224,7 @@ Steuere Fahrzeugfunktionen direkt aus dem WebFront:
 
 | Version | Datum | Änderungen |
 |----------|--------|------------|
-| **3.4** | 20.12.2025 | - Fehlermeldung beim Verbinden des Fahrzeuges behoben.<br>- Durch die Scopeprüfung ausgeblendete Scopes werden deaktiviert. |
+| **3.4** | 20.12.2025 | - Fehlermeldung beim Verbinden des Fahrzeuges behoben.<br>- Fehlermeldung trotz deaktivierten Scopes behoben. |
 | **3.3** | 19.10.2025 | - Beim Erreichen des Rate-Limits wird nach der vorgegebenen Wartezeit der Scope erneut abgefragt.<br>- Verbesserung der Debug- und Error-Ausgabe.<br>- Code überarbeitet.<br>- README neu strukturiert mit getrennten Abschnitten für Scopes & Signals |
 | **3.2** | 14.10.2025 | - Automatische Scopeerkennung verbessert. |
 | **3.1** | 07.10.2025 | - Neu ist eine automatische Prüfung auf kompatible Scopes im Konfigurationsformular verfügbar.<br>- So werden nur noch kompatible Scopes abgefragt und Fehlermeldungen und überflüssige Abfragen vermieden.<br>- Fehler bei der Abfrage der Batteriekapazität behoben.<br>- Ladeleistung wird jetzt korrekt dargestellt.<br>- Eine Variable mit dem Zeitpunkt der letzten Signale kann im Konfigurationsformular aktiviert werden. |
