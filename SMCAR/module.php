@@ -837,6 +837,23 @@ class Smartcar extends IPSModule
         $this->WriteAttributeString('CompatScopes', json_encode($map, JSON_UNESCAPED_SLASHES));
         $this->WriteAttributeString('CompatPaths', json_encode($pathMap, JSON_UNESCAPED_SLASHES));
         $this->ApplyCompatToProperties($map);
+        
+        // Path-spezifische READ-Properties deaktivieren, wenn Path inkompatibel
+        foreach (self::PROP_TO_PATH as $prop => $path) {
+
+            $scope = self::PROP_TO_SCOPE[$prop] ?? '';
+            if (!str_starts_with($scope, 'read_')) {
+                continue;
+            }
+
+            $canon = $this->canonicalizePath($path);
+
+            // Nur explizit inkompatible Paths deaktivieren
+            if (($pathMap[$canon] ?? true) === false) {
+                IPS_SetProperty($this->InstanceID, $prop, false);
+            }
+        }
+
         IPS_ApplyChanges($this->InstanceID);
 
         if ($missingScopes) {
