@@ -511,22 +511,6 @@ class Smartcar extends IPSModule
         echo $url;
     }
 
-    private function ApplyCompatToProperties(array $compat): void
-    {
-        foreach (self::PROP_TO_SCOPE as $prop => $scope) {
-
-            // nur READ-Scopes automatisch verwalten
-            if (!str_starts_with($scope, 'read_')) {
-                continue;
-            }
-
-            $isCompatible = ($compat[$scope] ?? false) === true;
-
-            // 🔴 WICHTIG: explizit TRUE ODER FALSE setzen
-            IPS_SetProperty($this->InstanceID, $prop, $isCompatible);
-        }
-    }
-
     private function ScheduleHttpRetry(array $job, int $delaySeconds): void
     {
         // Versuchszähler robust erhöhen
@@ -836,31 +820,28 @@ class Smartcar extends IPSModule
 
         $this->WriteAttributeString('CompatScopes', json_encode($map, JSON_UNESCAPED_SLASHES));
         $this->WriteAttributeString('CompatPaths', json_encode($pathMap, JSON_UNESCAPED_SLASHES));
-        $this->ApplyCompatToProperties($map);
         
-        // 🔒 Regel: Nicht sichtbare Checkboxen werden automatisch deaktiviert
         foreach (self::PROP_TO_SCOPE as $prop => $scope) {
 
-            // nur READ automatisch verwalten
             if (!str_starts_with($scope, 'read_')) {
                 continue;
             }
 
-            // 1) Scope-Sichtbarkeit (wie im Form)
+            // gleiche Logik wie im Form
             $scopeOK = ($map[$scope] ?? false) === true;
 
-            // 2) Path-Sichtbarkeit (falls vorhanden)
             $pathOK = true;
             if (isset(self::PROP_TO_PATH[$prop])) {
                 $canon = $this->canonicalizePath(self::PROP_TO_PATH[$prop]);
                 $pathOK = ($pathMap[$canon] ?? true) === true;
             }
 
-            // ❗ WICHTIGSTE REGEL
-            // Nicht sichtbar im Form => Property FALSE
-            if (!($scopeOK && $pathOK)) {
-                IPS_SetProperty($this->InstanceID, $prop, false);
-            }
+            // 🔥 NICHT sichtbar = FALSE, sichtbar = TRUE
+            IPS_SetProperty(
+                $this->InstanceID,
+                $prop,
+                ($scopeOK && $pathOK)
+            );
         }
 
         IPS_ApplyChanges($this->InstanceID);
