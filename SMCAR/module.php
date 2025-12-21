@@ -26,7 +26,7 @@ class Smartcar extends IPSModule
         'read_battery'      => ['/battery', '/battery/nominal_capacity'],
         'read_fuel'         => ['/fuel'],
         'read_security'     => ['/security'],
-        'read_charge'       => ['/charge/limit', '/charge'],
+        'read_charge'       => ['/charge', '/charge/limit'],
         'read_engine_oil'   => ['/engine/oil'],
     ];
 
@@ -838,18 +838,27 @@ class Smartcar extends IPSModule
         $this->WriteAttributeString('CompatPaths', json_encode($pathMap, JSON_UNESCAPED_SLASHES));
         $this->ApplyCompatToProperties($map);
         
-        // Path-spezifische READ-Properties deaktivieren, wenn Path inkompatibel
-        foreach (self::PROP_TO_PATH as $prop => $path) {
+        // 🔒 Regel: Nicht sichtbare Checkboxen werden automatisch deaktiviert
+        foreach (self::PROP_TO_SCOPE as $prop => $scope) {
 
-            $scope = self::PROP_TO_SCOPE[$prop] ?? '';
+            // nur READ automatisch verwalten
             if (!str_starts_with($scope, 'read_')) {
                 continue;
             }
 
-            $canon = $this->canonicalizePath($path);
+            // 1) Scope-Sichtbarkeit (wie im Form)
+            $scopeOK = ($map[$scope] ?? false) === true;
 
-            // Nur explizit inkompatible Paths deaktivieren
-            if (($pathMap[$canon] ?? true) === false) {
+            // 2) Path-Sichtbarkeit (falls vorhanden)
+            $pathOK = true;
+            if (isset(self::PROP_TO_PATH[$prop])) {
+                $canon = $this->canonicalizePath(self::PROP_TO_PATH[$prop]);
+                $pathOK = ($pathMap[$canon] ?? true) === true;
+            }
+
+            // ❗ WICHTIGSTE REGEL
+            // Nicht sichtbar im Form => Property FALSE
+            if (!($scopeOK && $pathOK)) {
                 IPS_SetProperty($this->InstanceID, $prop, false);
             }
         }
