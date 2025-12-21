@@ -55,11 +55,11 @@ class Smartcar extends IPSModule
         'ScopeReadTires'           => 'read_tires',
         'ScopeReadOdometer'        => 'read_odometer',
         'ScopeReadBattery'         => 'read_battery',
-        'ScopeReadBatteryCapacity' => 'read_battery',   // gleicher Scope
+        'ScopeReadBatteryCapacity' => 'read_battery',
         'ScopeReadFuel'            => 'read_fuel',
         'ScopeReadSecurity'        => 'read_security',
         'ScopeReadChargeLimit'     => 'read_charge',
-        'ScopeReadChargeStatus'    => 'read_charge',    // gleicher Scope
+        'ScopeReadChargeStatus'    => 'read_charge',
         'ScopeReadOilLife'         => 'read_engine_oil',
 
         // CONTROL
@@ -120,6 +120,7 @@ class Smartcar extends IPSModule
         $this->RegisterAttributeString('VehicleID', '');
         $this->RegisterAttributeString('PendingHttpRetry', '');
         $this->RegisterAttributeString('LastProbeAt', '');
+        $this->RegisterAttributeString('CompatPaths', '');
         
         // Effektive OAuth-Redirect-URI (manuell ODER Connect+Hook)
         $this->RegisterAttributeString('RedirectURI', '');
@@ -281,13 +282,23 @@ class Smartcar extends IPSModule
     public function GetConfigurationForm()
     {
         $effectiveRedirect = $this->ReadAttributeString('RedirectURI');
-        $compatRaw = $this->ReadAttributeString('CompatScopes');
-        $compat    = $compatRaw !== '' ? json_decode($compatRaw, true) : null;
-        $hasCompat = is_array($compat) && !empty($compat);
 
-        $permVisible = function (string $permission) use ($compat, $hasCompat): bool {
-            if (!$hasCompat) return true; // vor erster Probe alles zeigen
-            return ($compat[$permission] ?? false) === true;
+        $compatScopesRaw = $this->ReadAttributeString('CompatScopes');
+        $compatScopes    = $compatScopesRaw !== '' ? json_decode($compatScopesRaw, true) : null;
+        $hasCompatScopes = is_array($compatScopes) && !empty($compatScopes);
+
+        $compatPathsRaw = $this->ReadAttributeString('CompatPaths');
+        $compatPaths    = $compatPathsRaw !== '' ? json_decode($compatPathsRaw, true) : null;
+        $hasCompatPaths = is_array($compatPaths) && !empty($compatPaths);
+
+        $scopeVisible = function (string $scope) use ($compatScopes, $hasCompatScopes): bool {
+            if (!$hasCompatScopes) return true; // vor erster Probe alles zeigen
+            return ($compatScopes[$scope] ?? false) === true;
+        };
+
+        $pathVisible = function (string $path) use ($compatPaths, $hasCompatPaths): bool {
+            if (!$hasCompatPaths) return true; // vor erster Probe alles zeigen
+            return ($compatPaths[$this->canonicalizePath($path)] ?? false) === true;
         };
 
         $form = [
@@ -338,10 +349,10 @@ class Smartcar extends IPSModule
                         ['type'=>'CheckBox','name'=>'ScopeReadTires',           'caption'=>'Reifendruck lesen (/tires/pressure)','visible'=>$permVisible('read_tires')],
                         ['type'=>'CheckBox','name'=>'ScopeReadOdometer',        'caption'=>'Kilometerstand lesen (/odometer)','visible'=>$permVisible('read_odometer')],
                         ['type'=>'CheckBox','name'=>'ScopeReadBattery',         'caption'=>'Batterielevel lesen (/battery)','visible'=>$permVisible('read_battery')],
-                        ['type'=>'CheckBox','name'=>'ScopeReadBatteryCapacity', 'caption'=>'Batteriekapazität lesen (/battery/nominal_capacity)','visible'=>$permVisible('read_battery')],
+                        ['type'=>'CheckBox','name'=>'ScopeReadBatteryCapacity', 'caption'=>'Batteriekapazität lesen (/battery/nominal_capacity)','visible'=>$scopeVisible('read_battery') && $pathVisible('/battery/nominal_capacity')],
                         ['type'=>'CheckBox','name'=>'ScopeReadFuel',            'caption'=>'Kraftstoffstand lesen (/fuel)','visible'=>$permVisible('read_fuel')],
                         ['type'=>'CheckBox','name'=>'ScopeReadSecurity',        'caption'=>'Verriegelungsstatus lesen (/security)','visible'=>$permVisible('read_security')],
-                        ['type'=>'CheckBox','name'=>'ScopeReadChargeLimit',     'caption'=>'Ladelimit lesen (/charge/limit)','visible'=>$permVisible('read_charge')],
+                        ['type'=>'CheckBox','name'=>'ScopeReadChargeLimit',     'caption'=>'Ladelimit lesen (/charge/limit)','visible'=>$scopeVisible('read_charge') && $pathVisible('/charge/limit')],
                         ['type'=>'CheckBox','name'=>'ScopeReadChargeStatus',    'caption'=>'Ladestatus lesen (/charge)','visible'=>$permVisible('read_charge')],
                         ['type'=>'CheckBox','name'=>'ScopeReadOilLife',         'caption'=>'Motoröl lesen (/engine/oil)','visible'=>$permVisible('read_engine_oil')],
 
@@ -458,7 +469,7 @@ class Smartcar extends IPSModule
         $paths = [];
         foreach (self::PROP_TO_PATH as $prop => $path) {
             if ($this->ReadPropertyBoolean($prop)) {
-                $paths[$path] = true;
+                $paths[$this->canonicalizePath($path)] = true;
             }
         }
         return array_keys($paths);
@@ -774,9 +785,21 @@ class Smartcar extends IPSModule
         $batteryOK = false;
         $oilOK = false;
 
+        $pathMap = []; // Path -> bool kompatibel (200) / nicht kompatibel (404/400/501 etc.)
+
         foreach ($data['responses'] as $r) {
             $path = $r['path'] ?? '';
             $code = intval($r['code'] ?? 0);
+            $canonPath = $this->canonicalizePath($path);
+            if ($code === 200) {
+                $pathMap[$canonPath] = true;
+            } elseif ($code === 403) {
+                $missingScopes = true;
+                // nicht als "unsupported path" werten (könnte nur fehlender Scope sein)
+            } elseif (in_array($code, [404, 400, 409, 422, 501], true)) {
+                // diese Codes sind typischerweise: endpoint nicht unterstützt / nicht verfügbar
+                $pathMap[$canonPath] = false;
+            }
             $perm = $this->PathToPermission($path) ?? 'unknown';
             $body = is_array($r['body'] ?? null) ? $r['body'] : [];
             $perPathLog[] = ['path'=>$path,'perm'=>$perm,'code'=>$code,'body_keys'=>implode(',', array_keys($body))];
@@ -808,6 +831,7 @@ class Smartcar extends IPSModule
         $this->SendDebug('ProbeScopes/summary', json_encode($map, JSON_UNESCAPED_SLASHES), 0);
 
         $this->WriteAttributeString('CompatScopes', json_encode($map, JSON_UNESCAPED_SLASHES));
+        $this->WriteAttributeString('CompatPaths', json_encode($pathMap, JSON_UNESCAPED_SLASHES));
         $this->ApplyCompatToProperties($map);
         IPS_ApplyChanges($this->InstanceID);
 
