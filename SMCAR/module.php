@@ -1519,7 +1519,7 @@ class Smartcar extends IPSModule
 
             case 'charge-wattage':
             case 'charge-power':
-                if (isset($body['value'])) $setSafe('ChargeWattage', VARIABLETYPE_FLOAT, 'Ladeleistung', '~Watt', floatval($body['value']));
+                if (isset($body['value'])) $setSafe('ChargeWattage', VARIABLETYPE_FLOAT, 'Ladeleistung', '~Power', floatval($body['value']));
                 break;
 
             case 'charge-energyadded':
