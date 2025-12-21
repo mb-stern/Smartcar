@@ -104,11 +104,14 @@ class Smartcar extends IPSModule
         $this->RegisterAttributeString('VehicleID', '');
         $this->RegisterAttributeString('PendingHttpRetry', '');
         $this->RegisterAttributeString('LastProbeAt', '');
+        
+        // Effektive OAuth-Redirect-URI (manuell ODER Connect+Hook)
         $this->RegisterAttributeString('RedirectURI', '');
+
+        
+        //Kompatiple Scopes
         $this->RegisterAttributeString('CompatScopes', '');
         $this->RegisterAttributeString('NextAction', '');
-        $this->RegisterAttributeString('SignalIdents', '');
-
 
         // Timer
         $this->RegisterTimer('TokenRefreshTimer', 0, 'SMCAR_RefreshAccessToken(' . $this->InstanceID . ');');
@@ -1540,7 +1543,6 @@ class Smartcar extends IPSModule
         $setSafe = function (string $ident, int $type, string $caption, string $profile, $value) use (&$created) {
             $id = @$this->GetIDForIdent($ident);
             $wasCreated = false;
-
             if (!$id) {
                 switch ($type) {
                     case VARIABLETYPE_BOOLEAN: $this->RegisterVariableBoolean($ident, $caption, $profile, 0); break;
@@ -1551,15 +1553,10 @@ class Smartcar extends IPSModule
                 $id = $this->GetIDForIdent($ident);
                 $wasCreated = true;
             }
-
             if ($profile !== '') {
                 @IPS_SetVariableCustomProfile($id, $profile);
             }
-
             $this->SetValue($ident, $value);
-
-            // >>> NEU: egal ob neu oder schon vorhanden – wenn wir hier im Signal-Flow sind, merken wir das Ident
-            $this->RememberSignalIdent($ident);
 
             if ($wasCreated) {
                 if (is_object($value)) $value = json_encode($value, JSON_UNESCAPED_UNICODE);
@@ -1938,38 +1935,6 @@ class Smartcar extends IPSModule
         }
     }
 
-    private function RememberSignalIdent(string $ident): void
-    {
-        $raw = $this->ReadAttributeString('SignalIdents');
-        $set = $raw !== '' ? (json_decode($raw, true) ?: []) : [];
-
-        // wir speichern Timestamp (praktisch für spätere Cleanup-Ideen)
-        $set[$ident] = time();
-
-        $this->WriteAttributeString('SignalIdents', json_encode($set, JSON_UNESCAPED_SLASHES));
-    }
-
-    private function IsRememberedSignalIdent(string $ident): bool
-    {
-        $raw = $this->ReadAttributeString('SignalIdents');
-        if ($raw === '') return false;
-
-        $set = json_decode($raw, true);
-        if (!is_array($set)) return false;
-
-        return array_key_exists($ident, $set);
-    }
-
-    private function UnregisterVariableUnlessRememberedSignal(string $ident): void
-    {
-        // Wenn Ident durch Signals “bekannt” ist → NICHT löschen
-        if ($this->IsRememberedSignalIdent($ident)) {
-            return;
-        }
-
-        @$this->UnregisterVariable($ident);
-    }
-
     // -------- Commands --------
 
     public function SetChargeLimit(float $limit)
@@ -2313,16 +2278,16 @@ class Smartcar extends IPSModule
             $this->RegisterVariableString('VehicleModel', 'Fahrzeug Modell', '', 2);
             $this->RegisterVariableInteger('VehicleYear', 'Fahrzeug Baujahr', '', 3);
         } else {
-            $this->UnregisterVariableUnlessRememberedSignal('VehicleMake');
-            $this->UnregisterVariableUnlessRememberedSignal('VehicleModel');
-            $this->UnregisterVariableUnlessRememberedSignal('VehicleYear');
+            @$this->UnregisterVariable('VehicleMake');
+            @$this->UnregisterVariable('VehicleModel');
+            @$this->UnregisterVariable('VehicleYear');
         }
 
         // VIN
         if ($this->ReadPropertyBoolean('ScopeReadVIN')) {
             $this->RegisterVariableString('VIN', 'Fahrgestellnummer (VIN)', '', 4);
         } else {
-            $this->UnregisterVariableUnlessRememberedSignal('VIN');
+            @$this->UnregisterVariable('VIN');
         }
 
         // Standort
@@ -2330,15 +2295,15 @@ class Smartcar extends IPSModule
             $this->RegisterVariableFloat('Latitude', 'Breitengrad', '', 10);
             $this->RegisterVariableFloat('Longitude', 'Längengrad', '', 11);
         } else {
-            $this->UnregisterVariableUnlessRememberedSignal('Latitude');
-            $this->UnregisterVariableUnlessRememberedSignal('Longitude');
+            @$this->UnregisterVariable('Latitude');
+            @$this->UnregisterVariable('Longitude');
         }
 
         // Kilometerstand
         if ($this->ReadPropertyBoolean('ScopeReadOdometer')) {
             $this->RegisterVariableFloat('Odometer', 'Kilometerstand', 'SMCAR.Odometer', 20);
         } else {
-            $this->UnregisterVariableUnlessRememberedSignal('Odometer');
+            @$this->UnregisterVariable('Odometer');
         }
 
         // Reifendruck
@@ -2348,38 +2313,39 @@ class Smartcar extends IPSModule
             $this->RegisterVariableFloat('TireBackLeft', 'Reifendruck Hinterreifen Links', 'SMCAR.Pressure', 32);
             $this->RegisterVariableFloat('TireBackRight', 'Reifendruck Hinterreifen Rechts', 'SMCAR.Pressure', 33);
         } else {
-            $this->UnregisterVariableUnlessRememberedSignal('TireFrontLeft');
-            $this->UnregisterVariableUnlessRememberedSignal('TireFrontRight');
-            $this->UnregisterVariableUnlessRememberedSignal('TireBackLeft');
-            $this->UnregisterVariableUnlessRememberedSignal('TireBackRight');
+            @$this->UnregisterVariable('TireFrontLeft');
+            @$this->UnregisterVariable('TireFrontRight');
+            @$this->UnregisterVariable('TireBackLeft');
+            @$this->UnregisterVariable('TireBackRight');
         }
 
         // Batterie
         if ($this->ReadPropertyBoolean('ScopeReadBattery')) {
-            $this->RegisterVariableFloat('BatteryLevel', 'Batterieladestand', 'SMCAR.Progress', 40);
-            $this->RegisterVariableFloat('BatteryRange', 'Reichweite', 'SMCAR.Odometer', 41);
+            $this->RegisterVariableFloat('BatteryLevel', 'Batterieladestand (SOC)', 'SMCAR.Progress', 40);
+            $this->RegisterVariableFloat('BatteryRange', 'Reichweite Batterie', 'SMCAR.Odometer', 41);
         } else {
-            $this->UnregisterVariableUnlessRememberedSignal('BatteryLevel');
-            $this->UnregisterVariableUnlessRememberedSignal('BatteryRange');
+            @$this->UnregisterVariable('BatteryRange');
+            @$this->UnregisterVariable('BatteryLevel');
         }
 
         if ($this->ReadPropertyBoolean('ScopeReadBatteryCapacity')) {
-            $this->RegisterVariableFloat('BatteryCapacity', 'Batteriekapazität', '~Electricity', 42);
+            $this->RegisterVariableFloat('BatteryCapacity', 'Batteriekapazität', '~Electricity', 50);
         } else {
-            $this->UnregisterVariableUnlessRememberedSignal('BatteryCapacity');
+            @$this->UnregisterVariable('BatteryCapacity');
         }
 
-        // Kraftstoff
+        // Tank
         if ($this->ReadPropertyBoolean('ScopeReadFuel')) {
-            $this->RegisterVariableFloat('FuelLevel', 'Tankfüllstand', 'SMCAR.Progress', 50);
+            $this->RegisterVariableFloat('FuelLevel', 'Tankfüllstand', 'SMCAR.Progress', 60);
+            $this->RegisterVariableFloat('FuelRange', 'Reichweite Tank', 'SMCAR.Odometer', 61);
         } else {
-            $this->UnregisterVariableUnlessRememberedSignal('FuelLevel');
+            @$this->UnregisterVariable('FuelLevel');
+            @$this->UnregisterVariable('FuelRange');
         }
 
         // Security
         if ($this->ReadPropertyBoolean('ScopeReadSecurity')) {
             $this->RegisterVariableBoolean('DoorsLocked', 'Fahrzeug verriegelt', '~Lock', 70);
-
             $this->RegisterVariableString('FrontLeftDoor',  'Vordertür links',  'SMCAR.Status', 71);
             $this->RegisterVariableString('FrontRightDoor', 'Vordertür rechts', 'SMCAR.Status', 72);
             $this->RegisterVariableString('BackLeftDoor',   'Hintentür links',  'SMCAR.Status', 73);
@@ -2395,46 +2361,46 @@ class Smartcar extends IPSModule
             $this->RegisterVariableString('FrontStorage',  'Stauraum vorne',  'SMCAR.Status', 81);
             $this->RegisterVariableString('ChargingPort',  'Ladeanschluss',   'SMCAR.Status', 82);
         } else {
-            $this->UnregisterVariableUnlessRememberedSignal('DoorsLocked');
-            $this->UnregisterVariableUnlessRememberedSignal('FrontLeftDoor');
-            $this->UnregisterVariableUnlessRememberedSignal('FrontRightDoor');
-            $this->UnregisterVariableUnlessRememberedSignal('BackLeftDoor');
-            $this->UnregisterVariableUnlessRememberedSignal('BackRightDoor');
-            $this->UnregisterVariableUnlessRememberedSignal('FrontLeftWindow');
-            $this->UnregisterVariableUnlessRememberedSignal('FrontRightWindow');
-            $this->UnregisterVariableUnlessRememberedSignal('BackLeftWindow');
-            $this->UnregisterVariableUnlessRememberedSignal('BackRightWindow');
-            $this->UnregisterVariableUnlessRememberedSignal('Sunroof');
-            $this->UnregisterVariableUnlessRememberedSignal('RearStorage');
-            $this->UnregisterVariableUnlessRememberedSignal('FrontStorage');
-            $this->UnregisterVariableUnlessRememberedSignal('ChargingPort');
+            @$this->UnregisterVariable('DoorsLocked');
+            @$this->UnregisterVariable('FrontLeftDoor');
+            @$this->UnregisterVariable('FrontRightDoor');
+            @$this->UnregisterVariable('BackLeftDoor');
+            @$this->UnregisterVariable('BackRightDoor');
+            @$this->UnregisterVariable('FrontLeftWindow');
+            @$this->UnregisterVariable('FrontRightWindow');
+            @$this->UnregisterVariable('BackLeftWindow');
+            @$this->UnregisterVariable('BackRightWindow');
+            @$this->UnregisterVariable('Sunroof');
+            @$this->UnregisterVariable('RearStorage');
+            @$this->UnregisterVariable('FrontStorage');
+            @$this->UnregisterVariable('ChargingPort');
         }
 
         // Ladeinformationen
         if ($this->ReadPropertyBoolean('ScopeReadChargeLimit')) {
             $this->RegisterVariableFloat('ChargeLimit', 'Aktuelles Ladelimit', 'SMCAR.Progress', 90);
         } else {
-            $this->UnregisterVariableUnlessRememberedSignal('ChargeLimit');
+            @$this->UnregisterVariable('ChargeLimit');
         }
 
         if ($this->ReadPropertyBoolean('ScopeReadChargeStatus')) {
             $this->RegisterVariableString('ChargeStatus', 'Ladestatus', 'SMCAR.Charge', 91);
             $this->RegisterVariableBoolean('PluggedIn', 'Ladekabel eingesteckt', '~Switch', 92);
         } else {
-            $this->UnregisterVariableUnlessRememberedSignal('ChargeStatus');
-            $this->UnregisterVariableUnlessRememberedSignal('PluggedIn');
+            @$this->UnregisterVariable('ChargeStatus');
+            @$this->UnregisterVariable('PluggedIn');
         }
 
         // Ölstatus
         if ($this->ReadPropertyBoolean('ScopeReadOilLife')) {
             $this->RegisterVariableFloat('OilLife', 'Verbleibende Öl-Lebensdauer', 'SMCAR.Progress', 100);
         } else {
-            $this->UnregisterVariableUnlessRememberedSignal('OilLife');
+            @$this->UnregisterVariable('OilLife');
         }
 
-        // Commands (die bleiben wie gehabt – die sind nicht “Signals-only”)
+        // Commands
         if ($this->ReadPropertyBoolean('SetChargeLimit')) {
-            $this->RegisterVariableFloat('SetChargeLimit', 'Ladelimit setzen', 'SMCAR.ChargeLimitSet', 110);
+        $this->RegisterVariableFloat('SetChargeLimit', 'Ladelimit setzen', 'SMCAR.ChargeLimitSet', 110);
             $this->EnableAction('SetChargeLimit');
         } else {
             @$this->UnregisterVariable('SetChargeLimit');
