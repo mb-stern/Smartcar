@@ -298,7 +298,10 @@ class Smartcar extends IPSModule
 
         $pathVisible = function (string $path) use ($compatPaths, $hasCompatPaths): bool {
             if (!$hasCompatPaths) return true; // vor erster Probe alles zeigen
-            return ($compatPaths[$this->canonicalizePath($path)] ?? false) === true;
+            $canon = $this->canonicalizePath($path);
+            if (!$hasCompatPaths) return true;                 // wie bisher
+            if (!array_key_exists($canon, $compatPaths)) return true;  // unknown => NICHT ausblenden
+            return $compatPaths[$canon] === true;
         };
 
         $form = [
@@ -849,7 +852,11 @@ class Smartcar extends IPSModule
             $pathOK = true;
             if (isset(self::PROP_TO_PATH[$prop])) {
                 $canon = $this->canonicalizePath(self::PROP_TO_PATH[$prop]);
-                $pathOK = ($pathMap[$canon] ?? false) === true;
+                if (!array_key_exists($canon, $pathMap)) {
+                    $pathOK = true;              // unknown => NICHT sperren
+                } else {
+                    $pathOK = ($pathMap[$canon] === true);
+                }
             }
 
             // 🔥 NICHT sichtbar = FALSE, sichtbar = TRUE
