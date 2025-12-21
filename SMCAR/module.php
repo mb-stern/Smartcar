@@ -784,7 +784,7 @@ class Smartcar extends IPSModule
             } elseif ($code === 403) {
                 $missingScopes = true;
                 // nicht als "unsupported path" werten (könnte nur fehlender Scope sein)
-            } elseif (in_array($code, [404, 400, 422, 501], true)) {
+            } elseif (in_array($code, [404, 400, 409, 422, 429, 501], true)) {
                 // diese Codes sind typischerweise: endpoint nicht unterstützt / nicht verfügbar
                 $pathMap[$canonPath] = false;
             }
