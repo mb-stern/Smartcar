@@ -23,13 +23,27 @@ class Smartcar extends IPSModule
         'read_location'     => ['/location'],
         'read_tires'        => ['/tires/pressure'],
         'read_odometer'     => ['/odometer'],
-        'read_battery'      => ['/battery'],
-        'read_battery'      => ['/battery/nominal_capacity'],
+        'read_battery'      => ['/battery', '/battery/nominal_capacity'],
         'read_fuel'         => ['/fuel'],
         'read_security'     => ['/security'],
-        'read_charge'       => ['/charge'],
-        'read_charge'       => ['/charge/limit'],
+        'read_charge'       => ['/charge/limit', '/charge'],
         'read_engine_oil'   => ['/engine/oil'],
+    ];
+
+    /** Mapping: Property-Name (Form-Checkbox) -> API-Path (für Batch-Abfrage) */
+    private const PROP_TO_PATH = [
+        'ScopeReadVehicleInfo'     => '/',
+        'ScopeReadVIN'             => '/vin',
+        'ScopeReadLocation'        => '/location',
+        'ScopeReadTires'           => '/tires/pressure',
+        'ScopeReadOdometer'        => '/odometer',
+        'ScopeReadBattery'         => '/battery',
+        'ScopeReadBatteryCapacity' => '/battery/nominal_capacity',
+        'ScopeReadFuel'            => '/fuel',
+        'ScopeReadSecurity'        => '/security',
+        'ScopeReadChargeStatus'    => '/charge',
+        'ScopeReadChargeLimit'     => '/charge/limit',
+        'ScopeReadOilLife'         => '/engine/oil',
     ];
 
     /** Mapping: Property-Name (Form-Checkbox) -> benötigter Scope */
@@ -41,11 +55,11 @@ class Smartcar extends IPSModule
         'ScopeReadTires'           => 'read_tires',
         'ScopeReadOdometer'        => 'read_odometer',
         'ScopeReadBattery'         => 'read_battery',
-        'ScopeReadBatteryCapacity' => 'battery/nominal_capacity', 
+        'ScopeReadBatteryCapacity' => 'read_battery',   // gleicher Scope
         'ScopeReadFuel'            => 'read_fuel',
         'ScopeReadSecurity'        => 'read_security',
-        'ScopeReadChargeLimit'     => 'charge/limit',
-        'ScopeReadChargeStatus'    => 'read_charge',
+        'ScopeReadChargeLimit'     => 'read_charge',
+        'ScopeReadChargeStatus'    => 'read_charge',    // gleicher Scope
         'ScopeReadOilLife'         => 'read_engine_oil',
 
         // CONTROL
@@ -438,13 +452,13 @@ class Smartcar extends IPSModule
         ));
     }
 
-    /** Liefert alle API-Paths, die aus den aktivierten Read-Scopes resultieren (für Batch). */
+    /** Liefert alle API-Paths, die aus den aktivierten Read-Checkboxen resultieren (für Batch). */
     private function getEnabledReadPaths(): array
     {
         $paths = [];
-        foreach ($this->getEnabledReadScopes() as $scope) {
-            foreach (self::SCOPE_TO_PATHS[$scope] ?? [] as $p) {
-                $paths[$p] = true;
+        foreach (self::PROP_TO_PATH as $prop => $path) {
+            if ($this->ReadPropertyBoolean($prop)) {
+                $paths[$path] = true;
             }
         }
         return array_keys($paths);
