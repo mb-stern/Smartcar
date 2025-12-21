@@ -165,7 +165,7 @@ class Smartcar extends IPSModule
 
         if ($this->ReadPropertyBoolean('TrackLastSignals')) {
             if (!@$this->GetIDForIdent('LastSignalsAt')) {
-                $this->RegisterVariableInteger('LastSignalsAt', 'Letzte Fahrzeug-Signale', '~UnixTimestamp', 5);
+                $this->RegisterVariableInteger('LastSignalsAt', 'Letzte Fahrzeug-Signale', '~UnixTimestamp', -1);
             }
         } else {
             @$this->UnregisterVariable('LastSignalsAt');
