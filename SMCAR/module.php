@@ -1079,16 +1079,37 @@ class Smartcar extends IPSModule
         }
 
         $hasError = false;
+
         foreach ($data['responses'] as $resp) {
-            $scCode = (int)($resp['code'] ?? 0);
+
+            $path    = (string)($resp['path'] ?? '');
+            $scCode  = (int)($resp['code'] ?? 0);
+            $headers = is_array($resp['headers'] ?? null) ? $resp['headers'] : [];
+
             if ($scCode === 200 && isset($resp['body'])) {
-                $this->ProcessResponse((string)$resp['path'], (array)$resp['body']);
-            } else {
-                $hasError = true;
-                $fullMsg  = $this->GetHttpErrorDetails($scCode, (array)($resp['body'] ?? $resp));
-                $this->SendDebug('FetchVehicleData', "⚠️ Teilfehler für {$resp['path']}: $fullMsg", 0);
-                $this->LogMessage("FetchVehicleData - Teilfehler für {$resp['path']}: $fullMsg", KL_ERROR);
+                $this->ProcessResponse($path, (array)$resp['body']);
+                continue;
             }
+
+            // -----------------------------
+            // 🔥 NEU: 429 Retry-After Debug
+            // -----------------------------
+            if ($scCode === 429) {
+                // Smartcar liefert im Batch die Header als Map, z.B. {"Retry-After":252}
+                $retryAfter = $headers['Retry-After'] ?? $headers['retry-after'] ?? null;
+
+                if ($retryAfter !== null && $retryAfter !== '') {
+                    $this->SendDebug('FetchVehicleData', "⏳ RATE_LIMIT für {$path} → Retry-After: {$retryAfter} Sekunden", 0);
+                } else {
+                    $this->SendDebug('FetchVehicleData', "⏳ RATE_LIMIT für {$path} → Retry-After: (nicht vorhanden)", 0);
+                }
+            }
+
+            // bisheriges Fehler-Handling beibehalten
+            $hasError = true;
+            $fullMsg  = $this->GetHttpErrorDetails($scCode, (array)($resp['body'] ?? $resp));
+            $this->SendDebug('FetchVehicleData', "⚠️ Teilfehler für {$path}: $fullMsg", 0);
+            $this->LogMessage("FetchVehicleData - Teilfehler für {$path}: $fullMsg", KL_ERROR);
         }
 
         $this->SendDebug('FetchVehicleData', $hasError ? '⚠️ Teilweise erfolgreich.' : '✅ Alle Endpunkte erfolgreich.', 0);
