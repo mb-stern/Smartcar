@@ -23,10 +23,12 @@ class Smartcar extends IPSModule
         'read_location'     => ['/location'],
         'read_tires'        => ['/tires/pressure'],
         'read_odometer'     => ['/odometer'],
-        'read_battery'      => ['/battery', '/battery/nominal_capacity'],
+        'read_battery'      => ['/battery'],
+        'read_battery'      => ['/battery/nominal_capacity'],
         'read_fuel'         => ['/fuel'],
         'read_security'     => ['/security'],
-        'read_charge'       => ['/charge/limit', '/charge'],
+        'read_charge'       => ['/charge'],
+        'read_charge'       => ['/charge/limit'],
         'read_engine_oil'   => ['/engine/oil'],
     ];
 
