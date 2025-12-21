@@ -103,9 +103,15 @@ class Smartcar extends IPSModule
         $this->RegisterAttributeString('RefreshToken', '');
         $this->RegisterAttributeString('VehicleID', '');
         $this->RegisterAttributeString('PendingHttpRetry', '');
+        $this->RegisterAttributeString('LastProbeAt', '');
         
         // Effektive OAuth-Redirect-URI (manuell ODER Connect+Hook)
         $this->RegisterAttributeString('RedirectURI', '');
+
+        
+        //Kompatiple Scopes
+        $this->RegisterAttributeString('CompatScopes', '');
+        $this->RegisterAttributeString('NextAction', '');
 
         // Timer
         $this->RegisterTimer('TokenRefreshTimer', 0, 'SMCAR_RefreshAccessToken(' . $this->InstanceID . ');');
@@ -256,89 +262,101 @@ class Smartcar extends IPSModule
         }
     }
 
-public function GetConfigurationForm()
-{
-    $effectiveRedirect = $this->ReadAttributeString('RedirectURI');
+    public function GetConfigurationForm()
+    {
+        $effectiveRedirect = $this->ReadAttributeString('RedirectURI');
+        $compatRaw = $this->ReadAttributeString('CompatScopes');
+        $compat    = $compatRaw !== '' ? json_decode($compatRaw, true) : null;
+        $hasCompat = is_array($compat) && !empty($compat);
 
-    $form = [
-        'elements' => [
-            ['type' => 'Label', 'caption' => 'Redirect-/Callback-URI: ' . $effectiveRedirect],
-            [
-                'type' => 'ValidationTextBox',
-                'name' => 'ManualRedirectURI',
-                'caption' => 'Redirect-/Callback-URI überschreiben'
+        $permVisible = function (string $permission) use ($compat, $hasCompat): bool {
+            if (!$hasCompat) return true; // vor erster Probe alles zeigen
+            return ($compat[$permission] ?? false) === true;
+        };
+
+        $form = [
+            'elements' => [
+                ['type' => 'Label', 'caption' => 'Redirect-/Callback-URI: ' . $effectiveRedirect],
+                [
+                    'type' => 'ValidationTextBox',
+                    'name' => 'ManualRedirectURI',
+                    'caption' => 'Redirect-/Callback-URI überschreiben'
+                ],
+                ['type' => 'Label', 'caption' => '────────────────────────────────────────'],
+                ['type' => 'CheckBox', 'name' => 'EnableWebhook', 'caption' => 'Webhook-Empfang für Signale aktivieren'],
+                ['type' => 'CheckBox', 'name' => 'VerifyWebhookSignature', 'caption' => 'Fahrzeug verifizieren (Fahrzeugfilter!)'],
+                ['type' => 'CheckBox', 'name' => 'TrackLastSignals', 'caption' => 'Variable für letzte Aktualisierung der Signale'],
+
+                [
+                    'type'    => 'ValidationTextBox',
+                    'name'    => 'ManagementToken',
+                    'caption' => 'Application Management Token (HMAC & VERIFY)'
+                ],
+                ['type' => 'Label', 'caption' => '────────────────────────────────────────'],
+
+                ['type' => 'ValidationTextBox', 'name' => 'ClientID',     'caption' => 'Client ID'],
+                ['type' => 'ValidationTextBox', 'name' => 'ClientSecret', 'caption' => 'Client Secret'],
+                [
+                    'type'    => 'Select',
+                    'name'    => 'Mode',
+                    'caption' => 'Verbindungsmodus',
+                    'options' => [
+                        ['caption' => 'Simuliert', 'value' => 'simulated'],
+                        ['caption' => 'Live',      'value' => 'live']
+                    ]
+                ],
+                [
+                    'type'    => 'ExpansionPanel',
+                    'caption' => 'Berechtigungen (Scopes)',
+                    'items'   => [
+                        ['type' => 'Label', 'caption' => 'Zugehörige Variablen werden automatisch erstellt bzw. gelöscht.'],
+                        ['type' => 'Label', 'caption' => $hasCompat
+                        ? 'Scope-Filter aktiv (Ergebnis der automatischen Prüfung wird angewendet).'
+                        : 'Noch keine automatische Prüfung – alle Scopes werden gelistet. Kompatible Scopes mit Button prüfen und auf OK warten.'],
+                        ['type' => 'Label',  'caption' => $hasCompat ? ('Gefundene kompatible Scopes: ' . implode(', ', array_keys(array_filter($compat ?? [])))) : ''],
+
+                        // READ (sichtbar je Kompatibilität)
+                        ['type'=>'CheckBox','name'=>'ScopeReadVehicleInfo',     'caption'=>'Fahrzeuginformationen lesen (/)','visible'=>$permVisible('read_vehicle_info')],
+                        ['type'=>'CheckBox','name'=>'ScopeReadVIN',             'caption'=>'VIN lesen (/vin)','visible'=>$permVisible('read_vin')],
+                        ['type'=>'CheckBox','name'=>'ScopeReadLocation',        'caption'=>'Standort lesen (/location)','visible'=>$permVisible('read_location')],
+                        ['type'=>'CheckBox','name'=>'ScopeReadTires',           'caption'=>'Reifendruck lesen (/tires/pressure)','visible'=>$permVisible('read_tires')],
+                        ['type'=>'CheckBox','name'=>'ScopeReadOdometer',        'caption'=>'Kilometerstand lesen (/odometer)','visible'=>$permVisible('read_odometer')],
+                        ['type'=>'CheckBox','name'=>'ScopeReadBattery',         'caption'=>'Batterielevel lesen (/battery)','visible'=>$permVisible('read_battery')],
+                        ['type'=>'CheckBox','name'=>'ScopeReadBatteryCapacity', 'caption'=>'Batteriekapazität lesen (/battery/nominal_capacity)','visible'=>$permVisible('read_battery')],
+                        ['type'=>'CheckBox','name'=>'ScopeReadFuel',            'caption'=>'Kraftstoffstand lesen (/fuel)','visible'=>$permVisible('read_fuel')],
+                        ['type'=>'CheckBox','name'=>'ScopeReadSecurity',        'caption'=>'Verriegelungsstatus lesen (/security)','visible'=>$permVisible('read_security')],
+                        ['type'=>'CheckBox','name'=>'ScopeReadChargeLimit',     'caption'=>'Ladelimit lesen (/charge/limit)','visible'=>$permVisible('read_charge')],
+                        ['type'=>'CheckBox','name'=>'ScopeReadChargeStatus',    'caption'=>'Ladestatus lesen (/charge)','visible'=>$permVisible('read_charge')],
+                        ['type'=>'CheckBox','name'=>'ScopeReadOilLife',         'caption'=>'Motoröl lesen (/engine/oil)','visible'=>$permVisible('read_engine_oil')],
+
+                        // Commands
+                        ['type'=>'CheckBox','name'=>'SetChargeLimit',  'caption'=>'Ladelimit setzen (/charge/limit) – (Kompatibilität kann nicht geprüft werden)'],
+                        ['type'=>'CheckBox','name'=>'SetChargeStatus', 'caption'=>'Ladestatus setzen (/charge) – (Kompatibilität kann nicht geprüft werden)'],
+                        ['type'=>'CheckBox','name'=>'SetLockStatus',   'caption'=>'Zentralverriegelung setzen (/security) – (Kompatibilität kann nicht geprüft werden)']
+                    ]
+                ],
             ],
-            ['type' => 'Label', 'caption' => '────────────────────────────────────────'],
-            ['type' => 'CheckBox', 'name' => 'EnableWebhook', 'caption' => 'Webhook-Empfang für Signale aktivieren'],
-            ['type' => 'CheckBox', 'name' => 'VerifyWebhookSignature', 'caption' => 'Fahrzeug verifizieren (Fahrzeugfilter!)'],
-            ['type' => 'CheckBox', 'name' => 'TrackLastSignals', 'caption' => 'Variable für letzte Aktualisierung der Signale'],
-
-            [
-                'type'    => 'ValidationTextBox',
-                'name'    => 'ManagementToken',
-                'caption' => 'Application Management Token (HMAC & VERIFY)'
-            ],
-            ['type' => 'Label', 'caption' => '────────────────────────────────────────'],
-
-            ['type' => 'ValidationTextBox', 'name' => 'ClientID',     'caption' => 'Client ID'],
-            ['type' => 'ValidationTextBox', 'name' => 'ClientSecret', 'caption' => 'Client Secret'],
-            [
-                'type'    => 'Select',
-                'name'    => 'Mode',
-                'caption' => 'Verbindungsmodus',
-                'options' => [
-                    ['caption' => 'Simuliert', 'value' => 'simulated'],
-                    ['caption' => 'Live',      'value' => 'live']
-                ]
-            ],
-            [
-                'type'    => 'ExpansionPanel',
-                'caption' => 'Berechtigungen (Scopes)',
-                'items'   => [
-                    ['type' => 'Label', 'caption' => 'Zugehörige Variablen werden automatisch erstellt bzw. gelöscht.'],
-
-                    // READ (immer sichtbar, kein Compat-Filter mehr)
-                    ['type'=>'CheckBox','name'=>'ScopeReadVehicleInfo',     'caption'=>'Fahrzeuginformationen lesen (/)'],
-                    ['type'=>'CheckBox','name'=>'ScopeReadVIN',             'caption'=>'VIN lesen (/vin)'],
-                    ['type'=>'CheckBox','name'=>'ScopeReadLocation',        'caption'=>'Standort lesen (/location)'],
-                    ['type'=>'CheckBox','name'=>'ScopeReadTires',           'caption'=>'Reifendruck lesen (/tires/pressure)'],
-                    ['type'=>'CheckBox','name'=>'ScopeReadOdometer',        'caption'=>'Kilometerstand lesen (/odometer)'],
-                    ['type'=>'CheckBox','name'=>'ScopeReadBattery',         'caption'=>'Batterielevel lesen (/battery)'],
-                    ['type'=>'CheckBox','name'=>'ScopeReadBatteryCapacity', 'caption'=>'Batteriekapazität lesen (/battery/nominal_capacity)'],
-                    ['type'=>'CheckBox','name'=>'ScopeReadFuel',            'caption'=>'Kraftstoffstand lesen (/fuel)'],
-                    ['type'=>'CheckBox','name'=>'ScopeReadSecurity',        'caption'=>'Verriegelungsstatus lesen (/security)'],
-                    ['type'=>'CheckBox','name'=>'ScopeReadChargeLimit',     'caption'=>'Ladelimit lesen (/charge/limit)'],
-                    ['type'=>'CheckBox','name'=>'ScopeReadChargeStatus',    'caption'=>'Ladestatus lesen (/charge)'],
-                    ['type'=>'CheckBox','name'=>'ScopeReadOilLife',         'caption'=>'Motoröl lesen (/engine/oil)'],
-
-                    // Commands
-                    ['type'=>'CheckBox','name'=>'SetChargeLimit',  'caption'=>'Ladelimit setzen (/charge/limit)'],
-                    ['type'=>'CheckBox','name'=>'SetChargeStatus', 'caption'=>'Ladestatus setzen (/charge)'],
-                    ['type'=>'CheckBox','name'=>'SetLockStatus',   'caption'=>'Zentralverriegelung setzen (/security)']
-                ]
-            ],
-        ],
-        'actions' => [
-            ['type' => 'Button', 'caption' => 'Mit Smartcar verbinden', 'onClick' => 'echo SMCAR_GenerateAuthURL($id);'],
-            ['type' => 'Button', 'caption' => 'Fahrzeugdaten abrufen',  'onClick' => 'SMCAR_FetchVehicleData($id);'],
-            ['type' => 'Label',  'caption' => 'Sag danke und unterstütze den Modulentwickler:'],
-            [
-                'type'  => 'RowLayout',
-                'items' => [
-                    [
-                        'type'   => 'Image',
-                        'onClick'=> "echo 'https://paypal.me/mbstern';",
-                        "image"=> "data:image/jpeg;base64,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"
-                    ],
-                    ['type' => 'Label', 'caption' => '']
+            'actions' => [
+                ['type' => 'Button', 'caption' => 'Auf kompatible Scopes prüfen', 'onClick' => 'echo SMCAR_StartFullReauthAndProbe($id);'],
+                ['type' => 'Button', 'caption' => 'Mit Smartcar verbinden', 'onClick' => 'echo SMCAR_GenerateAuthURL($id);'],
+                ['type' => 'Button', 'caption' => 'Fahrzeugdaten abrufen', 'onClick' => 'SMCAR_FetchVehicleData($id);'],
+                ['type' => 'Label',  'caption' => 'Sag danke und unterstütze den Modulentwickler:'],
+                [
+                    'type'  => 'RowLayout',
+                    'items' => [
+                        [
+                            'type'   => 'Image',
+                            'onClick'=> "echo 'https://paypal.me/mbstern';",
+                             "image"=> "data:image/jpeg;base64,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"
+                        ],
+                        ['type' => 'Label', 'caption' => '']
+                    ]
                 ]
             ]
-        ]
-    ];
+        ];
 
-    return json_encode($form);
-}
-
+        return json_encode($form);
+    }
 
     private function HandleRetriableHttp(string $kind, array $jobFields, int $statusCode, array $headers, ?int $attempt = null): bool
     {
@@ -373,6 +391,31 @@ public function GetConfigurationForm()
         return true;
     }
 
+    private function canonicalizePath(string $path): string
+    {
+        $path = trim($path);
+        if ($path === '' || $path === '/') return '/';
+        $path = '/' . ltrim($path, '/');        
+        return rtrim($path, '/');           
+    }
+
+    private function PathToPermission(string $path): ?string
+    {
+        static $PATH_TO_SCOPE = null;
+
+        if ($PATH_TO_SCOPE === null) {
+            $PATH_TO_SCOPE = [];
+            foreach (self::SCOPE_TO_PATHS as $scope => $paths) {
+                foreach ($paths as $p) {
+                    $PATH_TO_SCOPE[$this->canonicalizePath($p)] = $scope;
+                }
+            }
+        }
+
+        $key = $this->canonicalizePath($path);
+        return $PATH_TO_SCOPE[$key] ?? null;
+    }
+
     private function getEnabledScopes(): array
     {
         $scopes = [];
@@ -403,6 +446,54 @@ public function GetConfigurationForm()
             }
         }
         return array_keys($paths);
+    }
+
+    /** Alle Read-Scopes (voll) – bequem für Reauth/Probe-All. */
+    private function getAllReadScopes(): array
+    {
+        return self::READ_SCOPES;
+    }
+
+    /** Alle Read-Paths (voll) – bequem für ProbeScopes(). */
+    private function getAllReadPaths(): array
+    {
+        $set = [];
+        foreach (self::SCOPE_TO_PATHS as $paths) {
+            foreach ($paths as $p) $set[$p] = true;
+        }
+        return array_keys($set);
+    }
+
+    private function bodyHasNumeric($a, array $keys): bool {
+        foreach ($keys as $k) {
+            if (isset($a[$k]) && is_numeric($a[$k])) return true;
+            // verschachtelt: capacity.nominal
+            if ($k === 'capacity.nominal' && isset($a['capacity']['nominal']) && is_numeric($a['capacity']['nominal'])) return true;
+        }
+        return false;
+    }
+
+    public function StartFullReauthAndProbe()
+    {
+        $this->WriteAttributeString('NextAction', 'probe_after_auth');
+        $url = $this->BuildAuthURLWithScopes($this->getAllReadScopes(), 'probe');
+        echo $url;
+    }
+
+    private function ApplyCompatToProperties(array $compat): void
+    {
+        foreach (self::PROP_TO_SCOPE as $prop => $scope) {
+
+            // nur READ-Scopes automatisch verwalten
+            if (!str_starts_with($scope, 'read_')) {
+                continue;
+            }
+
+            $isCompatible = ($compat[$scope] ?? false) === true;
+
+            // 🔴 WICHTIG: explizit TRUE ODER FALSE setzen
+            IPS_SetProperty($this->InstanceID, $prop, $isCompatible);
+        }
     }
 
     private function ScheduleHttpRetry(array $job, int $delaySeconds): void
@@ -574,6 +665,151 @@ public function GetConfigurationForm()
         return "Fertig. Alle Read-Scopes geprüft und kompatible automatisch aktiviert.";
     }
 
+    public function ProbeScopes(bool $silent = false): bool
+    {
+        $accessToken = $this->ReadAttributeString('AccessToken');
+        $vehicleID   = $this->GetVehicleID($accessToken);
+
+        if ($accessToken === '' || !$vehicleID) {
+            $url = $this->GenerateAuthURLAllRead();
+            $this->SendDebug('ProbeScopes', 'Nicht verbunden → volle Autorisierung nötig: ' . $url, 0);
+            if (!$silent) {
+                echo "Nicht verbunden. Bitte einmal verbinden, um die Kompatibilität zu prüfen:\n" . $url;
+            }
+            return false;
+        }
+
+        $doBatch = function(string $token) use ($vehicleID) {
+            $url  = "https://api.smartcar.com/v2.0/vehicles/$vehicleID/batch";
+            $allPaths = $this->getAllReadPaths();
+            $reqs = array_map(fn($p) => ['path' => $p], $allPaths);
+
+            $post = json_encode(['requests' => $reqs]);
+
+            $ctx = stream_context_create([
+                'http' => [
+                    'header'        => "Authorization: Bearer {$token}\r\nContent-Type: application/json\r\n",
+                    'method'        => 'POST',
+                    'content'       => $post,
+                    'ignore_errors' => true
+                ]
+            ]);
+
+            $raw  = @file_get_contents($url, false, $ctx);
+            $data = json_decode($raw ?? '', true);
+
+            // Statuscode aus Headern ziehen (dein vorhandener Helper)
+            $statusCode = $this->GetStatusCodeFromHeaders($http_response_header ?? []);
+
+            // Optionales Debug (wie bei dir vorhanden)
+            $this->DebugJsonAntwort('ProbeScopes/batch', $raw, $statusCode);
+
+            return [$statusCode, $raw, $data];
+        };
+
+        // 1) Erster Versuch
+        [$status, $raw, $data] = $doBatch($accessToken);
+
+        // >>> NEU: zentraler Retry (429 + 5xx) – nicht blockierend
+        $httpHeaders = $http_response_header ?? [];
+        if ($this->HandleRetriableHttp('batch', [], (int)$status, $httpHeaders)) {
+            if (!$silent) echo "Automatisch erneut versuchen (RATE LIMIT / 5xx).";
+            return false; // hier Schluss – Timer übernimmt
+        }
+
+        // 2) Bei 401 einmal Refresh + erneuter Versuch (wie bisher)
+        if ($status === 401) {
+            $this->SendDebug('ProbeScopes', '401 beim Batch → versuche Refresh + Retry', 0);
+            $this->RefreshAccessToken();
+            $accessToken = $this->ReadAttributeString('AccessToken');
+            [$status, $raw, $data] = $doBatch($accessToken);
+
+            // >>> NEU: auch beim erneuten Call zentraler Retry
+            $httpHeaders = $http_response_header ?? [];
+            if ($this->HandleRetriableHttp('batch', [], (int)$status, $httpHeaders)) {
+                if (!$silent) echo "Automatisch erneut versuchen (RATE LIMIT / 5xx).";
+                return false;
+            }
+        }
+
+        // 3) Fehler-/Erfolgsprüfung wie gehabt …
+        if ($raw === false || $raw === null) {
+            $this->SendDebug('ProbeScopes', '❌ Keine Antwort.', 0);
+            if (!$silent) echo "Fehlgeschlagen: Keine Antwort der Smartcar API.";
+            return false;
+        }
+        if ($status !== 200) {
+            $this->SendDebug('ProbeScopes', '❌ Unerwartete Struktur / HTTP ' . $status, 0);
+            if (!$silent) echo "Fehlgeschlagen: HTTP $status – bitte Debug ansehen.";
+            return false;
+        }
+        if (!isset($data['responses']) || !is_array($data['responses'])) {
+            $this->SendDebug('ProbeScopes', '❌ Unerwartete Struktur.', 0);
+            if (!$silent) echo "Fehlgeschlagen: Unerwartete Antwortstruktur.";
+            return false;
+        }
+
+        // Auswertung
+        $map = [];
+        $missingScopes = false;
+        $perPathLog = [];
+
+        $fuelOK = false;
+        $batteryOK = false;
+        $oilOK = false;
+
+        foreach ($data['responses'] as $r) {
+            $path = $r['path'] ?? '';
+            $code = intval($r['code'] ?? 0);
+            $perm = $this->PathToPermission($path) ?? 'unknown';
+            $body = is_array($r['body'] ?? null) ? $r['body'] : [];
+            $perPathLog[] = ['path'=>$path,'perm'=>$perm,'code'=>$code,'body_keys'=>implode(',', array_keys($body))];
+
+            if ($code === 403) $missingScopes = true;
+
+            if (!isset($map[$perm])) $map[$perm] = false;
+            if ($code === 200 && $perm !== 'read_battery' && $perm !== 'read_engine_oil') $map[$perm] = true;
+
+            if ($perm === 'read_fuel' && $code === 200) { $fuelOK = true; $map['read_fuel'] = true; }
+
+            if ($perm === 'read_battery' && $code === 200) {
+                if ($path === '/battery') {
+                    if ($this->bodyHasNumeric($body, ['percentRemaining','range'])) $batteryOK = true;
+                } elseif ($path === '/battery/nominal_capacity') {
+                    if ($this->bodyHasNumeric($body, ['capacity','capacity.nominal','nominal_capacity'])) $batteryOK = true;
+                }
+            }
+
+            if ($perm === 'read_engine_oil' && $code === 200) {
+                if ($this->bodyHasNumeric($body, ['lifeRemaining','remainingLifePercent','percentRemaining','value'])) $oilOK = true;
+            }
+        }
+
+        $map['read_battery']    = $batteryOK;
+        $map['read_engine_oil'] = $oilOK;
+
+        $this->SendDebug('ProbeScopes/perPath', json_encode($perPathLog, JSON_UNESCAPED_UNICODE), 0);
+        $this->SendDebug('ProbeScopes/summary', json_encode($map, JSON_UNESCAPED_SLASHES), 0);
+
+        $this->WriteAttributeString('CompatScopes', json_encode($map, JSON_UNESCAPED_SLASHES));
+        $this->ApplyCompatToProperties($map);
+        IPS_ApplyChanges($this->InstanceID);
+
+        if ($missingScopes) {
+            $authURL = $this->GenerateAuthURLAllRead();
+            $this->SendDebug('ProbeScopes', '403 erkannt → volle Re-Auth empfohlen: ' . $authURL, 0);
+            if (!$silent) {
+                echo "Einige Endpunkte konnten wegen fehlender Berechtigungen nicht geprüft werden.\n"
+                . "Bitte einmal mit *allen Read-Scopes* autorisieren und dann erneut prüfen:\n"
+                . $authURL;
+            }
+            return true;
+        }
+
+        if (!$silent) echo "Fertig.";
+        return true;
+    }
+
     public function ProcessHookData()
     {
         $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
@@ -597,7 +833,12 @@ public function GetConfigurationForm()
                 return;
             }
 
-            // ✅ Kein Probe/Compat mehr – immer einfach "verbunden"
+            if (preg_match('~^(probe|allread)_~i', $state)) {
+                $okProbe = $this->ProbeScopes();
+                echo $okProbe ? 'Kompatible Scopes geprüft.' : 'Prüfung fehlgeschlagen – bitte Debug ansehen.';
+                return;
+            }
+
             echo 'Fahrzeug erfolgreich verbunden!';
             return;
         }
