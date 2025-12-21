@@ -784,26 +784,10 @@ class Smartcar extends IPSModule
             } elseif ($code === 403) {
                 $missingScopes = true;
                 // nicht als "unsupported path" werten (könnte nur fehlender Scope sein)
-            } elseif ($code === 409) {
-
-            // 409 ist oft temporär (VEHICLE_STATE / RETRY_LATER) → NICHT ausblenden
-            // Wir lassen den Path-Status "unbekannt" (kein Eintrag in pathMap).
-            // Optional: Debug für die Diagnose
-            $body = is_array($r['body'] ?? null) ? $r['body'] : [];
-            $this->SendDebug('ProbeScopes/temp', json_encode([
-                'path' => $path,
-                'code' => $code,
-                'type' => $body['type'] ?? null,
-                'resolution' => $body['resolution']['type'] ?? null,
-                'msg'  => $body['suggestedUserMessage'] ?? null
-            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 0);
-
-        } elseif (in_array($code, [404, 400, 422, 501], true)) {
-
-            // diese Codes sind typischerweise: endpoint nicht unterstützt / nicht verfügbar
-            $pathMap[$canonPath] = false;
-        }
-
+            } elseif (in_array($code, [404, 400, 422, 501], true)) {
+                // diese Codes sind typischerweise: endpoint nicht unterstützt / nicht verfügbar
+                $pathMap[$canonPath] = false;
+            }
             $perm = $this->PathToPermission($path) ?? 'unknown';
             $body = is_array($r['body'] ?? null) ? $r['body'] : [];
             $perPathLog[] = ['path'=>$path,'perm'=>$perm,'code'=>$code,'body_keys'=>implode(',', array_keys($body))];
