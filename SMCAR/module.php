@@ -1537,9 +1537,9 @@ class Smartcar extends IPSModule
                     $setSafe(
                         'ChargeTimeToComplete',
                         VARIABLETYPE_STRING,
-                        'Restladezeit',
+                        'Fertig geladen',
                         '',
-                        sprintf('%02d:%02d', $h, $m)
+                        sprintf('%02d:%02d Uhr', $h, $m)
                     );
                 }
                 break;
