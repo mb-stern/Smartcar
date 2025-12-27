@@ -1528,8 +1528,20 @@ class Smartcar extends IPSModule
                 break;
 
             case 'charge-timetocomplete':
-                // je nach OEM als Minuten/Sekunden – wir speichern den Rohwert
-                if (isset($body['value'])) $setSafe('ChargeTimeToComplete', VARIABLETYPE_FLOAT, 'Restladezeit', '', floatval($body['value']));
+                if (isset($body['value'])) {
+                    $v = floatval($body['value']);          // Dezimalstunden
+                    $h = floor($v);
+                    $m = round(($v - $h) * 60);
+                    if ($m === 60) { $h++; $m = 0; }
+
+                    $setSafe(
+                        'ChargeTimeToComplete',
+                        VARIABLETYPE_STRING,
+                        'Restladezeit',
+                        '',
+                        sprintf('%02d:%02d', $h, $m)
+                    );
+                }
                 break;
 
             case 'charge-fastchargertype':
