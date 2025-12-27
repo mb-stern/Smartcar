@@ -1530,16 +1530,15 @@ class Smartcar extends IPSModule
             case 'charge-timetocomplete':
                 // Smartcar liefert Dezimalstunden → Sekunden für ~Time
                 if (isset($body['value'])) {
+                    $seconds = (int) round(floatval($body['value']) * 3600);
+
                     $setSafe(
                         'ChargeTimeToComplete',
                         VARIABLETYPE_INTEGER,
-                        (int) round(floatval($body['value']) * 3600),
-                        '~Time'
+                        'Laden abgeschlossen',
+                        '~Time',
+                        $seconds
                     );
-
-                    // Anzeigename setzen
-                    $id = $this->GetIDForIdent('ChargeTimeToComplete');
-                    IPS_SetName($id, 'Laden abgeschlossen');
                 }
                 break;
 
