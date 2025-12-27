@@ -223,7 +223,7 @@ Steuere Fahrzeugfunktionen direkt aus dem WebFront:
 
 | Version | Datum | Änderungen |
 |----------|--------|------------|
-| **3.5** | 28.12.2025 | - Variable für das voraussichliche Ende der Ladezeit angepasst.|
+| **3.5** | 28.12.2025 | - Variable für das Ladeende angepasst. Die alte Variable 'Restladezeit' muss gelöscht werden.|
 | **3.4** | 21.12.2025 | - Fehlermeldung beim Verbinden des Fahrzeuges behoben.<br>- Automatische Scopeerkennung deaktiviert wegen Problem mit Signalen. Es wurden bei ausgeblendeten Scopes entsprechende Signale blockiert.<br>- Diverse Code Modifikationen |
 | **3.3** | 19.10.2025 | - Beim Erreichen des Rate-Limits wird nach der vorgegebenen Wartezeit der Scope erneut abgefragt.<br>- Verbesserung der Debug- und Error-Ausgabe.<br>- Code überarbeitet.<br>- README neu strukturiert mit getrennten Abschnitten für Scopes & Signals |
 | **3.2** | 14.10.2025 | - Automatische Scopeerkennung verbessert. |
