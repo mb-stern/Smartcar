@@ -1529,7 +1529,7 @@ class Smartcar extends IPSModule
 
             case 'charge-timetocomplete':
                 if (isset($body['value'])) {
-                    $v = floatval($body['value']);          // Dezimalstunden
+                    $v = floatval($body['value']);   // Dezimal-Uhrzeit
                     $h = floor($v);
                     $m = round(($v - $h) * 60);
                     if ($m === 60) { $h++; $m = 0; }
