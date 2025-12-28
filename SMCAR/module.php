@@ -133,32 +133,22 @@ class Wordclock extends IPSModuleStrict
     {
         parent::ApplyChanges();
 
-        // Hook (WebHook-Control) setzen/aufräumen → /hook/smartcar_<InstanceID>
-        $hookPath = $this->RegisterHook();
+        /// Hook-Adresse (wird zu /hook/<adresse>)
+        $hookAddress = 'smartcar_' . $this->InstanceID;
+        $hookPath    = '/hook/' . $hookAddress;
+
+        // ✅ IPSModuleStrict: Hook registrieren (kein WebHook-Control-Gefummel mehr!)
+        $this->RegisterHook($hookAddress);
+
         $this->SendDebug('ApplyChanges', "Hook-Pfad aktiv: $hookPath", 0);
 
-        // Token-Refresh alle 90 Minuten
-        $this->SetTimerInterval('TokenRefreshTimer', 90 * 60 * 1000);
-        $this->SendDebug('ApplyChanges', 'Token-Erneuerungs-Timer auf 90 min gestellt.', 0);
-
-        // Effektive Redirect-URI festlegen (manuell oder ipmagic-Connect + Hook)
+        // Redirect-URI wie gehabt
         $manual = trim($this->ReadPropertyString('ManualRedirectURI'));
         if ($manual !== '') {
-            if (!preg_match('~^https://~i', $manual)) {
-                $this->SendDebug('ApplyChanges', 'Warnung: Manuelle Redirect-URI ohne https:// – wird trotzdem verwendet.', 0);
-            }
             $effectiveRedirect = $manual;
-            $this->SendDebug('ApplyChanges', 'Manuelle Redirect-URI aktiv.', 0);
         } else {
             $effectiveRedirect = $this->BuildConnectURL($hookPath);
-            if ($effectiveRedirect === '') {
-                $this->SendDebug('ApplyChanges', 'Connect-Adresse nicht verfügbar. Redirect-URI bleibt leer.', 0);
-                $this->LogMessage('ApplyChanges - Connect-Adresse konnte nicht ermittelt werden.', KL_ERROR);
-            } else {
-                $this->SendDebug('ApplyChanges', 'Redirect-URI automatisch (Connect+Hook).', 0);
-            }
         }
-
         $this->WriteAttributeString('RedirectURI', $effectiveRedirect);
 
         $this->CreateProfile();
@@ -195,42 +185,6 @@ class Wordclock extends IPSModuleStrict
             default:
                 throw new Exception('Invalid ident');
         }
-    }
-
-    private function RegisterHook()
-    {
-        $desired = '/hook/smartcar_' . $this->InstanceID;
-
-        $ids = IPS_GetInstanceListByModuleID('{015A6EB8-D6E5-4B93-B496-0D3F77AE9FE1}');
-        if (count($ids) === 0) {
-            $this->WriteAttributeString('CurrentHook', $desired);
-            $this->SendDebug('RegisterHook', 'Keine WebHook-Control-Instanz gefunden.', 0);
-            return $desired;
-        }
-
-        $hookInstanceID = $ids[0];
-        $hooks = json_decode(IPS_GetProperty($hookInstanceID, 'Hooks'), true);
-        if (!is_array($hooks)) $hooks = [];
-
-        // alte/kaputte Mappings entfernen
-        $clean = [];
-        foreach ($hooks as $h) {
-            $hHook = $h['Hook'] ?? '';
-            $hTarget = $h['TargetID'] ?? 0;
-            if ($hTarget === $this->InstanceID) continue; // von dieser Instanz → entfernen
-            if (preg_match('~^/hook/https?://~i', $hHook)) continue; // kaputte Einträge
-            $clean[] = $h;
-        }
-
-        // unser gewünschtes Mapping hinzufügen
-        $clean[] = ['Hook' => $desired, 'TargetID' => $this->InstanceID];
-
-        IPS_SetProperty($hookInstanceID, 'Hooks', json_encode($clean));
-        IPS_ApplyChanges($hookInstanceID);
-        $this->SendDebug('RegisterHook', "Hook neu registriert: $desired", 0);
-
-        $this->WriteAttributeString('CurrentHook', $desired);
-        return $desired;
     }
 
     private function BuildConnectURL(string $hookPath): string
