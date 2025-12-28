@@ -1,6 +1,6 @@
 <?php
 
-class Smartcar extends IPSModule
+class Wordclock extends IPSModuleStrict
 {
     /** Primäre Read-Scopes (ohne Control) */
     private const READ_SCOPES = [
@@ -74,7 +74,7 @@ class Smartcar extends IPSModule
     /** Statuscodes, die automatisch wiederholt werden */
     private const RETRYABLE_STATUS = [429, 500, 502, 503, 504];
 
-    public function Create()
+    public function Create(): void
     {
         parent::Create();
 
@@ -129,7 +129,7 @@ class Smartcar extends IPSModule
         $this->RegisterMessage(0, IPS_KERNELMESSAGE);
     }
 
-    public function ApplyChanges()
+    public function ApplyChanges(): void
     {
         parent::ApplyChanges();
 
@@ -174,7 +174,7 @@ class Smartcar extends IPSModule
         $this->UpdateVariablesBasedOnScopes();
     }
 
-    public function RequestAction($ident, $value)
+    public function RequestAction(string $Ident, mixed $Value): void
     {
         switch ($ident) {
             case 'SetChargeLimit':
@@ -270,8 +270,8 @@ class Smartcar extends IPSModule
         }
     }
 
-    public function GetConfigurationForm()
-{
+    public function GetConfigurationForm(): string
+    {
     $effectiveRedirect = $this->ReadAttributeString('RedirectURI');
 
     $form = [
@@ -353,7 +353,7 @@ class Smartcar extends IPSModule
     ];
 
     return json_encode($form);
-}
+    }
 
 
     private function HandleRetriableHttp(string $kind, array $jobFields, int $statusCode, array $headers, ?int $attempt = null): bool
