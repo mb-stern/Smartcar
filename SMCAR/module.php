@@ -258,7 +258,7 @@ class Wordclock extends IPSModuleStrict
         return '';
     }
 
-    public function MessageSink($TimeStamp, $SenderID, $Message, $Data)
+    public function MessageSink(int $TimeStamp, int $SenderID, int $Message, array $Data)
     {
         if ($Message === IPS_KERNELMESSAGE) {
             $runlevel = $Data[0] ?? -1;
