@@ -78,6 +78,9 @@ class Smartcar extends IPSModuleStrict
     {
         parent::Create();
 
+        //Webhook registrieren
+        $this->RegisterHook('smartcar_' . $this->InstanceID);
+
         // Allgemeine Eigenschaften
         $this->RegisterPropertyString('ClientID', '');
         $this->RegisterPropertyString('ClientSecret', '');
@@ -138,7 +141,7 @@ class Smartcar extends IPSModuleStrict
         $hookPath    = '/hook/' . $hookAddress;
 
         // ✅ IPSModuleStrict: Hook registrieren (kein WebHook-Control-Gefummel mehr!)
-        $this->RegisterHook($hookAddress);
+        //$this->RegisterHook($hookAddress);
 
         $this->SendDebug('ApplyChanges', "Hook-Pfad aktiv: $hookPath", 0);
 
