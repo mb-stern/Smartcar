@@ -1361,6 +1361,35 @@ Content-Type: application/json
             return $g; // z.B. UNAVAILABLE, KNOWN_ISSUE, ...
         };
 
+        // Variablen-Setter, der Neu-Anlagen in $created sammelt (wie in 3.5)
+        $setSafe = function (string $ident, int $type, string $caption, string $profile, $value) use (&$created) {
+            $id = @$this->GetIDForIdent($ident);
+            $wasCreated = false;
+
+            if (!$id) {
+                switch ($type) {
+                    case VARIABLETYPE_BOOLEAN: $this->RegisterVariableBoolean($ident, $caption, $profile, 0); break;
+                    case VARIABLETYPE_INTEGER: $this->RegisterVariableInteger($ident, $caption, $profile, 0); break;
+                    case VARIABLETYPE_FLOAT:   $this->RegisterVariableFloat($ident,   $caption, $profile, 0); break;
+                    default:                   $this->RegisterVariableString($ident,  $caption, $profile, 0); break;
+                }
+                $id = $this->GetIDForIdent($ident);
+                $wasCreated = true;
+            }
+
+            if ($profile !== '') {
+                @IPS_SetVariableCustomProfile($id, $profile);
+            }
+
+            $this->SetValue($ident, $value);
+
+            if ($wasCreated) {
+                if (is_object($value)) $value = json_encode($value, JSON_UNESCAPED_UNICODE);
+                if (is_array($value))  $value = json_encode($value, JSON_UNESCAPED_UNICODE);
+                $created[$ident] = $value;
+            }
+        };
+
         $asUpper = fn(?string $v): string => strtoupper(trim((string)$v));
 
         $asDiagIdent = function (string $diagCode): string {
