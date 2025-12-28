@@ -515,7 +515,7 @@ class Wordclock extends IPSModuleStrict
         return $url;
     }
 
-    public function ProcessHookData()
+    protected function ProcessHookData(): void
     {
         $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
         $uri    = $_SERVER['REQUEST_URI']     ?? '';
