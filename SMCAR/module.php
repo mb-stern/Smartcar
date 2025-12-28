@@ -2,32 +2,6 @@
 
 class Smartcar extends IPSModuleStrict
 {
-    // === Konstanten / Registry ===
-    private const ENDPOINTS = [
-        // propIdent                  => [scope, path, pathsForScope?]
-        'ScopeReadVehicleInfo'     => ['scope' => 'read_vehicle_info', 'path' => '/',                        'paths' => ['/']],
-        'ScopeReadVIN'             => ['scope' => 'read_vin',          'path' => '/vin',                     'paths' => ['/vin']],
-        'ScopeReadLocation'        => ['scope' => 'read_location',     'path' => '/location',                'paths' => ['/location']],
-        'ScopeReadTires'           => ['scope' => 'read_tires',        'path' => '/tires/pressure',          'paths' => ['/tires/pressure']],
-        'ScopeReadOdometer'        => ['scope' => 'read_odometer',     'path' => '/odometer',                'paths' => ['/odometer']],
-        'ScopeReadBattery'         => ['scope' => 'read_battery',      'path' => '/battery',                 'paths' => ['/battery', '/battery/nominal_capacity']],
-        'ScopeReadBatteryCapacity' => ['scope' => 'read_battery',      'path' => '/battery/nominal_capacity','paths' => ['/battery', '/battery/nominal_capacity']],
-        'ScopeReadFuel'            => ['scope' => 'read_fuel',         'path' => '/fuel',                    'paths' => ['/fuel']],
-        'ScopeReadSecurity'        => ['scope' => 'read_security',     'path' => '/security',                'paths' => ['/security']],
-        'ScopeReadChargeStatus'    => ['scope' => 'read_charge',       'path' => '/charge',                  'paths' => ['/charge', '/charge/limit']],
-        'ScopeReadChargeLimit'     => ['scope' => 'read_charge',       'path' => '/charge/limit',            'paths' => ['/charge', '/charge/limit']],
-        'ScopeReadOilLife'         => ['scope' => 'read_engine_oil',   'path' => '/engine/oil',              'paths' => ['/engine/oil']],
-
-        // CONTROL (keine paths-Liste nötig – aber gleiche Struktur tut nicht weh)
-        'SetChargeLimit'           => ['scope' => 'control_charge',    'path' => '/charge/limit',            'paths' => []],
-        'SetChargeStatus'          => ['scope' => 'control_charge',    'path' => '/charge',                  'paths' => []],
-        'SetLockStatus'            => ['scope' => 'control_security',  'path' => '/security',                'paths' => []],
-    ];
-
-    private const MAX_RETRY_ATTEMPTS = 3;
-    private const RETRYABLE_STATUS   = [429, 500, 502, 503, 504];
-    private const MI_TO_KM           = 1.609344;
-
     public function Create(): void
     {
         parent::Create();
@@ -120,20 +94,20 @@ class Smartcar extends IPSModuleStrict
 
     public function RequestAction(string $Ident, mixed $Value): void
     {
-        switch ($Ident) {
+        switch ($ident) {
             case 'SetChargeLimit':
-                $this->SetChargeLimit(((float)$Value) / 100);
-                $this->SetValue($Ident, (float)$Value);
+                $this->SetChargeLimit($value / 100);
+                $this->SetValue($ident, $value);
                 break;
 
             case 'SetChargeStatus':
-                $this->SetChargeStatus((bool)$Value);
-                $this->SetValue($Ident, (bool)$Value);
+                $this->SetChargeStatus($value);
+                $this->SetValue($ident, $value);
                 break;
 
             case 'SetLockStatus':
-                $this->SetLockStatus((bool)$Value);
-                $this->SetValue($Ident, (bool)$Value);
+                $this->SetLockStatus($value);
+                $this->SetValue($ident, $value);
                 break;
 
             default:
@@ -266,7 +240,8 @@ class Smartcar extends IPSModuleStrict
 
     private function HandleRetriableHttp(string $kind, array $jobFields, int $statusCode, array $headers, ?int $attempt = null): bool
     {
-        if (!in_array($statusCode, self::RETRYABLE_STATUS, true)) {
+        $retryableStatus = [429, 500, 502, 503, 504]; // inline
+        if (!in_array($statusCode, $retryableStatus, true)) {
             return false;
         }
 
@@ -299,16 +274,18 @@ class Smartcar extends IPSModuleStrict
 
     private function getEnabledScopes(): array
     {
+        $maps = $this->GetScopeMaps();
+
         $scopes = [];
-        foreach (self::ENDPOINTS as $prop => $meta) {
+        foreach ($maps['PROP_TO_SCOPE'] as $prop => $scope) {
             if ($this->ReadPropertyBoolean($prop)) {
-                $scopes[$meta['scope']] = true; // Set wie Map
+                $scopes[$scope] = true; // Set wie Map
             }
         }
         return array_keys($scopes);
     }
 
-    /** Liefert NUR aktivierte Read-Scopes (ohne control_*). */
+/** Liefert NUR aktivierte Read-Scopes (ohne control_*). */
     private function getEnabledReadScopes(): array
     {
         return array_values(array_filter(
@@ -320,21 +297,18 @@ class Smartcar extends IPSModuleStrict
     /** Liefert alle API-Paths, die aus den aktivierten Read-Checkboxen resultieren (für Batch). */
     private function getEnabledReadPaths(): array
     {
+        $maps = $this->GetScopeMaps();
+
         $paths = [];
-        foreach (self::ENDPOINTS as $prop => $meta) {
-            if (!$this->ReadPropertyBoolean($prop)) {
-                continue;
+        foreach ($maps['PROP_TO_PATH'] as $prop => $path) {
+            if ($this->ReadPropertyBoolean($prop)) {
+                $paths[$this->canonicalizePath($path)] = true;
             }
-            // Nur Read-Endpoints in den Batch aufnehmen
-            if (!str_starts_with($meta['scope'], 'read_')) {
-                continue;
-            }
-            $paths[$this->canonicalizePath($meta['path'])] = true;
         }
         return array_keys($paths);
     }
 
-    private function canonicalizePath(string $path): string
+private function canonicalizePath(string $path): string
     {
         $path = trim($path);
         if ($path === '' || $path === '/') return '/';
@@ -347,7 +321,7 @@ class Smartcar extends IPSModuleStrict
         // Versuchszähler robust erhöhen
         $job['attempt'] = (int)($job['attempt'] ?? 0) + 1;
 
-        if ($job['attempt'] > self::MAX_RETRY_ATTEMPTS) {
+        if ($job['attempt'] > 3) { // max attempts inline
             $this->SendDebug('Retry', 'Abgebrochen (max attempts erreicht).', 0);
             // Erst jetzt als Error ins Log
             $this->LogMessage('HTTP 429: Max. Wiederholversuche erreicht für '.json_encode($job, JSON_UNESCAPED_SLASHES), KL_ERROR);
@@ -796,7 +770,7 @@ class Smartcar extends IPSModuleStrict
         return null;
     }
 
-        private function RequestAccessToken(string $authCode): bool
+    private function RequestAccessToken(string $authCode): bool
     {
         $clientID     = $this->ReadPropertyString('ClientID');
         $clientSecret = $this->ReadPropertyString('ClientSecret');
@@ -820,9 +794,7 @@ class Smartcar extends IPSModuleStrict
 
         $opts = [
             'http' => [
-                'header'        => "Content-Type: application/x-www-form-urlencoded
-Accept: application/json
-",
+                'header'        => "Content-Type: application/x-www-form-urlencoded\r\nAccept: application/json\r\n",
                 'method'        => 'POST',
                 'content'       => $postData,
                 'ignore_errors' => true
@@ -840,11 +812,11 @@ Accept: application/json
             // VehicleID leeren; neues Konto/Fahrzeug möglich
             $this->WriteAttributeString('VehicleID', '');
 
-            // Refresh-Timer setzen (wenn expires_in vorhanden, sonst konservativ 55min)
-            $expiresIn = isset($data['expires_in']) ? (int)$data['expires_in'] : 0;
+
+            // Token-Refresh-Timer setzen (expires_in abzüglich Sicherheits-Puffer)
+            $expiresIn = isset($data['expires_in']) && is_numeric($data['expires_in']) ? (int)$data['expires_in'] : 0;
             $refreshIn = ($expiresIn > 0) ? max(60, $expiresIn - 300) : (55 * 60);
             $this->SetTimerInterval('TokenRefreshTimer', $refreshIn * 1000);
-
             // Maskiert loggen
             $mask = function(string $t): string {
                 $l = strlen($t);
@@ -852,7 +824,7 @@ Accept: application/json
             };
             $this->SendDebug(
                 'RequestAccessToken',
-                '✅ Tokens gespeichert (acc=' . $mask((string)$data['access_token']) . ', ref=' . $mask((string)$data['refresh_token']) . ', refreshIn=' . $refreshIn . 's)',
+                '✅ Tokens gespeichert (acc=' . $mask($data['access_token']) . ', ref=' . $mask($data['refresh_token']) . ')',
                 0
             );
 
@@ -867,24 +839,21 @@ Accept: application/json
         return false;
     }
 
-        private function httpRequest(
+    private function httpRequest(
         string $ctxName,
         string $method,
         string $url,
         string $accessToken,
         ?array $jsonBody,
         string $retryKind,
-        array $retryFields,
-        int $authRetryCount = 0
+        array $retryFields
     ): ?array {
 
         $body = ($jsonBody !== null) ? json_encode($jsonBody) : null;
 
         $options = [
             'http' => [
-                'header'        => "Authorization: Bearer $accessToken
-Content-Type: application/json
-",
+                'header'        => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
                 'method'        => strtoupper($method),
                 'ignore_errors' => true
             ]
@@ -918,21 +887,6 @@ Content-Type: application/json
             $this->DebugHttpHeaders($httpHeaders, $statusCode);
         }
 
-        // 401: AccessToken abgelaufen/ungültig -> Refresh + 1x sofort retry
-        if ($statusCode === 401 && $authRetryCount < 1) {
-            $this->SendDebug($ctxName, '🔄 HTTP 401 – versuche AccessToken zu erneuern und Anfrage zu wiederholen...', 0);
-            $this->RefreshAccessToken();
-            $newToken = $this->ReadAttributeString('AccessToken');
-            if ($newToken !== '' && $newToken !== $accessToken) {
-                $res = $this->httpRequest($ctxName, $method, $url, $newToken, $jsonBody, $retryKind, $retryFields, $authRetryCount + 1);
-                if (is_array($res)) {
-                    $res['authRetried'] = true;
-                }
-                return $res;
-            }
-            // Wenn Refresh nichts brachte, normal weiter (Fehler wird unten ausgewertet)
-        }
-
         // Zentraler Retry (429 + 5xx) – nicht blockierend
         if ($this->HandleRetriableHttp($retryKind, $retryFields, $statusCode, $httpHeaders)) {
             return [
@@ -955,8 +909,8 @@ Content-Type: application/json
         ];
     }
 
-
-        public function RefreshAccessToken()
+    
+    public function RefreshAccessToken()
     {
         $this->SendDebug('RefreshAccessToken', 'Token-Erneuerung gestartet!', 0);
 
@@ -979,12 +933,9 @@ Content-Type: application/json
         $basic = base64_encode($clientID . ':' . $clientSecret);
         $options = [
             'http' => [
-                'header'        => "Content-Type: application/x-www-form-urlencoded
-"
-                                . "Accept: application/json
-"
-                                . "Authorization: Basic {$basic}
-",
+                'header'        => "Content-Type: application/x-www-form-urlencoded\r\n"
+                                . "Accept: application/json\r\n"
+                                . "Authorization: Basic {$basic}\r\n",
                 'method'        => 'POST',
                 'content'       => $postData,
                 'ignore_errors' => true
@@ -995,22 +946,39 @@ Content-Type: application/json
         $response = @file_get_contents($url, false, $context);
         $data     = json_decode($response ?? '', true);
 
-        if (isset($data['access_token'], $data['refresh_token'])) {
-            $this->WriteAttributeString('AccessToken',  (string)$data['access_token']);
-            $this->WriteAttributeString('RefreshToken', (string)$data['refresh_token']);
+        // Erfolgsfall: mindestens access_token muss da sein
+        if (is_array($data) && isset($data['access_token'])) {
+            $this->WriteAttributeString('AccessToken', (string)$data['access_token']);
 
-            // Refresh-Timer setzen (wenn expires_in vorhanden, sonst konservativ 55min)
-            $expiresIn = isset($data['expires_in']) ? (int)$data['expires_in'] : 0;
+            // refresh_token ist optional – wenn vorhanden, aktualisieren
+            if (isset($data['refresh_token']) && is_string($data['refresh_token']) && $data['refresh_token'] !== '') {
+                $this->WriteAttributeString('RefreshToken', (string)$data['refresh_token']);
+            }
+
+            // Token-Refresh-Timer setzen (expires_in abzüglich Sicherheits-Puffer)
+            $expiresIn = isset($data['expires_in']) && is_numeric($data['expires_in']) ? (int)$data['expires_in'] : 0;
             $refreshIn = ($expiresIn > 0) ? max(60, $expiresIn - 300) : (55 * 60);
             $this->SetTimerInterval('TokenRefreshTimer', $refreshIn * 1000);
 
-            $mask = fn($t) => substr($t, 0, 6) . '...' . substr($t, -4);
-            $this->SendDebug('RefreshAccessToken', '✅ Token erneuert (acc=' . $mask((string)$data['access_token']) . ', ref=' . $mask((string)$data['refresh_token']) . ', refreshIn=' . $refreshIn . 's)', 0);
-        } else {
-            $this->SendDebug('RefreshAccessToken', '❌ Token-Erneuerung fehlgeschlagen! Antwort: ' . ($response ?: '(leer)'), 0);
-            $this->LogMessage('RefreshAccessToken - fehlgeschlagen!', KL_ERROR);
+            $mask = fn($t) => (strlen((string)$t) <= 10) ? '***' : (substr((string)$t, 0, 6) . '...' . substr((string)$t, -4));
+            $this->SendDebug(
+                'RefreshAccessToken',
+                '✅ Token erneuert (acc=' . $mask((string)$data['access_token'])
+                . ', ref=' . (isset($data['refresh_token']) ? $mask((string)$data['refresh_token']) : '(unverändert)')
+                . ', refreshIn=' . $refreshIn . 's)',
+                0
+            );
+            return;
         }
+
+        // Fehlerfall: Debug + optional in 5 Minuten nochmal versuchen (falls RefreshToken vorhanden)
+        $this->SendDebug('RefreshAccessToken', '❌ Token-Erneuerung fehlgeschlagen! Antwort: ' . ($response ?: '(leer)'), 0);
+        $this->LogMessage('RefreshAccessToken - fehlgeschlagen!', KL_ERROR);
+
+        // sanfter Retry in 5 Minuten (nicht zu aggressiv)
+        $this->SetTimerInterval('TokenRefreshTimer', 5 * 60 * 1000);
     }
+
 
 
     public function FetchVehicleData()
@@ -1294,45 +1262,21 @@ Content-Type: application/json
     private function setSafe(string $ident, int $varType, $value, string $profile = '', int $pos = 0, bool $createIfMissing = true): void
     {
         $id = @($this->GetIDForIdent($ident));
-        $wasCreated = false;
-
         if (!$id) {
-            if (!$createIfMissing) {
-                return; // nichts anlegen, nur zuweisen wenn vorhanden
-            }
-
-            $cap = ($caption !== '') ? $caption : $this->prettyName($ident);
-
+            if (!$createIfMissing) return; // nichts anlegen, nur zuweisen wenn vorhanden
             switch ($varType) {
-                case VARIABLETYPE_BOOLEAN: $this->RegisterVariableBoolean($ident, $cap, $profile, $pos); break;
-                case VARIABLETYPE_INTEGER: $this->RegisterVariableInteger($ident, $cap, $profile, $pos); break;
-                case VARIABLETYPE_FLOAT:   $this->RegisterVariableFloat($ident,   $cap, $profile, $pos); break;
-                case VARIABLETYPE_STRING:  $this->RegisterVariableString($ident,  $cap, $profile, $pos); break;
-                default:                   $this->RegisterVariableString($ident,  $cap, $profile, $pos); break;
+                case VARIABLETYPE_BOOLEAN: $this->RegisterVariableBoolean($ident, $this->prettyName($ident), $profile, $pos); break;
+                case VARIABLETYPE_INTEGER: $this->RegisterVariableInteger($ident, $this->prettyName($ident), $profile, $pos); break;
+                case VARIABLETYPE_FLOAT:   $this->RegisterVariableFloat($ident,   $this->prettyName($ident), $profile, $pos); break;
+                case VARIABLETYPE_STRING:  $this->RegisterVariableString($ident,  $this->prettyName($ident), $profile, $pos); break;
             }
-
-            $id = @($this->GetIDForIdent($ident));
-            $wasCreated = (bool)$id;
         }
-
-        if ($profile !== '' && $id) {
-            @IPS_SetVariableCustomProfile($id, $profile);
-        }
-
         $this->SetValue($ident, $value);
-
-        if ($wasCreated && $created !== null) {
-            $out = $value;
-            if (is_object($out) || is_array($out)) {
-                $out = json_encode($out, JSON_UNESCAPED_UNICODE);
-            }
-            $created[$ident] = $out;
-        }
     }
     
     private function ApplySignal(string $code, array $body, ?array $status, array &$created, array &$skipped): void
     {
-        $mi2km = self::MI_TO_KM;
+        $mi2km = 1.609344;
 
         // erkennt "echten" Payload vs. reine Statusmeldungen
         $hasPayload = static function(array $b): bool {
@@ -1361,11 +1305,10 @@ Content-Type: application/json
             return $g; // z.B. UNAVAILABLE, KNOWN_ISSUE, ...
         };
 
-        // Variablen-Setter, der Neu-Anlagen in $created sammelt (wie in 3.5)
+        // Variablen-Setter, der Neu-Anlagen in $created sammelt
         $setSafe = function (string $ident, int $type, string $caption, string $profile, $value) use (&$created) {
             $id = @$this->GetIDForIdent($ident);
             $wasCreated = false;
-
             if (!$id) {
                 switch ($type) {
                     case VARIABLETYPE_BOOLEAN: $this->RegisterVariableBoolean($ident, $caption, $profile, 0); break;
@@ -1376,11 +1319,9 @@ Content-Type: application/json
                 $id = $this->GetIDForIdent($ident);
                 $wasCreated = true;
             }
-
             if ($profile !== '') {
                 @IPS_SetVariableCustomProfile($id, $profile);
             }
-
             $this->SetValue($ident, $value);
 
             if ($wasCreated) {
@@ -1934,29 +1875,24 @@ Content-Type: application/json
     public function FetchChargeLimit()  { $this->FetchSingleEndpoint('/charge/limit'); }
     public function FetchChargeStatus() { $this->FetchSingleEndpoint('/charge'); }
 
-        private function FetchSingleEndpoint(string $path, int $authRetryCount = 0)
+    private function FetchSingleEndpoint(string $path)
     {
         $accessToken = $this->ReadAttributeString('AccessToken');
 
-        // VehicleID aus Cache bevorzugen
+        // Cache bevorzugen
         $vehicleID = $this->ReadAttributeString('VehicleID');
         if ($vehicleID === '') {
             $vehicleID = $this->GetVehicleID($accessToken);
         }
-
         if ($accessToken === '' || $vehicleID === null || $vehicleID === '') {
             $this->SendDebug('FetchSingleEndpoint', '❌ Access Token oder VehicleID fehlt!', 0);
-            $this->LogMessage('FetchSingleEndpoint - Access Token oder VehicleID fehlt!', KL_ERROR);
-            return false;
+            return;
         }
 
         $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID$path";
-
         $options = [
             'http' => [
-                'header'        => "Authorization: Bearer $accessToken
-Accept: application/json
-",
+                'header'        => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
                 'method'        => 'GET',
                 'ignore_errors' => true
             ]
@@ -1964,17 +1900,17 @@ Accept: application/json
 
         $this->SendDebug('FetchSingleEndpoint', "API-Anfrage: " . json_encode([
             'url'    => $url,
-            'method' => 'GET',
-            'header' => $options['http']['header']
+            'method' => $options['http']['method'],
+            'header' => $options['http']['header'],
+            'body'   => null
         ], JSON_PRETTY_PRINT), 0);
 
         $context  = stream_context_create($options);
         $response = @file_get_contents($url, false, $context);
-
         if ($response === false) {
             $this->SendDebug('FetchSingleEndpoint', '❌ Keine Antwort von der API!', 0);
             $this->LogMessage('FetchSingleEndpoint - Keine Antwort von der API!', KL_ERROR);
-            return false;
+            return;
         }
 
         $httpHeaders = $http_response_header ?? [];
@@ -1986,35 +1922,25 @@ Accept: application/json
             $this->DebugHttpHeaders($httpHeaders, $statusCode);
         }
 
-        // 401: AccessToken abgelaufen/ungültig -> Refresh + 1x sofort retry
-        if ($statusCode === 401 && $authRetryCount < 1) {
-            $this->SendDebug('FetchSingleEndpoint', '🔄 HTTP 401 – versuche AccessToken zu erneuern und Anfrage zu wiederholen...', 0);
-            $this->RefreshAccessToken();
-            $newToken = $this->ReadAttributeString('AccessToken');
-            if ($newToken !== '' && $newToken !== $accessToken) {
-                return $this->FetchSingleEndpoint($path, $authRetryCount + 1);
-            }
+        if ($this->HandleRetriableHttp('single', ['path' => $path], $statusCode, $httpHeaders)) {
+            return;
         }
 
         $data = json_decode($response, true);
-
         if ($statusCode !== 200) {
-            $msg = $this->GetHttpErrorDetails($statusCode, is_array($data) ? $data : []);
+            $msg = $this->GetHttpErrorDetails($statusCode, $data ?? []);
             $this->SendDebug('FetchSingleEndpoint', "❌ Fehler: $msg", 0);
             $this->LogMessage("FetchSingleEndpoint - $msg", KL_ERROR);
-            return false;
+            return;
         }
 
-        if (!is_array($data)) {
+        if (!empty($data)) {
+            $this->ProcessResponse($path, $data);
+        } else {
             $this->SendDebug('FetchSingleEndpoint', '❌ Unerwartete Antwortstruktur.', 0);
             $this->LogMessage('FetchSingleEndpoint - Unerwartete Antwortstruktur', KL_ERROR);
-            return false;
         }
-
-        $this->ProcessResponse($path, $data);
-        return true;
     }
-
 
     private function GetHttpErrorDetails(int $statusCode, array $data): string
     {
@@ -2243,5 +2169,58 @@ Accept: application/json
         } else {
             @$this->UnregisterVariable('SetLockStatus');
         }
+    }
+
+    private function GetScopeMaps(): array
+    {
+        static $maps;
+        if ($maps !== null) {
+            return $maps;
+        }
+
+        // Zentrale Definition (eine Quelle)
+        $defs = [
+            // prop                    => [scope, path]
+            'ScopeReadVehicleInfo'     => ['read_vehicle_info', '/'],
+            'ScopeReadVIN'             => ['read_vin', '/vin'],
+            'ScopeReadLocation'        => ['read_location', '/location'],
+            'ScopeReadTires'           => ['read_tires', '/tires/pressure'],
+            'ScopeReadOdometer'        => ['read_odometer', '/odometer'],
+            'ScopeReadBattery'         => ['read_battery', '/battery'],
+            'ScopeReadBatteryCapacity' => ['read_battery', '/battery/nominal_capacity'],
+            'ScopeReadFuel'            => ['read_fuel', '/fuel'],
+            'ScopeReadSecurity'        => ['read_security', '/security'],
+            'ScopeReadChargeStatus'    => ['read_charge', '/charge'],
+            'ScopeReadChargeLimit'     => ['read_charge', '/charge/limit'],
+            'ScopeReadOilLife'         => ['read_engine_oil', '/engine/oil'],
+
+            // CONTROL
+            'SetChargeLimit'           => ['control_charge', '/charge/limit'],
+            'SetChargeStatus'          => ['control_charge', '/charge'],
+            'SetLockStatus'            => ['control_security', '/security'],
+        ];
+
+        $maps = [
+            'READ_SCOPES'     => [],
+            'PROP_TO_PATH'    => [],
+            'PROP_TO_SCOPE'   => [],
+            'SCOPE_TO_PATHS'  => [],
+        ];
+
+        foreach ($defs as $prop => [$scope, $path]) {
+            $maps['PROP_TO_PATH'][$prop]  = $path;
+            $maps['PROP_TO_SCOPE'][$prop] = $scope;
+
+            if (str_starts_with($scope, 'read_')) {
+                $maps['READ_SCOPES'][$scope] = true;
+            }
+
+            $maps['SCOPE_TO_PATHS'][$scope][] = $path;
+        }
+
+        // READ_SCOPES als sauberes Array
+        $maps['READ_SCOPES'] = array_keys($maps['READ_SCOPES']);
+
+        return $maps;
     }
 }
