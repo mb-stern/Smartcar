@@ -140,12 +140,9 @@ class Smartcar extends IPSModuleStrict
         $hookAddress = 'smartcar_' . $this->InstanceID;
         $hookPath    = '/hook/' . $hookAddress;
 
-        // ✅ IPSModuleStrict: Hook registrieren (kein WebHook-Control-Gefummel mehr!)
-        //$this->RegisterHook($hookAddress);
-
         $this->SendDebug('ApplyChanges', "Hook-Pfad aktiv: $hookPath", 0);
 
-        // Redirect-URI wie gehabt
+        // Redirect-URI
         $manual = trim($this->ReadPropertyString('ManualRedirectURI'));
         if ($manual !== '') {
             $effectiveRedirect = $manual;
