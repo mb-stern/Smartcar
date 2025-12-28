@@ -2,6 +2,32 @@
 
 class Smartcar extends IPSModuleStrict
 {
+    // === Konstanten / Registry ===
+    private const ENDPOINTS = [
+        // propIdent                  => [scope, path, pathsForScope?]
+        'ScopeReadVehicleInfo'     => ['scope' => 'read_vehicle_info', 'path' => '/',                        'paths' => ['/']],
+        'ScopeReadVIN'             => ['scope' => 'read_vin',          'path' => '/vin',                     'paths' => ['/vin']],
+        'ScopeReadLocation'        => ['scope' => 'read_location',     'path' => '/location',                'paths' => ['/location']],
+        'ScopeReadTires'           => ['scope' => 'read_tires',        'path' => '/tires/pressure',          'paths' => ['/tires/pressure']],
+        'ScopeReadOdometer'        => ['scope' => 'read_odometer',     'path' => '/odometer',                'paths' => ['/odometer']],
+        'ScopeReadBattery'         => ['scope' => 'read_battery',      'path' => '/battery',                 'paths' => ['/battery', '/battery/nominal_capacity']],
+        'ScopeReadBatteryCapacity' => ['scope' => 'read_battery',      'path' => '/battery/nominal_capacity','paths' => ['/battery', '/battery/nominal_capacity']],
+        'ScopeReadFuel'            => ['scope' => 'read_fuel',         'path' => '/fuel',                    'paths' => ['/fuel']],
+        'ScopeReadSecurity'        => ['scope' => 'read_security',     'path' => '/security',                'paths' => ['/security']],
+        'ScopeReadChargeStatus'    => ['scope' => 'read_charge',       'path' => '/charge',                  'paths' => ['/charge', '/charge/limit']],
+        'ScopeReadChargeLimit'     => ['scope' => 'read_charge',       'path' => '/charge/limit',            'paths' => ['/charge', '/charge/limit']],
+        'ScopeReadOilLife'         => ['scope' => 'read_engine_oil',   'path' => '/engine/oil',              'paths' => ['/engine/oil']],
+
+        // CONTROL (keine paths-Liste nötig – aber gleiche Struktur tut nicht weh)
+        'SetChargeLimit'           => ['scope' => 'control_charge',    'path' => '/charge/limit',            'paths' => []],
+        'SetChargeStatus'          => ['scope' => 'control_charge',    'path' => '/charge',                  'paths' => []],
+        'SetLockStatus'            => ['scope' => 'control_security',  'path' => '/security',                'paths' => []],
+    ];
+
+    private const MAX_RETRY_ATTEMPTS = 3;
+    private const RETRYABLE_STATUS   = [429, 500, 502, 503, 504];
+    private const MI_TO_KM           = 1.609344;
+
     public function Create(): void
     {
         parent::Create();
@@ -96,18 +122,18 @@ class Smartcar extends IPSModuleStrict
     {
         switch ($Ident) {
             case 'SetChargeLimit':
-                $this->SetChargeLimit($Value / 100);
-                $this->SetValue($Ident, $Value);
+                $this->SetChargeLimit(((float)$Value) / 100);
+                $this->SetValue($Ident, (float)$Value);
                 break;
 
             case 'SetChargeStatus':
-                $this->SetChargeStatus($Value);
-                $this->SetValue($Ident, $Value);
+                $this->SetChargeStatus((bool)$Value);
+                $this->SetValue($Ident, (bool)$Value);
                 break;
 
             case 'SetLockStatus':
-                $this->SetLockStatus($Value);
-                $this->SetValue($Ident, $Value);
+                $this->SetLockStatus((bool)$Value);
+                $this->SetValue($Ident, (bool)$Value);
                 break;
 
             default:
@@ -240,10 +266,7 @@ class Smartcar extends IPSModuleStrict
 
     private function HandleRetriableHttp(string $kind, array $jobFields, int $statusCode, array $headers, ?int $attempt = null): bool
     {
-        // Inline statt Konstante
-        $retryableStatus = [429, 500, 502, 503, 504];
-
-        if (!in_array($statusCode, $retryableStatus, true)) {
+        if (!in_array($statusCode, self::RETRYABLE_STATUS, true)) {
             return false;
         }
 
@@ -276,15 +299,16 @@ class Smartcar extends IPSModuleStrict
 
     private function getEnabledScopes(): array
     {
-        $set = [];
-        foreach ($this->endpoints() as $prop => $meta) {
+        $scopes = [];
+        foreach (self::ENDPOINTS as $prop => $meta) {
             if ($this->ReadPropertyBoolean($prop)) {
-                $set[$meta['scope']] = true;
+                $scopes[$meta['scope']] = true; // Set wie Map
             }
         }
-        return array_keys($set);
+        return array_keys($scopes);
     }
 
+    /** Liefert NUR aktivierte Read-Scopes (ohne control_*). */
     private function getEnabledReadScopes(): array
     {
         return array_values(array_filter(
@@ -293,13 +317,15 @@ class Smartcar extends IPSModuleStrict
         ));
     }
 
+    /** Liefert alle API-Paths, die aus den aktivierten Read-Checkboxen resultieren (für Batch). */
     private function getEnabledReadPaths(): array
     {
         $paths = [];
-        foreach ($this->endpoints() as $prop => $meta) {
+        foreach (self::ENDPOINTS as $prop => $meta) {
             if (!$this->ReadPropertyBoolean($prop)) {
                 continue;
             }
+            // Nur Read-Endpoints in den Batch aufnehmen
             if (!str_starts_with($meta['scope'], 'read_')) {
                 continue;
             }
@@ -318,16 +344,13 @@ class Smartcar extends IPSModuleStrict
 
     private function ScheduleHttpRetry(array $job, int $delaySeconds): void
     {
-        // Inline statt Konstante
-        $maxRetryAttempts = 3;
-
         // Versuchszähler robust erhöhen
         $job['attempt'] = (int)($job['attempt'] ?? 0) + 1;
 
-        if ($job['attempt'] > $maxRetryAttempts) {
+        if ($job['attempt'] > self::MAX_RETRY_ATTEMPTS) {
             $this->SendDebug('Retry', 'Abgebrochen (max attempts erreicht).', 0);
             // Erst jetzt als Error ins Log
-            $this->LogMessage('HTTP 429: Max. Wiederholversuche erreicht für ' . json_encode($job, JSON_UNESCAPED_SLASHES), KL_ERROR);
+            $this->LogMessage('HTTP 429: Max. Wiederholversuche erreicht für '.json_encode($job, JSON_UNESCAPED_SLASHES), KL_ERROR);
             return;
         }
 
@@ -773,7 +796,7 @@ class Smartcar extends IPSModuleStrict
         return null;
     }
 
-    private function RequestAccessToken(string $authCode): bool
+        private function RequestAccessToken(string $authCode): bool
     {
         $clientID     = $this->ReadPropertyString('ClientID');
         $clientSecret = $this->ReadPropertyString('ClientSecret');
@@ -797,7 +820,9 @@ class Smartcar extends IPSModuleStrict
 
         $opts = [
             'http' => [
-                'header'        => "Content-Type: application/x-www-form-urlencoded\r\nAccept: application/json\r\n",
+                'header'        => "Content-Type: application/x-www-form-urlencoded
+Accept: application/json
+",
                 'method'        => 'POST',
                 'content'       => $postData,
                 'ignore_errors' => true
@@ -815,6 +840,11 @@ class Smartcar extends IPSModuleStrict
             // VehicleID leeren; neues Konto/Fahrzeug möglich
             $this->WriteAttributeString('VehicleID', '');
 
+            // Refresh-Timer setzen (wenn expires_in vorhanden, sonst konservativ 55min)
+            $expiresIn = isset($data['expires_in']) ? (int)$data['expires_in'] : 0;
+            $refreshIn = ($expiresIn > 0) ? max(60, $expiresIn - 300) : (55 * 60);
+            $this->SetTimerInterval('TokenRefreshTimer', $refreshIn * 1000);
+
             // Maskiert loggen
             $mask = function(string $t): string {
                 $l = strlen($t);
@@ -822,7 +852,7 @@ class Smartcar extends IPSModuleStrict
             };
             $this->SendDebug(
                 'RequestAccessToken',
-                '✅ Tokens gespeichert (acc=' . $mask($data['access_token']) . ', ref=' . $mask($data['refresh_token']) . ')',
+                '✅ Tokens gespeichert (acc=' . $mask((string)$data['access_token']) . ', ref=' . $mask((string)$data['refresh_token']) . ', refreshIn=' . $refreshIn . 's)',
                 0
             );
 
@@ -837,21 +867,24 @@ class Smartcar extends IPSModuleStrict
         return false;
     }
 
-    private function httpRequest(
+        private function httpRequest(
         string $ctxName,
         string $method,
         string $url,
         string $accessToken,
         ?array $jsonBody,
         string $retryKind,
-        array $retryFields
+        array $retryFields,
+        int $authRetryCount = 0
     ): ?array {
 
         $body = ($jsonBody !== null) ? json_encode($jsonBody) : null;
 
         $options = [
             'http' => [
-                'header'        => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
+                'header'        => "Authorization: Bearer $accessToken
+Content-Type: application/json
+",
                 'method'        => strtoupper($method),
                 'ignore_errors' => true
             ]
@@ -885,6 +918,21 @@ class Smartcar extends IPSModuleStrict
             $this->DebugHttpHeaders($httpHeaders, $statusCode);
         }
 
+        // 401: AccessToken abgelaufen/ungültig -> Refresh + 1x sofort retry
+        if ($statusCode === 401 && $authRetryCount < 1) {
+            $this->SendDebug($ctxName, '🔄 HTTP 401 – versuche AccessToken zu erneuern und Anfrage zu wiederholen...', 0);
+            $this->RefreshAccessToken();
+            $newToken = $this->ReadAttributeString('AccessToken');
+            if ($newToken !== '' && $newToken !== $accessToken) {
+                $res = $this->httpRequest($ctxName, $method, $url, $newToken, $jsonBody, $retryKind, $retryFields, $authRetryCount + 1);
+                if (is_array($res)) {
+                    $res['authRetried'] = true;
+                }
+                return $res;
+            }
+            // Wenn Refresh nichts brachte, normal weiter (Fehler wird unten ausgewertet)
+        }
+
         // Zentraler Retry (429 + 5xx) – nicht blockierend
         if ($this->HandleRetriableHttp($retryKind, $retryFields, $statusCode, $httpHeaders)) {
             return [
@@ -907,7 +955,8 @@ class Smartcar extends IPSModuleStrict
         ];
     }
 
-    public function RefreshAccessToken()
+
+        public function RefreshAccessToken()
     {
         $this->SendDebug('RefreshAccessToken', 'Token-Erneuerung gestartet!', 0);
 
@@ -930,9 +979,12 @@ class Smartcar extends IPSModuleStrict
         $basic = base64_encode($clientID . ':' . $clientSecret);
         $options = [
             'http' => [
-                'header'        => "Content-Type: application/x-www-form-urlencoded\r\n"
-                                . "Accept: application/json\r\n"
-                                . "Authorization: Basic {$basic}\r\n",
+                'header'        => "Content-Type: application/x-www-form-urlencoded
+"
+                                . "Accept: application/json
+"
+                                . "Authorization: Basic {$basic}
+",
                 'method'        => 'POST',
                 'content'       => $postData,
                 'ignore_errors' => true
@@ -944,16 +996,22 @@ class Smartcar extends IPSModuleStrict
         $data     = json_decode($response ?? '', true);
 
         if (isset($data['access_token'], $data['refresh_token'])) {
-            $this->WriteAttributeString('AccessToken',  $data['access_token']);
-            $this->WriteAttributeString('RefreshToken', $data['refresh_token']);
+            $this->WriteAttributeString('AccessToken',  (string)$data['access_token']);
+            $this->WriteAttributeString('RefreshToken', (string)$data['refresh_token']);
+
+            // Refresh-Timer setzen (wenn expires_in vorhanden, sonst konservativ 55min)
+            $expiresIn = isset($data['expires_in']) ? (int)$data['expires_in'] : 0;
+            $refreshIn = ($expiresIn > 0) ? max(60, $expiresIn - 300) : (55 * 60);
+            $this->SetTimerInterval('TokenRefreshTimer', $refreshIn * 1000);
 
             $mask = fn($t) => substr($t, 0, 6) . '...' . substr($t, -4);
-            $this->SendDebug('RefreshAccessToken', '✅ Token erneuert (acc=' . $mask($data['access_token']) . ', ref=' . $mask($data['refresh_token']) . ')', 0);
+            $this->SendDebug('RefreshAccessToken', '✅ Token erneuert (acc=' . $mask((string)$data['access_token']) . ', ref=' . $mask((string)$data['refresh_token']) . ', refreshIn=' . $refreshIn . 's)', 0);
         } else {
             $this->SendDebug('RefreshAccessToken', '❌ Token-Erneuerung fehlgeschlagen! Antwort: ' . ($response ?: '(leer)'), 0);
             $this->LogMessage('RefreshAccessToken - fehlgeschlagen!', KL_ERROR);
         }
     }
+
 
     public function FetchVehicleData()
     {
@@ -1233,13 +1291,15 @@ class Smartcar extends IPSModuleStrict
         return preg_replace('/([a-z])([A-Z])/', '$1 $2', $ident);
     }
 
-    private function setSafe( string $ident, int $varType, $value, string $caption = '', string $profile = '', int $pos = 0, bool $createIfMissing = true, ?array &$created = null): void
+    private function setSafe(string $ident, int $varType, $value, string $profile = '', int $pos = 0, bool $createIfMissing = true): void
     {
         $id = @($this->GetIDForIdent($ident));
         $wasCreated = false;
 
         if (!$id) {
-            if (!$createIfMissing) return;
+            if (!$createIfMissing) {
+                return; // nichts anlegen, nur zuweisen wenn vorhanden
+            }
 
             $cap = ($caption !== '') ? $caption : $this->prettyName($ident);
 
@@ -1247,6 +1307,7 @@ class Smartcar extends IPSModuleStrict
                 case VARIABLETYPE_BOOLEAN: $this->RegisterVariableBoolean($ident, $cap, $profile, $pos); break;
                 case VARIABLETYPE_INTEGER: $this->RegisterVariableInteger($ident, $cap, $profile, $pos); break;
                 case VARIABLETYPE_FLOAT:   $this->RegisterVariableFloat($ident,   $cap, $profile, $pos); break;
+                case VARIABLETYPE_STRING:  $this->RegisterVariableString($ident,  $cap, $profile, $pos); break;
                 default:                   $this->RegisterVariableString($ident,  $cap, $profile, $pos); break;
             }
 
@@ -1262,22 +1323,22 @@ class Smartcar extends IPSModuleStrict
 
         if ($wasCreated && $created !== null) {
             $out = $value;
-            if (is_array($out) || is_object($out)) {
-                $out = json_encode($out, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            if (is_object($out) || is_array($out)) {
+                $out = json_encode($out, JSON_UNESCAPED_UNICODE);
             }
             $created[$ident] = $out;
         }
     }
-
-    private function ApplySignal(string $code, array $body, $status, array &$created, array &$skipped): void
+    
+    private function ApplySignal(string $code, array $body, ?array $status, array &$created, array &$skipped): void
     {
-        $mi2km = 1.609344;
+        $mi2km = self::MI_TO_KM;
 
         // erkennt "echten" Payload vs. reine Statusmeldungen
-        $hasPayload = static function (array $b): bool {
+        $hasPayload = static function(array $b): bool {
             foreach ([
-                'value', 'values', 'capacity', 'latitude', 'longitude', 'heading',
-                'direction', 'locationType', 'limit', 'isOpen', 'status', 'description'
+                'value','values','capacity','latitude','longitude','heading',
+                'direction','locationType','limit','isOpen'
             ] as $k) {
                 if (array_key_exists($k, $b)) return true;
             }
@@ -1293,9 +1354,9 @@ class Smartcar extends IPSModuleStrict
         }
 
         // Gruppierungsschlüssel für $skipped
-        $group = function () use ($statusValue, $statusErr): string {
+        $group = function() use ($statusValue, $statusErr): string {
             $g = strtoupper((string)($statusErr ?: $statusValue ?: 'OTHER'));
-            if (in_array($g, ['COMPATIBILITY', 'PERMISSION', 'UPSTREAM'], true)) return $g;
+            if (in_array($g, ['COMPATIBILITY','PERMISSION','UPSTREAM'], true)) return $g;
             if ($g === 'ERROR' || $g === '') return 'OTHER';
             return $g; // z.B. UNAVAILABLE, KNOWN_ISSUE, ...
         };
@@ -1318,11 +1379,10 @@ class Smartcar extends IPSModuleStrict
 
         // ====== ab hier nur Pfade mit "echten" Daten ======
         switch (strtolower($code)) {
-
             // ---------- Batterie (HV/EV) ----------
             case 'tractionbattery-stateofcharge':
                 if (isset($body['value'])) {
-                    $this->setSafe('BatteryLevel', VARIABLETYPE_FLOAT, floatval($body['value']), 'Batterieladestand (SOC)', 'SMCAR.Progress', 0, true, $created);
+                    $setSafe('BatteryLevel', VARIABLETYPE_FLOAT, 'Batterieladestand (SOC)', 'SMCAR.Progress', floatval($body['value']));
                 }
                 break;
 
@@ -1331,55 +1391,42 @@ class Smartcar extends IPSModuleStrict
                     $val  = floatval($body['value']);
                     $unit = strtolower($body['unit'] ?? 'km');
                     $km   = ($unit === 'miles') ? $val * $mi2km : $val;
-                    $this->setSafe('BatteryRange', VARIABLETYPE_FLOAT, $km, 'Reichweite Batterie', 'SMCAR.Odometer', 0, true, $created);
+                    $setSafe('BatteryRange', VARIABLETYPE_FLOAT, 'Reichweite Batterie', 'SMCAR.Odometer', $km);
                 }
                 break;
 
             case 'tractionbattery-nominalcapacity':
                 if (isset($body['capacity'])) {
-                    $this->setSafe('BatteryCapacity', VARIABLETYPE_FLOAT, floatval($body['capacity']), 'Batteriekapazität', '~Electricity', 0, true, $created);
+                    $setSafe('BatteryCapacity', VARIABLETYPE_FLOAT, 'Batteriekapazität', '~Electricity', floatval($body['capacity']));
                 }
                 break;
-
+            
             case 'tractionbattery-maxrangechargecounter':
-                if (isset($body['value'])) {
-                    $this->setSafe('MaxRangeChargeCounter', VARIABLETYPE_FLOAT, floatval($body['value']), 'Max-Range-Ladezyklen', '', 0, true, $created);
-                }
+                if (isset($body['value'])) $setSafe('MaxRangeChargeCounter', VARIABLETYPE_FLOAT, 'Max-Range-Ladezyklen', '', floatval($body['value']));
                 break;
 
             case 'tractionbattery-nominalcapacities':
-                if (isset($body['values'])) {
-                    $this->setSafe(
-                        'BatteryNominalCapacities',
-                        VARIABLETYPE_STRING,
-                        json_encode($body['values'], JSON_UNESCAPED_UNICODE),
-                        'Nominalkapazitäten',
-                        '',
-                        0,
-                        true,
-                        $created
-                    );
-                }
+                if (isset($body['values'])) $setSafe('BatteryNominalCapacities', VARIABLETYPE_STRING, 'Nominalkapazitäten', '', json_encode($body['values'], JSON_UNESCAPED_UNICODE));
                 break;
 
             // ---------- Laden ----------
             case 'charge-detailedchargingstatus':
                 if (isset($body['value'])) {
-                    $this->setSafe('ChargeStatus', VARIABLETYPE_STRING, $asUpper($body['value']), 'Ladestatus', 'SMCAR.Charge', 0, true, $created);
+                    $setSafe('ChargeStatus', VARIABLETYPE_STRING, 'Ladestatus', 'SMCAR.Charge', $asUpper($body['value']));
                 }
                 break;
 
             case 'charge-ischarging':
                 if (isset($body['value'])) {
                     $is = (bool)$body['value'];
-                    $this->setSafe('IsCharging', VARIABLETYPE_BOOLEAN, $is, 'Lädt', '~Switch', 0, true, $created);
-                    $this->setSafe('ChargeStatus', VARIABLETYPE_STRING, $is ? 'CHARGING' : 'NOT_CHARGING', 'Ladestatus', 'SMCAR.Charge', 0, true, $created);
+                    $setSafe('IsCharging',  VARIABLETYPE_BOOLEAN, 'Lädt', '~Switch', $is);
+                    $setSafe('ChargeStatus', VARIABLETYPE_STRING,  'Ladestatus', 'SMCAR.Charge', $is ? 'CHARGING' : 'NOT_CHARGING');
                 }
                 break;
 
             case 'charge-ischargingcableconnected':
                 if (isset($body['value'])) {
-                    $this->setSafe('PluggedIn', VARIABLETYPE_BOOLEAN, (bool)$body['value'], 'Ladekabel eingesteckt', '~Switch', 0, true, $created);
+                    $setSafe('PluggedIn', VARIABLETYPE_BOOLEAN, 'Ladekabel eingesteckt', '~Switch', (bool)$body['value']);
                 }
                 break;
 
@@ -1387,7 +1434,7 @@ class Smartcar extends IPSModuleStrict
                 if (isset($body['values']) && is_array($body['values'])) {
                     foreach ($body['values'] as $cfg) {
                         if (($cfg['type'] ?? '') === 'global' && isset($cfg['limit'])) {
-                            $this->setSafe('ChargeLimit', VARIABLETYPE_FLOAT, floatval($cfg['limit']), 'Aktuelles Ladelimit', 'SMCAR.Progress', 0, true, $created);
+                            $setSafe('ChargeLimit', VARIABLETYPE_FLOAT, 'Aktuelles Ladelimit', 'SMCAR.Progress', floatval($cfg['limit']));
                             break;
                         }
                     }
@@ -1395,140 +1442,102 @@ class Smartcar extends IPSModuleStrict
                 break;
 
             case 'charge-amperage':
-                if (isset($body['value'])) {
-                    $this->setSafe('ChargeAmperage', VARIABLETYPE_FLOAT, floatval($body['value']), 'Ladestrom (A)', '', 0, true, $created);
-                }
+                if (isset($body['value'])) $setSafe('ChargeAmperage', VARIABLETYPE_FLOAT, 'Ladestrom (A)', '', floatval($body['value']));
                 break;
 
             case 'charge-amperagemax':
             case 'charge-maximumamperage':
-                if (isset($body['value'])) {
-                    $this->setSafe('ChargeAmperageMax', VARIABLETYPE_FLOAT, floatval($body['value']), 'Max. Ladestrom (A)', '', 0, true, $created);
-                }
+                if (isset($body['value'])) $setSafe('ChargeAmperageMax', VARIABLETYPE_FLOAT, 'Max. Ladestrom (A)', '', floatval($body['value']));
                 break;
 
             case 'charge-amperagerequested':
-                if (isset($body['value'])) {
-                    $this->setSafe('ChargeAmperageRequested', VARIABLETYPE_FLOAT, floatval($body['value']), 'Angeforderter Ladestrom (A)', '', 0, true, $created);
-                }
+                if (isset($body['value'])) $setSafe('ChargeAmperageRequested', VARIABLETYPE_FLOAT, 'Angeforderter Ladestrom (A)', '', floatval($body['value']));
                 break;
 
             case 'charge-chargerate':
                 // Einheit je nach OEM (km/h, mi/h, kW…). Wir speichern Rohwert.
-                if (isset($body['value'])) {
-                    $this->setSafe('ChargeRate', VARIABLETYPE_FLOAT, floatval($body['value']), 'Laderate', '', 0, true, $created);
-                }
+                if (isset($body['value'])) $setSafe('ChargeRate', VARIABLETYPE_FLOAT, 'Laderate', '', floatval($body['value']));
                 break;
 
             case 'charge-voltage':
-                if (isset($body['value'])) {
-                    $this->setSafe('ChargeVoltage', VARIABLETYPE_FLOAT, floatval($body['value']), 'Ladespannung (V)', '', 0, true, $created);
-                }
+                if (isset($body['value'])) $setSafe('ChargeVoltage', VARIABLETYPE_FLOAT, 'Ladespannung (V)', '', floatval($body['value']));
                 break;
 
             case 'charge-wattage':
             case 'charge-power':
-                if (isset($body['value'])) {
-                    $this->setSafe('ChargeWattage', VARIABLETYPE_FLOAT, floatval($body['value']), 'Ladeleistung', '~Power', 0, true, $created);
-                }
+                if (isset($body['value'])) $setSafe('ChargeWattage', VARIABLETYPE_FLOAT, 'Ladeleistung', '~Power', floatval($body['value']));
                 break;
 
             case 'charge-energyadded':
                 // meist kWh – falls Unit beiliegt, kannst du optional prüfen
-                if (isset($body['value'])) {
-                    $this->setSafe('ChargeEnergyAdded', VARIABLETYPE_FLOAT, floatval($body['value']), 'Energie hinzugefügt', '~Electricity', 0, true, $created);
-                }
+                if (isset($body['value'])) $setSafe('ChargeEnergyAdded', VARIABLETYPE_FLOAT, 'Energie hinzugefügt', '~Electricity', floatval($body['value']));
                 break;
 
             case 'charge-timetocomplete':
                 if (isset($body['value'])) {
-                    $v = floatval($body['value']); // Dezimalstunden
-                    $h = (int)floor($v);
-                    $m = (int)round(($v - $h) * 60);
-                    if ($m >= 60) { $h++; $m -= 60; }
-                    $time = sprintf('%02d:%02d', $h, $m);
-                    $this->setSafe('ChargeTimeToComplete', VARIABLETYPE_STRING, $time, 'Zeit bis voll', '', 0, true, $created);
+                    $v = floatval($body['value']);   // Dezimal-Uhrzeit
+                    $h = floor($v);
+                    $m = round(($v - $h) * 60);
+                    if ($m === 60) { $h++; $m = 0; }
+
+                    $setSafe(
+                        'ChargeTimeToComplete',
+                        VARIABLETYPE_STRING,
+                        'Fertig geladen',
+                        '',
+                        sprintf('%02d:%02d Uhr', $h, $m)
+                    );
                 }
                 break;
 
-            case 'charge-remainingtime':
-                if (isset($body['value'])) {
-                    $this->setSafe('ChargeRemainingTime', VARIABLETYPE_STRING, (string)$body['value'], 'Verbleibende Ladezeit', '', 0, true, $created);
-                }
-                break;
-
-            case 'charge-remainingtimeinseconds':
-                if (isset($body['value'])) {
-                    $this->setSafe('ChargeRemainingTimeSeconds', VARIABLETYPE_FLOAT, floatval($body['value']), 'Verbleibende Ladezeit (s)', '', 0, true, $created);
-                }
+            case 'charge-fastchargertype':
+                if (isset($body['value'])) $setSafe('FastChargerType', VARIABLETYPE_STRING, 'Schnelllader-Typ', '', (string)$body['value']);
                 break;
 
             case 'charge-isfastchargerpresent':
-                if (isset($body['value'])) {
-                    $this->setSafe('IsFastChargerPresent', VARIABLETYPE_BOOLEAN, (bool)$body['value'], 'Schnelllader erkannt', '~Switch', 0, true, $created);
-                }
+                if (isset($body['value'])) $setSafe('IsFastChargerPresent', VARIABLETYPE_BOOLEAN, 'Schnelllader erkannt', '~Switch', (bool)$body['value']);
                 break;
 
             case 'charge-chargingconnectortype':
-                if (isset($body['value'])) {
-                    $this->setSafe('ChargingConnectorType', VARIABLETYPE_STRING, (string)$body['value'], 'Steckertyp', '', 0, true, $created);
-                }
+                if (isset($body['value'])) $setSafe('ChargingConnectorType', VARIABLETYPE_STRING, 'Steckertyp', '', (string)$body['value']);
                 break;
 
             case 'charge-chargerphases':
-                if (isset($body['value'])) {
-                    $this->setSafe('ChargerPhases', VARIABLETYPE_FLOAT, floatval($body['value']), 'Phasen', '', 0, true, $created);
-                }
+                // je nach OEM: Zahl/Enum – Rohwert speichern
+                if (isset($body['value'])) $setSafe('ChargerPhases', VARIABLETYPE_FLOAT, 'Phasen', '', floatval($body['value']));
                 break;
 
             case 'charge-chargetimers':
-                if (isset($body['values'])) {
-                    $this->setSafe('ChargeTimers', VARIABLETYPE_STRING, json_encode($body['values'], JSON_UNESCAPED_UNICODE), 'Lade-Timer', '', 0, true, $created);
-                }
+                // typischerweise Liste → als JSON ablegen
+                if (isset($body['values'])) $setSafe('ChargeTimers', VARIABLETYPE_STRING, 'Lade-Timer', '', json_encode($body['values'], JSON_UNESCAPED_UNICODE));
                 break;
 
             case 'charge-records':
-                if (isset($body['values'])) {
-                    $this->setSafe('ChargeRecords', VARIABLETYPE_STRING, json_encode($body['values'], JSON_UNESCAPED_UNICODE), 'Lade-Records', '', 0, true, $created);
-                }
+                if (isset($body['values'])) $setSafe('ChargeRecords', VARIABLETYPE_STRING, 'Lade-Records', '', json_encode($body['values'], JSON_UNESCAPED_UNICODE));
                 break;
 
             case 'charge-ischargingcablelatched':
-                if (isset($body['value'])) {
-                    $this->setSafe('IsChargingCableLatched', VARIABLETYPE_BOOLEAN, (bool)$body['value'], 'Ladekabel verriegelt', '~Switch', 0, true, $created);
-                }
+                if (isset($body['value'])) $setSafe('IsChargingCableLatched', VARIABLETYPE_BOOLEAN, 'Ladekabel verriegelt', '~Switch', (bool)$body['value']);
                 break;
 
             case 'charge-ischargingportflapopen':
                 if (array_key_exists('isOpen', $body)) {
-                    $this->setSafe('ChargingPortFlap', VARIABLETYPE_STRING, $body['isOpen'] ? 'OPEN' : 'CLOSED', 'Ladeport-Klappe', 'SMCAR.Status', 0, true, $created);
+                    $setSafe('ChargingPortFlap', VARIABLETYPE_STRING, 'Ladeport-Klappe', 'SMCAR.Status', $body['isOpen'] ? 'OPEN' : 'CLOSED');
                 }
-                break;
-
+                break;     
+                
             case 'charge-chargeportstatuscolor':
             case 'closure-chargeportstatuscolor':
-                if (isset($body['value'])) {
-                    $this->setSafe('ChargingPortStatusColor', VARIABLETYPE_STRING, (string)$body['value'], 'Ladeport-Statusfarbe', '', 0, true, $created);
-                }
-                break;
+                if (isset($body['value'])) $setSafe('ChargingPortStatusColor', VARIABLETYPE_STRING, 'Ladeport-Statusfarbe', '', (string)$body['value']);
+                break;    
 
             // ---------- Standort ----------
             case 'location-preciselocation':
-                if (isset($body['latitude'])) {
-                    $this->setSafe('Latitude', VARIABLETYPE_FLOAT, floatval($body['latitude']), 'Breitengrad', '', 0, true, $created);
-                }
-                if (isset($body['longitude'])) {
-                    $this->setSafe('Longitude', VARIABLETYPE_FLOAT, floatval($body['longitude']), 'Längengrad', '', 0, true, $created);
-                }
-                if (isset($body['heading'])) {
-                    $this->setSafe('Heading', VARIABLETYPE_FLOAT, floatval($body['heading']), 'Fahrtrichtung (°)', '', 0, true, $created);
-                }
-                if (isset($body['direction'])) {
-                    $this->setSafe('Direction', VARIABLETYPE_STRING, $asUpper($body['direction']), 'Himmelsrichtung', '', 0, true, $created);
-                }
-                if (isset($body['locationType'])) {
-                    $this->setSafe('LocationType', VARIABLETYPE_STRING, $asUpper($body['locationType']), 'Standort-Typ', '', 0, true, $created);
-                }
+                if (isset($body['latitude']))     $setSafe('Latitude',     VARIABLETYPE_FLOAT,  'Breitengrad', '', floatval($body['latitude']));
+                if (isset($body['longitude']))    $setSafe('Longitude',    VARIABLETYPE_FLOAT,  'Längengrad',  '', floatval($body['longitude']));
+                if (isset($body['heading']))      $setSafe('Heading',      VARIABLETYPE_FLOAT,  'Fahrtrichtung (°)', '', floatval($body['heading']));
+                if (isset($body['direction']))    $setSafe('Direction',    VARIABLETYPE_STRING, 'Himmelsrichtung',    '', $asUpper($body['direction']));
+                if (isset($body['locationType'])) $setSafe('LocationType', VARIABLETYPE_STRING, 'Standort-Typ',        '', $asUpper($body['locationType']));
                 break;
 
             // ---------- Kilometerstand ----------
@@ -1537,14 +1546,14 @@ class Smartcar extends IPSModuleStrict
                     $val  = floatval($body['value']);
                     $unit = strtolower($body['unit'] ?? 'km');
                     $km   = ($unit === 'miles') ? $val * $mi2km : $val;
-                    $this->setSafe('Odometer', VARIABLETYPE_FLOAT, $km, 'Kilometerstand', 'SMCAR.Odometer', 0, true, $created);
+                    $setSafe('Odometer', VARIABLETYPE_FLOAT, 'Kilometerstand', 'SMCAR.Odometer', $km);
                 }
                 break;
 
             // ---------- Security ----------
             case 'closure-islocked':
                 if (isset($body['value'])) {
-                    $this->setSafe('DoorsLocked', VARIABLETYPE_BOOLEAN, (bool)$body['value'], 'Fahrzeug verriegelt', '~Lock', 0, true, $created);
+                    $setSafe('DoorsLocked', VARIABLETYPE_BOOLEAN, 'Fahrzeug verriegelt', '~Lock', (bool)$body['value']);
                 }
                 break;
 
@@ -1558,68 +1567,121 @@ class Smartcar extends IPSModuleStrict
 
             case 'closure-sunroof':
                 if (array_key_exists('isOpen', $body)) {
-                    $this->setSafe('Sunroof', VARIABLETYPE_STRING, $body['isOpen'] ? 'OPEN' : 'CLOSED', 'Schiebedach', 'SMCAR.Status', 0, true, $created);
+                    $setSafe('Sunroof', VARIABLETYPE_STRING, 'Schiebedach', 'SMCAR.Status', $body['isOpen'] ? 'OPEN' : 'CLOSED');
                 }
                 break;
 
             // ---------- Connectivity ----------
             case 'connectivitystatus-isonline':
                 if (isset($body['value'])) {
-                    $this->setSafe('IsOnline', VARIABLETYPE_BOOLEAN, (bool)$body['value'], 'Online', '~Switch', 0, true, $created);
+                    $setSafe('IsOnline', VARIABLETYPE_BOOLEAN, 'Online', '~Switch', (bool)$body['value']);
                 }
                 break;
 
             case 'connectivitystatus-isasleep':
                 if (isset($body['value'])) {
-                    $this->setSafe('IsAsleep', VARIABLETYPE_BOOLEAN, (bool)$body['value'], 'Schlafmodus', '~Switch', 0, true, $created);
+                    $setSafe('IsAsleep', VARIABLETYPE_BOOLEAN, 'Schlafmodus', '~Switch', (bool)$body['value']);
                 }
                 break;
 
-            // ---------- Tires ----------
+            case 'connectivitystatus-isdigitalkeypaired':
+                if (isset($body['value'])) {
+                    $setSafe('IsDigitalKeyPaired', VARIABLETYPE_BOOLEAN, 'Digitalschlüssel gekoppelt', '~Switch', (bool)$body['value']);
+                }
+                break;
+
+            case 'connectivitysoftware-currentfirmwareversion':
+                if (isset($body['value'])) {
+                    $setSafe('FirmwareVersion', VARIABLETYPE_STRING, 'Firmware-Version', '', (string)$body['value']);
+                }
+                break;
+
+            // ---------- ICE ----------
+            case 'internalcombustionengine-fuellevel':
+                if (isset($body['value'])) {
+                    $setSafe('FuelLevel', VARIABLETYPE_FLOAT, 'Tankfüllstand', 'SMCAR.Progress', floatval($body['value']));
+                }
+                break;
+
+            case 'internalcombustionengine-oillife':
+                if (isset($body['value'])) {
+                    $setSafe('OilLife', VARIABLETYPE_FLOAT, 'Öl-Lebensdauer', 'SMCAR.Progress', floatval($body['value']));
+                }
+                break;
+
+            case 'internalcombustionengine-oilpressure':
+                if (isset($body['value'])) $setSafe('OilPressure', VARIABLETYPE_FLOAT, 'Öldruck', '', floatval($body['value']));
+                break;
+
+            case 'internalcombustionengine-oiltemperature':
+                if (isset($body['value'])) $setSafe('OilTemperature', VARIABLETYPE_FLOAT, 'Öltemperatur', '', floatval($body['value']));
+                break;
+
+            case 'internalcombustionengine-waterinfuel':
+                if (isset($body['value'])) $setSafe('WaterInFuel', VARIABLETYPE_BOOLEAN, 'Wasser im Kraftstoff', '~Switch', (bool)$body['value']);
+                break;
+
+            // --- HVAC / Komfort ---
+            case 'climatecontrol-isheateractive':
+                if (isset($body['value'])) $setSafe('IsHeaterActive', VARIABLETYPE_BOOLEAN, 'Heizung aktiv', '~Switch', (bool)$body['value']);
+                break;
+
+            // --- Tires ---
             case 'tires-pressure':
-                // mögliche Struktur: frontLeft/frontRight/backLeft/backRight (ggf. in kPa/Pa → hier bleibt deine bisherige *0.01 Logik)
-                if (isset($body['frontLeft'])) {
-                    $this->setSafe('TireFrontLeft', VARIABLETYPE_FLOAT, floatval($body['frontLeft']) * 0.01, 'Reifendruck Vorderreifen Links', 'SMCAR.Pressure', 0, true, $created);
-                }
-                if (isset($body['frontRight'])) {
-                    $this->setSafe('TireFrontRight', VARIABLETYPE_FLOAT, floatval($body['frontRight']) * 0.01, 'Reifendruck Vorderreifen Rechts', 'SMCAR.Pressure', 0, true, $created);
-                }
-                if (isset($body['backLeft'])) {
-                    $this->setSafe('TireBackLeft', VARIABLETYPE_FLOAT, floatval($body['backLeft']) * 0.01, 'Reifendruck Hinterreifen Links', 'SMCAR.Pressure', 0, true, $created);
-                }
-                if (isset($body['backRight'])) {
-                    $this->setSafe('TireBackRight', VARIABLETYPE_FLOAT, floatval($body['backRight']) * 0.01, 'Reifendruck Hinterreifen Rechts', 'SMCAR.Pressure', 0, true, $created);
-                }
+                // mögliche Struktur: frontLeft/frontRight/backLeft/backRight ODER Grid/values
+                if (isset($body['frontLeft']))  $setSafe('TireFrontLeft',  VARIABLETYPE_FLOAT, 'Reifendruck Vorderreifen Links',  'SMCAR.Pressure', floatval($body['frontLeft'])  * 0.01);
+                if (isset($body['frontRight'])) $setSafe('TireFrontRight', VARIABLETYPE_FLOAT, 'Reifendruck Vorderreifen Rechts', 'SMCAR.Pressure', floatval($body['frontRight']) * 0.01);
+                if (isset($body['backLeft']))   $setSafe('TireBackLeft',   VARIABLETYPE_FLOAT, 'Reifendruck Hinterreifen Links', 'SMCAR.Pressure', floatval($body['backLeft'])   * 0.01);
+                if (isset($body['backRight']))  $setSafe('TireBackRight',  VARIABLETYPE_FLOAT, 'Reifendruck Hinterreifen Rechts','SMCAR.Pressure', floatval($body['backRight'])  * 0.01);
                 break;
 
             // ---------- Vehicle Identification ----------
             case 'vehicleidentification-vin':
                 if (isset($body['value'])) {
-                    $this->setSafe('VIN', VARIABLETYPE_STRING, (string)$body['value'], 'Fahrgestellnummer (VIN)', '', 0, true, $created);
+                    $setSafe('VIN', VARIABLETYPE_STRING, 'Fahrgestellnummer (VIN)', '', (string)$body['value']);
                 }
                 break;
 
             case 'vehicleidentification-trim':
                 if (isset($body['value'])) {
-                    $this->setSafe('Trim', VARIABLETYPE_STRING, (string)$body['value'], 'Ausstattungslinie (Trim)', '', 0, true, $created);
+                    $setSafe('Trim', VARIABLETYPE_STRING, 'Ausstattungslinie (Trim)', '', (string)$body['value']);
                 }
                 break;
 
             case 'vehicleidentification-exteriorcolor':
                 if (isset($body['value'])) {
-                    $this->setSafe('ExteriorColor', VARIABLETYPE_STRING, (string)$body['value'], 'Außenfarbe', '', 0, true, $created);
+                    $setSafe('ExteriorColor', VARIABLETYPE_STRING, 'Außenfarbe', '', (string)$body['value']);
                 }
                 break;
 
             case 'vehicleidentification-packages':
                 if (isset($body['values']) && is_array($body['values'])) {
-                    $this->setSafe('Packages', VARIABLETYPE_STRING, implode(', ', array_map('strval', $body['values'])), 'Pakete', '', 0, true, $created);
+                    $setSafe('Packages', VARIABLETYPE_STRING, 'Pakete', '', implode(', ', array_map('strval', $body['values'])));
                 }
                 break;
 
             case 'vehicleidentification-nickname':
                 if (isset($body['value'])) {
-                    $this->setSafe('Nickname', VARIABLETYPE_STRING, (string)$body['value'], 'Fahrzeug-Spitzname', '', 0, true, $created);
+                    $setSafe('Nickname', VARIABLETYPE_STRING, 'Fahrzeug-Spitzname', '', (string)$body['value']);
+                }
+                break;
+
+            // Synthetische vehicle-Felder (Top-Level) → gleiche Variablen wie Scopes
+            case 'vehicleidentification-make':
+                if (isset($body['value'])) {
+                    $setSafe('VehicleMake', VARIABLETYPE_STRING, 'Fahrzeug Hersteller', '', (string)$body['value']);
+                }
+                break;
+
+            case 'vehicleidentification-model':
+                if (isset($body['value'])) {
+                    $setSafe('VehicleModel', VARIABLETYPE_STRING, 'Fahrzeug Modell', '', (string)$body['value']);
+                }
+                break;
+
+            case 'vehicleidentification-year':
+                if (isset($body['value'])) {
+                    $setSafe('VehicleYear', VARIABLETYPE_INTEGER, 'Fahrzeug Baujahr', '', (int)$body['value']);
                 }
                 break;
 
@@ -1627,20 +1689,18 @@ class Smartcar extends IPSModuleStrict
             default:
                 if (str_starts_with(strtolower($code), 'diagnostics-')) {
                     $ident = $asDiagIdent($code);
-
                     if (isset($body['status']) && $body['status'] !== '') {
-                        $this->setSafe($ident, VARIABLETYPE_STRING, $asUpper($body['status']), 'Diagnose ' . $ident, 'SMCAR.Health', 0, true, $created);
+                        $setSafe($ident, VARIABLETYPE_STRING, 'Diagnose ' . $ident, 'SMCAR.Health', $asUpper($body['status']));
                     }
                     if (isset($body['description']) && $body['description'] !== '') {
-                        $this->setSafe($ident . '_Desc', VARIABLETYPE_STRING, (string)$body['description'], 'Diagnose Beschreibung ' . $ident, '', 0, true, $created);
+                        $setSafe($ident . '_Desc', VARIABLETYPE_STRING, 'Diagnose Beschreibung ' . $ident, '', (string)$body['description']);
                     }
-
                     $low = strtolower($code);
                     if (str_ends_with($low, 'dtccount') && isset($body['value'])) {
-                        $this->setSafe('Diag_DTCCount', VARIABLETYPE_INTEGER, intval($body['value']), 'Diagnose DTC Count', '', 0, true, $created);
+                        $setSafe('Diag_DTCCount', VARIABLETYPE_INTEGER, 'Diagnose DTC Count', '', intval($body['value']));
                     }
                     if (str_ends_with($low, 'dtclist') && isset($body['values'])) {
-                        $this->setSafe('Diag_DTCList', VARIABLETYPE_STRING, json_encode($body['values'], JSON_UNESCAPED_UNICODE), 'Diagnose DTC Liste', '', 0, true, $created);
+                        $setSafe('Diag_DTCList', VARIABLETYPE_STRING, 'Diagnose DTC Liste', '', json_encode($body['values'], JSON_UNESCAPED_UNICODE));
                     }
                     break;
                 }
@@ -1649,13 +1709,12 @@ class Smartcar extends IPSModuleStrict
                 if (array_key_exists('value', $body)) {
                     $ident = 'Sig_' . strtoupper(preg_replace('~[^A-Za-z0-9]+~', '_', $code));
                     $val   = $body['value'];
-
                     if (is_bool($val)) {
-                        $this->setSafe($ident, VARIABLETYPE_BOOLEAN, $val, $code, '~Switch', 0, true, $created);
+                        $setSafe($ident, VARIABLETYPE_BOOLEAN, $code, '~Switch', $val);
                     } elseif (is_numeric($val)) {
-                        $this->setSafe($ident, VARIABLETYPE_FLOAT, floatval($val), $code, '', 0, true, $created);
+                        $setSafe($ident, VARIABLETYPE_FLOAT, $code, '', floatval($val));
                     } else {
-                        $this->setSafe($ident, VARIABLETYPE_STRING, (string)$val, $code, '', 0, true, $created);
+                        $setSafe($ident, VARIABLETYPE_STRING, $code, '', (string)$val);
                     }
                 } else {
                     // exotischer Payload ohne verwertbare Felder → als STATUS_ONLY gruppieren
@@ -1846,24 +1905,29 @@ class Smartcar extends IPSModuleStrict
     public function FetchChargeLimit()  { $this->FetchSingleEndpoint('/charge/limit'); }
     public function FetchChargeStatus() { $this->FetchSingleEndpoint('/charge'); }
 
-    private function FetchSingleEndpoint(string $path)
+        private function FetchSingleEndpoint(string $path, int $authRetryCount = 0)
     {
         $accessToken = $this->ReadAttributeString('AccessToken');
 
-        // Cache bevorzugen
+        // VehicleID aus Cache bevorzugen
         $vehicleID = $this->ReadAttributeString('VehicleID');
         if ($vehicleID === '') {
             $vehicleID = $this->GetVehicleID($accessToken);
         }
+
         if ($accessToken === '' || $vehicleID === null || $vehicleID === '') {
             $this->SendDebug('FetchSingleEndpoint', '❌ Access Token oder VehicleID fehlt!', 0);
-            return;
+            $this->LogMessage('FetchSingleEndpoint - Access Token oder VehicleID fehlt!', KL_ERROR);
+            return false;
         }
 
         $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID$path";
+
         $options = [
             'http' => [
-                'header'        => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
+                'header'        => "Authorization: Bearer $accessToken
+Accept: application/json
+",
                 'method'        => 'GET',
                 'ignore_errors' => true
             ]
@@ -1871,17 +1935,17 @@ class Smartcar extends IPSModuleStrict
 
         $this->SendDebug('FetchSingleEndpoint', "API-Anfrage: " . json_encode([
             'url'    => $url,
-            'method' => $options['http']['method'],
-            'header' => $options['http']['header'],
-            'body'   => null
+            'method' => 'GET',
+            'header' => $options['http']['header']
         ], JSON_PRETTY_PRINT), 0);
 
         $context  = stream_context_create($options);
         $response = @file_get_contents($url, false, $context);
+
         if ($response === false) {
             $this->SendDebug('FetchSingleEndpoint', '❌ Keine Antwort von der API!', 0);
             $this->LogMessage('FetchSingleEndpoint - Keine Antwort von der API!', KL_ERROR);
-            return;
+            return false;
         }
 
         $httpHeaders = $http_response_header ?? [];
@@ -1893,25 +1957,35 @@ class Smartcar extends IPSModuleStrict
             $this->DebugHttpHeaders($httpHeaders, $statusCode);
         }
 
-        if ($this->HandleRetriableHttp('single', ['path' => $path], $statusCode, $httpHeaders)) {
-            return;
+        // 401: AccessToken abgelaufen/ungültig -> Refresh + 1x sofort retry
+        if ($statusCode === 401 && $authRetryCount < 1) {
+            $this->SendDebug('FetchSingleEndpoint', '🔄 HTTP 401 – versuche AccessToken zu erneuern und Anfrage zu wiederholen...', 0);
+            $this->RefreshAccessToken();
+            $newToken = $this->ReadAttributeString('AccessToken');
+            if ($newToken !== '' && $newToken !== $accessToken) {
+                return $this->FetchSingleEndpoint($path, $authRetryCount + 1);
+            }
         }
 
         $data = json_decode($response, true);
+
         if ($statusCode !== 200) {
-            $msg = $this->GetHttpErrorDetails($statusCode, $data ?? []);
+            $msg = $this->GetHttpErrorDetails($statusCode, is_array($data) ? $data : []);
             $this->SendDebug('FetchSingleEndpoint', "❌ Fehler: $msg", 0);
             $this->LogMessage("FetchSingleEndpoint - $msg", KL_ERROR);
-            return;
+            return false;
         }
 
-        if (!empty($data)) {
-            $this->ProcessResponse($path, $data);
-        } else {
+        if (!is_array($data)) {
             $this->SendDebug('FetchSingleEndpoint', '❌ Unerwartete Antwortstruktur.', 0);
             $this->LogMessage('FetchSingleEndpoint - Unerwartete Antwortstruktur', KL_ERROR);
+            return false;
         }
+
+        $this->ProcessResponse($path, $data);
+        return true;
     }
+
 
     private function GetHttpErrorDetails(int $statusCode, array $data): string
     {
@@ -2140,29 +2214,5 @@ class Smartcar extends IPSModuleStrict
         } else {
             @$this->UnregisterVariable('SetLockStatus');
         }
-    }
-
-    private function endpoints(): array
-    {
-        return [
-        // READ
-        'ScopeReadVehicleInfo'     => ['scope' => 'read_vehicle_info', 'path' => '/',                         'paths' => ['/']],
-        'ScopeReadVIN'             => ['scope' => 'read_vin',          'path' => '/vin',                      'paths' => ['/vin']],
-        'ScopeReadLocation'        => ['scope' => 'read_location',     'path' => '/location',                 'paths' => ['/location']],
-        'ScopeReadTires'           => ['scope' => 'read_tires',        'path' => '/tires/pressure',           'paths' => ['/tires/pressure']],
-        'ScopeReadOdometer'        => ['scope' => 'read_odometer',     'path' => '/odometer',                 'paths' => ['/odometer']],
-        'ScopeReadBattery'         => ['scope' => 'read_battery',      'path' => '/battery',                  'paths' => ['/battery', '/battery/nominal_capacity']],
-        'ScopeReadBatteryCapacity' => ['scope' => 'read_battery',      'path' => '/battery/nominal_capacity', 'paths' => ['/battery', '/battery/nominal_capacity']],
-        'ScopeReadFuel'            => ['scope' => 'read_fuel',         'path' => '/fuel',                     'paths' => ['/fuel']],
-        'ScopeReadSecurity'        => ['scope' => 'read_security',     'path' => '/security',                 'paths' => ['/security']],
-        'ScopeReadChargeLimit'     => ['scope' => 'read_charge',       'path' => '/charge/limit',             'paths' => ['/charge', '/charge/limit']],
-        'ScopeReadChargeStatus'    => ['scope' => 'read_charge',       'path' => '/charge',                   'paths' => ['/charge', '/charge/limit']],
-        'ScopeReadOilLife'         => ['scope' => 'read_engine_oil',   'path' => '/engine/oil',               'paths' => ['/engine/oil']],
-
-        // CONTROL (POST)
-        'SetChargeLimit'           => ['scope' => 'control_charge',    'path' => '/charge/limit',             'paths' => []],
-        'SetChargeStatus'          => ['scope' => 'control_charge',    'path' => '/charge',                   'paths' => []],
-        'SetLockStatus'            => ['scope' => 'control_security',  'path' => '/security',                 'paths' => []],
-    ];
     }
 }
