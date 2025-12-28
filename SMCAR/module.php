@@ -1,6 +1,6 @@
 <?php
 
-class Wordclock extends IPSModuleStrict
+class Smartcar extends IPSModuleStrict
 {
     /** Primäre Read-Scopes (ohne Control) */
     private const READ_SCOPES = [
