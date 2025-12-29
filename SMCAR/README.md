@@ -223,7 +223,7 @@ Steuere Fahrzeugfunktionen direkt aus dem WebFront:
 
 | Version | Datum | Änderungen |
 |----------|--------|------------|
-| **3.5** | 28.12.2025 | - Umbau auf IPSModuleStrict und Kompatibilität auf 8.1 hochgesetzt.<br>- Variable für das Ladeende angepasst. Die alte Variable 'Restladezeit' muss gelöscht werden. <br>- Tokenerneuerung verbessert.|
+| **3.5** | 28.12.2025 | - Umbau auf IPSModuleStrict und Kompatibilität auf 8.2 hochgesetzt (Update der Hooks brauchen 8.2 unter Verwendung von IPSModuleStrict).<br>- Variable für das Ladeende angepasst. Die alte Variable 'Restladezeit' muss gelöscht werden. <br>- Tokenerneuerung verbessert.|
 | **3.4** | 21.12.2025 | - Fehlermeldung beim Verbinden des Fahrzeuges behoben.<br>- Automatische Scopeerkennung deaktiviert wegen Problem mit Signalen. Es wurden bei ausgeblendeten Scopes entsprechende Signale blockiert.<br>- Diverse Code Modifikationen |
 | **3.3** | 19.10.2025 | - Beim Erreichen des Rate-Limits wird nach der vorgegebenen Wartezeit der Scope erneut abgefragt.<br>- Verbesserung der Debug- und Error-Ausgabe.<br>- Code überarbeitet.<br>- README neu strukturiert mit getrennten Abschnitten für Scopes & Signals |
 | **3.2** | 14.10.2025 | - Automatische Scopeerkennung verbessert. |
