@@ -1370,6 +1370,32 @@ private function canonicalizePath(string $path): string
                     $setSafe('BatteryCapacity', VARIABLETYPE_FLOAT, 'Batteriekapazität', '~Electricity', floatval($body['capacity']));
                 }
                 break;
+
+            case 'tractionbattery-chargecompletiontime':
+                if (isset($body['value']) && is_numeric($body['value'])) {
+
+                    $decimal = (float)$body['value'];
+
+                    $hours   = (int)floor($decimal);
+                    $minutes = (int)round(($decimal - $hours) * 60);
+
+                    if ($minutes >= 60) {
+                        $minutes -= 60;
+                        $hours++;
+                    }
+                    $hours = $hours % 24;
+
+                    $timeStr = sprintf('%02d:%02d', $hours, $minutes);
+
+                    $setSafe(
+                        'ChargeEndTime',
+                        VARIABLETYPE_STRING,
+                        'Ladeende (Uhrzeit)',
+                        '',
+                        $timeStr
+                    );
+                }
+                break;
             
             case 'tractionbattery-maxrangechargecounter':
                 if (isset($body['value'])) $setSafe('MaxRangeChargeCounter', VARIABLETYPE_FLOAT, 'Max-Range-Ladezyklen', '', floatval($body['value']));
