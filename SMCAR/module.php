@@ -1390,7 +1390,7 @@ private function canonicalizePath(string $path): string
                     $setSafe(
                         'ChargeEndTime',
                         VARIABLETYPE_STRING,
-                        'Ladeende (Uhrzeit)',
+                        'Fertig geladen',
                         '',
                         $timeStr
                     );
