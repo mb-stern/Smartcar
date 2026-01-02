@@ -840,46 +840,71 @@ private function canonicalizePath(string $path): string
     }
 
     private function httpRequest(
-        string $ctxName,
-        string $method,
-        string $url,
-        string $accessToken,
-        ?array $jsonBody,
-        string $retryKind,
-        array $retryFields
+    string $ctxName,
+    string $method,
+    string $url,
+    string $accessToken,
+    ?array $jsonBody,
+    string $retryKind,
+    array $retryFields
     ): ?array {
 
-        $body = ($jsonBody !== null) ? json_encode($jsonBody) : null;
+        $doRequest = function(string $token) use ($ctxName, $method, $url, $jsonBody): array {
+            $body = ($jsonBody !== null) ? json_encode($jsonBody) : null;
 
-        $options = [
-            'http' => [
-                'header'        => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
-                'method'        => strtoupper($method),
-                'ignore_errors' => true
-            ]
-        ];
-        if ($body !== null) {
-            $options['http']['content'] = $body;
-        }
+            $options = [
+                'http' => [
+                    'header'        => "Authorization: Bearer $token\r\nContent-Type: application/json\r\n",
+                    'method'        => strtoupper($method),
+                    'ignore_errors' => true
+                ]
+            ];
+            if ($body !== null) {
+                $options['http']['content'] = $body;
+            }
 
-        $this->SendDebug($ctxName, "API-Anfrage: " . json_encode([
-            'url'    => $url,
-            'method' => $options['http']['method'],
-            'header' => $options['http']['header'],
-            'body'   => $body
-        ], JSON_PRETTY_PRINT), 0);
+            $this->SendDebug($ctxName, "API-Anfrage: " . json_encode([
+                'url'    => $url,
+                'method' => $options['http']['method'],
+                'header' => $options['http']['header'],
+                'body'   => $body
+            ], JSON_PRETTY_PRINT), 0);
 
-        $context  = stream_context_create($options);
-        $response = @file_get_contents($url, false, $context);
+            $context  = stream_context_create($options);
+            $response = @file_get_contents($url, false, $context);
 
-        if ($response === false) {
+            // WICHTIG: file_get_contents kann false liefern -> wir behandeln das als "keine Antwort"
+            if ($response === false) {
+                return [
+                    'response'   => false,
+                    'headers'    => ($http_response_header ?? []),
+                    'statusCode' => 0
+                ];
+            }
+
+            $httpHeaders = $http_response_header ?? [];
+            $statusCode  = $this->GetStatusCodeFromHeaders($httpHeaders);
+
+            return [
+                'response'   => $response,
+                'headers'    => $httpHeaders,
+                'statusCode' => $statusCode
+            ];
+        };
+
+        // 1) Request mit aktuellem Token
+        $r1 = $doRequest($accessToken);
+
+        // Keine Antwort (Netz/HTTP stack)
+        if ($r1['response'] === false) {
             $this->SendDebug($ctxName, '❌ Keine Antwort von der API!', 0);
             $this->LogMessage("$ctxName - Keine Antwort von der API!", KL_ERROR);
             return null;
         }
 
-        $httpHeaders = $http_response_header ?? [];
-        $statusCode  = $this->GetStatusCodeFromHeaders($httpHeaders);
+        $httpHeaders = $r1['headers'];
+        $statusCode  = (int)$r1['statusCode'];
+        $response    = (string)$r1['response'];
 
         $this->DebugJsonAntwort($ctxName, $response, $statusCode);
         $this->LogRateLimitIfAny($statusCode, $httpHeaders);
@@ -887,7 +912,49 @@ private function canonicalizePath(string $path): string
             $this->DebugHttpHeaders($httpHeaders, $statusCode);
         }
 
-        // Zentraler Retry (429 + 5xx) – nicht blockierend
+        // 2) 🔥 NEU: Auto-Refresh bei 401 und Request 1x wiederholen
+        if ($statusCode === 401) {
+            $refreshToken = $this->ReadAttributeString('RefreshToken');
+
+            if ($refreshToken !== '') {
+                $this->SendDebug($ctxName, '🔄 401 Unauthorized → versuche AccessToken automatisch zu erneuern…', 0);
+
+                $ok = $this->RefreshAccessToken(); // aktualisiert Attribute + Timer
+                if ($ok) {
+                    $newToken = $this->ReadAttributeString('AccessToken');
+
+                    if ($newToken !== '' && $newToken !== $accessToken) {
+                        $this->SendDebug($ctxName, '🔁 Wiederhole API-Request mit neuem AccessToken…', 0);
+
+                        $r2 = $doRequest($newToken);
+
+                        if ($r2['response'] === false) {
+                            $this->SendDebug($ctxName, '❌ Keine Antwort nach Token-Refresh!', 0);
+                            $this->LogMessage("$ctxName - Keine Antwort nach Token-Refresh!", KL_ERROR);
+                            return null;
+                        }
+
+                        $httpHeaders = $r2['headers'];
+                        $statusCode  = (int)$r2['statusCode'];
+                        $response    = (string)$r2['response'];
+
+                        $this->DebugJsonAntwort($ctxName, $response, $statusCode);
+                        $this->LogRateLimitIfAny($statusCode, $httpHeaders);
+                        if ($statusCode !== 200) {
+                            $this->DebugHttpHeaders($httpHeaders, $statusCode);
+                        }
+                    } else {
+                        $this->SendDebug($ctxName, '⚠️ Token-Refresh meldet OK, aber neuer Token fehlt/gleich geblieben.', 0);
+                    }
+                } else {
+                    $this->SendDebug($ctxName, '❌ Auto-Refresh fehlgeschlagen → vermutlich neu verbinden nötig.', 0);
+                }
+            } else {
+                $this->SendDebug($ctxName, '⚠️ 401, aber kein RefreshToken vorhanden → neu verbinden nötig.', 0);
+            }
+        }
+
+        // 3) Zentraler Retry (429 + 5xx) – nicht blockierend
         if ($this->HandleRetriableHttp($retryKind, $retryFields, $statusCode, $httpHeaders)) {
             return [
                 'retried'    => true,
@@ -909,8 +976,7 @@ private function canonicalizePath(string $path): string
         ];
     }
 
-    
-    public function RefreshAccessToken()
+    public function RefreshAccessToken(): bool
     {
         $this->SendDebug('RefreshAccessToken', 'Token-Erneuerung gestartet!', 0);
 
@@ -921,7 +987,7 @@ private function canonicalizePath(string $path): string
         if ($clientID === '' || $clientSecret === '' || $refreshToken === '') {
             $this->SendDebug('RefreshAccessToken', '❌ Fehlende Zugangsdaten!', 0);
             $this->LogMessage('RefreshAccessToken - Fehlende Zugangsdaten!', KL_ERROR);
-            return;
+            return false;
         }
 
         $url = 'https://auth.smartcar.com/oauth/token';
@@ -947,7 +1013,9 @@ private function canonicalizePath(string $path): string
         $data     = json_decode($response ?? '', true);
 
         // Erfolgsfall: mindestens access_token muss da sein
-        if (is_array($data) && isset($data['access_token'])) {
+        if (is_array($data) && isset($data['access_token']) && is_string($data['access_token']) && $data['access_token'] !== '') {
+            $oldAcc = $this->ReadAttributeString('AccessToken');
+
             $this->WriteAttributeString('AccessToken', (string)$data['access_token']);
 
             // refresh_token ist optional – wenn vorhanden, aktualisieren
@@ -965,10 +1033,12 @@ private function canonicalizePath(string $path): string
                 'RefreshAccessToken',
                 '✅ Token erneuert (acc=' . $mask((string)$data['access_token'])
                 . ', ref=' . (isset($data['refresh_token']) ? $mask((string)$data['refresh_token']) : '(unverändert)')
-                . ', refreshIn=' . $refreshIn . 's)',
+                . ', refreshIn=' . $refreshIn . 's'
+                . ', changed=' . (($oldAcc !== (string)$data['access_token']) ? 'yes' : 'no') . ')',
                 0
             );
-            return;
+
+            return true;
         }
 
         // Fehlerfall: Debug + optional in 5 Minuten nochmal versuchen (falls RefreshToken vorhanden)
@@ -977,9 +1047,8 @@ private function canonicalizePath(string $path): string
 
         // sanfter Retry in 5 Minuten (nicht zu aggressiv)
         $this->SetTimerInterval('TokenRefreshTimer', 5 * 60 * 1000);
+        return false;
     }
-
-
 
     public function FetchVehicleData()
     {
@@ -1074,47 +1143,42 @@ private function canonicalizePath(string $path): string
         $cached = $this->ReadAttributeString('VehicleID');
         if ($cached !== '') return $cached;
 
-        $maxRetries = 1;
+        if ($accessToken === '') {
+            $this->SendDebug('GetVehicleID', '❌ AccessToken leer.', 0);
+            return null;
+        }
+
         $url = 'https://api.smartcar.com/v2.0/vehicles';
-        $options = [
-            'http' => [
-                'header'        => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
-                'method'        => 'GET',
-                'ignore_errors' => true
-            ]
-        ];
-        $res = @file_get_contents($url, false, stream_context_create($options));
 
-        $httpHeaders = $http_response_header ?? [];
-        $statusCode  = $this->GetStatusCodeFromHeaders($httpHeaders);
+        $res = $this->httpRequest(
+            'GetVehicleID',
+            'GET',
+            $url,
+            $accessToken,
+            null,
+            'getVehicleID',
+            []
+        );
 
-        $data = json_decode($res ?? '', true);
+        if ($res === null) return null;
+        if (!empty($res['retried'])) return null; // Timer übernimmt
 
-        $this->DebugJsonAntwort('GetVehicleID', $res, $statusCode);
-        $this->LogRateLimitIfAny($statusCode, $httpHeaders);
+        $statusCode = (int)$res['statusCode'];
+        $data       = $res['data'] ?? [];
+
         if ($statusCode !== 200) {
-            $this->DebugHttpHeaders($httpHeaders, $statusCode);
-        }
-
-        if ($this->HandleRetriableHttp('getVehicleID', [], $statusCode, $httpHeaders)) {
+            $msg = $this->GetHttpErrorDetails($statusCode, is_array($data) ? $data : []);
+            $this->SendDebug('GetVehicleID', "❌ Fehler: $msg", 0);
             return null;
         }
 
-        if ($statusCode === 401 && $retryCount < $maxRetries) {
-            $this->SendDebug('GetVehicleID', '401 → versuche Refresh + Retry', 0);
-            $this->RefreshAccessToken();
-            $newToken = $this->ReadAttributeString('AccessToken');
-            if ($newToken !== '') return $this->GetVehicleID($newToken, $retryCount + 1);
-            return null;
-        }
-
-        if (isset($data['vehicles'][0])) {
+        if (is_array($data) && isset($data['vehicles'][0])) {
             $vehicleId = (string)$data['vehicles'][0];
             $this->WriteAttributeString('VehicleID', $vehicleId);
             return $vehicleId;
         }
 
-        $this->SendDebug('GetVehicleID', 'Keine Fahrzeug-ID gefunden! HTTP=' . $statusCode . ' Body=' . ($res ?: '(leer)'), 0);
+        $this->SendDebug('GetVehicleID', 'Keine Fahrzeug-ID gefunden! HTTP=' . $statusCode . ' Body=' . json_encode($data), 0);
         return null;
     }
 
@@ -1910,57 +1974,43 @@ private function canonicalizePath(string $path): string
         if ($vehicleID === '') {
             $vehicleID = $this->GetVehicleID($accessToken);
         }
+
         if ($accessToken === '' || $vehicleID === null || $vehicleID === '') {
             $this->SendDebug('FetchSingleEndpoint', '❌ Access Token oder VehicleID fehlt!', 0);
             return;
         }
 
         $url = "https://api.smartcar.com/v2.0/vehicles/$vehicleID$path";
-        $options = [
-            'http' => [
-                'header'        => "Authorization: Bearer $accessToken\r\nContent-Type: application/json\r\n",
-                'method'        => 'GET',
-                'ignore_errors' => true
-            ]
-        ];
 
-        $this->SendDebug('FetchSingleEndpoint', "API-Anfrage: " . json_encode([
-            'url'    => $url,
-            'method' => $options['http']['method'],
-            'header' => $options['http']['header'],
-            'body'   => null
-        ], JSON_PRETTY_PRINT), 0);
+        $res = $this->httpRequest(
+            'FetchSingleEndpoint',
+            'GET',
+            $url,
+            $accessToken,
+            null,
+            'single',
+            ['path' => $path]
+        );
 
-        $context  = stream_context_create($options);
-        $response = @file_get_contents($url, false, $context);
-        if ($response === false) {
-            $this->SendDebug('FetchSingleEndpoint', '❌ Keine Antwort von der API!', 0);
-            $this->LogMessage('FetchSingleEndpoint - Keine Antwort von der API!', KL_ERROR);
+        if ($res === null) {
+            $this->SendDebug('FetchSingleEndpoint', '❌ Keine Antwort.', 0);
             return;
         }
-
-        $httpHeaders = $http_response_header ?? [];
-        $statusCode  = $this->GetStatusCodeFromHeaders($httpHeaders);
-
-        $this->DebugJsonAntwort('FetchSingleEndpoint', $response, $statusCode);
-        $this->LogRateLimitIfAny($statusCode, $httpHeaders);
-        if ($statusCode !== 200) {
-            $this->DebugHttpHeaders($httpHeaders, $statusCode);
+        if (!empty($res['retried'])) {
+            return; // Retry wurde geplant
         }
 
-        if ($this->HandleRetriableHttp('single', ['path' => $path], $statusCode, $httpHeaders)) {
-            return;
-        }
+        $statusCode = (int)$res['statusCode'];
+        $data       = $res['data'] ?? [];
 
-        $data = json_decode($response, true);
         if ($statusCode !== 200) {
-            $msg = $this->GetHttpErrorDetails($statusCode, $data ?? []);
+            $msg = $this->GetHttpErrorDetails($statusCode, is_array($data) ? $data : []);
             $this->SendDebug('FetchSingleEndpoint', "❌ Fehler: $msg", 0);
             $this->LogMessage("FetchSingleEndpoint - $msg", KL_ERROR);
             return;
         }
 
-        if (!empty($data)) {
+        if (!empty($data) && is_array($data)) {
             $this->ProcessResponse($path, $data);
         } else {
             $this->SendDebug('FetchSingleEndpoint', '❌ Unerwartete Antwortstruktur.', 0);
@@ -1972,7 +2022,7 @@ private function canonicalizePath(string $path): string
     {
         $errorText = match ($statusCode) {
             400 => 'Ungültige Anfrage an die Smartcar API.',
-            401 => 'Ungültiges Access Token – bitte neu verbinden.',
+            401 => 'Ungültiges Access Token (401). Auto-Refresh wurde versucht – falls weiterhin 401: bitte neu verbinden.',
             403 => 'Keine Berechtigung für diesen API-Endpunkt.',
             404 => 'Fahrzeug oder Ressource nicht gefunden.',
             408 => 'Zeitüberschreitung bei der API-Anfrage.',
