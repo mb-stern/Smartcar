@@ -51,7 +51,7 @@ Diese Adresse muss in Smartcar eingetragen werden unter:
 - Verbindung eines Fahrzeugs über Smartcar (Test- oder Live-Fahrzeug).  
 - Abruf der wichtigsten Fahrzeugdaten über API-Endpunkte.  
 - Steuerung von Funktionen wie Zentralverriegelung oder Ladelimit.  
-- Unterstützung von **Smartcar Signals (Webhooks)** zur automatischen Aktualisierung.  
+- Unterstützung von **Smartcar Signals (Webhooks)** zur automatischen Aktualisierung direkt vom OEM-Backend gepusht.  
 - Automatische Erstellung und Verwaltung der Statusvariablen.  
 - Fehler- und Debug-Ausgaben im Symcon-Debug-Fenster.  
 - Unterstützung mehrerer Fahrzeuge über mehrere Modulinstanzen.  
@@ -223,7 +223,8 @@ Steuere Fahrzeugfunktionen direkt aus dem WebFront:
 
 | Version | Datum | Änderungen |
 |----------|--------|------------|
-| **3.4** | 21.12.2025 | - Fehlermeldung beim Verbinden des Fahrzeuges behoben.<br>- Automatische Scopeerkennung deaktivert wegen Problem mit Signalen. Es wurden bei ausgeblendeten Scopes entsprechende Signale blockiert.<br>- Diverse Code Modifikationen |
+| **3.5** | 28.12.2025 | - Umbau auf IPSModuleStrict und Kompatibilität auf 8.2 hochgesetzt.<br>- Variable für das Ladeende angepasst. Die alte Variable 'Restladezeit' muss gelöscht werden. <br>- Tokenerneuerung verbessert.|
+| **3.4** | 21.12.2025 | - Fehlermeldung beim Verbinden des Fahrzeuges behoben.<br>- Automatische Scopeerkennung deaktiviert wegen Problem mit Signalen. Es wurden bei ausgeblendeten Scopes entsprechende Signale blockiert.<br>- Diverse Code Modifikationen |
 | **3.3** | 19.10.2025 | - Beim Erreichen des Rate-Limits wird nach der vorgegebenen Wartezeit der Scope erneut abgefragt.<br>- Verbesserung der Debug- und Error-Ausgabe.<br>- Code überarbeitet.<br>- README neu strukturiert mit getrennten Abschnitten für Scopes & Signals |
 | **3.2** | 14.10.2025 | - Automatische Scopeerkennung verbessert. |
 | **3.1** | 07.10.2025 | - Neu ist eine automatische Prüfung auf kompatible Scopes im Konfigurationsformular verfügbar.<br>- So werden nur noch kompatible Scopes abgefragt und Fehlermeldungen und überflüssige Abfragen vermieden.<br>- Fehler bei der Abfrage der Batteriekapazität behoben.<br>- Ladeleistung wird jetzt korrekt dargestellt.<br>- Eine Variable mit dem Zeitpunkt der letzten Signale kann im Konfigurationsformular aktiviert werden. |

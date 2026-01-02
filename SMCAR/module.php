@@ -1,82 +1,13 @@
 <?php
 
-class Smartcar extends IPSModule
+class Smartcar extends IPSModuleStrict
 {
-    /** Primäre Read-Scopes (ohne Control) */
-    private const READ_SCOPES = [
-        'read_vehicle_info',
-        'read_vin',
-        'read_location',
-        'read_tires',
-        'read_odometer',
-        'read_battery',
-        'read_fuel',
-        'read_security',
-        'read_charge',
-        'read_engine_oil',
-    ];
-
-    /** Mapping: Scope -> API-Paths (alle Paths, die zur Prüfung/Abfrage dieses Scopes gehören) */
-    private const SCOPE_TO_PATHS = [
-        'read_vehicle_info' => ['/'],
-        'read_vin'          => ['/vin'],
-        'read_location'     => ['/location'],
-        'read_tires'        => ['/tires/pressure'],
-        'read_odometer'     => ['/odometer'],
-        'read_battery'      => ['/battery', '/battery/nominal_capacity'],
-        'read_fuel'         => ['/fuel'],
-        'read_security'     => ['/security'],
-        'read_charge'       => ['/charge', '/charge/limit'],
-        'read_engine_oil'   => ['/engine/oil'],
-    ];
-
-    /** Mapping: Property-Name (Form-Checkbox) -> API-Path (für Batch-Abfrage) */
-    private const PROP_TO_PATH = [
-        'ScopeReadVehicleInfo'     => '/',
-        'ScopeReadVIN'             => '/vin',
-        'ScopeReadLocation'        => '/location',
-        'ScopeReadTires'           => '/tires/pressure',
-        'ScopeReadOdometer'        => '/odometer',
-        'ScopeReadBattery'         => '/battery',
-        'ScopeReadBatteryCapacity' => '/battery/nominal_capacity',
-        'ScopeReadFuel'            => '/fuel',
-        'ScopeReadSecurity'        => '/security',
-        'ScopeReadChargeStatus'    => '/charge',
-        'ScopeReadChargeLimit'     => '/charge/limit',
-        'ScopeReadOilLife'         => '/engine/oil',
-    ];
-
-    /** Mapping: Property-Name (Form-Checkbox) -> benötigter Scope */
-    private const PROP_TO_SCOPE = [
-        // READ
-        'ScopeReadVehicleInfo'     => 'read_vehicle_info',
-        'ScopeReadVIN'             => 'read_vin',
-        'ScopeReadLocation'        => 'read_location',
-        'ScopeReadTires'           => 'read_tires',
-        'ScopeReadOdometer'        => 'read_odometer',
-        'ScopeReadBattery'         => 'read_battery',
-        'ScopeReadBatteryCapacity' => 'read_battery',
-        'ScopeReadFuel'            => 'read_fuel',
-        'ScopeReadSecurity'        => 'read_security',
-        'ScopeReadChargeLimit'     => 'read_charge',
-        'ScopeReadChargeStatus'    => 'read_charge',
-        'ScopeReadOilLife'         => 'read_engine_oil',
-
-        // CONTROL
-        'SetChargeLimit'           => 'control_charge',
-        'SetChargeStatus'          => 'control_charge',
-        'SetLockStatus'            => 'control_security',
-    ];
-
-    // Anzahl Wiederholungen bei Fehler 
-    private const MAX_RETRY_ATTEMPTS = 3;
-
-    /** Statuscodes, die automatisch wiederholt werden */
-    private const RETRYABLE_STATUS = [429, 500, 502, 503, 504];
-
-    public function Create()
+    public function Create(): void
     {
         parent::Create();
+
+        //Webhook registrieren
+        $this->RegisterHook('smartcar_' . $this->InstanceID);
 
         // Allgemeine Eigenschaften
         $this->RegisterPropertyString('ClientID', '');
@@ -129,36 +60,23 @@ class Smartcar extends IPSModule
         $this->RegisterMessage(0, IPS_KERNELMESSAGE);
     }
 
-    public function ApplyChanges()
+    public function ApplyChanges(): void
     {
         parent::ApplyChanges();
 
-        // Hook (WebHook-Control) setzen/aufräumen → /hook/smartcar_<InstanceID>
-        $hookPath = $this->RegisterHook();
+        /// Hook-Adresse (wird zu /hook/<adresse>)
+        $hookAddress = 'smartcar_' . $this->InstanceID;
+        $hookPath    = '/hook/' . $hookAddress;
+
         $this->SendDebug('ApplyChanges', "Hook-Pfad aktiv: $hookPath", 0);
 
-        // Token-Refresh alle 90 Minuten
-        $this->SetTimerInterval('TokenRefreshTimer', 90 * 60 * 1000);
-        $this->SendDebug('ApplyChanges', 'Token-Erneuerungs-Timer auf 90 min gestellt.', 0);
-
-        // Effektive Redirect-URI festlegen (manuell oder ipmagic-Connect + Hook)
+        // Redirect-URI
         $manual = trim($this->ReadPropertyString('ManualRedirectURI'));
         if ($manual !== '') {
-            if (!preg_match('~^https://~i', $manual)) {
-                $this->SendDebug('ApplyChanges', 'Warnung: Manuelle Redirect-URI ohne https:// – wird trotzdem verwendet.', 0);
-            }
             $effectiveRedirect = $manual;
-            $this->SendDebug('ApplyChanges', 'Manuelle Redirect-URI aktiv.', 0);
         } else {
             $effectiveRedirect = $this->BuildConnectURL($hookPath);
-            if ($effectiveRedirect === '') {
-                $this->SendDebug('ApplyChanges', 'Connect-Adresse nicht verfügbar. Redirect-URI bleibt leer.', 0);
-                $this->LogMessage('ApplyChanges - Connect-Adresse konnte nicht ermittelt werden.', KL_ERROR);
-            } else {
-                $this->SendDebug('ApplyChanges', 'Redirect-URI automatisch (Connect+Hook).', 0);
-            }
         }
-
         $this->WriteAttributeString('RedirectURI', $effectiveRedirect);
 
         $this->CreateProfile();
@@ -174,7 +92,7 @@ class Smartcar extends IPSModule
         $this->UpdateVariablesBasedOnScopes();
     }
 
-    public function RequestAction($ident, $value)
+    public function RequestAction(string $Ident, mixed $Value): void
     {
         switch ($ident) {
             case 'SetChargeLimit':
@@ -195,42 +113,6 @@ class Smartcar extends IPSModule
             default:
                 throw new Exception('Invalid ident');
         }
-    }
-
-    private function RegisterHook()
-    {
-        $desired = '/hook/smartcar_' . $this->InstanceID;
-
-        $ids = IPS_GetInstanceListByModuleID('{015A6EB8-D6E5-4B93-B496-0D3F77AE9FE1}');
-        if (count($ids) === 0) {
-            $this->WriteAttributeString('CurrentHook', $desired);
-            $this->SendDebug('RegisterHook', 'Keine WebHook-Control-Instanz gefunden.', 0);
-            return $desired;
-        }
-
-        $hookInstanceID = $ids[0];
-        $hooks = json_decode(IPS_GetProperty($hookInstanceID, 'Hooks'), true);
-        if (!is_array($hooks)) $hooks = [];
-
-        // alte/kaputte Mappings entfernen
-        $clean = [];
-        foreach ($hooks as $h) {
-            $hHook = $h['Hook'] ?? '';
-            $hTarget = $h['TargetID'] ?? 0;
-            if ($hTarget === $this->InstanceID) continue; // von dieser Instanz → entfernen
-            if (preg_match('~^/hook/https?://~i', $hHook)) continue; // kaputte Einträge
-            $clean[] = $h;
-        }
-
-        // unser gewünschtes Mapping hinzufügen
-        $clean[] = ['Hook' => $desired, 'TargetID' => $this->InstanceID];
-
-        IPS_SetProperty($hookInstanceID, 'Hooks', json_encode($clean));
-        IPS_ApplyChanges($hookInstanceID);
-        $this->SendDebug('RegisterHook', "Hook neu registriert: $desired", 0);
-
-        $this->WriteAttributeString('CurrentHook', $desired);
-        return $desired;
     }
 
     private function BuildConnectURL(string $hookPath): string
@@ -258,7 +140,7 @@ class Smartcar extends IPSModule
         return '';
     }
 
-    public function MessageSink($TimeStamp, $SenderID, $Message, $Data)
+    public function MessageSink(int $TimeStamp, int $SenderID, int $Message, array $Data):void
     {
         if ($Message === IPS_KERNELMESSAGE) {
             $runlevel = $Data[0] ?? -1;
@@ -270,8 +152,8 @@ class Smartcar extends IPSModule
         }
     }
 
-    public function GetConfigurationForm()
-{
+    public function GetConfigurationForm(): string
+    {
     $effectiveRedirect = $this->ReadAttributeString('RedirectURI');
 
     $form = [
@@ -353,12 +235,13 @@ class Smartcar extends IPSModule
     ];
 
     return json_encode($form);
-}
+    }
 
 
     private function HandleRetriableHttp(string $kind, array $jobFields, int $statusCode, array $headers, ?int $attempt = null): bool
     {
-        if (!in_array($statusCode, self::RETRYABLE_STATUS, true)) {
+        $retryableStatus = [429, 500, 502, 503, 504]; // inline
+        if (!in_array($statusCode, $retryableStatus, true)) {
             return false;
         }
 
@@ -391,8 +274,10 @@ class Smartcar extends IPSModule
 
     private function getEnabledScopes(): array
     {
+        $maps = $this->GetScopeMaps();
+
         $scopes = [];
-        foreach (self::PROP_TO_SCOPE as $prop => $scope) {
+        foreach ($maps['PROP_TO_SCOPE'] as $prop => $scope) {
             if ($this->ReadPropertyBoolean($prop)) {
                 $scopes[$scope] = true; // Set wie Map
             }
@@ -400,7 +285,7 @@ class Smartcar extends IPSModule
         return array_keys($scopes);
     }
 
-    /** Liefert NUR aktivierte Read-Scopes (ohne control_*). */
+/** Liefert NUR aktivierte Read-Scopes (ohne control_*). */
     private function getEnabledReadScopes(): array
     {
         return array_values(array_filter(
@@ -412,8 +297,10 @@ class Smartcar extends IPSModule
     /** Liefert alle API-Paths, die aus den aktivierten Read-Checkboxen resultieren (für Batch). */
     private function getEnabledReadPaths(): array
     {
+        $maps = $this->GetScopeMaps();
+
         $paths = [];
-        foreach (self::PROP_TO_PATH as $prop => $path) {
+        foreach ($maps['PROP_TO_PATH'] as $prop => $path) {
             if ($this->ReadPropertyBoolean($prop)) {
                 $paths[$this->canonicalizePath($path)] = true;
             }
@@ -421,7 +308,7 @@ class Smartcar extends IPSModule
         return array_keys($paths);
     }
 
-    private function canonicalizePath(string $path): string
+private function canonicalizePath(string $path): string
     {
         $path = trim($path);
         if ($path === '' || $path === '/') return '/';
@@ -434,7 +321,7 @@ class Smartcar extends IPSModule
         // Versuchszähler robust erhöhen
         $job['attempt'] = (int)($job['attempt'] ?? 0) + 1;
 
-        if ($job['attempt'] > self::MAX_RETRY_ATTEMPTS) {
+        if ($job['attempt'] > 3) { // max attempts inline
             $this->SendDebug('Retry', 'Abgebrochen (max attempts erreicht).', 0);
             // Erst jetzt als Error ins Log
             $this->LogMessage('HTTP 429: Max. Wiederholversuche erreicht für '.json_encode($job, JSON_UNESCAPED_SLASHES), KL_ERROR);
@@ -561,7 +448,7 @@ class Smartcar extends IPSModule
         return $url;
     }
 
-    public function ProcessHookData()
+    protected function ProcessHookData(): void
     {
         $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
         $uri    = $_SERVER['REQUEST_URI']     ?? '';
@@ -925,6 +812,11 @@ class Smartcar extends IPSModule
             // VehicleID leeren; neues Konto/Fahrzeug möglich
             $this->WriteAttributeString('VehicleID', '');
 
+
+            // Token-Refresh-Timer setzen (expires_in abzüglich Sicherheits-Puffer)
+            $expiresIn = isset($data['expires_in']) && is_numeric($data['expires_in']) ? (int)$data['expires_in'] : 0;
+            $refreshIn = ($expiresIn > 0) ? max(60, $expiresIn - 300) : (55 * 60);
+            $this->SetTimerInterval('TokenRefreshTimer', $refreshIn * 1000);
             // Maskiert loggen
             $mask = function(string $t): string {
                 $l = strlen($t);
@@ -1017,6 +909,7 @@ class Smartcar extends IPSModule
         ];
     }
 
+    
     public function RefreshAccessToken()
     {
         $this->SendDebug('RefreshAccessToken', 'Token-Erneuerung gestartet!', 0);
@@ -1053,17 +946,40 @@ class Smartcar extends IPSModule
         $response = @file_get_contents($url, false, $context);
         $data     = json_decode($response ?? '', true);
 
-        if (isset($data['access_token'], $data['refresh_token'])) {
-            $this->WriteAttributeString('AccessToken',  $data['access_token']);
-            $this->WriteAttributeString('RefreshToken', $data['refresh_token']);
+        // Erfolgsfall: mindestens access_token muss da sein
+        if (is_array($data) && isset($data['access_token'])) {
+            $this->WriteAttributeString('AccessToken', (string)$data['access_token']);
 
-            $mask = fn($t) => substr($t, 0, 6) . '...' . substr($t, -4);
-            $this->SendDebug('RefreshAccessToken', '✅ Token erneuert (acc=' . $mask($data['access_token']) . ', ref=' . $mask($data['refresh_token']) . ')', 0);
-        } else {
-            $this->SendDebug('RefreshAccessToken', '❌ Token-Erneuerung fehlgeschlagen! Antwort: ' . ($response ?: '(leer)'), 0);
-            $this->LogMessage('RefreshAccessToken - fehlgeschlagen!', KL_ERROR);
+            // refresh_token ist optional – wenn vorhanden, aktualisieren
+            if (isset($data['refresh_token']) && is_string($data['refresh_token']) && $data['refresh_token'] !== '') {
+                $this->WriteAttributeString('RefreshToken', (string)$data['refresh_token']);
+            }
+
+            // Token-Refresh-Timer setzen (expires_in abzüglich Sicherheits-Puffer)
+            $expiresIn = isset($data['expires_in']) && is_numeric($data['expires_in']) ? (int)$data['expires_in'] : 0;
+            $refreshIn = ($expiresIn > 0) ? max(60, $expiresIn - 300) : (55 * 60);
+            $this->SetTimerInterval('TokenRefreshTimer', $refreshIn * 1000);
+
+            $mask = fn($t) => (strlen((string)$t) <= 10) ? '***' : (substr((string)$t, 0, 6) . '...' . substr((string)$t, -4));
+            $this->SendDebug(
+                'RefreshAccessToken',
+                '✅ Token erneuert (acc=' . $mask((string)$data['access_token'])
+                . ', ref=' . (isset($data['refresh_token']) ? $mask((string)$data['refresh_token']) : '(unverändert)')
+                . ', refreshIn=' . $refreshIn . 's)',
+                0
+            );
+            return;
         }
+
+        // Fehlerfall: Debug + optional in 5 Minuten nochmal versuchen (falls RefreshToken vorhanden)
+        $this->SendDebug('RefreshAccessToken', '❌ Token-Erneuerung fehlgeschlagen! Antwort: ' . ($response ?: '(leer)'), 0);
+        $this->LogMessage('RefreshAccessToken - fehlgeschlagen!', KL_ERROR);
+
+        // sanfter Retry in 5 Minuten (nicht zu aggressiv)
+        $this->SetTimerInterval('TokenRefreshTimer', 5 * 60 * 1000);
     }
+
+
 
     public function FetchVehicleData()
     {
@@ -1454,6 +1370,32 @@ class Smartcar extends IPSModule
                     $setSafe('BatteryCapacity', VARIABLETYPE_FLOAT, 'Batteriekapazität', '~Electricity', floatval($body['capacity']));
                 }
                 break;
+
+            case 'tractionbattery-chargecompletiontime':
+                if (isset($body['value']) && is_numeric($body['value'])) {
+
+                    $decimal = (float)$body['value'];
+
+                    $hours   = (int)floor($decimal);
+                    $minutes = (int)round(($decimal - $hours) * 60);
+
+                    if ($minutes >= 60) {
+                        $minutes -= 60;
+                        $hours++;
+                    }
+                    $hours = $hours % 24;
+
+                    $timeStr = sprintf('%02d:%02d', $hours, $minutes);
+
+                    $setSafe(
+                        'ChargeEndTime',
+                        VARIABLETYPE_STRING,
+                        'Fertig geladen',
+                        '',
+                        $timeStr
+                    );
+                }
+                break;
             
             case 'tractionbattery-maxrangechargecounter':
                 if (isset($body['value'])) $setSafe('MaxRangeChargeCounter', VARIABLETYPE_FLOAT, 'Max-Range-Ladezyklen', '', floatval($body['value']));
@@ -1528,8 +1470,20 @@ class Smartcar extends IPSModule
                 break;
 
             case 'charge-timetocomplete':
-                // je nach OEM als Minuten/Sekunden – wir speichern den Rohwert
-                if (isset($body['value'])) $setSafe('ChargeTimeToComplete', VARIABLETYPE_FLOAT, 'Restladezeit', '', floatval($body['value']));
+                if (isset($body['value'])) {
+                    $v = floatval($body['value']);   // Dezimal-Uhrzeit
+                    $h = floor($v);
+                    $m = round(($v - $h) * 60);
+                    if ($m === 60) { $h++; $m = 0; }
+
+                    $setSafe(
+                        'ChargeTimeToComplete',
+                        VARIABLETYPE_STRING,
+                        'Fertig geladen',
+                        '',
+                        sprintf('%02d:%02d Uhr', $h, $m)
+                    );
+                }
                 break;
 
             case 'charge-fastchargertype':
@@ -2241,5 +2195,58 @@ class Smartcar extends IPSModule
         } else {
             @$this->UnregisterVariable('SetLockStatus');
         }
+    }
+
+    private function GetScopeMaps(): array
+    {
+        static $maps;
+        if ($maps !== null) {
+            return $maps;
+        }
+
+        // Zentrale Definition (eine Quelle)
+        $defs = [
+            // prop                    => [scope, path]
+            'ScopeReadVehicleInfo'     => ['read_vehicle_info', '/'],
+            'ScopeReadVIN'             => ['read_vin', '/vin'],
+            'ScopeReadLocation'        => ['read_location', '/location'],
+            'ScopeReadTires'           => ['read_tires', '/tires/pressure'],
+            'ScopeReadOdometer'        => ['read_odometer', '/odometer'],
+            'ScopeReadBattery'         => ['read_battery', '/battery'],
+            'ScopeReadBatteryCapacity' => ['read_battery', '/battery/nominal_capacity'],
+            'ScopeReadFuel'            => ['read_fuel', '/fuel'],
+            'ScopeReadSecurity'        => ['read_security', '/security'],
+            'ScopeReadChargeStatus'    => ['read_charge', '/charge'],
+            'ScopeReadChargeLimit'     => ['read_charge', '/charge/limit'],
+            'ScopeReadOilLife'         => ['read_engine_oil', '/engine/oil'],
+
+            // CONTROL
+            'SetChargeLimit'           => ['control_charge', '/charge/limit'],
+            'SetChargeStatus'          => ['control_charge', '/charge'],
+            'SetLockStatus'            => ['control_security', '/security'],
+        ];
+
+        $maps = [
+            'READ_SCOPES'     => [],
+            'PROP_TO_PATH'    => [],
+            'PROP_TO_SCOPE'   => [],
+            'SCOPE_TO_PATHS'  => [],
+        ];
+
+        foreach ($defs as $prop => [$scope, $path]) {
+            $maps['PROP_TO_PATH'][$prop]  = $path;
+            $maps['PROP_TO_SCOPE'][$prop] = $scope;
+
+            if (str_starts_with($scope, 'read_')) {
+                $maps['READ_SCOPES'][$scope] = true;
+            }
+
+            $maps['SCOPE_TO_PATHS'][$scope][] = $path;
+        }
+
+        // READ_SCOPES als sauberes Array
+        $maps['READ_SCOPES'] = array_keys($maps['READ_SCOPES']);
+
+        return $maps;
     }
 }

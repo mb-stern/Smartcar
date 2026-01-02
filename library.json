@@ -4,9 +4,9 @@
     "author": "Stefan Künzli",
     "url": "https://github.com/mb-stern/Smartcar",
     "compatibility": {
-        "version": "7.0"
+        "version": "8.2"
     },
-    "version": "3.4",
+    "version": "3.5",
     "build": 0,
     "date": 0
 }
