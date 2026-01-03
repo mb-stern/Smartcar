@@ -90,6 +90,17 @@ class Smartcar extends IPSModuleStrict
         }
 
         $this->UpdateVariablesBasedOnScopes();
+
+        // Nach Update/ApplyChanges: Tokenrefresh neu anstoßen (egal wie alt), wenn RefreshToken vorhanden
+        if ($this->ReadAttributeString('RefreshToken') !== '') {
+            $this->SendDebug('Token', 'ApplyChanges -> starte RefreshAccessToken', 0);
+            $this->RefreshAccessToken();
+
+            // Timer danach wieder aktivieren (z.B. alle 55 Minuten)
+            $this->SetTimerInterval('TokenRefreshTimer', 55 * 60 * 1000);
+        } else {
+            $this->SetTimerInterval('TokenRefreshTimer', 0);
+        }
     }
 
     public function RequestAction(string $Ident, mixed $Value): void
@@ -140,14 +151,36 @@ class Smartcar extends IPSModuleStrict
         return '';
     }
 
-    public function MessageSink(int $TimeStamp, int $SenderID, int $Message, array $Data):void
+    public function MessageSink(int $TimeStamp, int $SenderID, int $Message, array $Data): void
     {
-        if ($Message === IPS_KERNELMESSAGE) {
-            $runlevel = $Data[0] ?? -1;
-            if ($runlevel === KR_READY) {
-                if ($this->ReadAttributeString('RefreshToken') !== '') {
-                    $this->RefreshAccessToken();
-                }
+        if ($Message !== IPS_KERNELMESSAGE) {
+            return;
+        }
+
+        $runlevel = $Data[0] ?? -1;
+        $this->SendDebug('Kernel', 'IPS_KERNELMESSAGE runlevel=' . $runlevel, 0);
+
+        // Symcon ist vollständig gestartet
+        if ($runlevel === KR_READY) {
+
+            // Prüfen ob ein RefreshToken vorhanden ist
+            if ($this->ReadAttributeString('RefreshToken') !== '') {
+
+                $this->SendDebug('Token', 'KR_READY -> starte RefreshAccessToken', 0);
+
+                // Token nach Neustart immer neu anfordern (egal wie alt)
+                $this->RefreshAccessToken();
+
+                // Timer danach wieder aktivieren (z.B. alle 55 Minuten)
+                $this->SetTimerInterval('TokenRefreshTimer', 55 * 60 * 1000);
+
+                $this->SendDebug('Token', 'TokenRefreshTimer neu gesetzt (55 Minuten)', 0);
+
+            } else {
+
+                // Kein RefreshToken → Timer aus
+                $this->SetTimerInterval('TokenRefreshTimer', 0);
+                $this->SendDebug('Token', 'KR_READY -> kein RefreshToken vorhanden', 0);
             }
         }
     }
