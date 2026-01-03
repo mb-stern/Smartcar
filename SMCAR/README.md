@@ -61,7 +61,7 @@ Diese Adresse muss in Smartcar eingetragen werden unter:
 
 ## 2. Voraussetzungen
 
-- IP-Symcon ab Version **7.0**  
+- IP-Symcon ab Version **8.2**  
 - Smartcar-Konto mit Test- oder Live-Fahrzeug  
 - Eingetragene Redirect-/Webhook-URI in Smartcar
 
