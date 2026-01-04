@@ -1567,7 +1567,7 @@ private function canonicalizePath(string $path): string
                 break;
 
             case 'charge-timetocomplete':
-                //hier werden unterschiedliche Fäll der Fertig-Zeit beahndelt. Einige kommen als Dezimalzeit und andere als Minuten
+                //Hier werden unterschiedliche Fälle der 'Fertig geladen Zeit' behandelt. Einige kommen als Dezimalzeit und andere als Minuten
                 if (isset($body['value'])) {
 
                     $raw = (string)$body['value'];
