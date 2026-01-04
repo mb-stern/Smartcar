@@ -1568,17 +1568,28 @@ private function canonicalizePath(string $path): string
 
             case 'charge-timetocomplete':
                 if (isset($body['value'])) {
-                    $v = floatval($body['value']);   // Dezimal-Uhrzeit
-                    $h = floor($v);
-                    $m = round(($v - $h) * 60);
-                    if ($m === 60) { $h++; $m = 0; }
+
+                    $raw = (string)$body['value'];
+                    $raw = str_replace(',', '.', $raw);
+
+                    // 👉 Manchmal kommen Dezimalstunden, Manchmal Minuten. Hier wird berechnet
+                    if (strpos($raw, '.') !== false) {
+                        // Dezimalstunden -> Minuten
+                        $minutes = (int)round(((float)$raw) * 60);
+                    } else {
+                        // Minuten
+                        $minutes = (int)$raw;
+                    }
+
+                    // ETA als Uhrzeit ab jetzt
+                    $eta = date('H:i', time() + ($minutes * 60));
 
                     $setSafe(
                         'ChargeTimeToComplete',
                         VARIABLETYPE_STRING,
-                        'Fertig geladen',
+                        'Fertiggeladen',
                         '',
-                        sprintf('%02d:%02d Uhr', $h, $m)
+                        $eta . ' Uhr'
                     );
                 }
                 break;
