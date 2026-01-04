@@ -1205,7 +1205,7 @@ private function canonicalizePath(string $path): string
 
         // --- NEU: 1 Zeile Debug mit OEM-Stand pro Path ---
         if (!empty($oemDateApi)) {
-            $this->SendDebug('OEM-Date(API)', json_encode($oemDateApi, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+            $this->SendDebug('OEM-Daten(API)', json_encode($oemDateApi, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
         }
 
         $this->SendDebug('FetchVehicleData', $hasError ? '⚠️ Teilweise erfolgreich.' : '✅ Alle Endpunkte erfolgreich.', 0);
