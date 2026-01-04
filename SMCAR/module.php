@@ -645,6 +645,30 @@ private function canonicalizePath(string $path): string
                     'OTHER'         => []
                 ];
 
+                // --- NEU: OEM-Zeitpunkte aus Webhook-Signalen (meta.oemUpdatedAt) sammeln ---
+                $oemDateWebhook = [];
+
+                foreach ($signals as $sig) {
+                    $code = $sig['code'] ?? '';
+                    if ($code === '') continue;
+
+                    $meta = is_array($sig['meta'] ?? null) ? $sig['meta'] : [];
+
+                    if (isset($meta['oemUpdatedAt']) && (int)$meta['oemUpdatedAt'] > 0) {
+                        $ts = (int)((int)$meta['oemUpdatedAt'] / 1000); // ms -> s
+                        $oemDateWebhook[$code] = date('Y-m-d H:i', $ts);
+                    } else {
+                        $oemDateWebhook[$code] = 'n/a';
+                    }
+                }
+
+                // --- NEU: 1 Zeile Debug ---
+                $this->SendDebug(
+                    'OEM-Date(Webhook)',
+                    json_encode($oemDateWebhook, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                    0
+                );
+
                 foreach ($signals as $sig) {
                     $code   = $sig['code']   ?? '';
                     $body   = $sig['body']   ?? [];
@@ -1135,12 +1159,24 @@ private function canonicalizePath(string $path): string
 
         $hasError = false;
 
+        $oemDateApi = [];
+
         foreach ($data['responses'] as $resp) {
 
             $path    = (string)($resp['path'] ?? '');
             $scCode  = (int)($resp['code'] ?? 0);
             $headers = is_array($resp['headers'] ?? null) ? $resp['headers'] : [];
 
+            // --- NEU: OEM-Zeitpunkt (sc-data-age) als lokales Datum speichern ---
+            $scDataAge = $headers['sc-data-age'] ?? $headers['SC-DATA-AGE'] ?? null;
+            if ($scDataAge !== null && $scDataAge !== '') {
+                $ts = strtotime((string)$scDataAge); // ISO-Z -> UTC -> Timestamp
+                $oemDateApi[$path] = $ts ? date('Y-m-d H:i', $ts) : 'parse_err';
+            } else {
+                // kein Header (z.B. 429 oder Endpoint ohne Age)
+                if (!isset($oemDateApi[$path])) $oemDateApi[$path] = 'n/a';
+            }
+            
             if ($scCode === 200 && isset($resp['body'])) {
                 $this->ProcessResponse($path, (array)$resp['body']);
                 continue;
@@ -1165,6 +1201,11 @@ private function canonicalizePath(string $path): string
             $fullMsg  = $this->GetHttpErrorDetails($scCode, (array)($resp['body'] ?? $resp));
             $this->SendDebug('FetchVehicleData', "⚠️ Teilfehler für {$path}: $fullMsg", 0);
             $this->LogMessage("FetchVehicleData - Teilfehler für {$path}: $fullMsg", KL_ERROR);
+        }
+
+        // --- NEU: 1 Zeile Debug mit OEM-Stand pro Path ---
+        if (!empty($oemDateApi)) {
+            $this->SendDebug('OEM-Date(API)', json_encode($oemDateApi, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
         }
 
         $this->SendDebug('FetchVehicleData', $hasError ? '⚠️ Teilweise erfolgreich.' : '✅ Alle Endpunkte erfolgreich.', 0);
