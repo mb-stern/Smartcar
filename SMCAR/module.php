@@ -1567,30 +1567,32 @@ private function canonicalizePath(string $path): string
                 break;
 
             case 'charge-timetocomplete':
+                //hier werden unterschiedliche Fäll der Fertig-Zeit beahndelt. Einige kommen als Dezimalzeit und andere als Minuten
                 if (isset($body['value'])) {
 
                     $raw = (string)$body['value'];
                     $raw = str_replace(',', '.', $raw);
 
-                    // 👉 Manchmal kommen Dezimalstunden, Manchmal Minuten. Hier wird berechnet
                     if (strpos($raw, '.') !== false) {
-                        // Dezimalstunden -> Minuten
-                        $minutes = (int)round(((float)$raw) * 60);
+                        // Dezimal-Uhrzeit (Stunden seit Mitternacht), z.B. 22.1166 -> 22:07
+                        $v = (float)$raw;
+                        $h = (int)floor($v);
+                        $m = (int)round(($v - $h) * 60);
+
+                        if ($m >= 60) { $m -= 60; $h++; }
+                        $h = $h % 24;
+
+                        $timeStr = sprintf('%02d:%02d', $h, $m);
                     } else {
-                        // Minuten
-                        $minutes = (int)$raw;
+                        // Minuten seit Mitternacht, z.B. 1335 -> 22:15
+                        $mins = (int)$raw;
+                        $h = intdiv($mins, 60) % 24;
+                        $m = $mins % 60;
+
+                        $timeStr = sprintf('%02d:%02d', $h, $m);
                     }
 
-                    // ETA als Uhrzeit ab jetzt
-                    $eta = date('H:i', time() + ($minutes * 60));
-
-                    $setSafe(
-                        'ChargeTimeToComplete',
-                        VARIABLETYPE_STRING,
-                        'Fertiggeladen',
-                        '',
-                        $eta . ' Uhr'
-                    );
+                    $setSafe('ChargeTimeToComplete', VARIABLETYPE_STRING, 'Fertiggeladen', '', $timeStr . ' Uhr');
                 }
                 break;
 
