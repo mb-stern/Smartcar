@@ -1457,11 +1457,6 @@ private function canonicalizePath(string $path): string
                 $id = $this->GetIDForIdent($ident);
                 $wasCreated = true;
             }
-            /*
-            if ($profile !== '') {
-                @IPS_SetVariableCustomProfile($id, $profile);
-            }
-                */
             $this->SetValue($ident, $value);
 
             if ($wasCreated) {
