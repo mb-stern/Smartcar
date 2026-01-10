@@ -223,6 +223,7 @@ Steuere Fahrzeugfunktionen direkt aus dem WebFront:
 
 | Version | Datum | Änderungen |
 |----------|--------|------------|
+| **3.7** | 10.01.2026 | - Code-Korrektur aufgrund Store-Review.|
 | **3.6** | 04.01.2026 | - Anpassen der Ausgabe für das Ladeende. Die Zeit kommt entweder als Dezimalzeit oder als Minuten.<br>- Zusätzliche Debugausgabe für das Alter der OEM-Daten, teilweise sind diese nicht aktuell.|
 | **3.5** | 02.01.2026 | - Umbau auf IPSModuleStrict und Kompatibilität auf 8.2 hochgesetzt.<br>- Variable für das Ladeende angepasst. Die alte Variable 'Restladezeit' muss gelöscht werden. <br>- Tokenerneuerung verbessert.|
 | **3.4** | 21.12.2025 | - Fehlermeldung beim Verbinden des Fahrzeuges behoben.<br>- Automatische Scopeerkennung deaktiviert wegen Problem mit Signalen. Es wurden bei ausgeblendeten Scopes entsprechende Signale blockiert.<br>- Diverse Code Modifikationen |
