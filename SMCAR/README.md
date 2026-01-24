@@ -223,6 +223,7 @@ Steuere Fahrzeugfunktionen direkt aus dem WebFront:
 
 | Version | Datum | Änderungen |
 |----------|--------|------------|
+| **3.8** | 24.01.2026 | - Fehler beim Senden von Befehlen über die API behoben.|
 | **3.7** | 10.01.2026 | - Code-Korrektur aufgrund Store-Review.|
 | **3.6** | 04.01.2026 | - Anpassen der Ausgabe für das Ladeende. Die Zeit kommt entweder als Dezimalzeit oder als Minuten.<br>- Zusätzliche Debugausgabe für das Alter der OEM-Daten, teilweise sind diese nicht aktuell.|
 | **3.5** | 02.01.2026 | - Umbau auf IPSModuleStrict und Kompatibilität auf 8.2 hochgesetzt.<br>- Variable für das Ladeende angepasst. Die alte Variable 'Restladezeit' muss gelöscht werden. <br>- Tokenerneuerung verbessert.|
