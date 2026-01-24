@@ -105,20 +105,23 @@ class Smartcar extends IPSModuleStrict
 
     public function RequestAction(string $Ident, mixed $Value): void
     {
-        switch ($ident) {
+        switch ($Ident) {
             case 'SetChargeLimit':
-                $this->SetChargeLimit($value / 100);
-                $this->SetValue($ident, $value);
+                // UI-Wert 50–100 % → API erwartet 0.5–1.0 (Smartcar-Doku)
+                $this->SetChargeLimit($Value / 100);
+                $this->SetValue($Ident, $Value);
                 break;
 
             case 'SetChargeStatus':
-                $this->SetChargeStatus($value);
-                $this->SetValue($ident, $value);
+                // Boolean aus ~Switch direkt durchreichen
+                $this->SetChargeStatus((bool)$Value);
+                $this->SetValue($Ident, (bool)$Value);
                 break;
 
             case 'SetLockStatus':
-                $this->SetLockStatus($value);
-                $this->SetValue($ident, $value);
+                // Boolean aus ~Lock direkt durchreichen
+                $this->SetLockStatus((bool)$Value);
+                $this->SetValue($Ident, (bool)$Value);
                 break;
 
             default:
