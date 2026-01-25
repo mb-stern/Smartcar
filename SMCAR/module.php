@@ -115,6 +115,8 @@ class Smartcar extends IPSModuleStrict
                     $Value = 100;
                 }
 
+                $this->SendDebug('SetChargeLimit/RequestAction', "Raw=$raw, stored=$Value, api=" . ($Value/100.0), 0);
+
                 // Smartcar erwartet 0.5–1.0
                 $this->SetChargeLimit($Value / 100.0);
                 $this->SetValue($Ident, $Value);
