@@ -107,21 +107,29 @@ class Smartcar extends IPSModuleStrict
     {
         switch ($Ident) {
             case 'SetChargeLimit':
-                // UI-Wert 50–100 % → API erwartet 0.5–1.0 (Smartcar-Doku)
-                $this->SetChargeLimit($Value / 100);
+                // Nur 50–100 % erlauben
+                $Value = (float)$Value;
+                if ($Value < 50) {
+                    $Value = 50;
+                } elseif ($Value > 100) {
+                    $Value = 100;
+                }
+
+                // Smartcar erwartet 0.5–1.0
+                $this->SetChargeLimit($Value / 100.0);
                 $this->SetValue($Ident, $Value);
                 break;
 
             case 'SetChargeStatus':
-                // Boolean aus ~Switch direkt durchreichen
-                $this->SetChargeStatus((bool)$Value);
-                $this->SetValue($Ident, (bool)$Value);
+                $bool = (bool)$Value;
+                $this->SetChargeStatus($bool);
+                $this->SetValue($Ident, $bool);
                 break;
 
             case 'SetLockStatus':
-                // Boolean aus ~Lock direkt durchreichen
-                $this->SetLockStatus((bool)$Value);
-                $this->SetValue($Ident, (bool)$Value);
+                $bool = (bool)$Value;
+                $this->SetLockStatus($bool);
+                $this->SetValue($Ident, $bool);
                 break;
 
             default:
@@ -228,7 +236,7 @@ class Smartcar extends IPSModuleStrict
                 'caption' => 'Berechtigungen (Scopes)',
                 'items'   => [
                     ['type' => 'Label', 'caption' => 'Zugehörige Variablen werden automatisch erstellt bzw. gelöscht.'],
-                    ['type' => 'Label', 'caption' => 'Keine Kompatibilitätsprüfung aktiv – du wählst die Scopes manuell.'],
+                    ['type' => 'Label', 'caption' => 'Nach der Auswahl der Scopes ist über den Button (*mit Smartcar verbinden*) die Berchtigung zu setzen .'],
 
                     // READ (immer sichtbar)
                     ['type'=>'CheckBox','name'=>'ScopeReadVehicleInfo',     'caption'=>'Fahrzeuginformationen lesen (/)'],
@@ -252,7 +260,6 @@ class Smartcar extends IPSModuleStrict
             ],
         ],
         'actions' => [
-            // ⛔ Button "Auf kompatible Scopes prüfen" ist weg
             ['type' => 'Button', 'caption' => 'Mit Smartcar verbinden', 'onClick' => 'echo SMCAR_GenerateAuthURL($id);'],
             ['type' => 'Button', 'caption' => 'Fahrzeugdaten abrufen', 'onClick' => 'SMCAR_FetchVehicleData($id);'],
             ['type' => 'Label',  'caption' => 'Sag danke und unterstütze den Modulentwickler:'],
@@ -273,39 +280,9 @@ class Smartcar extends IPSModuleStrict
     return json_encode($form);
     }
 
-
     private function HandleRetriableHttp(string $kind, array $jobFields, int $statusCode, array $headers, ?int $attempt = null): bool
     {
-        $retryableStatus = [429, 500, 502, 503, 504]; // inline
-        if (!in_array($statusCode, $retryableStatus, true)) {
-            return false;
-        }
-
-        // Logging (429 separat, 5xx gemeinsam)
-        if ($statusCode === 429) {
-            $this->LogRateLimitIfAny($statusCode, $headers);
-        } else {
-            $this->DebugHttpHeaders($headers, $statusCode); // bereits vorhanden; loggt Fehlerzeile kompakt
-            $this->SendDebug('Retry', "Retrybarer 5xx erkannt ($statusCode).", 0);
-        }
-
-        // Retry-After respektieren; sonst kurzer exponentieller Backoff (gekappte Sekunden)
-        $retryAfter = $this->GetRetryAfterFromHeaders($headers);
-        $delay = $this->ParseRetryAfter($retryAfter);
-        if ($delay === null) {
-            $baseAttempt = max(1, (int)($attempt ?? 0));
-            // 2, 4, 8, 16 … (hart auf 60s gedeckelt; die Schedule-Funktion deckelt zusätzlich global)
-            $delay = min(60, 2 ** $baseAttempt);
-        }
-
-        $job = array_merge(['kind' => $kind], $jobFields);
-        if ($attempt !== null) {
-            // Falls der Aufrufer schon einen Zähler pflegt, mitgeben, damit Schedule robust weiterzählt
-            $job['attempt'] = (int)$attempt;
-        }
-
-        $this->ScheduleHttpRetry($job, (int)$delay);
-        return true;
+        return false;
     }
 
     private function getEnabledScopes(): array
@@ -772,14 +749,18 @@ private function canonicalizePath(string $path): string
 
     private function DebugHttpHeaders(array $headers, ?int $statusCode = null): void 
     {
-        if (empty($headers)) return;
-        $line = implode(' | ', array_map('trim', $headers));
-        $this->SendDebug('HTTP-Headers' . ($statusCode ? " ($statusCode)" : ''), $line, 0);
-
-        // Nur echte Fehler loggen – 429 ist erwartbar und wird retried
-        if ($statusCode !== null && $statusCode >= 400 && $statusCode !== 429) {
-            $this->LogMessage('HTTP-Headers' . " ($statusCode) | " . $line, KL_ERROR);
+        if (empty($headers)) {
+            return;
         }
+
+        $line = implode(' | ', array_map('trim', $headers));
+
+        // Nur in der Debug-Konsole anzeigen
+        $this->SendDebug(
+            'HTTP-Headers' . ($statusCode ? " ($statusCode)" : ''),
+            $line,
+            0
+        );
     }
 
     private function DebugJsonAntwort(string $context, $response, ?int $statusCode = null): void
@@ -1568,7 +1549,7 @@ private function canonicalizePath(string $path): string
                 if (isset($body['values']) && is_array($body['values'])) {
                     foreach ($body['values'] as $cfg) {
                         if (($cfg['type'] ?? '') === 'global' && isset($cfg['limit'])) {
-                            $setSafe('ChargeLimit', VARIABLETYPE_FLOAT, 'Aktuelles Ladelimit', 'SMCAR.Progress', floatval($cfg['limit']));
+                            $setSafe('ChargeLimit', VARIABLETYPE_FLOAT, 'Aktuelles Ladelimit', 'SMCAR.Progress', floatval($cfg['limit']) * 100);
                             break;
                         }
                     }
@@ -2130,56 +2111,76 @@ private function canonicalizePath(string $path): string
 
     private function CreateProfile()
     {
+        // --- Druck (bar) ---
         if (!IPS_VariableProfileExists('SMCAR.Pressure')) {
             IPS_CreateVariableProfile('SMCAR.Pressure', VARIABLETYPE_FLOAT);
-            IPS_SetVariableProfileText('SMCAR.Pressure', '', ' bar');
-            IPS_SetVariableProfileDigits('SMCAR.Pressure', 1);
-            IPS_SetVariableProfileValues('SMCAR.Pressure', 0, 5, 0.1);
         }
+        IPS_SetVariableProfileText('SMCAR.Pressure', '', ' bar');
+        IPS_SetVariableProfileDigits('SMCAR.Pressure', 1);
+        IPS_SetVariableProfileValues('SMCAR.Pressure', 0, 5, 0.1);
 
+        // --- Kilometerstand (km) ---
         if (!IPS_VariableProfileExists('SMCAR.Odometer')) {
             IPS_CreateVariableProfile('SMCAR.Odometer', VARIABLETYPE_FLOAT);
-            IPS_SetVariableProfileText('SMCAR.Odometer', '', ' km');
-            IPS_SetVariableProfileDigits('SMCAR.Odometer', 0);
-            IPS_SetVariableProfileValues('SMCAR.Odometer', 0, 0, 1);
         }
+        IPS_SetVariableProfileText('SMCAR.Odometer', '', ' km');
+        IPS_SetVariableProfileDigits('SMCAR.Odometer', 0);
+        IPS_SetVariableProfileValues('SMCAR.Odometer', 0, 0, 1);
 
+        // --- Prozent allgemein (0–100 %) ---
         if (!IPS_VariableProfileExists('SMCAR.Progress')) {
             IPS_CreateVariableProfile('SMCAR.Progress', VARIABLETYPE_FLOAT);
-            IPS_SetVariableProfileText('SMCAR.Progress', '', ' %');
-            IPS_SetVariableProfileDigits('SMCAR.Progress', 0);
-            IPS_SetVariableProfileValues('SMCAR.Progress', 0, 100, 1);
         }
+        IPS_SetVariableProfileText('SMCAR.Progress', '', ' %');
+        IPS_SetVariableProfileDigits('SMCAR.Progress', 0);
+        IPS_SetVariableProfileValues('SMCAR.Progress', 0, 100, 1);
 
+        // --- Status offen/geschlossen ---
         if (!IPS_VariableProfileExists('SMCAR.Status')) {
             IPS_CreateVariableProfile('SMCAR.Status', VARIABLETYPE_STRING);
-            IPS_SetVariableProfileAssociation('SMCAR.Status', 'OPEN', 'Offen', '', -1);
-            IPS_SetVariableProfileAssociation('SMCAR.Status', 'CLOSED', 'Geschlossen', '', -1);
-            IPS_SetVariableProfileAssociation('SMCAR.Status', 'UNKNOWN', 'Unbekannt', '', -1);
         }
+        // alte Associations leeren
+        $vp = IPS_GetVariableProfile('SMCAR.Status');
+        foreach ($vp['Associations'] as $assoc) {
+            IPS_SetVariableProfileAssociation('SMCAR.Status', $assoc['Value'], '', '', -1);
+        }
+        IPS_SetVariableProfileAssociation('SMCAR.Status', 'OPEN',    'Offen',      '', -1);
+        IPS_SetVariableProfileAssociation('SMCAR.Status', 'CLOSED',  'Geschlossen','', -1);
+        IPS_SetVariableProfileAssociation('SMCAR.Status', 'UNKNOWN', 'Unbekannt',  '', -1);
 
+        // --- Ladestatus (string) ---
         if (!IPS_VariableProfileExists('SMCAR.Charge')) {
             IPS_CreateVariableProfile('SMCAR.Charge', VARIABLETYPE_STRING);
-            IPS_SetVariableProfileAssociation('SMCAR.Charge', 'CHARGING', 'Laden', '', -1);
-            IPS_SetVariableProfileAssociation('SMCAR.Charge', 'FULLY_CHARGED', 'Voll geladen', '', -1);
-            IPS_SetVariableProfileAssociation('SMCAR.Charge', 'NOT_CHARGING', 'Lädt nicht', '', -1);
-            IPS_SetVariableProfileAssociation('SMCAR.Charge', 'UNKNOWN', 'Unbekannt', '', -1);
         }
-        
+        $vp = IPS_GetVariableProfile('SMCAR.Charge');
+        foreach ($vp['Associations'] as $assoc) {
+            IPS_SetVariableProfileAssociation('SMCAR.Charge', $assoc['Value'], '', '', -1);
+        }
+        IPS_SetVariableProfileAssociation('SMCAR.Charge', 'CHARGING',      'Laden',        '', -1);
+        IPS_SetVariableProfileAssociation('SMCAR.Charge', 'FULLY_CHARGED', 'Voll geladen', '', -1);
+        IPS_SetVariableProfileAssociation('SMCAR.Charge', 'NOT_CHARGING',  'Lädt nicht',   '', -1);
+        IPS_SetVariableProfileAssociation('SMCAR.Charge', 'UNKNOWN',       'Unbekannt',    '', -1);
+
+        // --- Health-Status ---
         if (!IPS_VariableProfileExists('SMCAR.Health')) {
             IPS_CreateVariableProfile('SMCAR.Health', VARIABLETYPE_STRING);
-            IPS_SetVariableProfileAssociation('SMCAR.Health', 'OK',      'OK',        '', -1);
-            IPS_SetVariableProfileAssociation('SMCAR.Health', 'WARN',    'Warnung',   '', -1);
-            IPS_SetVariableProfileAssociation('SMCAR.Health', 'ERROR',   'Fehler',    '', -1);
-            IPS_SetVariableProfileAssociation('SMCAR.Health', 'UNKNOWN', 'Unbekannt', '', -1);
         }
+        $vp = IPS_GetVariableProfile('SMCAR.Health');
+        foreach ($vp['Associations'] as $assoc) {
+            IPS_SetVariableProfileAssociation('SMCAR.Health', $assoc['Value'], '', '', -1);
+        }
+        IPS_SetVariableProfileAssociation('SMCAR.Health', 'OK',      'OK',        '', -1);
+        IPS_SetVariableProfileAssociation('SMCAR.Health', 'WARN',    'Warnung',   '', -1);
+        IPS_SetVariableProfileAssociation('SMCAR.Health', 'ERROR',   'Fehler',    '', -1);
+        IPS_SetVariableProfileAssociation('SMCAR.Health', 'UNKNOWN', 'Unbekannt', '', -1);
 
+        // --- Ladelimit setzen (0–100 %) ---
         if (!IPS_VariableProfileExists('SMCAR.ChargeLimitSet')) {
             IPS_CreateVariableProfile('SMCAR.ChargeLimitSet', VARIABLETYPE_FLOAT);
-            IPS_SetVariableProfileText('SMCAR.ChargeLimitSet', '', ' %');
-            IPS_SetVariableProfileDigits('SMCAR.ChargeLimitSet', 0);
-            IPS_SetVariableProfileValues('SMCAR.ChargeLimitSet', 50, 100, 5);
         }
+        IPS_SetVariableProfileText('SMCAR.ChargeLimitSet', '', ' %');
+        IPS_SetVariableProfileDigits('SMCAR.ChargeLimitSet', 0);
+        IPS_SetVariableProfileValues('SMCAR.ChargeLimitSet', 0, 100, 10);
     }
 
     // -------- Variablen je nach Scopes registrieren --------

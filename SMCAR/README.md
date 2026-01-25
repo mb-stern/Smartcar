@@ -87,8 +87,8 @@ Unter *Instanz hinzufügen* das Modul **Smartcar** auswählen.
 | **Application Management Token** | Aus Smartcar (*Configuration*). Wird für VERIFY und Signaturprüfung benötigt. |
 | **Client ID / Secret** | Aus Smartcar (*Configuration*). |
 | **Verbindungsmodus** | *Simuliert* oder *Live*. Bei Wechsel neu verbinden. |
-| **Berechtigungen (Scopes)** | Auswahl der gewünschten API-Endpunkte. Am besten immer alle Berechtigungen holen. Danach können einzelne Scopes von der Abfrage deaktiviert werden, welche Fehler im Log generieren.|
-| **Mit Smartcar verbinden** | Startet den OAuth-Prozess. |
+| **Berechtigungen (Scopes)** | Auswahl der gewünschten Berechtigungen für die Scopes. Am besten immer alle Berechtigungen holen. Danach können einzelne Scopes von der Abfrage deaktiviert werden, welche Fehler im Log/Debug generieren. So kann festgestellt werden, was überhaupt von Samrtcar/OEM unterstützt ist.|
+| **Mit Smartcar verbinden** | Startet den Prozess für die Berechtigung der Scopes. |
 | **Fahrzeugdaten abrufen** | Ruft aktiv alle gewählten Scopes ab. (Achtung: API-Limits beachten) |
 
 ---
@@ -223,7 +223,7 @@ Steuere Fahrzeugfunktionen direkt aus dem WebFront:
 
 | Version | Datum | Änderungen |
 |----------|--------|------------|
-| **3.8** | 24.01.2026 | - Fehler beim Senden von Befehlen über die API behoben.|
+| **3.8** | 25.01.2026 | - Diverse Fehler beim Senden von Befehlen wie endlose Wiederholversuche und falsche Darstellung des Ladelimts behoben.|
 | **3.7** | 10.01.2026 | - Code-Korrektur aufgrund Store-Review.|
 | **3.6** | 04.01.2026 | - Anpassen der Ausgabe für das Ladeende. Die Zeit kommt entweder als Dezimalzeit oder als Minuten.<br>- Zusätzliche Debugausgabe für das Alter der OEM-Daten, teilweise sind diese nicht aktuell.|
 | **3.5** | 02.01.2026 | - Umbau auf IPSModuleStrict und Kompatibilität auf 8.2 hochgesetzt.<br>- Variable für das Ladeende angepasst. Die alte Variable 'Restladezeit' muss gelöscht werden. <br>- Tokenerneuerung verbessert.|
