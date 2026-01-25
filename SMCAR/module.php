@@ -766,14 +766,18 @@ private function canonicalizePath(string $path): string
 
     private function DebugHttpHeaders(array $headers, ?int $statusCode = null): void 
     {
-        if (empty($headers)) return;
-        $line = implode(' | ', array_map('trim', $headers));
-        $this->SendDebug('HTTP-Headers' . ($statusCode ? " ($statusCode)" : ''), $line, 0);
-
-        // Nur echte Fehler loggen – 429 ist erwartbar und wird retried
-        if ($statusCode !== null && $statusCode >= 400 && $statusCode !== 429) {
-            $this->LogMessage('HTTP-Headers' . " ($statusCode) | " . $line, KL_ERROR);
+        if (empty($headers)) {
+            return;
         }
+
+        $line = implode(' | ', array_map('trim', $headers));
+
+        // Nur in der Debug-Konsole anzeigen
+        $this->SendDebug(
+            'HTTP-Headers' . ($statusCode ? " ($statusCode)" : ''),
+            $line,
+            0
+        );
     }
 
     private function DebugJsonAntwort(string $context, $response, ?int $statusCode = null): void
