@@ -107,7 +107,6 @@ class Smartcar extends IPSModuleStrict
     {
         switch ($Ident) {
             case 'SetChargeLimit':
-                $raw = $Value;
                 // Nur 50–100 % erlauben
                 $Value = (float)$Value;
                 if ($Value < 50) {
@@ -115,8 +114,6 @@ class Smartcar extends IPSModuleStrict
                 } elseif ($Value > 100) {
                     $Value = 100;
                 }
-
-                $this->SendDebug('SetChargeLimit/RequestAction', "Raw=$raw, stored=$Value, api=" . ($Value/100.0), 0);
 
                 // Smartcar erwartet 0.5–1.0
                 $this->SetChargeLimit($Value / 100.0);
@@ -2114,56 +2111,76 @@ private function canonicalizePath(string $path): string
 
     private function CreateProfile()
     {
+        // --- Druck (bar) ---
         if (!IPS_VariableProfileExists('SMCAR.Pressure')) {
             IPS_CreateVariableProfile('SMCAR.Pressure', VARIABLETYPE_FLOAT);
-            IPS_SetVariableProfileText('SMCAR.Pressure', '', ' bar');
-            IPS_SetVariableProfileDigits('SMCAR.Pressure', 1);
-            IPS_SetVariableProfileValues('SMCAR.Pressure', 0, 5, 0.1);
         }
+        IPS_SetVariableProfileText('SMCAR.Pressure', '', ' bar');
+        IPS_SetVariableProfileDigits('SMCAR.Pressure', 1);
+        IPS_SetVariableProfileValues('SMCAR.Pressure', 0, 5, 0.1);
 
+        // --- Kilometerstand (km) ---
         if (!IPS_VariableProfileExists('SMCAR.Odometer')) {
             IPS_CreateVariableProfile('SMCAR.Odometer', VARIABLETYPE_FLOAT);
-            IPS_SetVariableProfileText('SMCAR.Odometer', '', ' km');
-            IPS_SetVariableProfileDigits('SMCAR.Odometer', 0);
-            IPS_SetVariableProfileValues('SMCAR.Odometer', 0, 0, 1);
         }
+        IPS_SetVariableProfileText('SMCAR.Odometer', '', ' km');
+        IPS_SetVariableProfileDigits('SMCAR.Odometer', 0);
+        IPS_SetVariableProfileValues('SMCAR.Odometer', 0, 0, 1);
 
+        // --- Prozent allgemein (0–100 %) ---
         if (!IPS_VariableProfileExists('SMCAR.Progress')) {
             IPS_CreateVariableProfile('SMCAR.Progress', VARIABLETYPE_FLOAT);
-            IPS_SetVariableProfileText('SMCAR.Progress', '', ' %');
-            IPS_SetVariableProfileDigits('SMCAR.Progress', 0);
-            IPS_SetVariableProfileValues('SMCAR.Progress', 0, 100, 1);
         }
+        IPS_SetVariableProfileText('SMCAR.Progress', '', ' %');
+        IPS_SetVariableProfileDigits('SMCAR.Progress', 0);
+        IPS_SetVariableProfileValues('SMCAR.Progress', 0, 100, 1);
 
+        // --- Status offen/geschlossen ---
         if (!IPS_VariableProfileExists('SMCAR.Status')) {
             IPS_CreateVariableProfile('SMCAR.Status', VARIABLETYPE_STRING);
-            IPS_SetVariableProfileAssociation('SMCAR.Status', 'OPEN', 'Offen', '', -1);
-            IPS_SetVariableProfileAssociation('SMCAR.Status', 'CLOSED', 'Geschlossen', '', -1);
-            IPS_SetVariableProfileAssociation('SMCAR.Status', 'UNKNOWN', 'Unbekannt', '', -1);
         }
+        // alte Associations leeren
+        $vp = IPS_GetVariableProfile('SMCAR.Status');
+        foreach ($vp['Associations'] as $assoc) {
+            IPS_SetVariableProfileAssociation('SMCAR.Status', $assoc['Value'], '', '', -1);
+        }
+        IPS_SetVariableProfileAssociation('SMCAR.Status', 'OPEN',    'Offen',      '', -1);
+        IPS_SetVariableProfileAssociation('SMCAR.Status', 'CLOSED',  'Geschlossen','', -1);
+        IPS_SetVariableProfileAssociation('SMCAR.Status', 'UNKNOWN', 'Unbekannt',  '', -1);
 
+        // --- Ladestatus (string) ---
         if (!IPS_VariableProfileExists('SMCAR.Charge')) {
             IPS_CreateVariableProfile('SMCAR.Charge', VARIABLETYPE_STRING);
-            IPS_SetVariableProfileAssociation('SMCAR.Charge', 'CHARGING', 'Laden', '', -1);
-            IPS_SetVariableProfileAssociation('SMCAR.Charge', 'FULLY_CHARGED', 'Voll geladen', '', -1);
-            IPS_SetVariableProfileAssociation('SMCAR.Charge', 'NOT_CHARGING', 'Lädt nicht', '', -1);
-            IPS_SetVariableProfileAssociation('SMCAR.Charge', 'UNKNOWN', 'Unbekannt', '', -1);
         }
-        
+        $vp = IPS_GetVariableProfile('SMCAR.Charge');
+        foreach ($vp['Associations'] as $assoc) {
+            IPS_SetVariableProfileAssociation('SMCAR.Charge', $assoc['Value'], '', '', -1);
+        }
+        IPS_SetVariableProfileAssociation('SMCAR.Charge', 'CHARGING',      'Laden',        '', -1);
+        IPS_SetVariableProfileAssociation('SMCAR.Charge', 'FULLY_CHARGED', 'Voll geladen', '', -1);
+        IPS_SetVariableProfileAssociation('SMCAR.Charge', 'NOT_CHARGING',  'Lädt nicht',   '', -1);
+        IPS_SetVariableProfileAssociation('SMCAR.Charge', 'UNKNOWN',       'Unbekannt',    '', -1);
+
+        // --- Health-Status ---
         if (!IPS_VariableProfileExists('SMCAR.Health')) {
             IPS_CreateVariableProfile('SMCAR.Health', VARIABLETYPE_STRING);
-            IPS_SetVariableProfileAssociation('SMCAR.Health', 'OK',      'OK',        '', -1);
-            IPS_SetVariableProfileAssociation('SMCAR.Health', 'WARN',    'Warnung',   '', -1);
-            IPS_SetVariableProfileAssociation('SMCAR.Health', 'ERROR',   'Fehler',    '', -1);
-            IPS_SetVariableProfileAssociation('SMCAR.Health', 'UNKNOWN', 'Unbekannt', '', -1);
         }
+        $vp = IPS_GetVariableProfile('SMCAR.Health');
+        foreach ($vp['Associations'] as $assoc) {
+            IPS_SetVariableProfileAssociation('SMCAR.Health', $assoc['Value'], '', '', -1);
+        }
+        IPS_SetVariableProfileAssociation('SMCAR.Health', 'OK',      'OK',        '', -1);
+        IPS_SetVariableProfileAssociation('SMCAR.Health', 'WARN',    'Warnung',   '', -1);
+        IPS_SetVariableProfileAssociation('SMCAR.Health', 'ERROR',   'Fehler',    '', -1);
+        IPS_SetVariableProfileAssociation('SMCAR.Health', 'UNKNOWN', 'Unbekannt', '', -1);
 
+        // --- Ladelimit setzen (0–100 %) ---
         if (!IPS_VariableProfileExists('SMCAR.ChargeLimitSet')) {
             IPS_CreateVariableProfile('SMCAR.ChargeLimitSet', VARIABLETYPE_FLOAT);
-            IPS_SetVariableProfileText('SMCAR.ChargeLimitSet', '', ' %');
-            IPS_SetVariableProfileDigits('SMCAR.ChargeLimitSet', 0);
-            IPS_SetVariableProfileValues('SMCAR.ChargeLimitSet', 50, 100, 5);
         }
+        IPS_SetVariableProfileText('SMCAR.ChargeLimitSet', '', ' %');
+        IPS_SetVariableProfileDigits('SMCAR.ChargeLimitSet', 0);
+        IPS_SetVariableProfileValues('SMCAR.ChargeLimitSet', 0, 100, 10);
     }
 
     // -------- Variablen je nach Scopes registrieren --------
