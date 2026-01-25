@@ -280,39 +280,26 @@ class Smartcar extends IPSModuleStrict
     return json_encode($form);
     }
 
-
     private function HandleRetriableHttp(string $kind, array $jobFields, int $statusCode, array $headers, ?int $attempt = null): bool
     {
-        $retryableStatus = [429, 500, 502, 503, 504]; // inline
-        if (!in_array($statusCode, $retryableStatus, true)) {
+        // Nur noch LOGGEN, aber KEINE automatischen Wiederholungen mehr.
+
+        // Rate-Limit-Hinweis bei 429
+        if ($statusCode === 429) {
+            $this->LogRateLimitIfAny($statusCode, $headers);
+            $this->SendDebug('Retry', "429 RATE_LIMIT für kind={$kind} – kein Retry, nur Log.", 0);
             return false;
         }
 
-        // Logging (429 separat, 5xx gemeinsam)
-        if ($statusCode === 429) {
-            $this->LogRateLimitIfAny($statusCode, $headers);
-        } else {
-            $this->DebugHttpHeaders($headers, $statusCode); // bereits vorhanden; loggt Fehlerzeile kompakt
-            $this->SendDebug('Retry', "Retrybarer 5xx erkannt ($statusCode).", 0);
+        // 5xx & andere Fehler: kompakte Header-Logausgabe
+        if ($statusCode >= 500) {
+            $this->DebugHttpHeaders($headers, $statusCode);
+            $this->SendDebug('Retry', "HTTP-Fehler {$statusCode} für kind={$kind} – kein Retry, nur Log.", 0);
+            return false;
         }
 
-        // Retry-After respektieren; sonst kurzer exponentieller Backoff (gekappte Sekunden)
-        $retryAfter = $this->GetRetryAfterFromHeaders($headers);
-        $delay = $this->ParseRetryAfter($retryAfter);
-        if ($delay === null) {
-            $baseAttempt = max(1, (int)($attempt ?? 0));
-            // 2, 4, 8, 16 … (hart auf 60s gedeckelt; die Schedule-Funktion deckelt zusätzlich global)
-            $delay = min(60, 2 ** $baseAttempt);
-        }
-
-        $job = array_merge(['kind' => $kind], $jobFields);
-        if ($attempt !== null) {
-            // Falls der Aufrufer schon einen Zähler pflegt, mitgeben, damit Schedule robust weiterzählt
-            $job['attempt'] = (int)$attempt;
-        }
-
-        $this->ScheduleHttpRetry($job, (int)$delay);
-        return true;
+        // Alle anderen Statuscodes interessieren die Retry-Logik gar nicht
+        return false;
     }
 
     private function getEnabledScopes(): array
