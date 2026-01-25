@@ -107,21 +107,29 @@ class Smartcar extends IPSModuleStrict
     {
         switch ($Ident) {
             case 'SetChargeLimit':
-                // UI-Wert 50–100 % → API erwartet 0.5–1.0 (Smartcar-Doku)
-                $this->SetChargeLimit($Value / 100);
+                // Nur 50–100 % erlauben
+                $Value = (float)$Value;
+                if ($Value < 50) {
+                    $Value = 50;
+                } elseif ($Value > 100) {
+                    $Value = 100;
+                }
+
+                // Smartcar erwartet 0.5–1.0
+                $this->SetChargeLimit($Value / 100.0);
                 $this->SetValue($Ident, $Value);
                 break;
 
             case 'SetChargeStatus':
-                // Boolean aus ~Switch direkt durchreichen
-                $this->SetChargeStatus((bool)$Value);
-                $this->SetValue($Ident, (bool)$Value);
+                $bool = (bool)$Value;
+                $this->SetChargeStatus($bool);
+                $this->SetValue($Ident, $bool);
                 break;
 
             case 'SetLockStatus':
-                // Boolean aus ~Lock direkt durchreichen
-                $this->SetLockStatus((bool)$Value);
-                $this->SetValue($Ident, (bool)$Value);
+                $bool = (bool)$Value;
+                $this->SetLockStatus($bool);
+                $this->SetValue($Ident, $bool);
                 break;
 
             default:
@@ -228,7 +236,7 @@ class Smartcar extends IPSModuleStrict
                 'caption' => 'Berechtigungen (Scopes)',
                 'items'   => [
                     ['type' => 'Label', 'caption' => 'Zugehörige Variablen werden automatisch erstellt bzw. gelöscht.'],
-                    ['type' => 'Label', 'caption' => 'Keine Kompatibilitätsprüfung aktiv – du wählst die Scopes manuell.'],
+                    ['type' => 'Label', 'caption' => 'Nach der Auswahl der Scopes ist über den Button (*mit Smartcar verbinden*) die Berchtigung zu setzen .'],
 
                     // READ (immer sichtbar)
                     ['type'=>'CheckBox','name'=>'ScopeReadVehicleInfo',     'caption'=>'Fahrzeuginformationen lesen (/)'],
@@ -252,7 +260,6 @@ class Smartcar extends IPSModuleStrict
             ],
         ],
         'actions' => [
-            // ⛔ Button "Auf kompatible Scopes prüfen" ist weg
             ['type' => 'Button', 'caption' => 'Mit Smartcar verbinden', 'onClick' => 'echo SMCAR_GenerateAuthURL($id);'],
             ['type' => 'Button', 'caption' => 'Fahrzeugdaten abrufen', 'onClick' => 'SMCAR_FetchVehicleData($id);'],
             ['type' => 'Label',  'caption' => 'Sag danke und unterstütze den Modulentwickler:'],
