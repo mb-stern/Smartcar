@@ -282,23 +282,6 @@ class Smartcar extends IPSModuleStrict
 
     private function HandleRetriableHttp(string $kind, array $jobFields, int $statusCode, array $headers, ?int $attempt = null): bool
     {
-        // Nur noch LOGGEN, aber KEINE automatischen Wiederholungen mehr.
-
-        // Rate-Limit-Hinweis bei 429
-        if ($statusCode === 429) {
-            $this->LogRateLimitIfAny($statusCode, $headers);
-            $this->SendDebug('Retry', "429 RATE_LIMIT für kind={$kind} – kein Retry, nur Log.", 0);
-            return false;
-        }
-
-        // 5xx & andere Fehler: kompakte Header-Logausgabe
-        if ($statusCode >= 500) {
-            $this->DebugHttpHeaders($headers, $statusCode);
-            $this->SendDebug('Retry', "HTTP-Fehler {$statusCode} für kind={$kind} – kein Retry, nur Log.", 0);
-            return false;
-        }
-
-        // Alle anderen Statuscodes interessieren die Retry-Logik gar nicht
         return false;
     }
 
