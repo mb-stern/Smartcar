@@ -106,9 +106,8 @@ class Smartcar extends IPSModuleStrict
     public function RequestAction(string $Ident, mixed $Value): void
     {
         switch ($Ident) {
-            $raw = $Value;
-            
             case 'SetChargeLimit':
+                $raw = $Value;
                 // Nur 50–100 % erlauben
                 $Value = (float)$Value;
                 if ($Value < 50) {
