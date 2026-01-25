@@ -1549,7 +1549,7 @@ private function canonicalizePath(string $path): string
                 if (isset($body['values']) && is_array($body['values'])) {
                     foreach ($body['values'] as $cfg) {
                         if (($cfg['type'] ?? '') === 'global' && isset($cfg['limit'])) {
-                            $setSafe('ChargeLimit', VARIABLETYPE_FLOAT, 'Aktuelles Ladelimit', 'SMCAR.Progress', floatval($cfg['limit']));
+                            $setSafe('ChargeLimit', VARIABLETYPE_FLOAT, 'Aktuelles Ladelimit', 'SMCAR.Progress', floatval($cfg['limit']) * 100);
                             break;
                         }
                     }
