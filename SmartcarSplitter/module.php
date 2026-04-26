@@ -8,6 +8,8 @@ class SmartcarSplitter extends IPSModuleStrict
     {
         parent::Create();
 
+        $this->RegisterHook('smartcar_' . $this->InstanceID);
+
         $this->RegisterPropertyString('ClientID', '');
         $this->RegisterPropertyString('ClientSecret', '');
 
@@ -15,10 +17,9 @@ class SmartcarSplitter extends IPSModuleStrict
         $this->RegisterPropertyBoolean('VerifyWebhookSignature', true);
         $this->RegisterPropertyString('ManagementToken', '');
 
-        $this->RegisterHook('smartcar_' . $this->InstanceID);
-
         $this->RegisterAttributeString('ApplicationAccessToken', '');
         $this->RegisterAttributeInteger('TokenExpiresAt', 0);
+        $this->RegisterAttributeString('RedirectURI', '');
 
         $this->RegisterTimer('TokenTimer', 0, 'SMCARS_RequestApplicationAccessToken($_IPS["TARGET"]);');
     }
@@ -26,6 +27,14 @@ class SmartcarSplitter extends IPSModuleStrict
     public function ApplyChanges(): void
     {
         parent::ApplyChanges();
+
+        $hookAddress = 'smartcar_' . $this->InstanceID;
+        $hookPath = '/hook/' . $hookAddress;
+
+        $redirectURI = $this->BuildSymconConnectURL($hookPath);
+        $this->WriteAttributeString('RedirectURI', $redirectURI);
+
+        $this->SendDebug('ApplyChanges', 'Hook/Redirect URI: ' . $redirectURI, 0);
 
         $this->SetStatus(102);
 
@@ -40,10 +49,14 @@ class SmartcarSplitter extends IPSModuleStrict
 
     public function GetConfigurationForm(): string
     {
-        $hookPath = '/hook/smartcar_' . $this->InstanceID;
+        $redirectURI = $this->ReadAttributeString('RedirectURI');
 
         $form = [
             'elements' => [
+                [
+                    'type' => 'Label',
+                    'caption' => 'Redirect-/Webhook-URI: ' . $redirectURI
+                ],
                 [
                     'type' => 'ValidationTextBox',
                     'name' => 'ClientID',
@@ -53,10 +66,6 @@ class SmartcarSplitter extends IPSModuleStrict
                     'type' => 'ValidationTextBox',
                     'name' => 'ClientSecret',
                     'caption' => 'Client Secret'
-                ],
-                [
-                    'type' => 'Label',
-                    'caption' => 'Webhook-Pfad: ' . $hookPath
                 ],
                 [
                     'type' => 'CheckBox',
@@ -162,7 +171,6 @@ class SmartcarSplitter extends IPSModuleStrict
                 return json_encode([
                     'success' => true,
                     'url' => $this->BuildConnectURL(
-                        (string)($data['RedirectURI'] ?? ''),
                         (string)($data['Mode'] ?? 'live'),
                         (string)($data['State'] ?? ''),
                         is_array($data['Permissions'] ?? null) ? $data['Permissions'] : []
@@ -620,16 +628,17 @@ class SmartcarSplitter extends IPSModuleStrict
         return null;
     }
 
-    public function BuildConnectURL(string $redirectURI, string $mode, string $state, array $permissions): string
+    public function BuildConnectURL(string $mode, string $state, array $permissions): string
     {
         $clientID = trim($this->ReadPropertyString('ClientID'));
+        $redirectURI = $this->ReadAttributeString('RedirectURI');
 
         if ($clientID === '') {
             return 'Fehler: Client ID fehlt.';
         }
 
         if ($redirectURI === '') {
-            return 'Fehler: Redirect URI fehlt.';
+            return 'Fehler: Redirect-/Webhook-URI fehlt.';
         }
 
         $permissions = array_values(array_unique(array_filter(array_map('strval', $permissions))));
@@ -652,5 +661,29 @@ class SmartcarSplitter extends IPSModuleStrict
         ];
 
         return 'https://connect.smartcar.com/oauth/authorize?' . http_build_query($query);
+    }
+
+    private function BuildSymconConnectURL(string $hookPath): string
+    {
+        if ($hookPath === '' || strpos($hookPath, '/hook/') !== 0) {
+            $hookPath = '/hook/' . ltrim($hookPath, '/');
+        }
+
+        $connectAddress = '';
+        $ids = @IPS_GetInstanceListByModuleID('{9486D575-BE8C-4ED8-B5B5-20930E26DE6F}');
+
+        if (!empty($ids)) {
+            if (function_exists('CC_GetUrl')) {
+                $connectAddress = @CC_GetUrl($ids[0]);
+            } elseif (function_exists('CC_GetURL')) {
+                $connectAddress = @CC_GetURL($ids[0]);
+            }
+        }
+
+        if (is_string($connectAddress) && $connectAddress !== '') {
+            return rtrim($connectAddress, '/') . $hookPath;
+        }
+
+        return '';
     }
 }

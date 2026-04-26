@@ -21,7 +21,6 @@ class SmartcarVehicle extends IPSModuleStrict
     $this->RegisterPropertyString('CompatibilityRegion', 'EUROPE');
     $this->RegisterPropertyString('SelectedCapabilities', '[]');
 
-    $this->RegisterPropertyString('RedirectURI', '');
     $this->RegisterPropertyString('ConnectMode', 'live');
 
     $this->RegisterAttributeString('CompatibilityCache', '[]');
@@ -62,11 +61,6 @@ class SmartcarVehicle extends IPSModuleStrict
                 ['type' => 'Label', 'caption' => 'Fahrzeug: ' . $this->ReadPropertyString('VehicleCaption')],
                 ['type' => 'Label', 'caption' => 'Antrieb: ' . $this->ReadPropertyString('PowertrainType')],
 
-                [
-                    'type' => 'ValidationTextBox',
-                    'name' => 'RedirectURI',
-                    'caption' => 'Redirect URI für Smartcar Connect'
-                ],
                 [
                     'type' => 'Select',
                     'name' => 'ConnectMode',
@@ -594,19 +588,13 @@ class SmartcarVehicle extends IPSModuleStrict
             return 'Fehler: Keine aktivierten Signale/Befehle mit Permission ausgewählt.';
         }
 
-        $redirectURI = trim($this->ReadPropertyString('RedirectURI'));
-        if ($redirectURI === '') {
-            return 'Fehler: Bitte zuerst Redirect URI im Fahrzeug eintragen.';
-        }
-
         $state = 'vehicle_' . $this->ReadPropertyString('VehicleID') . '_' . bin2hex(random_bytes(8));
 
         $result = $this->SendDataToParent(json_encode([
-            'DataID' => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
-            'Command' => 'BuildConnectURL',
-            'RedirectURI' => $redirectURI,
-            'Mode' => $this->ReadPropertyString('ConnectMode'),
-            'State' => $state,
+            'DataID'      => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
+            'Command'     => 'BuildConnectURL',
+            'Mode'        => $this->ReadPropertyString('ConnectMode'),
+            'State'       => $state,
             'Permissions' => $permissions
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
 
