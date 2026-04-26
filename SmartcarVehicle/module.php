@@ -307,11 +307,17 @@ class SmartcarVehicle extends IPSModuleStrict
             $filtered = $items;
         }
 
-        $this->WriteAttributeString(
-            'CompatibilityCache',
-            json_encode($filtered, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
-        );
-        $this->WriteAttributeInteger('CompatibilityCacheAt', time());
+        if (!empty($filtered)) {
+            $this->WriteAttributeString(
+                'CompatibilityCache',
+                json_encode($filtered, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+            );
+            $this->WriteAttributeInteger('CompatibilityCacheAt', time());
+        } else {
+            $this->WriteAttributeString('CompatibilityCache', '[]');
+            $this->WriteAttributeInteger('CompatibilityCacheAt', 0);
+            $this->SendDebug('Compatibility/Cache', 'Leeres Ergebnis wird nicht gecacht.', 0);
+        }
 
         return $filtered;
     }
