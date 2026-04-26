@@ -1,9 +1,9 @@
 {
     "id": "{9F7A4B2C-3D1E-4A6F-8B20-6C5D4E3F2A10}",
-    "name": "Smartcar Konfigurator",
+    "name": "Smartcar Splitter",
     "type": 2,
     "vendor": "Smartcar",
-    "aliases": ["Smartcar Konfigurator"],
+    "aliases": ["Smartcar Splitter"],
     "parentRequirements": [],
     "childRequirements": ["{1E1B7C9A-2D4F-4E8A-9C3B-7F6D5A4E2B10}"],
     "implemented": ["{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}"],
