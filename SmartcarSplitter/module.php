@@ -51,8 +51,9 @@ class SmartcarSplitter extends IPSModuleStrict
                 [
                     'type' => 'Select',
                     'name' => 'Mode',
-                    'caption' => 'Modus',
+                    'caption' => 'Fahrzeug-Modus / Filter',
                     'options' => [
+                        ['caption' => 'Alle', 'value' => 'all'],
                         ['caption' => 'Live', 'value' => 'live'],
                         ['caption' => 'Simuliert', 'value' => 'simulated']
                     ]
@@ -167,7 +168,16 @@ class SmartcarSplitter extends IPSModuleStrict
         }
 
         $mode = $this->ReadPropertyString('Mode');
-        $url = 'https://vehicle.api.smartcar.com/v3/connections?filter[vehicle.mode]=' . urlencode($mode) . '&page[size]=100';
+
+        $query = [
+            'page[size]' => 100
+        ];
+
+        if ($mode !== '' && $mode !== 'all') {
+            $query['filter[mode]'] = $mode;
+        }
+
+        $url = 'https://vehicle.api.smartcar.com/v3/connections?' . http_build_query($query);
 
         $response = $this->HttpRequestRaw(
             'Connections',
@@ -194,34 +204,45 @@ class SmartcarSplitter extends IPSModuleStrict
 
         foreach ($data['data'] as $item) {
             $connectionId = (string)($item['id'] ?? '');
-            $attributes = $item['attributes'] ?? [];
-            $vehicle = $attributes['vehicle'] ?? [];
+            $attributes   = is_array($item['attributes'] ?? null) ? $item['attributes'] : [];
+            $vehicle      = is_array($attributes['vehicle'] ?? null) ? $attributes['vehicle'] : [];
+
             $vehicleId = (string)($item['relationships']['vehicle']['data']['id'] ?? '');
 
             if ($connectionId === '' || $vehicleId === '') {
                 continue;
             }
 
-            $make = (string)($vehicle['make'] ?? '');
+            $make  = (string)($vehicle['make'] ?? '');
             $model = (string)($vehicle['model'] ?? '');
-            $year = (string)($vehicle['year'] ?? '');
-            $modeValue = (string)($vehicle['mode'] ?? '');
+            $year  = (string)($vehicle['year'] ?? '');
+
+            $modeValue      = (string)($vehicle['mode'] ?? ($attributes['mode'] ?? ''));
             $powertrainType = (string)($vehicle['powertrainType'] ?? '');
 
+            $caption = trim($make . ' ' . $model . ' ' . $year);
+            if ($caption === '') {
+                $caption = $vehicleId;
+            }
+
             $connections[] = [
-                'connectionId' => $connectionId,
-                'vehicleId' => $vehicleId,
-                'caption' => trim($make . ' ' . $model . ' ' . $year),
-                'make' => $make,
-                'model' => $model,
-                'year' => $year,
-                'mode' => $modeValue,
+                'connectionId'   => $connectionId,
+                'vehicleId'      => $vehicleId,
+                'caption'        => $caption,
+                'make'           => $make,
+                'model'          => $model,
+                'year'           => $year,
+                'mode'           => $modeValue,
                 'powertrainType' => $powertrainType,
-                'permissions' => $attributes['permissions'] ?? []
+                'permissions'    => $attributes['permissions'] ?? []
             ];
         }
 
-        $this->WriteAttributeString('ConnectionsCache', json_encode($connections, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        $this->WriteAttributeString(
+            'ConnectionsCache',
+            json_encode($connections, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+        );
+
         $this->ReloadForm();
 
         return $connections;
@@ -293,13 +314,13 @@ class SmartcarSplitter extends IPSModuleStrict
         $connections = $this->LoadConnections();
 
         foreach ($connections as $connection) {
-            $vehicleId = $connection['vehicleId'];
-            $connectionId = $connection['connectionId'];
+            $vehicleId    = (string)$connection['vehicleId'];
+            $connectionId = (string)$connection['connectionId'];
 
             $instanceId = $this->FindVehicleInstanceByVehicleId($vehicleId);
 
             if ($instanceId === 0) {
-                IPS_CreateInstance('{1E1B7C9A-2D4F-4E8A-9C3B-7F6D5A4E2B10}');
+                $instanceId = IPS_CreateInstance('{1E1B7C9A-2D4F-4E8A-9C3B-7F6D5A4E2B10}');
                 IPS_SetParent($instanceId, $this->InstanceID);
             }
 
@@ -307,11 +328,12 @@ class SmartcarSplitter extends IPSModuleStrict
 
             IPS_SetProperty($instanceId, 'VehicleID', $vehicleId);
             IPS_SetProperty($instanceId, 'ConnectionID', $connectionId);
-            IPS_SetProperty($instanceId, 'VehicleCaption', $connection['caption']);
-            IPS_SetProperty($instanceId, 'Make', $connection['make']);
-            IPS_SetProperty($instanceId, 'Model', $connection['model']);
+            IPS_SetProperty($instanceId, 'VehicleCaption', (string)$connection['caption']);
+            IPS_SetProperty($instanceId, 'Make', (string)$connection['make']);
+            IPS_SetProperty($instanceId, 'Model', (string)$connection['model']);
             IPS_SetProperty($instanceId, 'Year', (int)$connection['year']);
-            IPS_SetProperty($instanceId, 'PowertrainType', $connection['powertrainType']);
+            IPS_SetProperty($instanceId, 'PowertrainType', (string)$connection['powertrainType']);
+
             IPS_ApplyChanges($instanceId);
         }
     }
