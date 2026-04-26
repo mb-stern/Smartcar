@@ -37,6 +37,9 @@ class Smartcar extends IPSModuleStrict
         $this->RegisterAttributeInteger('VehicleYear', 0);
         $this->RegisterAttributeString('VehiclePowertrainType', '');
 
+        $this->RegisterAttributeString('SignalCheckboxValues', '');
+        $this->RegisterAttributeString('SignalCheckboxCacheKey', '');
+
         $this->RegisterTimer(
             'TokenRefreshTimer',
             0,
@@ -194,10 +197,15 @@ class Smartcar extends IPSModuleStrict
         $tokenExpiresAt = $this->ReadAttributeInteger('ApplicationAccessTokenExpiresAt');
         $cacheAt = $this->ReadAttributeInteger('CompatibilityCacheAt');
 
+        $checkboxValues = json_decode($this->ReadAttributeString('SignalCheckboxValues'), true);
+        if (!is_array($checkboxValues)) {
+            $checkboxValues = [];
+        }
+
         $form = [
             'elements' => [
                 ['type' => 'Label', 'caption' => 'Webhook-URL: ' . $effectiveRedirect],
-                ['type' => 'Label', 'caption' => 'Smartcar API V3 – nur Signals, keine Legacy/V2-Endpunkte'],
+                ['type' => 'Label', 'caption' => 'Smartcar API V3 – Connect koppelt Fahrzeug, API-Credentials holen App-Token'],
                 ['type' => 'Label', 'caption' => 'Redirect-/Callback-URI: ' . $effectiveRedirect],
 
                 [
@@ -232,8 +240,9 @@ class Smartcar extends IPSModuleStrict
                     ]
                 ],
 
-                ['type' => 'Label', 'caption' => 'Token gültig bis: ' . ($tokenExpiresAt > 0 ? date('Y-m-d H:i:s', $tokenExpiresAt) : 'kein Token')],
+                ['type' => 'Label', 'caption' => 'App-Token gültig bis: ' . ($tokenExpiresAt > 0 ? date('Y-m-d H:i:s', $tokenExpiresAt) : 'kein Token')],
                 ['type' => 'Label', 'caption' => 'Compatibility Cache: ' . ($cacheAt > 0 ? date('Y-m-d H:i:s', $cacheAt) : 'leer')],
+                ['type' => 'Label', 'caption' => 'Fahrzeug: ' . trim($this->ReadAttributeString('VehicleMake') . ' ' . $this->ReadAttributeString('VehicleModel') . ' ' . $this->ReadAttributeInteger('VehicleYear'))],
 
                 [
                     'type' => 'List',
@@ -248,7 +257,7 @@ class Smartcar extends IPSModuleStrict
                         ['caption' => 'Signal', 'name' => 'signal', 'width' => 'auto'],
                         ['caption' => 'Permission', 'name' => 'permission', 'width' => '160px']
                     ],
-                    'values' => $this->GetCachedSignalCheckboxValues()
+                    'values' => $checkboxValues
                 ],
 
                 ['type' => 'Label', 'caption' => '────────────────────────────────────────'],
@@ -323,8 +332,8 @@ class Smartcar extends IPSModuleStrict
         $mode = $this->ReadPropertyString('Mode');
 
         $url = 'https://vehicle.api.smartcar.com/v3/connections'
-             . '?filter[vehicle.mode]=' . urlencode($mode)
-             . '&page[size]=10';
+            . '?filter[vehicle.mode]=' . urlencode($mode)
+            . '&page[size]=10';
 
         $opts = [
             'http' => [
@@ -371,36 +380,26 @@ class Smartcar extends IPSModuleStrict
             $year  = (int)($vehicle['year'] ?? 0);
             $powertrain = (string)($vehicle['powertrainType'] ?? '');
 
+            $this->WriteAttributeString('VehicleMake', $make);
+            $this->WriteAttributeString('VehicleModel', $model);
+            $this->WriteAttributeInteger('VehicleYear', $year);
+            $this->WriteAttributeString('VehiclePowertrainType', $powertrain);
+
             if ($make !== '') {
-                $this->WriteAttributeString('VehicleMake', $make);
                 $this->setSafe('VehicleMake', VARIABLETYPE_STRING, $make, '', 1, true, 'Fahrzeug Hersteller');
             }
 
             if ($model !== '') {
-                $this->WriteAttributeString('VehicleModel', $model);
                 $this->setSafe('VehicleModel', VARIABLETYPE_STRING, $model, '', 2, true, 'Fahrzeug Modell');
             }
 
             if ($year > 0) {
-                $this->WriteAttributeInteger('VehicleYear', $year);
                 $this->setSafe('VehicleYear', VARIABLETYPE_INTEGER, $year, '', 3, true, 'Fahrzeug Baujahr');
             }
 
             if ($powertrain !== '') {
-                $this->WriteAttributeString('VehiclePowertrainType', $powertrain);
                 $this->setSafe('PowertrainType', VARIABLETYPE_STRING, $powertrain, '', 4, true, 'Antriebsart');
             }
-
-            $this->SendDebug(
-                'ConnectionsV3/vehicle',
-                json_encode([
-                    'make' => $make,
-                    'model' => $model,
-                    'year' => $year,
-                    'powertrainType' => $powertrain
-                ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
-                0
-            );
         }
 
         $this->SendDebug(
@@ -417,7 +416,7 @@ class Smartcar extends IPSModuleStrict
         $region = $this->ReadPropertyString('CompatibilityRegion');
 
         $url = 'https://compatibility.api.smartcar.com/v3/compatible-vehicles'
-             . '?filter[region]=' . urlencode($region);
+            . '?filter[region]=' . urlencode($region);
 
         $opts = [
             'http' => [
@@ -445,8 +444,117 @@ class Smartcar extends IPSModuleStrict
         );
         $this->WriteAttributeInteger('CompatibilityCacheAt', time());
 
-        $this->SendDebug('Compatibility', 'Compatibility Cache gespeichert.', 0);
+        $values = $this->BuildSignalCheckboxValuesFromCompatibility($data);
+
+        $this->WriteAttributeString(
+            'SignalCheckboxValues',
+            json_encode($values, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+        );
+
+        $this->WriteAttributeString(
+            'SignalCheckboxCacheKey',
+            md5(json_encode($values, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE))
+        );
+
+        $this->SendDebug('Compatibility', 'Compatibility Cache und Checkboxliste gespeichert. Signale=' . count($values), 0);
         return true;
+    }
+
+    private function BuildSignalCheckboxValuesFromCompatibility(array $cache): array
+    {
+        $selectedRows = json_decode($this->ReadPropertyString('SelectedSignals'), true);
+        if (!is_array($selectedRows)) {
+            $selectedRows = [];
+        }
+
+        $selectedMap = [];
+        foreach ($selectedRows as $row) {
+            if (is_array($row)) {
+                $cap = (string)($row['capability'] ?? $row['signal'] ?? '');
+                if ($cap !== '' && (bool)($row['selected'] ?? false)) {
+                    $selectedMap[$cap] = true;
+                }
+            } elseif (is_string($row) && $row !== '') {
+                $selectedMap[$row] = true;
+            }
+        }
+
+        $make       = strtolower(trim($this->ReadAttributeString('VehicleMake')));
+        $model      = strtolower(trim($this->ReadAttributeString('VehicleModel')));
+        $year       = $this->ReadAttributeInteger('VehicleYear');
+        $powertrain = strtolower(trim($this->ReadAttributeString('VehiclePowertrainType')));
+
+        $signals = [];
+        $matchedVehicles = 0;
+
+        if (is_array($cache['data'] ?? null)) {
+            foreach ($cache['data'] as $vehicle) {
+                $attributes = $vehicle['attributes'] ?? [];
+                if (!is_array($attributes)) {
+                    continue;
+                }
+
+                $itemMake       = strtolower(trim((string)($attributes['make'] ?? '')));
+                $itemModel      = strtolower(trim((string)($attributes['model'] ?? '')));
+                $itemPowertrain = strtolower(trim((string)($attributes['powertrainType'] ?? '')));
+
+                $years = $attributes['years'] ?? [];
+                $yearMatches = true;
+
+                if ($year > 0 && is_array($years) && !empty($years)) {
+                    $yearMatches = in_array($year, array_map('intval', $years), true);
+                }
+
+                $makeMatches = ($make === '' || $itemMake === '' || $make === $itemMake);
+                $modelMatches = ($model === '' || $itemModel === '' || $model === $itemModel);
+                $powertrainMatches = ($powertrain === '' || $itemPowertrain === '' || $powertrain === $itemPowertrain);
+
+                if (!$makeMatches || !$modelMatches || !$yearMatches || !$powertrainMatches) {
+                    continue;
+                }
+
+                $matchedVehicles++;
+
+                $capabilities = $attributes['capabilities'] ?? [];
+                if (!is_array($capabilities)) {
+                    continue;
+                }
+
+                foreach ($capabilities as $cap) {
+                    if (($cap['type'] ?? '') !== 'signal') {
+                        continue;
+                    }
+
+                    $signalCode = (string)($cap['capability'] ?? '');
+                    if ($signalCode === '') {
+                        continue;
+                    }
+
+                    $signals[$signalCode] = [
+                        'capability' => $signalCode,
+                        'selected'   => $selectedMap[$signalCode] ?? false,
+                        'group'      => (string)($cap['group'] ?? ''),
+                        'name'       => (string)($cap['name'] ?? $signalCode),
+                        'signal'     => $signalCode,
+                        'permission' => (string)($cap['permission'] ?? '')
+                    ];
+                }
+            }
+        }
+
+        $this->SendDebug(
+            'Compatibility/filter',
+            'make=' . $make . ', model=' . $model . ', year=' . $year . ', powertrain=' . $powertrain .
+            ', matchedVehicles=' . $matchedVehicles . ', signals=' . count($signals),
+            0
+        );
+
+        uasort($signals, function ($a, $b) {
+            $g = strcmp($a['group'], $b['group']);
+            return $g !== 0 ? $g : strcmp($a['signal'], $b['signal']);
+        });
+
+        return array_values($signals);
     }
 
     private function GetSignalCheckboxValues(): array
@@ -623,7 +731,8 @@ class Smartcar extends IPSModuleStrict
         $this->SendDebug('SignalsV3', 'Abruf abgeschlossen. Anzahl=' . count($signals), 0);
         return true;
     }
-        private function GetSelectedSignalCodes(): array
+        
+    private function GetSelectedSignalCodes(): array
     {
         $rows = json_decode($this->ReadPropertyString('SelectedSignals'), true);
 
@@ -778,26 +887,29 @@ class Smartcar extends IPSModuleStrict
 
         $this->SendDebug('Webhook', 'Request method=' . $method . ' uri=' . $uri . ' qs=' . $qs, 0);
 
+        // Smartcar Connect Redirect
         if ($method === 'GET' && isset($_GET['code'])) {
+            $this->SendDebug('Connect', 'Connect Redirect empfangen.', 0);
 
-            $authCode = $_GET['code'];
-
-            if (!$this->ExchangeAuthCodeForUserToken($authCode)) {
-                echo 'User Token fehlgeschlagen';
+            if (!$this->RequestApplicationAccessToken()) {
+                echo 'App-Token konnte nicht geholt werden.';
                 return;
             }
 
             if (!$this->LoadConnectionV3()) {
-                echo 'Connection laden fehlgeschlagen';
+                echo 'Connection konnte nicht geladen werden.';
                 return;
             }
 
-            $this->RefreshCompatibility();
+            if (!$this->RefreshCompatibility()) {
+                echo 'Fahrzeug verbunden, aber Compatibility konnte nicht geladen werden.';
+                return;
+            }
 
-            echo 'Fahrzeug verbunden ✔';
+            echo 'Fahrzeug verbunden ✔ Kompatible Signale geladen.';
             return;
         }
-        
+
         if (!$this->ReadPropertyBoolean('EnableWebhook')) {
             http_response_code(200);
             echo 'ignored';
@@ -829,7 +941,6 @@ class Smartcar extends IPSModuleStrict
         }
 
         $eventType = (string)($payload['eventType'] ?? $payload['type'] ?? '');
-
         $this->SendDebug('Webhook', 'eventType=' . $eventType, 0);
 
         if ($eventType === 'VERIFY') {
