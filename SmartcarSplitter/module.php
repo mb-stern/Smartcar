@@ -301,8 +301,14 @@ class SmartcarSplitter extends IPSModuleStrict
 
             if ($instanceId === 0) {
                 $instanceId = IPS_CreateInstance('{1E1B7C9A-2D4F-4E8A-9C3B-7F6D5A4E2B10}');
-                IPS_SetParent($instanceId, $this->InstanceID);
+
+                // NICHT unter den Splitter hängen,
+                // sondern auf die gleiche Ebene wie der Splitter legen
+                IPS_SetParent($instanceId, IPS_GetParent($this->InstanceID));
             }
+
+            // Technische Verbindung zum Splitter herstellen
+            IPS_ConnectInstance($instanceId, $this->InstanceID);
 
             IPS_SetName($instanceId, $connection['caption'] !== '' ? $connection['caption'] : $vehicleId);
 
