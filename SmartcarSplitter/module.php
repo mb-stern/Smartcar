@@ -501,7 +501,7 @@ class SmartcarSplitter extends IPSModuleStrict
 
         $this->SendDebug(
             'Hook/Request',
-            'method=' . $method . ' query=' . json_encode($_GET, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            'method=' . $method . ' get=' . json_encode($_GET, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
             0
         );
 
@@ -546,9 +546,8 @@ class SmartcarSplitter extends IPSModuleStrict
 
         $eventType = (string)($payload['eventType'] ?? '');
         $vehicleId = (string)($payload['data']['vehicle']['id'] ?? '');
-        $userId = (string)($payload['data']['user']['id'] ?? '');
 
-        $this->SendDebug('Webhook/Event', 'eventType=' . $eventType . ' vehicleId=' . $vehicleId . ' userId=' . $userId, 0);
+        $this->SendDebug('Webhook/Event', 'eventType=' . $eventType . ' vehicleId=' . $vehicleId, 0);
 
         if ($eventType === 'VEHICLE_STATE' && $vehicleId !== '') {
             $this->DispatchVehicleStateToVehicle($vehicleId, $payload);
@@ -740,22 +739,29 @@ class SmartcarSplitter extends IPSModuleStrict
     private function HandleConnectRedirect(): void
     {
         $error = (string)($_GET['error'] ?? '');
+        $errorDescription = (string)($_GET['error_description'] ?? '');
+
         if ($error !== '') {
-            $description = (string)($_GET['error_description'] ?? '');
-            $this->SendDebug('Connect/RedirectError', $error . ' ' . $description, 0);
+            $this->SendDebug('Connect/RedirectError', $error . ' ' . $errorDescription, 0);
 
             http_response_code(200);
-            echo 'Smartcar Connect fehlgeschlagen: ' . htmlspecialchars($error . ' ' . $description);
+            header('Content-Type: text/html; charset=utf-8');
+            echo '<!doctype html><html><head><meta charset="utf-8"><title>Smartcar Connect</title></head><body>';
+            echo '<h2>Smartcar Connect fehlgeschlagen</h2>';
+            echo '<p>' . htmlspecialchars($error . ' ' . $errorDescription) . '</p>';
+            echo '<p>Dieses Fenster kann geschlossen werden.</p>';
+            echo '</body></html>';
             return;
         }
 
+        $code = (string)($_GET['code'] ?? '');
         $userId = (string)($_GET['user_id'] ?? ($_GET['userId'] ?? ''));
-        $state  = (string)($_GET['state'] ?? '');
+        $state = (string)($_GET['state'] ?? '');
 
         $this->SendDebug('Connect/Redirect', json_encode([
+            'code'    => $code !== '' ? '<present>' : '',
             'user_id' => $userId,
-            'state'   => $state,
-            'query'   => $_GET
+            'state'   => $state
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
         $vehicleId = $this->ExtractVehicleIdFromState($state);
@@ -764,21 +770,18 @@ class SmartcarSplitter extends IPSModuleStrict
             $this->UpdateVehicleUserId($vehicleId, $userId);
         }
 
-        // Auch ohne user_id versuchen, Connections neu zu laden.
         $connections = $this->LoadConnections();
         $this->UpdateVehiclesFromConnections($connections);
 
         http_response_code(200);
-        echo 'Smartcar Connect erfolgreich abgeschlossen. Dieses Fenster kann geschlossen werden.';
-    }
-
-    private function ExtractVehicleIdFromState(string $state): string
-    {
-        if (preg_match('/vehicle_([0-9a-fA-F-]{36})_/', $state, $m)) {
-            return $m[1];
-        }
-
-        return '';
+        header('Content-Type: text/html; charset=utf-8');
+        echo '<!doctype html><html><head><meta charset="utf-8"><title>Smartcar Connect</title>';
+        echo '<style>body{font-family:Arial,sans-serif;margin:40px;color:#222} .ok{color:#16803c}</style>';
+        echo '</head><body>';
+        echo '<h2 class="ok">Smartcar erfolgreich verbunden</h2>';
+        echo '<p>Die Verbindung zum OEM wurde bestätigt.</p>';
+        echo '<p>Du kannst dieses Fenster jetzt schließen und zu IP-Symcon zurückkehren.</p>';
+        echo '</body></html>';
     }
 
     private function UpdateVehicleUserId(string $vehicleId, string $userId): void
@@ -840,5 +843,14 @@ class SmartcarSplitter extends IPSModuleStrict
         }
 
         return 0;
+    }
+
+    private function ExtractVehicleIdFromState(string $state): string
+    {
+        if (preg_match('/vehicle_([0-9a-fA-F-]{36})_/', $state, $m)) {
+            return $m[1];
+        }
+
+        return '';
     }
 }
