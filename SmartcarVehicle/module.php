@@ -388,19 +388,23 @@ class SmartcarVehicle extends IPSModuleStrict
     {
         $this->SendDebug('FetchSignals/Start', 'Aktiver Signalabruf gestartet.', 0);
 
-        $entries = json_decode($this->ReadPropertyString('SelectedCapabilities'), true);
-        if (!is_array($entries)) {
+        $saved = json_decode($this->ReadPropertyString('SelectedCapabilities'), true);
+        if (!is_array($saved)) {
             $this->SendDebug('FetchSignals/Error', 'SelectedCapabilities ist kein Array: ' . $this->ReadPropertyString('SelectedCapabilities'), 0);
             return;
         }
+
+        // Wichtig: vollständige Daten aus Compatibility wieder dazu holen
+        $fullList = $this->GetCompatibilityCapabilitiesForForm();
 
         $vehicleId = $this->ReadPropertyString('VehicleID');
         $userId    = $this->ReadPropertyString('UserID');
 
         $this->SendDebug('FetchSignals/Vehicle', json_encode([
-            'vehicleId' => $vehicleId,
-            'userId'    => $userId,
-            'count'     => count($entries)
+            'vehicleId'  => $vehicleId,
+            'userId'     => $userId,
+            'savedCount' => count($saved),
+            'fullCount'  => count($fullList)
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
         if ($vehicleId === '') {
@@ -409,26 +413,34 @@ class SmartcarVehicle extends IPSModuleStrict
         }
 
         if ($userId === '') {
-            $this->SendDebug('FetchSignals/Error', 'UserID fehlt. Connect-Redirect wurde vermutlich noch nicht ins Vehicle geschrieben.', 0);
+            $this->SendDebug('FetchSignals/Error', 'UserID fehlt.', 0);
             return;
         }
 
         $fetched = 0;
         $skipped = 0;
 
-        foreach ($entries as $index => $entry) {
-            if (!is_array($entry)) {
+        foreach ($saved as $index => $savedEntry) {
+            if (!is_array($savedEntry)) {
                 $skipped++;
                 continue;
             }
 
+            $rawSelected = $savedEntry['selected'] ?? false;
             $selected =
-                ($entry['selected'] ?? false) === true ||
-                ($entry['selected'] ?? false) === 1 ||
-                ($entry['selected'] ?? false) === '1' ||
-                strtolower((string)($entry['selected'] ?? '')) === 'true';
+                $rawSelected === true ||
+                $rawSelected === 1 ||
+                $rawSelected === '1' ||
+                strtolower((string)$rawSelected) === 'true';
 
             if (!$selected) {
+                $skipped++;
+                continue;
+            }
+
+            $entry = $fullList[$index] ?? null;
+            if (!is_array($entry)) {
+                $this->SendDebug('FetchSignals/Skip', 'Kein FullEntry für Index ' . $index, 0);
                 $skipped++;
                 continue;
             }
@@ -439,14 +451,13 @@ class SmartcarVehicle extends IPSModuleStrict
                 continue;
             }
 
-            // Wichtig: Für Smartcar /signals/{signalCode} die capability verwenden.
             $signalCode = (string)($entry['capability'] ?? '');
             if ($signalCode === '') {
                 $signalCode = (string)($entry['code'] ?? '');
             }
 
             if ($signalCode === '') {
-                $this->SendDebug('FetchSignals/Skip', 'Kein signalCode/capability bei Index ' . $index, 0);
+                $this->SendDebug('FetchSignals/Skip', 'Kein signalCode bei Index ' . $index, 0);
                 $skipped++;
                 continue;
             }
@@ -551,25 +562,32 @@ class SmartcarVehicle extends IPSModuleStrict
 
     private function GetSelectedSignalMap(): array
     {
-        $entries = json_decode($this->ReadPropertyString('SelectedCapabilities'), true);
-        if (!is_array($entries)) {
+        $saved = json_decode($this->ReadPropertyString('SelectedCapabilities'), true);
+        if (!is_array($saved)) {
             return [];
         }
 
+        $fullList = $this->GetCompatibilityCapabilitiesForForm();
         $map = [];
 
-        foreach ($entries as $entry) {
-            if (!is_array($entry)) {
+        foreach ($saved as $index => $savedEntry) {
+            if (!is_array($savedEntry)) {
                 continue;
             }
 
+            $rawSelected = $savedEntry['selected'] ?? false;
             $selected =
-                ($entry['selected'] ?? false) === true ||
-                ($entry['selected'] ?? false) === 1 ||
-                ($entry['selected'] ?? false) === '1' ||
-                strtolower((string)($entry['selected'] ?? '')) === 'true';
+                $rawSelected === true ||
+                $rawSelected === 1 ||
+                $rawSelected === '1' ||
+                strtolower((string)$rawSelected) === 'true';
 
             if (!$selected) {
+                continue;
+            }
+
+            $entry = $fullList[$index] ?? null;
+            if (!is_array($entry)) {
                 continue;
             }
 
