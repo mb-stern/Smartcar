@@ -21,10 +21,9 @@ class Smartcar extends IPSModuleStrict
         $this->RegisterPropertyString('SelectedSignals', '[]');
 
         $this->RegisterAttributeString('RedirectURI', '');
+
         $this->RegisterAttributeString('ApplicationAccessToken', '');
         $this->RegisterAttributeInteger('ApplicationAccessTokenExpiresAt', 0);
-        $this->RegisterAttributeString('UserAccessToken', '');
-        $this->RegisterAttributeString('RefreshToken', '');
 
         $this->RegisterAttributeString('VehicleID', '');
         $this->RegisterAttributeString('VehicleUserID', '');
@@ -38,7 +37,6 @@ class Smartcar extends IPSModuleStrict
         $this->RegisterAttributeString('VehiclePowertrainType', '');
 
         $this->RegisterAttributeString('SignalCheckboxValues', '');
-        $this->RegisterAttributeString('SignalCheckboxCacheKey', '');
 
         $this->RegisterTimer(
             'TokenRefreshTimer',
@@ -139,56 +137,6 @@ class Smartcar extends IPSModuleStrict
         }
 
         return $token;
-    }
-
-    public function ExchangeAuthCodeForUserToken(string $code): bool
-    {
-        $clientID     = trim($this->ReadPropertyString('ClientID'));
-        $clientSecret = trim($this->ReadPropertyString('ClientSecret'));
-        $redirectURI  = $this->ReadAttributeString('RedirectURI');
-
-        if ($clientID === '' || $clientSecret === '' || $redirectURI === '') {
-            $this->SendDebug('UserToken', 'ClientID/Secret/RedirectURI fehlt.', 0);
-            return false;
-        }
-
-        $url = 'https://auth.smartcar.com/oauth/token';
-
-        $postData = http_build_query([
-            'grant_type'    => 'authorization_code',
-            'code'          => $code,
-            'client_id'     => $clientID,
-            'client_secret' => $clientSecret,
-            'redirect_uri'  => $redirectURI
-        ]);
-
-        $opts = [
-            'http' => [
-                'header'        => "Content-Type: application/x-www-form-urlencoded\r\nAccept: application/json\r\n",
-                'method'        => 'POST',
-                'content'       => $postData,
-                'ignore_errors' => true
-            ]
-        ];
-
-        $response = @file_get_contents($url, false, stream_context_create($opts));
-        $headers  = $http_response_header ?? [];
-        $codeHttp = $this->GetStatusCodeFromHeaders($headers);
-        $data     = json_decode($response ?: '', true);
-
-        $this->SendDebug('UserToken', 'HTTP=' . $codeHttp . ' Antwort=' . ($response ?: '(leer)'), 0);
-
-        if ($codeHttp !== 200 || !is_array($data) || empty($data['access_token'])) {
-            return false;
-        }
-
-        // 🔥 DAS ist der wichtige Token für Fahrzeugdaten
-        $this->WriteAttributeString('UserAccessToken', (string)$data['access_token']);
-
-        // optional:
-        $this->WriteAttributeString('RefreshToken', (string)($data['refresh_token'] ?? ''));
-
-        return true;
     }
 
     public function GetConfigurationForm(): string
@@ -442,6 +390,7 @@ class Smartcar extends IPSModuleStrict
             'CompatibilityCache',
             json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
         );
+
         $this->WriteAttributeInteger('CompatibilityCacheAt', time());
 
         $values = $this->BuildSignalCheckboxValuesFromCompatibility($data);
@@ -451,12 +400,12 @@ class Smartcar extends IPSModuleStrict
             json_encode($values, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
         );
 
-        $this->WriteAttributeString(
-            'SignalCheckboxCacheKey',
-            md5(json_encode($values, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE))
+        $this->SendDebug(
+            'Compatibility',
+            'Compatibility Cache und Checkboxliste gespeichert. Signale=' . count($values),
+            0
         );
 
-        $this->SendDebug('Compatibility', 'Compatibility Cache und Checkboxliste gespeichert. Signale=' . count($values), 0);
         return true;
     }
 
@@ -555,143 +504,6 @@ class Smartcar extends IPSModuleStrict
         });
 
         return array_values($signals);
-    }
-
-    private function GetSignalCheckboxValues(): array
-    {
-        $rawCache = $this->ReadAttributeString('CompatibilityCache');
-        $cache = json_decode($rawCache, true);
-
-        $selectedRows = json_decode($this->ReadPropertyString('SelectedSignals'), true);
-        if (!is_array($selectedRows)) {
-            $selectedRows = [];
-        }
-
-        $selectedMap = [];
-        foreach ($selectedRows as $row) {
-            if (is_array($row)) {
-                $cap = (string)($row['capability'] ?? $row['signal'] ?? '');
-                if ($cap !== '' && (bool)($row['selected'] ?? false)) {
-                    $selectedMap[$cap] = true;
-                }
-            } elseif (is_string($row) && $row !== '') {
-                $selectedMap[$row] = true;
-            }
-        }
-
-        $make       = strtolower(trim($this->ReadAttributeString('VehicleMake')));
-        $model      = strtolower(trim($this->ReadAttributeString('VehicleModel')));
-        $year       = $this->ReadAttributeInteger('VehicleYear');
-        $powertrain = strtolower(trim($this->ReadAttributeString('VehiclePowertrainType')));
-
-        $signals = [];
-        $matchedVehicles = 0;
-
-        if (is_array($cache['data'] ?? null)) {
-            foreach ($cache['data'] as $vehicle) {
-                $attributes = $vehicle['attributes'] ?? [];
-                if (!is_array($attributes)) {
-                    continue;
-                }
-
-                $itemMake  = strtolower(trim((string)($attributes['make'] ?? '')));
-                $itemModel = strtolower(trim((string)($attributes['model'] ?? '')));
-                $itemPowertrain = strtolower(trim((string)($attributes['powertrainType'] ?? '')));
-
-                $years = $attributes['years'] ?? [];
-                $yearMatches = true;
-
-                if ($year > 0 && is_array($years) && !empty($years)) {
-                    $yearMatches = in_array($year, array_map('intval', $years), true);
-                }
-
-                $makeMatches = ($make === '' || $itemMake === '' || $make === $itemMake);
-                $modelMatches = ($model === '' || $itemModel === '' || $model === $itemModel);
-                $powertrainMatches = ($powertrain === '' || $itemPowertrain === '' || $powertrain === $itemPowertrain);
-
-                if (!$makeMatches || !$modelMatches || !$yearMatches || !$powertrainMatches) {
-                    continue;
-                }
-
-                $matchedVehicles++;
-
-                $capabilities = $attributes['capabilities'] ?? [];
-                if (!is_array($capabilities)) {
-                    continue;
-                }
-
-                foreach ($capabilities as $cap) {
-                    if (($cap['type'] ?? '') !== 'signal') {
-                        continue;
-                    }
-
-                    $signalCode = (string)($cap['capability'] ?? '');
-                    if ($signalCode === '') {
-                        continue;
-                    }
-
-                    $signals[$signalCode] = [
-                        'capability' => $signalCode,
-                        'selected'   => $selectedMap[$signalCode] ?? false,
-                        'group'      => (string)($cap['group'] ?? ''),
-                        'name'       => (string)($cap['name'] ?? $signalCode),
-                        'signal'     => $signalCode,
-                        'permission' => (string)($cap['permission'] ?? '')
-                    ];
-                }
-            }
-        }
-
-        $this->SendDebug(
-            'Compatibility/filter',
-            'make=' . $make . ', model=' . $model . ', year=' . $year . ', powertrain=' . $powertrain .
-            ', matchedVehicles=' . $matchedVehicles . ', signals=' . count($signals),
-            0
-        );
-
-        uasort($signals, function ($a, $b) {
-            $g = strcmp($a['group'], $b['group']);
-            return $g !== 0 ? $g : strcmp($a['signal'], $b['signal']);
-        });
-
-        return array_values($signals);
-    }
-
-    private function GetCachedSignalCheckboxValues(): array
-    {
-        $rawCache = $this->ReadAttributeString('CompatibilityCache');
-
-        if ($rawCache === '') {
-            return [];
-        }
-
-        $cacheKey = md5(
-            $rawCache .
-            $this->ReadAttributeString('VehicleMake') .
-            $this->ReadAttributeString('VehicleModel') .
-            $this->ReadAttributeInteger('VehicleYear') .
-            $this->ReadAttributeString('VehiclePowertrainType') .
-            $this->ReadPropertyString('SelectedSignals')
-        );
-
-        $cacheIdent = 'SignalCheckboxValues_' . $cacheKey;
-
-        $cached = $this->GetBuffer($cacheIdent);
-        if ($cached !== '') {
-            $values = json_decode($cached, true);
-            if (is_array($values)) {
-                return $values;
-            }
-        }
-
-        $values = $this->GetSignalCheckboxValues();
-
-        $this->SetBuffer(
-            $cacheIdent,
-            json_encode($values, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
-        );
-
-        return $values;
     }
 
     public function FetchSelectedSignals(): bool
@@ -1511,73 +1323,6 @@ class Smartcar extends IPSModuleStrict
                 $this->setSafe($br, VARIABLETYPE_STRING, $status, 'SMCAR.Status', 74);
             }
         }
-    }
-
-    private function DebugJsonAntwort(string $context, mixed $response, ?int $statusCode = null): void
-    {
-        $txt = ($response !== false && $response !== null && $response !== '') ? (string)$response : '';
-
-        if ($txt === '') {
-            $this->SendDebug($context, 'Antwort: (leer)', 0);
-            return;
-        }
-
-        $decoded = json_decode($txt, true);
-
-        if (is_array($decoded)) {
-            $isError = ($statusCode !== null && $statusCode >= 400)
-                || (
-                    isset($decoded['statusCode'])
-                    && is_numeric($decoded['statusCode'])
-                    && (int)$decoded['statusCode'] >= 400
-                );
-
-            $payload = $isError
-                ? json_encode($decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
-                : json_encode($decoded, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-
-            $this->SendDebug($context, 'Antwort: ' . $payload, 0);
-            return;
-        }
-
-        $this->SendDebug($context, 'Antwort: ' . $txt, 0);
-    }
-
-    private function GetHttpErrorDetails(int $statusCode, array $data): string
-    {
-        $errorText = match ($statusCode) {
-            400 => 'Ungültige Anfrage an die Smartcar API.',
-            401 => 'Ungültiger oder abgelaufener Application Access Token.',
-            403 => 'Keine Berechtigung für diesen Signal- oder API-Endpunkt.',
-            404 => 'Fahrzeug, User oder Signal nicht gefunden.',
-            408 => 'Zeitüberschreitung bei der API-Anfrage.',
-            429 => 'Zu viele Anfragen – Rate-Limit erreicht.',
-            500, 502, 503, 504 => 'Smartcar API-Serverfehler.',
-            default => 'Unbekannter HTTP-Fehler (' . $statusCode . ').'
-        };
-
-        $apiCode =
-            $data['errors'][0]['code']
-            ?? $data['code']
-            ?? $data['body']['code']
-            ?? '';
-
-        $apiDesc =
-            $data['errors'][0]['detail']
-            ?? $data['errors'][0]['description']
-            ?? $data['description']
-            ?? $data['body']['description']
-            ?? '';
-
-        if ($apiCode !== '') {
-            $errorText .= ' | Smartcar-Code: ' . $apiCode;
-        }
-
-        if ($apiDesc !== '') {
-            $errorText .= ' - ' . $apiDesc;
-        }
-
-        return $errorText;
     }
 
     public function FetchAll(): bool
