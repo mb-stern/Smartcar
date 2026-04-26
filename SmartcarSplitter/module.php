@@ -21,6 +21,8 @@ class SmartcarSplitter extends IPSModuleStrict
         $this->RegisterAttributeInteger('TokenExpiresAt', 0);
         $this->RegisterAttributeString('RedirectURI', '');
 
+        $this->RegisterPropertyString('ManualRedirectURI', '');
+
         $this->RegisterTimer('TokenTimer', 0, 'SMCARS_RequestApplicationAccessToken($_IPS["TARGET"]);');
     }
 
@@ -31,7 +33,8 @@ class SmartcarSplitter extends IPSModuleStrict
         $hookAddress = 'smartcar_' . $this->InstanceID;
         $hookPath = '/hook/' . $hookAddress;
 
-        $redirectURI = $this->BuildSymconConnectURL($hookPath);
+        $manualRedirectURI = trim($this->ReadPropertyString('ManualRedirectURI'));
+        $redirectURI = $manualRedirectURI !== '' ? $manualRedirectURI : $this->BuildSymconConnectURL($hookPath);
         $this->WriteAttributeString('RedirectURI', $redirectURI);
 
         $this->SendDebug('ApplyChanges', 'Hook/Redirect URI: ' . $redirectURI, 0);
@@ -58,6 +61,11 @@ class SmartcarSplitter extends IPSModuleStrict
                     'caption' => $redirectURI !== ''
                         ? 'Redirect-/Webhook-URI: ' . $redirectURI
                         : 'Redirect-/Webhook-URI: (leer – Symcon Connect nicht gefunden)'
+                ],
+                [
+                    'type' => 'ValidationTextBox',
+                    'name' => 'ManualRedirectURI',
+                    'caption' => 'Redirect-/Webhook-URI manuell überschreiben'
                 ],
                 [
                     'type' => 'ValidationTextBox',
@@ -633,7 +641,13 @@ class SmartcarSplitter extends IPSModuleStrict
     public function BuildConnectURL(string $mode, string $state, array $permissions): string
     {
         $clientID = trim($this->ReadPropertyString('ClientID'));
+        $hookAddress = 'smartcar_' . $this->InstanceID;
+        $hookPath = '/hook/' . $hookAddress;
+
         $redirectURI = $this->ReadAttributeString('RedirectURI');
+        if ($redirectURI === '') {
+            $redirectURI = $this->BuildSymconConnectURL($hookPath);
+        }
 
         if ($clientID === '') {
             return 'Fehler: Client ID fehlt.';
