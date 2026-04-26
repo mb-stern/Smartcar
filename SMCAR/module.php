@@ -23,6 +23,8 @@ class Smartcar extends IPSModuleStrict
         $this->RegisterAttributeString('RedirectURI', '');
         $this->RegisterAttributeString('ApplicationAccessToken', '');
         $this->RegisterAttributeInteger('ApplicationAccessTokenExpiresAt', 0);
+        $this->RegisterAttributeString('UserAccessToken', '');
+        $this->RegisterAttributeString('RefreshToken', '');
 
         $this->RegisterAttributeString('VehicleID', '');
         $this->RegisterAttributeString('VehicleUserID', '');
@@ -136,6 +138,56 @@ class Smartcar extends IPSModuleStrict
         return $token;
     }
 
+    public function ExchangeAuthCodeForUserToken(string $code): bool
+    {
+        $clientID     = trim($this->ReadPropertyString('ClientID'));
+        $clientSecret = trim($this->ReadPropertyString('ClientSecret'));
+        $redirectURI  = $this->ReadAttributeString('RedirectURI');
+
+        if ($clientID === '' || $clientSecret === '' || $redirectURI === '') {
+            $this->SendDebug('UserToken', 'ClientID/Secret/RedirectURI fehlt.', 0);
+            return false;
+        }
+
+        $url = 'https://auth.smartcar.com/oauth/token';
+
+        $postData = http_build_query([
+            'grant_type'    => 'authorization_code',
+            'code'          => $code,
+            'client_id'     => $clientID,
+            'client_secret' => $clientSecret,
+            'redirect_uri'  => $redirectURI
+        ]);
+
+        $opts = [
+            'http' => [
+                'header'        => "Content-Type: application/x-www-form-urlencoded\r\nAccept: application/json\r\n",
+                'method'        => 'POST',
+                'content'       => $postData,
+                'ignore_errors' => true
+            ]
+        ];
+
+        $response = @file_get_contents($url, false, stream_context_create($opts));
+        $headers  = $http_response_header ?? [];
+        $codeHttp = $this->GetStatusCodeFromHeaders($headers);
+        $data     = json_decode($response ?: '', true);
+
+        $this->SendDebug('UserToken', 'HTTP=' . $codeHttp . ' Antwort=' . ($response ?: '(leer)'), 0);
+
+        if ($codeHttp !== 200 || !is_array($data) || empty($data['access_token'])) {
+            return false;
+        }
+
+        // 🔥 DAS ist der wichtige Token für Fahrzeugdaten
+        $this->WriteAttributeString('UserAccessToken', (string)$data['access_token']);
+
+        // optional:
+        $this->WriteAttributeString('RefreshToken', (string)($data['refresh_token'] ?? ''));
+
+        return true;
+    }
+
     public function GetConfigurationForm(): string
     {
         $effectiveRedirect = $this->ReadAttributeString('RedirectURI');
@@ -144,7 +196,7 @@ class Smartcar extends IPSModuleStrict
 
         $form = [
             'elements' => [
-                
+                ['type' => 'Label', 'caption' => 'Webhook-URL: ' . $effectiveRedirect],
                 ['type' => 'Label', 'caption' => 'Smartcar API V3 – nur Signals, keine Legacy/V2-Endpunkte'],
                 ['type' => 'Label', 'caption' => 'Redirect-/Callback-URI: ' . $effectiveRedirect],
 
@@ -196,7 +248,7 @@ class Smartcar extends IPSModuleStrict
                         ['caption' => 'Signal', 'name' => 'signal', 'width' => 'auto'],
                         ['caption' => 'Permission', 'name' => 'permission', 'width' => '160px']
                     ],
-                    'values' => $this->GetSignalCheckboxValues()
+                    'values' => $this->GetCachedSignalCheckboxValues()
                 ],
 
                 ['type' => 'Label', 'caption' => '────────────────────────────────────────'],
@@ -206,16 +258,36 @@ class Smartcar extends IPSModuleStrict
                 ['type' => 'ValidationTextBox', 'name' => 'ManagementToken', 'caption' => 'Application Management Token']
             ],
             'actions' => [
-                ['type' => 'Button', 'caption' => 'App-Token abrufen', 'onClick' => 'SMCAR_RequestApplicationAccessToken($id);'],
-                ['type' => 'Button', 'caption' => 'Connections laden', 'onClick' => 'SMCAR_LoadConnectionV3($id);'],
-                ['type' => 'Button', 'caption' => 'Compatibility aktualisieren', 'onClick' => 'SMCAR_RefreshCompatibility($id);'],
+                ['type' => 'Button', 'caption' => 'Mit Smartcar verbinden', 'onClick' => 'echo SMCAR_GenerateConnectURL($id);'],
                 ['type' => 'Button', 'caption' => 'Ausgewählte Signale abrufen', 'onClick' => 'SMCAR_FetchSelectedSignals($id);']
             ]
         ];
 
         return json_encode($form);
     }
-        private function BuildConnectURL(string $hookPath): string
+        
+    public function GenerateConnectURL(): string
+    {
+        $clientID = trim($this->ReadPropertyString('ClientID'));
+        $mode = $this->ReadPropertyString('Mode');
+        $redirectURI = $this->ReadAttributeString('RedirectURI');
+
+        if ($clientID === '' || $redirectURI === '') {
+            return 'Fehler: Client ID oder Redirect-URI fehlt!';
+        }
+
+        $state = bin2hex(random_bytes(8));
+
+        return 'https://connect.smartcar.com/oauth/authorize?'
+            . 'response_type=code'
+            . '&client_id=' . urlencode($clientID)
+            . '&redirect_uri=' . urlencode($redirectURI)
+            . '&scope=' . urlencode('read_vehicle_info read_signals')
+            . '&state=' . urlencode($state)
+            . '&mode=' . urlencode($mode);
+    }
+    
+    private function BuildConnectURL(string $hookPath): string
     {
         if ($hookPath === '' || strpos($hookPath, '/hook/') !== 0) {
             $hookPath = '/hook/' . ltrim($hookPath, '/');
@@ -477,6 +549,43 @@ class Smartcar extends IPSModuleStrict
         return array_values($signals);
     }
 
+    private function GetCachedSignalCheckboxValues(): array
+    {
+        $rawCache = $this->ReadAttributeString('CompatibilityCache');
+
+        if ($rawCache === '') {
+            return [];
+        }
+
+        $cacheKey = md5(
+            $rawCache .
+            $this->ReadAttributeString('VehicleMake') .
+            $this->ReadAttributeString('VehicleModel') .
+            $this->ReadAttributeInteger('VehicleYear') .
+            $this->ReadAttributeString('VehiclePowertrainType') .
+            $this->ReadPropertyString('SelectedSignals')
+        );
+
+        $cacheIdent = 'SignalCheckboxValues_' . $cacheKey;
+
+        $cached = $this->GetBuffer($cacheIdent);
+        if ($cached !== '') {
+            $values = json_decode($cached, true);
+            if (is_array($values)) {
+                return $values;
+            }
+        }
+
+        $values = $this->GetSignalCheckboxValues();
+
+        $this->SetBuffer(
+            $cacheIdent,
+            json_encode($values, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+        );
+
+        return $values;
+    }
+
     public function FetchSelectedSignals(): bool
     {
         $token = $this->GetApplicationAccessToken();
@@ -669,6 +778,26 @@ class Smartcar extends IPSModuleStrict
 
         $this->SendDebug('Webhook', 'Request method=' . $method . ' uri=' . $uri . ' qs=' . $qs, 0);
 
+        if ($method === 'GET' && isset($_GET['code'])) {
+
+            $authCode = $_GET['code'];
+
+            if (!$this->ExchangeAuthCodeForUserToken($authCode)) {
+                echo 'User Token fehlgeschlagen';
+                return;
+            }
+
+            if (!$this->LoadConnectionV3()) {
+                echo 'Connection laden fehlgeschlagen';
+                return;
+            }
+
+            $this->RefreshCompatibility();
+
+            echo 'Fahrzeug verbunden ✔';
+            return;
+        }
+        
         if (!$this->ReadPropertyBoolean('EnableWebhook')) {
             http_response_code(200);
             echo 'ignored';
