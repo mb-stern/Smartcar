@@ -109,37 +109,31 @@ class SmartcarVehicle extends IPSModuleStrict
                         'caption' => 'Typ',
                         'name' => 'type',
                         'width' => '90px',
-                        'edit' => ['type' => 'ValidationTextBox']
                     ],
                     [
                         'caption' => 'Gruppe',
                         'name' => 'group',
                         'width' => '160px',
-                        'edit' => ['type' => 'ValidationTextBox']
                     ],
                     [
                         'caption' => 'Name',
                         'name' => 'name',
                         'width' => 'auto',
-                        'edit' => ['type' => 'ValidationTextBox']
                     ],
                     [
                         'caption' => 'Capability',
                         'name' => 'capability',
                         'width' => '220px',
-                        'edit' => ['type' => 'ValidationTextBox']
                     ],
                     [
                         'caption' => 'Code',
                         'name' => 'code',
                         'width' => '220px',
-                        'edit' => ['type' => 'ValidationTextBox']
                     ],
                     [
                         'caption' => 'Permission',
                         'name' => 'permission',
                         'width' => '180px',
-                        'edit' => ['type' => 'ValidationTextBox']
                     ]
                 ],
                 'values' => $capabilities
