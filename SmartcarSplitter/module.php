@@ -1,6 +1,6 @@
 <?php
 
-class SmartcarVSplitter extends IPSModuleStrict
+class SmartcarSplitter extends IPSModuleStrict
 {
     public function Create(): void
     {
