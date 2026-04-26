@@ -84,7 +84,7 @@ class SmartcarVehicle extends IPSModuleStrict
                     'type' => 'List',
                     'name' => 'SelectedCapabilities',
                     'caption' => 'Kompatible Signale / Befehle',
-                    'rowCount' => 20,
+                    'rowCount' => 10,
                     'add' => false,
                     'delete' => false,
                     'sort' => [
