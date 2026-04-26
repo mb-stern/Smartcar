@@ -123,9 +123,9 @@ class SmartcarVehicle extends IPSModuleStrict
                         'name' => 'permission',
                         'width' => '180px'
                     ]
-                ],
+                ]
                 'values' => $capabilities
-            ],
+            ]
             'actions' => [
                 [
                     'type' => 'Button',
