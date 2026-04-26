@@ -392,102 +392,166 @@ class SmartcarVehicle extends IPSModuleStrict
 
     public function FetchSelectedSignals(): void
     {
+        $this->SendDebug('FetchSignals/Start', 'Aktiver Signalabruf gestartet.', 0);
+
         $entries = json_decode($this->ReadPropertyString('SelectedCapabilities'), true);
         if (!is_array($entries)) {
-            $this->SendDebug('FetchSignals', 'SelectedCapabilities ist kein Array.', 0);
+            $this->SendDebug('FetchSignals/Error', 'SelectedCapabilities ist kein Array: ' . $this->ReadPropertyString('SelectedCapabilities'), 0);
             return;
         }
 
         $vehicleId = $this->ReadPropertyString('VehicleID');
-        $userId = $this->ReadPropertyString('UserID');
+        $userId    = $this->ReadPropertyString('UserID');
 
-        foreach ($entries as $entry) {
+        $this->SendDebug('FetchSignals/Vehicle', json_encode([
+            'vehicleId' => $vehicleId,
+            'userId'    => $userId,
+            'count'     => count($entries)
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+
+        if ($vehicleId === '') {
+            $this->SendDebug('FetchSignals/Error', 'VehicleID fehlt.', 0);
+            return;
+        }
+
+        if ($userId === '') {
+            $this->SendDebug('FetchSignals/Error', 'UserID fehlt. Connect-Redirect wurde vermutlich noch nicht ins Vehicle geschrieben.', 0);
+            return;
+        }
+
+        $fetched = 0;
+        $skipped = 0;
+
+        foreach ($entries as $index => $entry) {
             if (!is_array($entry)) {
+                $skipped++;
                 continue;
             }
 
-            if (!($entry['selected'] ?? false)) {
+            $selected =
+                ($entry['selected'] ?? false) === true ||
+                ($entry['selected'] ?? false) === 1 ||
+                ($entry['selected'] ?? false) === '1' ||
+                strtolower((string)($entry['selected'] ?? '')) === 'true';
+
+            if (!$selected) {
+                $skipped++;
                 continue;
             }
 
             if (strtolower((string)($entry['type'] ?? '')) !== 'signal') {
+                $this->SendDebug('FetchSignals/Skip', 'Kein Signal: ' . json_encode($entry, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+                $skipped++;
                 continue;
             }
 
-            $code = (string)($entry['code'] ?? '');
-            if ($code === '') {
+            // Wichtig: Für Smartcar /signals/{signalCode} die capability verwenden.
+            $signalCode = (string)($entry['capability'] ?? '');
+            if ($signalCode === '') {
+                $signalCode = (string)($entry['code'] ?? '');
+            }
+
+            if ($signalCode === '') {
+                $this->SendDebug('FetchSignals/Skip', 'Kein signalCode/capability bei Index ' . $index, 0);
+                $skipped++;
                 continue;
             }
+
+            $this->SendDebug('FetchSignals/Request', json_encode([
+                'index'      => $index,
+                'name'       => $entry['name'] ?? '',
+                'capability' => $entry['capability'] ?? '',
+                'code'       => $entry['code'] ?? '',
+                'signalCode' => $signalCode
+            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
             $result = $this->SendDataToParent(json_encode([
-                'DataID' => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
-                'Command' => 'GetSignal',
-                'VehicleID' => $vehicleId,
-                'UserID' => $userId,
-                'SignalCode' => $code
+                'DataID'     => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
+                'Command'    => 'GetSignal',
+                'VehicleID'  => $vehicleId,
+                'UserID'     => $userId,
+                'SignalCode' => $signalCode
             ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
 
-            $this->SendDebug('FetchSignal/' . $code, (string)$result, 0);
+            $this->SendDebug('FetchSignals/Response/' . $signalCode, (string)$result, 0);
 
             $decoded = json_decode((string)$result, true);
-            if (!is_array($decoded) || empty($decoded['success'])) {
+            if (!is_array($decoded)) {
+                $this->SendDebug('FetchSignals/Error', 'Antwort ist kein JSON für ' . $signalCode, 0);
                 continue;
             }
 
-            $body = $decoded['body']['data']['attributes']['body']
-                ?? $decoded['body']['attributes']['body']
-                ?? $decoded['body']['body']
+            if (empty($decoded['success'])) {
+                $this->SendDebug('FetchSignals/Error', 'success=false für ' . $signalCode . ': ' . json_encode($decoded, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+                continue;
+            }
+
+            $attributes = $decoded['body']['data']['attributes']
+                ?? $decoded['body']['attributes']
                 ?? [];
 
-            $status = $decoded['body']['data']['attributes']['status']
-                ?? $decoded['body']['attributes']['status']
-                ?? $decoded['body']['status']
-                ?? null;
+            $body = is_array($attributes['body'] ?? null) ? $attributes['body'] : [];
+            $status = is_array($attributes['status'] ?? null) ? $attributes['status'] : null;
 
-            $this->ApplySignalFromV3(
-                $code,
-                is_array($body) ? $body : [],
-                is_array($status) ? $status : null,
-                $entry
-            );
+            $this->SendDebug('FetchSignals/Parsed/' . $signalCode, json_encode([
+                'body'   => $body,
+                'status' => $status
+            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+
+            $this->ApplySignalFromV3($signalCode, $body, $status, $entry);
+            $fetched++;
         }
+
+        $this->SendDebug('FetchSignals/Done', 'Fertig. fetched=' . $fetched . ' skipped=' . $skipped, 0);
     }
 
     public function ProcessWebhookSignals(string $payloadJson): void
     {
+        $this->SendDebug('WebhookVehicle/Start', 'Payload empfangen.', 0);
+
         $payload = json_decode($payloadJson, true);
         if (!is_array($payload)) {
-            $this->SendDebug('Webhook', 'Payload ist kein JSON.', 0);
+            $this->SendDebug('WebhookVehicle/Error', 'Payload ist kein JSON: ' . $payloadJson, 0);
             return;
         }
 
         $signals = $payload['data']['signals'] ?? [];
         if (!is_array($signals)) {
-            $this->SendDebug('Webhook', 'Keine signals[] im Payload.', 0);
+            $this->SendDebug('WebhookVehicle/Error', 'Keine signals[] im Payload: ' . $payloadJson, 0);
             return;
         }
 
         $selectedMap = $this->GetSelectedSignalMap();
+
+        $this->SendDebug('WebhookVehicle/Info', json_encode([
+            'signalsReceived' => count($signals),
+            'selectedSignals' => array_keys($selectedMap)
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
         foreach ($signals as $signal) {
             if (!is_array($signal)) {
                 continue;
             }
 
-            $code = (string)($signal['code'] ?? '');
-            if ($code === '') {
+            $signalCode = (string)($signal['code'] ?? '');
+            if ($signalCode === '') {
                 continue;
             }
 
-            if (!isset($selectedMap[$code])) {
-                $this->SendDebug('Webhook/Skip', 'Signal nicht aktiviert: ' . $code, 0);
+            if (!isset($selectedMap[$signalCode])) {
+                $this->SendDebug('WebhookVehicle/Skip', 'Signal nicht aktiviert: ' . $signalCode, 0);
                 continue;
             }
 
-            $body = is_array($signal['body'] ?? null) ? $signal['body'] : [];
+            $body   = is_array($signal['body'] ?? null) ? $signal['body'] : [];
             $status = is_array($signal['status'] ?? null) ? $signal['status'] : null;
 
-            $this->ApplySignalFromV3($code, $body, $status, $selectedMap[$code]);
+            $this->SendDebug('WebhookVehicle/Apply/' . $signalCode, json_encode([
+                'body'   => $body,
+                'status' => $status
+            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+
+            $this->ApplySignalFromV3($signalCode, $body, $status, $selectedMap[$signalCode]);
         }
     }
 
@@ -505,7 +569,13 @@ class SmartcarVehicle extends IPSModuleStrict
                 continue;
             }
 
-            if (!($entry['selected'] ?? false)) {
+            $selected =
+                ($entry['selected'] ?? false) === true ||
+                ($entry['selected'] ?? false) === 1 ||
+                ($entry['selected'] ?? false) === '1' ||
+                strtolower((string)($entry['selected'] ?? '')) === 'true';
+
+            if (!$selected) {
                 continue;
             }
 
@@ -513,12 +583,16 @@ class SmartcarVehicle extends IPSModuleStrict
                 continue;
             }
 
-            $code = (string)($entry['code'] ?? '');
-            if ($code === '') {
+            $signalCode = (string)($entry['capability'] ?? '');
+            if ($signalCode === '') {
+                $signalCode = (string)($entry['code'] ?? '');
+            }
+
+            if ($signalCode === '') {
                 continue;
             }
 
-            $map[$code] = $entry;
+            $map[$signalCode] = $entry;
         }
 
         return $map;
