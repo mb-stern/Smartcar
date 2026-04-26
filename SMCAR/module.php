@@ -206,16 +206,36 @@ class Smartcar extends IPSModuleStrict
                 ['type' => 'ValidationTextBox', 'name' => 'ManagementToken', 'caption' => 'Application Management Token']
             ],
             'actions' => [
-                ['type' => 'Button', 'caption' => 'App-Token abrufen', 'onClick' => 'SMCAR_RequestApplicationAccessToken($id);'],
-                ['type' => 'Button', 'caption' => 'Connections laden', 'onClick' => 'SMCAR_LoadConnectionV3($id);'],
-                ['type' => 'Button', 'caption' => 'Compatibility aktualisieren', 'onClick' => 'SMCAR_RefreshCompatibility($id);'],
+                ['type' => 'Button', 'caption' => 'Mit Smartcar verbinden', 'onClick' => 'echo SMCAR_GenerateConnectURL($id);'],
                 ['type' => 'Button', 'caption' => 'Ausgewählte Signale abrufen', 'onClick' => 'SMCAR_FetchSelectedSignals($id);']
             ]
         ];
 
         return json_encode($form);
     }
-        private function BuildConnectURL(string $hookPath): string
+        
+    public function GenerateConnectURL(): string
+    {
+        $clientID = trim($this->ReadPropertyString('ClientID'));
+        $mode = $this->ReadPropertyString('Mode');
+        $redirectURI = $this->ReadAttributeString('RedirectURI');
+
+        if ($clientID === '' || $redirectURI === '') {
+            return 'Fehler: Client ID oder Redirect-URI fehlt!';
+        }
+
+        $state = bin2hex(random_bytes(8));
+
+        return 'https://connect.smartcar.com/oauth/authorize?'
+            . 'response_type=code'
+            . '&client_id=' . urlencode($clientID)
+            . '&redirect_uri=' . urlencode($redirectURI)
+            . '&scope=' . urlencode('read_vehicle_info read_signals')
+            . '&state=' . urlencode($state)
+            . '&mode=' . urlencode($mode);
+    }
+    
+    private function BuildConnectURL(string $hookPath): string
     {
         if ($hookPath === '' || strpos($hookPath, '/hook/') !== 0) {
             $hookPath = '/hook/' . ltrim($hookPath, '/');
@@ -669,6 +689,27 @@ class Smartcar extends IPSModuleStrict
 
         $this->SendDebug('Webhook', 'Request method=' . $method . ' uri=' . $uri . ' qs=' . $qs, 0);
 
+        if ($method === 'GET' && isset($_GET['code'])) {
+            $this->SendDebug('OAuth', 'Connect abgeschlossen. Code empfangen.', 0);
+
+            if (!$this->RequestApplicationAccessToken()) {
+                http_response_code(500);
+                echo 'App-Token konnte nicht geholt werden.';
+                return;
+            }
+
+            if (!$this->LoadConnectionV3()) {
+                http_response_code(500);
+                echo 'Connection konnte nicht geladen werden.';
+                return;
+            }
+
+            $this->RefreshCompatibility();
+
+            echo 'Fahrzeug erfolgreich verbunden. Compatibility wurde geladen.';
+            return;
+        }
+        
         if (!$this->ReadPropertyBoolean('EnableWebhook')) {
             http_response_code(200);
             echo 'ignored';
