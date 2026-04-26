@@ -340,7 +340,7 @@ class SmartcarSplitter extends IPSModuleStrict
                     (string)$data['VehicleID'],
                     (string)$data['Method'],
                     (string)$data['Path'],
-                    $data['Body'] ?? null
+                    isset($data['Body']) ? json_encode($data['Body']) : ''
                 ));
 
             default:
