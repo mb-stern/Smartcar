@@ -55,7 +55,9 @@ class SmartcarSplitter extends IPSModuleStrict
             'elements' => [
                 [
                     'type' => 'Label',
-                    'caption' => 'Redirect-/Webhook-URI: ' . $redirectURI
+                    'caption' => $redirectURI !== ''
+                        ? 'Redirect-/Webhook-URI: ' . $redirectURI
+                        : 'Redirect-/Webhook-URI: (leer – Symcon Connect nicht gefunden)'
                 ],
                 [
                     'type' => 'ValidationTextBox',
