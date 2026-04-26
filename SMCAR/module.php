@@ -1314,153 +1314,67 @@ private function canonicalizePath(string $path): string
     }
 
     public function FetchVehicleData()
-    {
-        $accessToken = $this->ReadAttributeString('AccessToken');
-        $vehicleID   = $this->GetVehicleID($accessToken);
+{
+    $vehicleID = trim($this->ReadPropertyString('VehicleID'));
 
-        if ($accessToken === '' || $vehicleID === null || $vehicleID === '') {
-            $this->SendDebug('FetchVehicleData', '❌ Access Token oder Fahrzeug-ID fehlt!', 0);
-            $this->LogMessage('FetchVehicleData - Access Token oder Fahrzeug-ID fehlt!', KL_ERROR);
-            return false;
-        }
-
-        $paths = $this->getEnabledReadPaths();
-        if (empty($paths)) {
-            $this->SendDebug('FetchVehicleData', 'Keine Read-Scopes aktiviert!', 0);
-            $this->LogMessage('FetchVehicleData - Keine Read-Scopes aktiviert!', KL_WARNING);
-            return false;
-        }
-
-        $endpoints = array_map(fn($p) => ['path' => $p], $paths);
-        $url       = "https://api.smartcar.com/v2.0/vehicles/$vehicleID/batch";
-
-        $res = $this->httpRequest(
-            'FetchVehicleData',
-            'POST',
-            $url,
-            $accessToken,
-            ['requests' => $endpoints],
-            'batch',
-            []
-        );
-
-        if ($res === null) return false;
-        if (!empty($res['retried'])) return false; // Timer übernimmt
-
-        $statusCode = (int)$res['statusCode'];
-        $data       = $res['data'] ?? [];
-
-        if ($statusCode !== 200) {
-            $fullMsg = $this->GetHttpErrorDetails($statusCode, is_array($data) ? $data : []);
-            $this->SendDebug('FetchVehicleData', "❌ Fehler: $fullMsg", 0);
-            $this->LogMessage("FetchVehicleData - $fullMsg", KL_ERROR);
-            return false;
-        }
-
-        if (!isset($data['responses']) || !is_array($data['responses'])) {
-            $this->SendDebug('FetchVehicleData', '❌ Unerwartete Antwortstruktur.', 0);
-            $this->LogMessage('FetchVehicleData - Unerwartete Antwortstruktur', KL_ERROR);
-            return false;
-        }
-
-        $hasError = false;
-
-        $oemDateApi = [];
-
-        foreach ($data['responses'] as $resp) {
-
-            $path    = (string)($resp['path'] ?? '');
-            $scCode  = (int)($resp['code'] ?? 0);
-            $headers = is_array($resp['headers'] ?? null) ? $resp['headers'] : [];
-
-            // --- NEU: OEM-Zeitpunkt (sc-data-age) als lokales Datum speichern ---
-            $scDataAge = $headers['sc-data-age'] ?? $headers['SC-DATA-AGE'] ?? null;
-            if ($scDataAge !== null && $scDataAge !== '') {
-                $ts = strtotime((string)$scDataAge); // ISO-Z -> UTC -> Timestamp
-                $oemDateApi[$path] = $ts ? date('Y-m-d H:i', $ts) : 'parse_err';
-            } else {
-                // kein Header (z.B. 429 oder Endpoint ohne Age)
-                if (!isset($oemDateApi[$path])) $oemDateApi[$path] = 'n/a';
-            }
-            
-            if ($scCode === 200 && isset($resp['body'])) {
-                $this->ProcessResponse($path, (array)$resp['body']);
-                continue;
-            }
-
-            // -----------------------------
-            // 🔥 NEU: 429 Retry-After Debug
-            // -----------------------------
-            if ($scCode === 429) {
-                // Smartcar liefert im Batch die Header als Map, z.B. {"Retry-After":252}
-                $retryAfter = $headers['Retry-After'] ?? $headers['retry-after'] ?? null;
-
-                if ($retryAfter !== null && $retryAfter !== '') {
-                    $this->SendDebug('FetchVehicleData', "⏳ RATE_LIMIT für {$path} → Retry-After: {$retryAfter} Sekunden", 0);
-                } else {
-                    $this->SendDebug('FetchVehicleData', "⏳ RATE_LIMIT für {$path} → Retry-After: (nicht vorhanden)", 0);
-                }
-            }
-
-            // bisheriges Fehler-Handling beibehalten
-            $hasError = true;
-            $fullMsg  = $this->GetHttpErrorDetails($scCode, (array)($resp['body'] ?? $resp));
-            $this->SendDebug('FetchVehicleData', "⚠️ Teilfehler für {$path}: $fullMsg", 0);
-            $this->LogMessage("FetchVehicleData - Teilfehler für {$path}: $fullMsg", KL_ERROR);
-        }
-
-        // --- NEU: 1 Zeile Debug mit OEM-Stand pro Path ---
-        if (!empty($oemDateApi)) {
-            $this->SendDebug('OEM-Date(API)', json_encode($oemDateApi, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
-        }
-
-        $this->SendDebug('FetchVehicleData', $hasError ? '⚠️ Teilweise erfolgreich.' : '✅ Alle Endpunkte erfolgreich.', 0);
-        return true;
+    if ($vehicleID === '') {
+        $this->SendDebug('FetchVehicleData', 'VehicleID fehlt. Bitte zuerst Fahrzeug auswählen/eintragen.', 0);
+        $this->LogMessage('FetchVehicleData - VehicleID fehlt.', KL_WARNING);
+        return false;
     }
 
-    private function GetVehicleID(string $accessToken, int $retryCount = 0): ?string
-    {
-        $cached = $this->ReadAttributeString('VehicleID');
-        if ($cached !== '') return $cached;
+    $url = 'https://vehicle.api.smartcar.com/v3/vehicles/' . rawurlencode($vehicleID);
 
-        if ($accessToken === '') {
-            $this->SendDebug('GetVehicleID', '❌ AccessToken leer.', 0);
-            return null;
-        }
+    $res = $this->httpRequestV3(
+        'FetchVehicleData',
+        'GET',
+        $url,
+        null,
+        true
+    );
 
-        $url = 'https://api.smartcar.com/v2.0/vehicles';
+    if ($res === null) {
+        $this->SendDebug('FetchVehicleData', 'V3 Request fehlgeschlagen.', 0);
+        return false;
+    }
 
-        $res = $this->httpRequest(
-            'GetVehicleID',
-            'GET',
-            $url,
-            $accessToken,
-            null,
-            'getVehicleID',
-            []
+    $statusCode = (int)$res['statusCode'];
+    $data       = $res['data'] ?? null;
+
+    if ($statusCode !== 200) {
+        $this->SendDebug(
+            'FetchVehicleData',
+            'Fehler HTTP ' . $statusCode . ': ' . ($res['raw'] ?? ''),
+            0
         );
+        return false;
+    }
 
-        if ($res === null) return null;
-        if (!empty($res['retried'])) return null; // Timer übernimmt
+    if (!is_array($data)) {
+        $this->SendDebug('FetchVehicleData', 'Unerwartete Antwortstruktur.', 0);
+        return false;
+    }
 
-        $statusCode = (int)$res['statusCode'];
-        $data       = $res['data'] ?? [];
+    $this->SendDebug(
+        'FetchVehicleData/V3',
+        json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+        0
+    );
 
-        if ($statusCode !== 200) {
-            $msg = $this->GetHttpErrorDetails($statusCode, is_array($data) ? $data : []);
-            $this->SendDebug('GetVehicleID', "❌ Fehler: $msg", 0);
-            return null;
-        }
+    return true;
+}
 
-        if (is_array($data) && isset($data['vehicles'][0])) {
-            $vehicleId = (string)$data['vehicles'][0];
-            $this->WriteAttributeString('VehicleID', $vehicleId);
-            return $vehicleId;
-        }
+    private function GetVehicleID(string $accessToken = ''): ?string
+{
+    $vehicleID = trim($this->ReadPropertyString('VehicleID'));
 
-        $this->SendDebug('GetVehicleID', 'Keine Fahrzeug-ID gefunden! HTTP=' . $statusCode . ' Body=' . json_encode($data), 0);
+    if ($vehicleID === '') {
+        $this->SendDebug('GetVehicleID', 'VehicleID Property ist leer.', 0);
         return null;
     }
+
+    return $vehicleID;
+}
 
     private function ProcessResponse(string $path, array $body)
     {
