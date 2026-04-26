@@ -156,15 +156,19 @@ class SmartcarConfigurator extends IPSModuleStrict
 
             $instanceId = IPS_CreateInstance(self::VEHICLE_MODULE_ID);
 
-            IPS_SetParent($instanceId, IPS_GetParent($this->InstanceID));
+            $targetParentId = IPS_GetParent($this->InstanceID);
+            $currentParentId = IPS_GetParent($instanceId);
+
+            if ($targetParentId > 0 && $currentParentId !== $targetParentId) {
+                @IPS_SetParent($instanceId, $targetParentId);
+            }
 
             $splitterId = $this->GetSplitterInstanceID();
             if ($splitterId > 0) {
-                IPS_ConnectInstance($instanceId, $splitterId);
+                @IPS_ConnectInstance($instanceId, $splitterId);
             }
 
             $this->UpdateVehicleInstance($instanceId, $connection);
-        }
 
         $this->ReloadForm();
     }
