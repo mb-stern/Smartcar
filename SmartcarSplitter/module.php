@@ -383,8 +383,8 @@ class SmartcarSplitter extends IPSModuleStrict
         }
 
         /*if ($powertrainType !== '' && strtoupper($powertrainType) !== 'ICE') {
-            $query['filter[powertrainType]'] = $powertrainType;*/
-        }
+            $query['filter[powertrainType]'] = $powertrainType;
+        } */
 
         $url = 'https://compatibility.api.smartcar.com/v3/compatible-vehicles';
         if (!empty($query)) {
