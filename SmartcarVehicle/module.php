@@ -1,12 +1,12 @@
 <?php
 
-class Smartcar extends IPSModuleStrict
+class SmartcarVehicle extends IPSModuleStrict
 {
     public function Create(): void
     {
         parent::Create();
 
-        // Webhook registrieren
+        //Webhook registrieren
         $this->RegisterHook('smartcar_' . $this->InstanceID);
 
         // Allgemeine Eigenschaften
@@ -14,19 +14,15 @@ class Smartcar extends IPSModuleStrict
         $this->RegisterPropertyString('ClientSecret', '');
         $this->RegisterPropertyString('Mode', 'live');
 
-        // Optional: Manuelle Redirect-URI für späteren Connect-/Webhook-Ablauf
+        // Optional: Manuelle Redirect-URI (überschreibt Connect+Hook)
         $this->RegisterPropertyString('ManualRedirectURI', '');
 
-        // V3: User- und Fahrzeugzuordnung
-        $this->RegisterPropertyString('UserID', '');
-        $this->RegisterPropertyString('VehicleID', '');
-
-        // Webhook-Optionen bleiben vorerst bestehen
+        // Webhook-Optionen
         $this->RegisterPropertyBoolean('EnableWebhook', true);
         $this->RegisterPropertyBoolean('VerifyWebhookSignature', true);
         $this->RegisterPropertyBoolean('TrackLastSignals', false);
-
-        // Smartcar application_management_token für HMAC / VERIFY
+        
+        // Smartcar "application_management_token" für HMAC (SC-Signature) & VERIFY-Challenge
         $this->RegisterPropertyString('ManagementToken', '');
 
         // Scopes für API-Endpunkte
@@ -43,28 +39,22 @@ class Smartcar extends IPSModuleStrict
         $this->RegisterPropertyBoolean('ScopeReadVIN', false);
         $this->RegisterPropertyBoolean('ScopeReadOilLife', false);
 
-        // Vorhandene Ansteuerungen
+        // Vorhandene Ansteuerungen (POST-Endpunkte)
         $this->RegisterPropertyBoolean('SetChargeLimit', false);
         $this->RegisterPropertyBoolean('SetChargeStatus', false);
         $this->RegisterPropertyBoolean('SetLockStatus', false);
 
         // Attribute für interne Nutzung
         $this->RegisterAttributeString('CurrentHook', '');
+        $this->RegisterAttributeString('AccessToken', '');
+        $this->RegisterAttributeString('RefreshToken', '');
+        $this->RegisterAttributeString('VehicleID', '');
+        $this->RegisterAttributeString('PendingHttpRetry', '');
         $this->RegisterAttributeString('RedirectURI', '');
 
-        // V3 Application Token
-        $this->RegisterAttributeString('ApplicationAccessToken', '');
-        $this->RegisterAttributeInteger('ApplicationAccessTokenExpiresAt', 0);
-
-        // Später für Fahrzeugliste
-        $this->RegisterAttributeString('AvailableVehicles', '[]');
-
         // Timer
-        $this->RegisterTimer(
-            'TokenRefreshTimer',
-            0,
-            'SMCAR_RequestApplicationAccessToken(' . $this->InstanceID . ');'
-        );
+        $this->RegisterTimer('TokenRefreshTimer', 0, 'SMCAR_RefreshAccessToken(' . $this->InstanceID . ');');
+        $this->RegisterTimer('HttpRetryTimer', 0, 'SMCAR_HandleHttpRetry($_IPS["TARGET"]);');
 
         // Kernel-Runlevel
         $this->RegisterMessage(0, IPS_KERNELMESSAGE);
@@ -74,20 +64,19 @@ class Smartcar extends IPSModuleStrict
     {
         parent::ApplyChanges();
 
-        // Hook-Adresse
+        /// Hook-Adresse (wird zu /hook/<adresse>)
         $hookAddress = 'smartcar_' . $this->InstanceID;
         $hookPath    = '/hook/' . $hookAddress;
 
         $this->SendDebug('ApplyChanges', "Hook-Pfad aktiv: $hookPath", 0);
 
-        // Redirect-URI für späteren Connect-/Webhook-Ablauf weiterhin vorbereiten
+        // Redirect-URI
         $manual = trim($this->ReadPropertyString('ManualRedirectURI'));
         if ($manual !== '') {
             $effectiveRedirect = $manual;
         } else {
             $effectiveRedirect = $this->BuildConnectURL($hookPath);
         }
-
         $this->WriteAttributeString('RedirectURI', $effectiveRedirect);
 
         $this->CreateProfile();
@@ -102,98 +91,16 @@ class Smartcar extends IPSModuleStrict
 
         $this->UpdateVariablesBasedOnScopes();
 
-        // V3: Application Token anfordern, sobald ClientID und ClientSecret vorhanden sind
-        if (
-            trim($this->ReadPropertyString('ClientID')) !== '' &&
-            trim($this->ReadPropertyString('ClientSecret')) !== ''
-        ) {
-            $this->RequestApplicationAccessToken();
+        // Nach Update/ApplyChanges: Tokenrefresh neu anstoßen (egal wie alt), wenn RefreshToken vorhanden
+        if ($this->ReadAttributeString('RefreshToken') !== '') {
+            $this->SendDebug('Token', 'ApplyChanges -> starte RefreshAccessToken', 0);
+            $this->RefreshAccessToken();
+
+            // Timer danach wieder aktivieren (z.B. alle 55 Minuten)
+            $this->SetTimerInterval('TokenRefreshTimer', 55 * 60 * 1000);
         } else {
             $this->SetTimerInterval('TokenRefreshTimer', 0);
-            $this->SendDebug('AppToken', 'ClientID oder ClientSecret fehlt. TokenRefreshTimer deaktiviert.', 0);
         }
-    }
-
-    public function RequestApplicationAccessToken(): bool
-    {
-        $this->SendDebug('AppToken', 'Application Access Token wird angefordert...', 0);
-
-        $clientID     = trim($this->ReadPropertyString('ClientID'));
-        $clientSecret = trim($this->ReadPropertyString('ClientSecret'));
-
-        if ($clientID === '' || $clientSecret === '') {
-            $this->SendDebug('AppToken', 'ClientID oder ClientSecret fehlt.', 0);
-            $this->SetTimerInterval('TokenRefreshTimer', 0);
-            return false;
-        }
-
-        $url = 'https://iam.smartcar.com/oauth2/token';
-
-        $postData = http_build_query([
-            'grant_type'    => 'client_credentials',
-            'client_id'     => $clientID,
-            'client_secret' => $clientSecret
-        ]);
-
-        $opts = [
-            'http' => [
-                'header'        => "Content-Type: application/x-www-form-urlencoded\r\nAccept: application/json\r\n",
-                'method'        => 'POST',
-                'content'       => $postData,
-                'ignore_errors' => true
-            ]
-        ];
-
-        $context  = stream_context_create($opts);
-        $response = @file_get_contents($url, false, $context);
-        $data     = json_decode($response ?: '', true);
-
-        if (!is_array($data) || empty($data['access_token'])) {
-            $this->SendDebug('AppToken', 'Token-Anforderung fehlgeschlagen. Antwort: ' . ($response ?: '(leer)'), 0);
-            $this->LogMessage('Smartcar V3 Application Access Token konnte nicht angefordert werden.', KL_ERROR);
-
-            // Nicht aggressiv erneut versuchen
-            $this->SetTimerInterval('TokenRefreshTimer', 5 * 60 * 1000);
-            return false;
-        }
-
-        $expiresIn = isset($data['expires_in']) && is_numeric($data['expires_in'])
-            ? (int)$data['expires_in']
-            : 3600;
-
-        $this->WriteAttributeString('ApplicationAccessToken', (string)$data['access_token']);
-        $this->WriteAttributeInteger('ApplicationAccessTokenExpiresAt', time() + $expiresIn);
-
-        $refreshIn = max(60, $expiresIn - 300);
-        $this->SetTimerInterval('TokenRefreshTimer', $refreshIn * 1000);
-
-        $mask = function (string $token): string {
-            $len = strlen($token);
-            return $len <= 12 ? '***' : substr($token, 0, 8) . '...' . substr($token, -4);
-        };
-
-        $this->SendDebug(
-            'AppToken',
-            'Token gespeichert: ' . $mask((string)$data['access_token']) . ', gültig für ' . $expiresIn . 's, Refresh in ' . $refreshIn . 's',
-            0
-        );
-
-        return true;
-    }
-
-    private function GetApplicationAccessToken(): string
-    {
-        $token     = $this->ReadAttributeString('ApplicationAccessToken');
-        $expiresAt = $this->ReadAttributeInteger('ApplicationAccessTokenExpiresAt');
-
-        if ($token === '' || $expiresAt <= time() + 120) {
-            $this->SendDebug('AppToken', 'Token fehlt oder läuft bald ab. Fordere neuen Token an.', 0);
-            $this->RequestApplicationAccessToken();
-
-            $token = $this->ReadAttributeString('ApplicationAccessToken');
-        }
-
-        return $token;
     }
 
     public function RequestAction(string $Ident, mixed $Value): void
@@ -264,16 +171,27 @@ class Smartcar extends IPSModuleStrict
         $runlevel = $Data[0] ?? -1;
         $this->SendDebug('Kernel', 'IPS_KERNELMESSAGE runlevel=' . $runlevel, 0);
 
+        // Symcon ist vollständig gestartet
         if ($runlevel === KR_READY) {
-            if (
-                trim($this->ReadPropertyString('ClientID')) !== '' &&
-                trim($this->ReadPropertyString('ClientSecret')) !== ''
-            ) {
-                $this->SendDebug('AppToken', 'KR_READY -> fordere Application Access Token an.', 0);
-                $this->RequestApplicationAccessToken();
+
+            // Prüfen ob ein RefreshToken vorhanden ist
+            if ($this->ReadAttributeString('RefreshToken') !== '') {
+
+                $this->SendDebug('Token', 'KR_READY -> starte RefreshAccessToken', 0);
+
+                // Token nach Neustart immer neu anfordern (egal wie alt)
+                $this->RefreshAccessToken();
+
+                // Timer danach wieder aktivieren (z.B. alle 55 Minuten)
+                $this->SetTimerInterval('TokenRefreshTimer', 55 * 60 * 1000);
+
+                $this->SendDebug('Token', 'TokenRefreshTimer neu gesetzt (55 Minuten)', 0);
+
             } else {
+
+                // Kein RefreshToken → Timer aus
                 $this->SetTimerInterval('TokenRefreshTimer', 0);
-                $this->SendDebug('AppToken', 'KR_READY -> ClientID oder ClientSecret fehlt.', 0);
+                $this->SendDebug('Token', 'KR_READY -> kein RefreshToken vorhanden', 0);
             }
         }
     }
@@ -345,7 +263,6 @@ class Smartcar extends IPSModuleStrict
             ['type' => 'Button', 'caption' => 'Mit Smartcar verbinden', 'onClick' => 'echo SMCAR_GenerateAuthURL($id);'],
             ['type' => 'Button', 'caption' => 'Fahrzeugdaten abrufen', 'onClick' => 'SMCAR_FetchVehicleData($id);'],
             ['type' => 'Label',  'caption' => 'Sag danke und unterstütze den Modulentwickler:'],
-            ['type' => 'Button', 'caption' => 'Fahrzeugdaten abrufen', 'onClick' => 'SMCAR_FetchVehicleData($id);'],
             [
                 'type'  => 'RowLayout',
                 'items' => [
@@ -1099,145 +1016,6 @@ private function canonicalizePath(string $path): string
             'data'       => is_array($data) ? $data : null
         ];
     }
-    
-    private function httpRequestV3(
-    string $ctxName,
-    string $method,
-    string $url,
-    ?array $jsonBody = null,
-    bool $useUserHeader = true
-): ?array 
-    {
-        $accessToken = $this->GetApplicationAccessToken();
-
-        if ($accessToken === '') {
-            $this->SendDebug($ctxName, 'Kein Application Access Token verfügbar.', 0);
-            return null;
-        }
-
-        $headers =
-            "Authorization: Bearer {$accessToken}\r\n" .
-            "Accept: application/json\r\n" .
-            "Content-Type: application/json\r\n";
-
-        if ($useUserHeader) {
-            $userID = trim($this->ReadPropertyString('UserID'));
-
-            if ($userID !== '') {
-                $headers .= "sc-user-id: {$userID}\r\n";
-            } else {
-                $this->SendDebug($ctxName, 'Hinweis: UserID ist leer, sc-user-id Header wird nicht gesetzt.', 0);
-            }
-        }
-
-        $opts = [
-            'http' => [
-                'header'        => $headers,
-                'method'        => strtoupper($method),
-                'ignore_errors' => true
-            ]
-        ];
-
-        if ($jsonBody !== null) {
-            $opts['http']['content'] = json_encode($jsonBody, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-        }
-
-        $this->SendDebug($ctxName, 'V3 Request: ' . json_encode([
-            'method' => strtoupper($method),
-            'url'    => $url,
-            'body'   => $jsonBody
-        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
-
-        $context  = stream_context_create($opts);
-        $response = @file_get_contents($url, false, $context);
-
-        $httpHeaders = $http_response_header ?? [];
-        $statusCode  = $this->GetStatusCodeFromHeaders($httpHeaders);
-
-        if ($response === false) {
-            $this->SendDebug($ctxName, 'Keine Antwort von Smartcar V3.', 0);
-            $this->DebugHttpHeaders($httpHeaders, $statusCode);
-            return null;
-        }
-
-        $this->DebugJsonAntwort($ctxName, $response, $statusCode);
-
-        if ($statusCode !== 200 && $statusCode !== 201 && $statusCode !== 202) {
-            $this->DebugHttpHeaders($httpHeaders, $statusCode);
-        }
-
-        // Token ungültig/abgelaufen → einmal neu holen und Request wiederholen
-        if ($statusCode === 401) {
-            $this->SendDebug($ctxName, '401 Unauthorized -> Application Token wird erneuert und Request einmal wiederholt.', 0);
-
-            $this->WriteAttributeString('ApplicationAccessToken', '');
-            $this->WriteAttributeInteger('ApplicationAccessTokenExpiresAt', 0);
-
-            if (!$this->RequestApplicationAccessToken()) {
-                $this->SendDebug($ctxName, 'Token-Erneuerung fehlgeschlagen.', 0);
-                return null;
-            }
-
-            $newToken = $this->ReadAttributeString('ApplicationAccessToken');
-
-            $headers =
-                "Authorization: Bearer {$newToken}\r\n" .
-                "Accept: application/json\r\n" .
-                "Content-Type: application/json\r\n";
-
-            if ($useUserHeader) {
-                $userID = trim($this->ReadPropertyString('UserID'));
-                if ($userID !== '') {
-                    $headers .= "sc-user-id: {$userID}\r\n";
-                }
-            }
-
-            $opts['http']['header'] = $headers;
-
-            $context  = stream_context_create($opts);
-            $response = @file_get_contents($url, false, $context);
-
-            $httpHeaders = $http_response_header ?? [];
-            $statusCode  = $this->GetStatusCodeFromHeaders($httpHeaders);
-
-            if ($response === false) {
-                $this->SendDebug($ctxName, 'Keine Antwort nach Token-Erneuerung.', 0);
-                $this->DebugHttpHeaders($httpHeaders, $statusCode);
-                return null;
-            }
-
-            $this->DebugJsonAntwort($ctxName, $response, $statusCode);
-        }
-
-        $data = json_decode($response, true);
-
-        return [
-            'statusCode' => $statusCode,
-            'headers'    => $httpHeaders,
-            'raw'        => $response,
-            'data'       => is_array($data) ? $data : null
-        ];
-    }
-
-    public function TestApplicationToken(): bool
-    {
-        $token = $this->GetApplicationAccessToken();
-
-        if ($token === '') {
-            $this->SendDebug('TestApplicationToken', 'Kein Token erhalten.', 0);
-            return false;
-        }
-
-        $expiresAt = $this->ReadAttributeInteger('ApplicationAccessTokenExpiresAt');
-
-        $this->SendDebug(
-            'TestApplicationToken',
-            'Application Token vorhanden. Gültig bis: ' . date('Y-m-d H:i:s', $expiresAt),
-            0
-        );
-
-        return true;
-    }
 
     public function RefreshAccessToken(): bool
     {
@@ -1314,67 +1092,153 @@ private function canonicalizePath(string $path): string
     }
 
     public function FetchVehicleData()
-{
-    $vehicleID = trim($this->ReadPropertyString('VehicleID'));
+    {
+        $accessToken = $this->ReadAttributeString('AccessToken');
+        $vehicleID   = $this->GetVehicleID($accessToken);
 
-    if ($vehicleID === '') {
-        $this->SendDebug('FetchVehicleData', 'VehicleID fehlt. Bitte zuerst Fahrzeug auswählen/eintragen.', 0);
-        $this->LogMessage('FetchVehicleData - VehicleID fehlt.', KL_WARNING);
-        return false;
-    }
+        if ($accessToken === '' || $vehicleID === null || $vehicleID === '') {
+            $this->SendDebug('FetchVehicleData', '❌ Access Token oder Fahrzeug-ID fehlt!', 0);
+            $this->LogMessage('FetchVehicleData - Access Token oder Fahrzeug-ID fehlt!', KL_ERROR);
+            return false;
+        }
 
-    $url = 'https://vehicle.api.smartcar.com/v3/vehicles/' . rawurlencode($vehicleID);
+        $paths = $this->getEnabledReadPaths();
+        if (empty($paths)) {
+            $this->SendDebug('FetchVehicleData', 'Keine Read-Scopes aktiviert!', 0);
+            $this->LogMessage('FetchVehicleData - Keine Read-Scopes aktiviert!', KL_WARNING);
+            return false;
+        }
 
-    $res = $this->httpRequestV3(
-        'FetchVehicleData',
-        'GET',
-        $url,
-        null,
-        true
-    );
+        $endpoints = array_map(fn($p) => ['path' => $p], $paths);
+        $url       = "https://api.smartcar.com/v2.0/vehicles/$vehicleID/batch";
 
-    if ($res === null) {
-        $this->SendDebug('FetchVehicleData', 'V3 Request fehlgeschlagen.', 0);
-        return false;
-    }
-
-    $statusCode = (int)$res['statusCode'];
-    $data       = $res['data'] ?? null;
-
-    if ($statusCode !== 200) {
-        $this->SendDebug(
+        $res = $this->httpRequest(
             'FetchVehicleData',
-            'Fehler HTTP ' . $statusCode . ': ' . ($res['raw'] ?? ''),
-            0
+            'POST',
+            $url,
+            $accessToken,
+            ['requests' => $endpoints],
+            'batch',
+            []
         );
-        return false;
+
+        if ($res === null) return false;
+        if (!empty($res['retried'])) return false; // Timer übernimmt
+
+        $statusCode = (int)$res['statusCode'];
+        $data       = $res['data'] ?? [];
+
+        if ($statusCode !== 200) {
+            $fullMsg = $this->GetHttpErrorDetails($statusCode, is_array($data) ? $data : []);
+            $this->SendDebug('FetchVehicleData', "❌ Fehler: $fullMsg", 0);
+            $this->LogMessage("FetchVehicleData - $fullMsg", KL_ERROR);
+            return false;
+        }
+
+        if (!isset($data['responses']) || !is_array($data['responses'])) {
+            $this->SendDebug('FetchVehicleData', '❌ Unerwartete Antwortstruktur.', 0);
+            $this->LogMessage('FetchVehicleData - Unerwartete Antwortstruktur', KL_ERROR);
+            return false;
+        }
+
+        $hasError = false;
+
+        $oemDateApi = [];
+
+        foreach ($data['responses'] as $resp) {
+
+            $path    = (string)($resp['path'] ?? '');
+            $scCode  = (int)($resp['code'] ?? 0);
+            $headers = is_array($resp['headers'] ?? null) ? $resp['headers'] : [];
+
+            // --- NEU: OEM-Zeitpunkt (sc-data-age) als lokales Datum speichern ---
+            $scDataAge = $headers['sc-data-age'] ?? $headers['SC-DATA-AGE'] ?? null;
+            if ($scDataAge !== null && $scDataAge !== '') {
+                $ts = strtotime((string)$scDataAge); // ISO-Z -> UTC -> Timestamp
+                $oemDateApi[$path] = $ts ? date('Y-m-d H:i', $ts) : 'parse_err';
+            } else {
+                // kein Header (z.B. 429 oder Endpoint ohne Age)
+                if (!isset($oemDateApi[$path])) $oemDateApi[$path] = 'n/a';
+            }
+            
+            if ($scCode === 200 && isset($resp['body'])) {
+                $this->ProcessResponse($path, (array)$resp['body']);
+                continue;
+            }
+
+            // -----------------------------
+            // 🔥 NEU: 429 Retry-After Debug
+            // -----------------------------
+            if ($scCode === 429) {
+                // Smartcar liefert im Batch die Header als Map, z.B. {"Retry-After":252}
+                $retryAfter = $headers['Retry-After'] ?? $headers['retry-after'] ?? null;
+
+                if ($retryAfter !== null && $retryAfter !== '') {
+                    $this->SendDebug('FetchVehicleData', "⏳ RATE_LIMIT für {$path} → Retry-After: {$retryAfter} Sekunden", 0);
+                } else {
+                    $this->SendDebug('FetchVehicleData', "⏳ RATE_LIMIT für {$path} → Retry-After: (nicht vorhanden)", 0);
+                }
+            }
+
+            // bisheriges Fehler-Handling beibehalten
+            $hasError = true;
+            $fullMsg  = $this->GetHttpErrorDetails($scCode, (array)($resp['body'] ?? $resp));
+            $this->SendDebug('FetchVehicleData', "⚠️ Teilfehler für {$path}: $fullMsg", 0);
+            $this->LogMessage("FetchVehicleData - Teilfehler für {$path}: $fullMsg", KL_ERROR);
+        }
+
+        // --- NEU: 1 Zeile Debug mit OEM-Stand pro Path ---
+        if (!empty($oemDateApi)) {
+            $this->SendDebug('OEM-Date(API)', json_encode($oemDateApi, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+        }
+
+        $this->SendDebug('FetchVehicleData', $hasError ? '⚠️ Teilweise erfolgreich.' : '✅ Alle Endpunkte erfolgreich.', 0);
+        return true;
     }
 
-    if (!is_array($data)) {
-        $this->SendDebug('FetchVehicleData', 'Unerwartete Antwortstruktur.', 0);
-        return false;
-    }
+    private function GetVehicleID(string $accessToken, int $retryCount = 0): ?string
+    {
+        $cached = $this->ReadAttributeString('VehicleID');
+        if ($cached !== '') return $cached;
 
-    $this->SendDebug(
-        'FetchVehicleData/V3',
-        json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
-        0
-    );
+        if ($accessToken === '') {
+            $this->SendDebug('GetVehicleID', '❌ AccessToken leer.', 0);
+            return null;
+        }
 
-    return true;
-}
+        $url = 'https://api.smartcar.com/v2.0/vehicles';
 
-    private function GetVehicleID(string $accessToken = ''): ?string
-{
-    $vehicleID = trim($this->ReadPropertyString('VehicleID'));
+        $res = $this->httpRequest(
+            'GetVehicleID',
+            'GET',
+            $url,
+            $accessToken,
+            null,
+            'getVehicleID',
+            []
+        );
 
-    if ($vehicleID === '') {
-        $this->SendDebug('GetVehicleID', 'VehicleID Property ist leer.', 0);
+        if ($res === null) return null;
+        if (!empty($res['retried'])) return null; // Timer übernimmt
+
+        $statusCode = (int)$res['statusCode'];
+        $data       = $res['data'] ?? [];
+
+        if ($statusCode !== 200) {
+            $msg = $this->GetHttpErrorDetails($statusCode, is_array($data) ? $data : []);
+            $this->SendDebug('GetVehicleID', "❌ Fehler: $msg", 0);
+            return null;
+        }
+
+        if (is_array($data) && isset($data['vehicles'][0])) {
+            $vehicleId = (string)$data['vehicles'][0];
+            $this->WriteAttributeString('VehicleID', $vehicleId);
+            return $vehicleId;
+        }
+
+        $this->SendDebug('GetVehicleID', 'Keine Fahrzeug-ID gefunden! HTTP=' . $statusCode . ' Body=' . json_encode($data), 0);
         return null;
     }
-
-    return $vehicleID;
-}
 
     private function ProcessResponse(string $path, array $body)
     {
