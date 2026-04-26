@@ -144,7 +144,7 @@ class Smartcar extends IPSModuleStrict
 
         $form = [
             'elements' => [
-                ['type' => 'Label', 'caption' => 'Webhook-URL: ' . $effectiveRedirect],
+                
                 ['type' => 'Label', 'caption' => 'Smartcar API V3 – nur Signals, keine Legacy/V2-Endpunkte'],
                 ['type' => 'Label', 'caption' => 'Redirect-/Callback-URI: ' . $effectiveRedirect],
 
