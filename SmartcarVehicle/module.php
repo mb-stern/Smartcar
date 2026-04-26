@@ -143,6 +143,8 @@ class SmartcarVehicle extends IPSModuleStrict
     {
         $data = $this->LoadCompatibility(false);
 
+        $this->SendDebug('Compatibility/Form', 'Modelle im Cache/Response: ' . count($data), 0);
+
         $selectedRaw = $this->ReadPropertyString('SelectedCapabilities');
         $selected = json_decode($selectedRaw, true);
         if (!is_array($selected)) {
@@ -160,6 +162,18 @@ class SmartcarVehicle extends IPSModuleStrict
 
         foreach ($data as $item) {
             $attributes = is_array($item['attributes'] ?? null) ? $item['attributes'] : [];
+
+            $this->SendDebug(
+                'Compatibility/Item',
+                json_encode([
+                    'make'  => $attributes['make'] ?? '',
+                    'model' => $attributes['model'] ?? '',
+                    'years' => $attributes['years'] ?? null,
+                    'capabilities_count' => isset($attributes['capabilities']) && is_array($attributes['capabilities']) ? count($attributes['capabilities']) : 0
+                ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                0
+            );
+
             $capabilities = is_array($attributes['capabilities'] ?? null) ? $attributes['capabilities'] : [];
 
             foreach ($capabilities as $capability) {
@@ -172,27 +186,21 @@ class SmartcarVehicle extends IPSModuleStrict
                     continue;
                 }
 
-                $type = (string)($capability['type'] ?? '');
-                $name = (string)($capability['name'] ?? $key);
-                $group = (string)($capability['group'] ?? '');
-                $permission = (string)($capability['permission'] ?? '');
-
                 $values[] = [
-                    'caption' => trim(strtoupper($type) . ' · ' . $group . ' · ' . $name . ' · ' . $permission),
-                    'value' => [
-                        'selected' => $selectedMap[$key] ?? false,
-                        'capability' => $key,
-                        'type' => $type,
-                        'name' => $name,
-                        'group' => $group,
-                        'code' => (string)($capability['code'] ?? ''),
-                        'permission' => $permission
-                    ]
+                    'selected'   => $selectedMap[$key] ?? false,
+                    'capability' => $key,
+                    'type'       => (string)($capability['type'] ?? ''),
+                    'name'       => (string)($capability['name'] ?? $key),
+                    'group'      => (string)($capability['group'] ?? ''),
+                    'code'       => (string)($capability['code'] ?? ''),
+                    'permission' => (string)($capability['permission'] ?? '')
                 ];
             }
         }
 
-        usort($values, fn($a, $b) => strcmp((string)$a['caption'], (string)$b['caption']));
+        usort($values, fn($a, $b) => strcmp((string)$a['name'], (string)$b['name']));
+
+        $this->SendDebug('Compatibility/Form', 'Capabilities für Liste: ' . count($values), 0);
 
         return $values;
     }
@@ -205,35 +213,97 @@ class SmartcarVehicle extends IPSModuleStrict
         if (!$forceReload && $cacheRaw !== '' && $cacheAt > (time() - 86400)) {
             $cached = json_decode($cacheRaw, true);
             if (is_array($cached)) {
+                $this->SendDebug('Compatibility/Cache', 'Cache verwendet. Einträge: ' . count($cached), 0);
                 return $cached;
             }
         }
 
-        $result = $this->SendDataToParent(json_encode([
+        $make = $this->NormalizeCompatibilityMake($this->ReadPropertyString('Make'));
+        $model = $this->ReadPropertyString('Model');
+        $year = $this->ReadPropertyInteger('Year');
+        $powertrainType = $this->ReadPropertyString('PowertrainType');
+        $region = $this->ReadPropertyString('CompatibilityRegion');
+
+        $request = [
             'DataID' => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
             'Command' => 'GetCompatibleVehicles',
-            'Make' => $this->NormalizeCompatibilityMake($this->ReadPropertyString('Make')),
-            'PowertrainType' => $this->ReadPropertyString('PowertrainType'),
-            'Region' => $this->ReadPropertyString('CompatibilityRegion')
-        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+            'Make' => $make,
+            'PowertrainType' => $powertrainType,
+            'Region' => $region
+        ];
+
+        $this->SendDebug('Compatibility/Request', json_encode([
+            'make' => $make,
+            'model' => $model,
+            'year' => $year,
+            'powertrainType' => $powertrainType,
+            'region' => $region
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+
+        $result = $this->SendDataToParent(json_encode($request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+
+        $this->SendDebug('Compatibility/RAW', (string)$result, 0);
 
         $decoded = json_decode((string)$result, true);
 
-        if (!is_array($decoded) || empty($decoded['success'])) {
-            $this->SendDebug('Compatibility', 'Fehler beim Laden: ' . (string)$result, 0);
+        if (!is_array($decoded)) {
+            $this->SendDebug('Compatibility/Error', 'Antwort ist kein JSON.', 0);
+            return [];
+        }
+
+        if (empty($decoded['success'])) {
+            $this->SendDebug('Compatibility/Error', 'success=false: ' . json_encode($decoded, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
             return [];
         }
 
         $body = is_array($decoded['body'] ?? null) ? $decoded['body'] : [];
+
+        $this->SendDebug('Compatibility/BodyKeys', implode(', ', array_keys($body)), 0);
+
         $items = is_array($body['data'] ?? null) ? $body['data'] : [];
+
+        $this->SendDebug('Compatibility/DataCount', 'Ungefilterte Einträge: ' . count($items), 0);
+
+        $filtered = [];
+        $normalizedVehicleModel = $this->NormalizeText($model);
+
+        foreach ($items as $item) {
+            $attributes = is_array($item['attributes'] ?? null) ? $item['attributes'] : [];
+
+            $itemModel = $this->NormalizeText((string)($attributes['model'] ?? ''));
+            $years = is_array($attributes['years'] ?? null) ? $attributes['years'] : [];
+
+            $startYear = (int)($years['start'] ?? 0);
+            $endYear = (int)($years['end'] ?? 9999);
+
+            $yearMatches = ($year <= 0 || ($year >= $startYear && $year <= $endYear));
+
+            $modelMatches =
+                $normalizedVehicleModel === '' ||
+                $itemModel === '' ||
+                str_contains($normalizedVehicleModel, $itemModel) ||
+                str_contains($itemModel, $normalizedVehicleModel) ||
+                str_contains($normalizedVehicleModel, explode(' ', $itemModel)[0] ?? $itemModel);
+
+            if ($yearMatches && $modelMatches) {
+                $filtered[] = $item;
+            }
+        }
+
+        $this->SendDebug('Compatibility/FilteredCount', 'Gefilterte Einträge: ' . count($filtered), 0);
+
+        if (empty($filtered)) {
+            $this->SendDebug('Compatibility/Fallback', 'Keine exakte Modell/Jahr-Übereinstimmung. Verwende ungefilterte Einträge.', 0);
+            $filtered = $items;
+        }
 
         $this->WriteAttributeString(
             'CompatibilityCache',
-            json_encode($items, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+            json_encode($filtered, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
         );
         $this->WriteAttributeInteger('CompatibilityCacheAt', time());
 
-        return $items;
+        return $filtered;
     }
 
     private function NormalizeCompatibilityMake(string $make): string
