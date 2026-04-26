@@ -5,25 +5,28 @@ class SmartcarVehicle extends IPSModuleStrict
     private const SPLITTER_MODULE_ID = '{9F7A4B2C-3D1E-4A6F-8B20-6C5D4E3F2A10}';
 
     public function Create(): void
-    {
-        parent::Create();
+{
+    parent::Create();
 
-        $this->RegisterPropertyString('VehicleID', '');
-        $this->RegisterPropertyString('ConnectionID', '');
-        $this->RegisterPropertyString('UserID', '');
-        $this->RegisterPropertyString('VehicleCaption', '');
+    $this->RegisterPropertyString('VehicleID', '');
+    $this->RegisterPropertyString('ConnectionID', '');
+    $this->RegisterPropertyString('UserID', '');
+    $this->RegisterPropertyString('VehicleCaption', '');
 
-        $this->RegisterPropertyString('Make', '');
-        $this->RegisterPropertyString('Model', '');
-        $this->RegisterPropertyInteger('Year', 0);
-        $this->RegisterPropertyString('PowertrainType', '');
+    $this->RegisterPropertyString('Make', '');
+    $this->RegisterPropertyString('Model', '');
+    $this->RegisterPropertyInteger('Year', 0);
+    $this->RegisterPropertyString('PowertrainType', '');
 
-        $this->RegisterPropertyString('CompatibilityRegion', 'EUROPE');
-        $this->RegisterPropertyString('SelectedCapabilities', '[]');
+    $this->RegisterPropertyString('CompatibilityRegion', 'EUROPE');
+    $this->RegisterPropertyString('SelectedCapabilities', '[]');
 
-        $this->RegisterAttributeString('CompatibilityCache', '[]');
-        $this->RegisterAttributeInteger('CompatibilityCacheAt', 0);
-    }
+    $this->RegisterPropertyString('RedirectURI', '');
+    $this->RegisterPropertyString('ConnectMode', 'live');
+
+    $this->RegisterAttributeString('CompatibilityCache', '[]');
+    $this->RegisterAttributeInteger('CompatibilityCacheAt', 0);
+}
 
     public function ApplyChanges(): void
     {
@@ -47,7 +50,7 @@ class SmartcarVehicle extends IPSModuleStrict
         ]);
     }
 
-   public function GetConfigurationForm(): string
+    public function GetConfigurationForm(): string
     {
         $capabilities = $this->GetCompatibilityCapabilitiesForForm();
 
@@ -55,10 +58,24 @@ class SmartcarVehicle extends IPSModuleStrict
             'elements' => [
                 ['type' => 'Label', 'caption' => 'Vehicle ID: ' . $this->ReadPropertyString('VehicleID')],
                 ['type' => 'Label', 'caption' => 'Connection ID: ' . $this->ReadPropertyString('ConnectionID')],
+                ['type' => 'Label', 'caption' => 'User ID: ' . $this->ReadPropertyString('UserID')],
                 ['type' => 'Label', 'caption' => 'Fahrzeug: ' . $this->ReadPropertyString('VehicleCaption')],
                 ['type' => 'Label', 'caption' => 'Antrieb: ' . $this->ReadPropertyString('PowertrainType')],
-                ['type' => 'Label', 'caption' => 'User ID: ' . $this->ReadPropertyString('UserID')],
 
+                [
+                    'type' => 'ValidationTextBox',
+                    'name' => 'RedirectURI',
+                    'caption' => 'Redirect URI für Smartcar Connect'
+                ],
+                [
+                    'type' => 'Select',
+                    'name' => 'ConnectMode',
+                    'caption' => 'Connect Modus',
+                    'options' => [
+                        ['caption' => 'Live', 'value' => 'live'],
+                        ['caption' => 'Simuliert', 'value' => 'simulated']
+                    ]
+                ],
                 [
                     'type' => 'Select',
                     'name' => 'CompatibilityRegion',
@@ -70,70 +87,75 @@ class SmartcarVehicle extends IPSModuleStrict
                     ]
                 ],
                 [
-                'type' => 'List',
-                'name' => 'SelectedCapabilities',
-                'caption' => 'Kompatible Signale / Befehle',
-                'rowCount' => 20,
-                'add' => false,
-                'delete' => false,
-                'sort' => [
-                    'column' => 'sortKey',
-                    'direction' => 'ascending'
-                ],
-                'columns' => [
-                    [
-                        'caption' => '',
-                        'name' => 'sortKey',
-                        'width' => '0px',
-                        'visible' => false
+                    'type' => 'List',
+                    'name' => 'SelectedCapabilities',
+                    'caption' => 'Kompatible Signale / Befehle',
+                    'rowCount' => 20,
+                    'add' => false,
+                    'delete' => false,
+                    'sort' => [
+                        'column' => 'sortKey',
+                        'direction' => 'ascending'
                     ],
-                    [
-                        'caption' => 'Aktiv',
-                        'name' => 'selected',
-                        'width' => '80px',
-                        'edit' => [
-                            'type' => 'CheckBox'
+                    'columns' => [
+                        [
+                            'caption' => '',
+                            'name' => 'sortKey',
+                            'width' => '0px',
+                            'visible' => false
+                        ],
+                        [
+                            'caption' => 'Aktiv',
+                            'name' => 'selected',
+                            'width' => '80px',
+                            'edit' => [
+                                'type' => 'CheckBox'
+                            ]
+                        ],
+                        [
+                            'caption' => 'Typ',
+                            'name' => 'type',
+                            'width' => '90px'
+                        ],
+                        [
+                            'caption' => 'Gruppe',
+                            'name' => 'group',
+                            'width' => '160px'
+                        ],
+                        [
+                            'caption' => 'Name',
+                            'name' => 'name',
+                            'width' => 'auto'
+                        ],
+                        [
+                            'caption' => 'Capability',
+                            'name' => 'capability',
+                            'width' => '220px'
+                        ],
+                        [
+                            'caption' => 'Code',
+                            'name' => 'code',
+                            'width' => '220px'
+                        ],
+                        [
+                            'caption' => 'Permission',
+                            'name' => 'permission',
+                            'width' => '180px'
                         ]
                     ],
-                    [
-                        'caption' => 'Typ',
-                        'name' => 'type',
-                        'width' => '90px'
-                    ],
-                    [
-                        'caption' => 'Gruppe',
-                        'name' => 'group',
-                        'width' => '160px'
-                    ],
-                    [
-                        'caption' => 'Name',
-                        'name' => 'name',
-                        'width' => 'auto'
-                    ],
-                    [
-                        'caption' => 'Capability',
-                        'name' => 'capability',
-                        'width' => '220px'
-                    ],
-                    [
-                        'caption' => 'Code',
-                        'name' => 'code',
-                        'width' => '220px'
-                    ],
-                    [
-                        'caption' => 'Permission',
-                        'name' => 'permission',
-                        'width' => '180px'
-                    ]
-                ],
-                'values' => $capabilities
-            ]
+                    'values' => $capabilities
+                ]
             ],
             'actions' => [
                 [
                     'type' => 'Button',
                     'caption' => 'Kompatibilitätsliste neu laden',
                     'onClick' => 'SMCARV_ReloadCompatibility($id);'
+                ],
+                [
+                    'type' => 'Button',
+                    'caption' => 'Smartcar Connect URL erzeugen',
+                    'onClick' => 'echo SMCARV_GenerateConnectURL($id);'
                 ],
                 [
                     'type' => 'Button',
@@ -562,5 +584,66 @@ class SmartcarVehicle extends IPSModuleStrict
         }
 
         $this->SetValue($ident, $value);
+    }
+
+    public function GenerateConnectURL(): string
+    {
+        $permissions = $this->GetSelectedPermissions();
+
+        if (empty($permissions)) {
+            return 'Fehler: Keine aktivierten Signale/Befehle mit Permission ausgewählt.';
+        }
+
+        $redirectURI = trim($this->ReadPropertyString('RedirectURI'));
+        if ($redirectURI === '') {
+            return 'Fehler: Bitte zuerst Redirect URI im Fahrzeug eintragen.';
+        }
+
+        $state = 'vehicle_' . $this->ReadPropertyString('VehicleID') . '_' . bin2hex(random_bytes(8));
+
+        $result = $this->SendDataToParent(json_encode([
+            'DataID' => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
+            'Command' => 'BuildConnectURL',
+            'RedirectURI' => $redirectURI,
+            'Mode' => $this->ReadPropertyString('ConnectMode'),
+            'State' => $state,
+            'Permissions' => $permissions
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+
+        $decoded = json_decode((string)$result, true);
+        if (!is_array($decoded) || empty($decoded['success'])) {
+            return 'Fehler beim Erzeugen der Connect URL: ' . (string)$result;
+        }
+
+        return (string)($decoded['url'] ?? '');
+    }
+
+    private function GetSelectedPermissions(): array
+    {
+        $entries = json_decode($this->ReadPropertyString('SelectedCapabilities'), true);
+        if (!is_array($entries)) {
+            return [];
+        }
+
+        $permissions = [];
+
+        foreach ($entries as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+
+            if (!($entry['selected'] ?? false)) {
+                continue;
+            }
+
+            $permission = trim((string)($entry['permission'] ?? ''));
+            if ($permission === '') {
+                continue;
+            }
+
+            $permissions[$permission] = true;
+        }
+
+        return array_keys($permissions);
     }
 }

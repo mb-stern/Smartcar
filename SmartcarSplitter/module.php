@@ -158,6 +158,17 @@ class SmartcarSplitter extends IPSModuleStrict
             case 'LoadConnections':
                 return json_encode($this->LoadConnections(), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
+            case 'BuildConnectURL':
+                return json_encode([
+                    'success' => true,
+                    'url' => $this->BuildConnectURL(
+                        (string)($data['RedirectURI'] ?? ''),
+                        (string)($data['Mode'] ?? 'live'),
+                        (string)($data['State'] ?? ''),
+                        is_array($data['Permissions'] ?? null) ? $data['Permissions'] : []
+                    )
+                ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
             case 'GetVehicle':
                 return json_encode($this->ApiGetVehicle(
                     (string)$data['VehicleID'],
@@ -607,5 +618,39 @@ class SmartcarSplitter extends IPSModuleStrict
         }
 
         return null;
+    }
+
+    public function BuildConnectURL(string $redirectURI, string $mode, string $state, array $permissions): string
+    {
+        $clientID = trim($this->ReadPropertyString('ClientID'));
+
+        if ($clientID === '') {
+            return 'Fehler: Client ID fehlt.';
+        }
+
+        if ($redirectURI === '') {
+            return 'Fehler: Redirect URI fehlt.';
+        }
+
+        $permissions = array_values(array_unique(array_filter(array_map('strval', $permissions))));
+
+        if (empty($permissions)) {
+            return 'Fehler: Keine Permissions aus den aktivierten Signalen gefunden.';
+        }
+
+        if ($state === '') {
+            $state = bin2hex(random_bytes(12));
+        }
+
+        $query = [
+            'response_type' => 'code',
+            'client_id'     => $clientID,
+            'redirect_uri'  => $redirectURI,
+            'scope'         => implode(' ', $permissions),
+            'state'         => $state,
+            'mode'          => $mode !== '' ? $mode : 'live'
+        ];
+
+        return 'https://connect.smartcar.com/oauth/authorize?' . http_build_query($query);
     }
 }
