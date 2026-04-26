@@ -877,14 +877,12 @@ class SmartcarVehicle extends IPSModuleStrict
 
     public function ApplySelectedCapabilities(): void
     {
-        $selected = $this->GetSelectedFullCapabilities();
+        $selected = $this->GetSelectedFullCapabilitiesFromCache();
 
-        $this->SendDebug('Variables/ApplySelected', 'Ausgewählte Capabilities: ' . count($selected), 0);
+        $this->SendDebug('Variables/ApplySelected', 'Ausgewählte Signale aus Cache: ' . count($selected), 0);
 
         foreach ($selected as $entry) {
-            $type = strtolower((string)($entry['type'] ?? ''));
-
-            if ($type !== 'signal') {
+            if (strtolower((string)($entry['type'] ?? '')) !== 'signal') {
                 continue;
             }
 
@@ -898,8 +896,126 @@ class SmartcarVehicle extends IPSModuleStrict
             }
 
             $name = (string)($entry['name'] ?? $signalCode);
-
             $this->CreateSignalVariable($signalCode, $name);
         }
+    }
+
+    private function GetSelectedFullCapabilitiesFromCache(): array
+    {
+        $saved = json_decode($this->ReadPropertyString('SelectedCapabilities'), true);
+        if (!is_array($saved)) {
+            return [];
+        }
+
+        $cache = json_decode($this->ReadAttributeString('CompatibilityCache'), true);
+        if (!is_array($cache)) {
+            $this->SendDebug('Variables/Cache', 'CompatibilityCache leer oder ungültig.', 0);
+            return [];
+        }
+
+        $fullList = $this->BuildCapabilitiesListFromCompatibilityItems($cache);
+
+        $fullBySortKey = [];
+        foreach ($fullList as $entry) {
+            $sortKey = (string)($entry['sortKey'] ?? '');
+            if ($sortKey !== '') {
+                $fullBySortKey[$sortKey] = $entry;
+            }
+        }
+
+        $selected = [];
+
+        foreach ($saved as $savedEntry) {
+            if (!is_array($savedEntry)) {
+                continue;
+            }
+
+            $isSelected =
+                ($savedEntry['selected'] ?? false) === true ||
+                ($savedEntry['selected'] ?? false) === 1 ||
+                ($savedEntry['selected'] ?? false) === '1' ||
+                strtolower((string)($savedEntry['selected'] ?? '')) === 'true';
+
+            if (!$isSelected) {
+                continue;
+            }
+
+            $sortKey = (string)($savedEntry['sortKey'] ?? '');
+            if ($sortKey !== '' && isset($fullBySortKey[$sortKey])) {
+                $entry = $fullBySortKey[$sortKey];
+                $entry['selected'] = true;
+                $selected[] = $entry;
+            }
+        }
+
+        return $selected;
+    }
+
+    private function BuildCapabilitiesListFromCompatibilityItems(array $data): array
+    {
+        $temp = [];
+
+        foreach ($data as $item) {
+            $attributes = is_array($item['attributes'] ?? null) ? $item['attributes'] : [];
+            $capabilities = is_array($attributes['capabilities'] ?? null) ? $attributes['capabilities'] : [];
+
+            foreach ($capabilities as $capability) {
+                if (!is_array($capability)) {
+                    continue;
+                }
+
+                $type       = (string)($capability['type'] ?? '');
+                $group      = (string)($capability['group'] ?? '');
+                $name       = (string)($capability['name'] ?? '');
+                $code       = (string)($capability['code'] ?? '');
+                $capKey     = (string)($capability['capability'] ?? '');
+                $permission = (string)($capability['permission'] ?? '');
+
+                if ($code === '' && $capKey === '') {
+                    continue;
+                }
+
+                $uniqueKey = strtolower($type . '|' . $group . '|' . $code . '|' . $capKey);
+
+                if (!isset($temp[$uniqueKey])) {
+                    $displayName = $name !== '' ? $name : $capKey;
+
+                    $typeOrder = match (strtolower($type)) {
+                        'signal'  => '0',
+                        'command' => '1',
+                        default   => '9'
+                    };
+
+                    $sortKey = $typeOrder
+                        . '|' . strtoupper($group)
+                        . '|' . strtoupper($displayName)
+                        . '|' . strtoupper($code);
+
+                    $temp[$uniqueKey] = [
+                        'sortKey'    => $sortKey,
+                        'selected'   => false,
+                        'capability' => $capKey,
+                        'type'       => $type,
+                        'name'       => $displayName,
+                        'group'      => $group,
+                        'code'       => $code,
+                        'permission' => $permission
+                    ];
+                    continue;
+                }
+
+                if ($temp[$uniqueKey]['permission'] === '' && $permission !== '') {
+                    $temp[$uniqueKey]['permission'] = $permission;
+                }
+            }
+        }
+
+        $values = array_values($temp);
+
+        usort($values, function ($a, $b) {
+            return strcasecmp((string)$a['sortKey'], (string)$b['sortKey']);
+        });
+
+        return $values;
     }
 }
