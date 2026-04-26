@@ -10,8 +10,14 @@ class SmartcarSplitter extends IPSModuleStrict
 
         $this->RegisterHook('smartcar_' . $this->InstanceID);
 
+        // Neue API credentials / M2M
         $this->RegisterPropertyString('ClientID', '');
         $this->RegisterPropertyString('ClientSecret', '');
+
+        // Connect client_id aus Legacy credentials / Legacy Keys
+        $this->RegisterPropertyString('ConnectClientID', '');
+
+        $this->RegisterPropertyString('ManualRedirectURI', '');
 
         $this->RegisterPropertyBoolean('EnableWebhook', true);
         $this->RegisterPropertyBoolean('VerifyWebhookSignature', true);
@@ -20,8 +26,6 @@ class SmartcarSplitter extends IPSModuleStrict
         $this->RegisterAttributeString('ApplicationAccessToken', '');
         $this->RegisterAttributeInteger('TokenExpiresAt', 0);
         $this->RegisterAttributeString('RedirectURI', '');
-
-        $this->RegisterPropertyString('ManualRedirectURI', '');
 
         $this->RegisterTimer('TokenTimer', 0, 'SMCARS_RequestApplicationAccessToken($_IPS["TARGET"]);');
     }
@@ -76,6 +80,11 @@ class SmartcarSplitter extends IPSModuleStrict
                     'type' => 'ValidationTextBox',
                     'name' => 'ClientSecret',
                     'caption' => 'Client Secret'
+                ],
+                [
+                    'type' => 'ValidationTextBox',
+                    'name' => 'ConnectClientID',
+                    'caption' => 'Connect Client ID (Legacy credentials)'
                 ],
                 [
                     'type' => 'CheckBox',
@@ -640,7 +649,8 @@ class SmartcarSplitter extends IPSModuleStrict
 
     public function BuildConnectURL(string $mode, string $state, array $permissions): string
     {
-        $clientID = trim($this->ReadPropertyString('ClientID'));
+        $clientID = trim($this->ReadPropertyString('ConnectClientID'));
+
         $hookAddress = 'smartcar_' . $this->InstanceID;
         $hookPath = '/hook/' . $hookAddress;
 
@@ -650,7 +660,7 @@ class SmartcarSplitter extends IPSModuleStrict
         }
 
         if ($clientID === '') {
-            return 'Fehler: Client ID fehlt.';
+            return 'Fehler: Connect Client ID fehlt. Diese steht bei Smartcar unter Legacy credentials / Legacy Keys.';
         }
 
         if ($redirectURI === '') {
