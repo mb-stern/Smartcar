@@ -37,6 +37,8 @@ class SmartcarVehicle extends IPSModuleStrict
         }
 
         $this->SetStatus(102);
+
+        $this->ApplySelectedCapabilities();
     }
 
     public function GetCompatibleParents(): string
@@ -147,12 +149,12 @@ class SmartcarVehicle extends IPSModuleStrict
                 ],
                 [
                     'type' => 'Button',
-                    'caption' => 'Smartcar Connect URL erzeugen',
+                    'caption' => 'Mit SMartcar verbinden',
                     'onClick' => 'echo SMCARV_GenerateConnectURL($id);'
                 ],
                 [
                     'type' => 'Button',
-                    'caption' => 'Aktivierte Signale jetzt abrufen',
+                    'caption' => 'Aktivierte Signale abrufen',
                     'onClick' => 'SMCARV_FetchSelectedSignals($id);'
                 ]
             ]
@@ -818,8 +820,13 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $fullBySortKey = [];
         foreach ($fullList as $entry) {
-            if (is_array($entry) && isset($entry['sortKey'])) {
-                $fullBySortKey[(string)$entry['sortKey']] = $entry;
+            if (!is_array($entry)) {
+                continue;
+            }
+
+            $sortKey = (string)($entry['sortKey'] ?? '');
+            if ($sortKey !== '') {
+                $fullBySortKey[$sortKey] = $entry;
             }
         }
 
@@ -854,27 +861,45 @@ class SmartcarVehicle extends IPSModuleStrict
         return $selected;
     }
 
+    private function CreateSignalVariable(string $signalCode, string $name): void
+    {
+        $ident = $this->BuildSignalIdent($signalCode);
+
+        if (@$this->GetIDForIdent($ident)) {
+            return;
+        }
+
+        // Erst als String anlegen. Beim ersten echten Wert kann später gezielt typisiert werden.
+        $this->RegisterVariableString($ident, $name !== '' ? $name : $signalCode, '', 0);
+
+        $this->SendDebug('Variables/Create', 'Variable erstellt: ' . $ident . ' (' . $name . ')', 0);
+    }
+
     public function ApplySelectedCapabilities(): void
     {
         $selected = $this->GetSelectedFullCapabilities();
 
+        $this->SendDebug('Variables/ApplySelected', 'Ausgewählte Capabilities: ' . count($selected), 0);
+
         foreach ($selected as $entry) {
-            if (strtolower((string)($entry['type'] ?? '')) !== 'signal') {
+            $type = strtolower((string)($entry['type'] ?? ''));
+
+            if ($type !== 'signal') {
                 continue;
             }
 
             $signalCode = (string)($entry['capability'] ?? '');
             if ($signalCode === '') {
+                $signalCode = (string)($entry['code'] ?? '');
+            }
+
+            if ($signalCode === '') {
                 continue;
             }
 
-            $ident = $this->BuildSignalIdent($signalCode);
-            $name  = (string)($entry['name'] ?? $signalCode);
+            $name = (string)($entry['name'] ?? $signalCode);
 
-            if (!@$this->GetIDForIdent($ident)) {
-                $this->RegisterVariableString($ident, $name !== '' ? $name : $ident, '', 0);
-                $this->SendDebug('Variables/Create', 'Variable erstellt: ' . $ident . ' (' . $name . ')', 0);
-            }
+            $this->CreateSignalVariable($signalCode, $name);
         }
     }
 }

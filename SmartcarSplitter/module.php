@@ -745,32 +745,26 @@ class SmartcarSplitter extends IPSModuleStrict
             $this->SendDebug('Connect/RedirectError', $error . ' ' . $description, 0);
 
             http_response_code(200);
-            echo 'Smartcar Connect abgebrochen/fehlgeschlagen: ' . htmlspecialchars($error . ' ' . $description);
+            echo 'Smartcar Connect fehlgeschlagen: ' . htmlspecialchars($error . ' ' . $description);
             return;
         }
 
         $userId = (string)($_GET['user_id'] ?? ($_GET['userId'] ?? ''));
         $state  = (string)($_GET['state'] ?? '');
-        $code   = (string)($_GET['code'] ?? '');
 
         $this->SendDebug('Connect/Redirect', json_encode([
             'user_id' => $userId,
             'state'   => $state,
-            'code'    => $code !== '' ? '<present>' : ''
+            'query'   => $_GET
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
-        if ($userId === '') {
-            http_response_code(200);
-            echo 'Smartcar Connect abgeschlossen, aber user_id fehlt. Debug prüfen.';
-            return;
-        }
-
         $vehicleId = $this->ExtractVehicleIdFromState($state);
-        if ($vehicleId !== '') {
+
+        if ($vehicleId !== '' && $userId !== '') {
             $this->UpdateVehicleUserId($vehicleId, $userId);
         }
 
-        // Connections neu laden, damit ConnectionID/VehicleID/userId aus Smartcar synchronisiert werden
+        // Auch ohne user_id versuchen, Connections neu zu laden.
         $connections = $this->LoadConnections();
         $this->UpdateVehiclesFromConnections($connections);
 
