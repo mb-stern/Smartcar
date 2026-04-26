@@ -75,10 +75,16 @@ class SmartcarVehicle extends IPSModuleStrict
                 'add' => false,
                 'delete' => false,
                 'sort' => [
-                    'column' => 'name',
+                    'column' => 'sortKey',
                     'direction' => 'ascending'
                 ],
                 'columns' => [
+                    [
+                        'caption' => '',
+                        'name' => 'sortKey',
+                        'width' => '0px',
+                        'visible' => false
+                    ],
                     [
                         'caption' => 'Aktiv',
                         'name' => 'selected',
@@ -120,7 +126,6 @@ class SmartcarVehicle extends IPSModuleStrict
                 ],
                 'values' => $capabilities
             ]
-            ],
             'actions' => [
                 [
                     'type' => 'Button',
@@ -208,35 +213,11 @@ class SmartcarVehicle extends IPSModuleStrict
         $values = array_values($temp);
 
         usort($values, function ($a, $b) {
-
-            // feste Reihenfolge für Typen
-            $typeOrder = [
-                'signal'  => 0,
-                'command' => 1
-            ];
-
-            $typeA = $typeOrder[strtolower($a['type'])] ?? 99;
-            $typeB = $typeOrder[strtolower($b['type'])] ?? 99;
-
-            // 1. Typ
-            if ($typeA !== $typeB) {
-                return $typeA <=> $typeB;
-            }
-
-            // 2. Gruppe
-            $groupCompare = strcasecmp((string)$a['group'], (string)$b['group']);
-            if ($groupCompare !== 0) {
-                return $groupCompare;
-            }
-
-            // 3. Name
-            $nameCompare = strcasecmp((string)$a['name'], (string)$b['name']);
-            if ($nameCompare !== 0) {
-                return $nameCompare;
-            }
-
-            // 4. Code (Fallback, falls Name gleich)
-            return strcasecmp((string)$a['code'], (string)$b['code']);
+            return
+                strcasecmp((string)$a['type'], (string)$b['type']) ?:
+                strcasecmp((string)$a['group'], (string)$b['group']) ?:
+                strcasecmp((string)$a['name'], (string)$b['name']) ?:
+                strcasecmp((string)$a['code'], (string)$b['code']);
         });
 
         $this->SendDebug('Compatibility/Form', 'Capabilities für Liste nach Dedupe: ' . count($values), 0);
