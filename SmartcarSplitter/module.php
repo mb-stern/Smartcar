@@ -382,8 +382,8 @@ class SmartcarSplitter extends IPSModuleStrict
             $query['filter[make]'] = $make;
         }
 
-        if ($powertrainType !== '' && strtoupper($powertrainType) !== 'ICE') {
-            $query['filter[powertrainType]'] = $powertrainType;
+        /*if ($powertrainType !== '' && strtoupper($powertrainType) !== 'ICE') {
+            $query['filter[powertrainType]'] = $powertrainType;*/
         }
 
         $url = 'https://compatibility.api.smartcar.com/v3/compatible-vehicles';
