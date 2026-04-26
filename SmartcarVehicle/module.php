@@ -638,85 +638,75 @@ class SmartcarVehicle extends IPSModuleStrict
     private function GetSelectedPermissions(): array
     {
         $raw = $this->ReadPropertyString('SelectedCapabilities');
-
         $this->SendDebug('Connect/SelectedCapabilitiesRaw', $raw, 0);
 
-        $entries = json_decode($raw, true);
-
-        if (!is_array($entries)) {
+        $saved = json_decode($raw, true);
+        if (!is_array($saved)) {
             $this->SendDebug('Connect/Error', 'SelectedCapabilities ist kein JSON-Array.', 0);
             return [];
         }
 
-        $total = count($entries);
-        $selectedCount = 0;
-        $selectedWithPermission = 0;
-        $selectedWithoutPermission = 0;
-        $notSelectedCount = 0;
+        // Aktuelle vollständige Liste neu aus Cache/Compatibility aufbauen
+        $fullList = $this->GetCompatibilityCapabilitiesForForm();
 
         $permissions = [];
+        $summary = [
+            'savedCount' => count($saved),
+            'fullCount' => count($fullList),
+            'selected' => 0,
+            'selectedWithPermission' => 0,
+            'selectedWithoutPermission' => 0,
+            'permissions' => []
+        ];
 
-        foreach ($entries as $index => $entry) {
-            if (!is_array($entry)) {
-                $this->SendDebug('Connect/EntryInvalid', 'Index ' . $index . ' ist kein Array.', 0);
+        foreach ($saved as $index => $savedEntry) {
+            if (!is_array($savedEntry)) {
                 continue;
             }
 
-            $rawSelected = $entry['selected'] ?? null;
-
+            $rawSelected = $savedEntry['selected'] ?? false;
             $selected =
                 $rawSelected === true ||
                 $rawSelected === 1 ||
                 $rawSelected === '1' ||
                 strtolower((string)$rawSelected) === 'true';
 
-            $permission = trim((string)($entry['permission'] ?? ''));
-
-            $debugEntry = [
-                'index'       => $index,
-                'rawSelected' => $rawSelected,
-                'selected'    => $selected,
-                'type'        => $entry['type'] ?? '',
-                'group'       => $entry['group'] ?? '',
-                'name'        => $entry['name'] ?? '',
-                'capability'  => $entry['capability'] ?? '',
-                'code'        => $entry['code'] ?? '',
-                'permission'  => $permission
-            ];
-
-            $this->SendDebug('Connect/Entry', json_encode($debugEntry, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
-
             if (!$selected) {
-                $notSelectedCount++;
                 continue;
             }
 
-            $selectedCount++;
+            $summary['selected']++;
+
+            $fullEntry = $fullList[$index] ?? null;
+            if (!is_array($fullEntry)) {
+                $summary['selectedWithoutPermission']++;
+                $this->SendDebug('Connect/MissingFullEntry', 'Kein FullEntry für Index ' . $index, 0);
+                continue;
+            }
+
+            $permission = trim((string)($fullEntry['permission'] ?? ''));
+
+            $this->SendDebug('Connect/MergedEntry', json_encode([
+                'index' => $index,
+                'selected' => $selected,
+                'name' => $fullEntry['name'] ?? '',
+                'type' => $fullEntry['type'] ?? '',
+                'group' => $fullEntry['group'] ?? '',
+                'code' => $fullEntry['code'] ?? '',
+                'permission' => $permission
+            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
             if ($permission === '') {
-                $selectedWithoutPermission++;
-                $this->SendDebug(
-                    'Connect/SelectedNoPermission',
-                    'Ausgewählt aber ohne Permission: ' . json_encode($debugEntry, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
-                    0
-                );
+                $summary['selectedWithoutPermission']++;
                 continue;
             }
 
-            $selectedWithPermission++;
+            $summary['selectedWithPermission']++;
             $permissions[$permission] = true;
         }
 
         $result = array_keys($permissions);
-
-        $summary = [
-            'total'                     => $total,
-            'notSelected'               => $notSelectedCount,
-            'selected'                  => $selectedCount,
-            'selectedWithPermission'    => $selectedWithPermission,
-            'selectedWithoutPermission' => $selectedWithoutPermission,
-            'permissions'               => $result
-        ];
+        $summary['permissions'] = $result;
 
         $this->SendDebug('Connect/Summary', json_encode($summary, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
