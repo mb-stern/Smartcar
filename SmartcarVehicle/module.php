@@ -103,6 +103,16 @@ class SmartcarVehicle extends IPSModuleStrict
         }
     }
 
+    public function GetCompatibleParents(): string
+    {
+        return json_encode([
+            'type' => 'connect',
+            'moduleIDs' => [
+                '{9F7A4B2C-3D1E-4A6F-8B20-6C5D4E3F2A10}'
+            ]
+        ]);
+    }
+
     public function RequestAction(string $Ident, mixed $Value): void
     {
         switch ($Ident) {
