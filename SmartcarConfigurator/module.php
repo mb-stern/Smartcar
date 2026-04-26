@@ -20,11 +20,11 @@ class SmartcarConfigurator extends IPSModuleStrict
     }
 
     public function GetCompatibleParents(): string
-    {
-        return json_encode([
-            self::DATA_ID
-        ]);
-    }
+{
+    return json_encode([
+        '{9F7A4B2C-3D1E-4A6F-8B20-6C5D4E3F2A10}'
+    ]);
+}
 
     public function GetConfigurationForm(): string
     {
