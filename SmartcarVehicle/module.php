@@ -16,6 +16,12 @@ class SmartcarVehicle extends IPSModuleStrict
         $this->RegisterPropertyString('Model', '');
         $this->RegisterPropertyInteger('Year', 0);
         $this->RegisterPropertyString('PowertrainType', '');
+
+        $this->RegisterPropertyString('CompatibilityRegion', 'EUROPE');
+        $this->RegisterPropertyString('SelectedCapabilities', '[]');
+
+        $this->RegisterAttributeString('CompatibilityCache', '[]');
+        $this->RegisterAttributeInteger('CompatibilityCacheAt', 0);
     }
 
     public function ApplyChanges(): void
@@ -40,42 +46,45 @@ class SmartcarVehicle extends IPSModuleStrict
         ]);
     }
 
-    public function GetConfigurationForm(): string
+   public function GetConfigurationForm(): string
     {
+        $capabilities = $this->GetCompatibilityCapabilitiesForForm();
+
         $form = [
             'elements' => [
+                ['type' => 'Label', 'caption' => 'Vehicle ID: ' . $this->ReadPropertyString('VehicleID')],
+                ['type' => 'Label', 'caption' => 'Connection ID: ' . $this->ReadPropertyString('ConnectionID')],
+                ['type' => 'Label', 'caption' => 'Fahrzeug: ' . $this->ReadPropertyString('VehicleCaption')],
+                ['type' => 'Label', 'caption' => 'Antrieb: ' . $this->ReadPropertyString('PowertrainType')],
+
                 [
-                    'type' => 'Label',
-                    'caption' => 'Vehicle ID: ' . $this->ReadPropertyString('VehicleID')
+                    'type' => 'Select',
+                    'name' => 'CompatibilityRegion',
+                    'caption' => 'Compatibility Region',
+                    'options' => [
+                        ['caption' => 'Europa', 'value' => 'EUROPE'],
+                        ['caption' => 'USA', 'value' => 'US'],
+                        ['caption' => 'Kanada', 'value' => 'CA']
+                    ]
                 ],
+
                 [
-                    'type' => 'Label',
-                    'caption' => 'Connection ID: ' . $this->ReadPropertyString('ConnectionID')
-                ],
-                [
-                    'type' => 'Label',
-                    'caption' => 'Fahrzeug: ' . $this->ReadPropertyString('VehicleCaption')
-                ],
-                [
-                    'type' => 'Label',
-                    'caption' => 'Hersteller: ' . $this->ReadPropertyString('Make')
-                ],
-                [
-                    'type' => 'Label',
-                    'caption' => 'Modell: ' . $this->ReadPropertyString('Model')
-                ],
-                [
-                    'type' => 'Label',
-                    'caption' => 'Baujahr: ' . $this->ReadPropertyInteger('Year')
-                ],
-                [
-                    'type' => 'Label',
-                    'caption' => 'Antrieb: ' . $this->ReadPropertyString('PowertrainType')
+                    'type' => 'CheckBoxList',
+                    'name' => 'SelectedCapabilities',
+                    'caption' => 'Kompatible Signale / Befehle',
+                    'rowCount' => 20,
+                    'values' => $capabilities
                 ]
             ],
-            'actions' => []
+            'actions' => [
+                [
+                    'type' => 'Button',
+                    'caption' => 'Kompatibilitätsliste neu laden',
+                    'onClick' => 'SMCARV_ReloadCompatibility($id);'
+                ]
+            ]
         ];
 
-        return json_encode($form);
+        return json_encode($form, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     }
 }
