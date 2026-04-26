@@ -17,7 +17,9 @@ class SmartcarSplitter extends IPSModuleStrict
 
         $this->RegisterPropertyBoolean('EnableWebhook', true);
         $this->RegisterPropertyBoolean('VerifyWebhookSignature', true);
+       
         $this->RegisterPropertyString('ManagementToken', '');
+        $this->RegisterPropertyString('ApplicationID', '');
 
         $this->RegisterAttributeString('ApplicationAccessToken', '');
         $this->RegisterAttributeInteger('TokenExpiresAt', 0);
@@ -76,6 +78,11 @@ class SmartcarSplitter extends IPSModuleStrict
                     'type' => 'ValidationTextBox',
                     'name' => 'ClientSecret',
                     'caption' => 'Client Secret'
+                ],
+                [
+                    'type' => 'ValidationTextBox',
+                    'name' => 'ApplicationID',
+                    'caption' => 'Application ID für Smartcar Connect'
                 ],
                 [
                     'type' => 'CheckBox',
@@ -653,7 +660,7 @@ class SmartcarSplitter extends IPSModuleStrict
 
     public function BuildConnectURL(string $mode, string $state, array $permissions): string
     {
-        $clientID = trim($this->ReadPropertyString('ClientID'));
+        $clientID = trim($this->ReadPropertyString('ApplicationID'));
 
         $hookAddress = 'smartcar_' . $this->InstanceID;
         $hookPath = '/hook/' . $hookAddress;
