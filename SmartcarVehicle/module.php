@@ -217,6 +217,10 @@ class SmartcarVehicle extends IPSModuleStrict
 
     private function LoadCompatibility(bool $forceReload): array
     {
+        if (!$this->HasParentConnection()) {
+            $this->SendDebug('Compatibility/Error', 'Kein Splitter/Parent verbunden.', 0);
+            return [];
+        }
         $cacheAt = $this->ReadAttributeInteger('CompatibilityCacheAt');
         $cacheRaw = $this->ReadAttributeString('CompatibilityCache');
 
@@ -340,6 +344,11 @@ class SmartcarVehicle extends IPSModuleStrict
     public function FetchSelectedSignals(): void
     {
         $this->SendDebug('FetchSignals/Start', 'Aktiver Signalabruf gestartet.', 0);
+
+        if (!$this->HasParentConnection()) {
+            $this->SendDebug('FetchSignals/Error', 'Kein Splitter/Parent verbunden.', 0);
+            return;
+        }
 
         $vehicleId = $this->ReadPropertyString('VehicleID');
         $userId    = $this->ReadPropertyString('UserID');
@@ -835,5 +844,15 @@ class SmartcarVehicle extends IPSModuleStrict
         $this->SendDebug('Selected/Resolve', 'Ausgewählte Einträge: ' . count($result), 0);
 
         return $result;
+    }
+
+    private function HasParentConnection(): bool
+    {
+        $instance = @IPS_GetInstance($this->InstanceID);
+        if (!is_array($instance)) {
+            return false;
+        }
+
+        return ((int)($instance['ConnectionID'] ?? 0)) > 0;
     }
 }

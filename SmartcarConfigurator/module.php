@@ -145,6 +145,11 @@ class SmartcarConfigurator extends IPSModuleStrict
 
             $instanceId = $this->FindVehicleInstanceByVehicleId($vehicleId);
             if ($instanceId > 0) {
+                $splitterId = $this->GetSplitterInstanceID();
+                if ($splitterId > 0) {
+                    IPS_ConnectInstance($instanceId, $splitterId);
+                }
+
                 $this->UpdateVehicleInstance($instanceId, $connection);
                 continue;
             }
