@@ -47,16 +47,6 @@ class SmartcarSplitter extends IPSModuleStrict
                     'type' => 'ValidationTextBox',
                     'name' => 'ClientSecret',
                     'caption' => 'Client Secret'
-                ],
-                [
-                    'type' => 'Select',
-                    'name' => 'Mode',
-                    'caption' => 'Fahrzeug-Modus / Filter',
-                    'options' => [
-                        ['caption' => 'Alle', 'value' => 'all'],
-                        ['caption' => 'Live', 'value' => 'live'],
-                        ['caption' => 'Simuliert', 'value' => 'simulated']
-                    ]
                 ]
             ],
             'actions' => [
@@ -167,17 +157,7 @@ class SmartcarSplitter extends IPSModuleStrict
             return [];
         }
 
-        $mode = $this->ReadPropertyString('Mode');
-
-        $query = [
-            'page[size]' => 100
-        ];
-
-        if ($mode !== '' && $mode !== 'all') {
-            $query['filter[mode]'] = $mode;
-        }
-
-        $url = 'https://vehicle.api.smartcar.com/v3/connections?' . http_build_query($query);
+        $url = 'https://vehicle.api.smartcar.com/v3/connections?page[size]=100';
 
         $response = $this->HttpRequestRaw(
             'Connections',
