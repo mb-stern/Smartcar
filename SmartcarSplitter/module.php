@@ -2,17 +2,17 @@
 
 class SmartcarSplitter extends IPSModuleStrict
 {
+    private const DATA_ID = '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}';
+
     public function Create(): void
     {
         parent::Create();
 
         $this->RegisterPropertyString('ClientID', '');
         $this->RegisterPropertyString('ClientSecret', '');
-        $this->RegisterPropertyString('Mode', 'live');
 
         $this->RegisterAttributeString('ApplicationAccessToken', '');
         $this->RegisterAttributeInteger('TokenExpiresAt', 0);
-        $this->RegisterAttributeString('ConnectionsCache', '[]');
 
         $this->RegisterTimer('TokenTimer', 0, 'SMCARS_RequestApplicationAccessToken($_IPS["TARGET"]);');
     }
@@ -34,8 +34,6 @@ class SmartcarSplitter extends IPSModuleStrict
 
     public function GetConfigurationForm(): string
     {
-        $connections = $this->GetCachedConnectionsForForm();
-
         $form = [
             'elements' => [
                 [
@@ -54,36 +52,6 @@ class SmartcarSplitter extends IPSModuleStrict
                     'type' => 'Button',
                     'caption' => 'Application Token holen',
                     'onClick' => 'SMCARS_RequestApplicationAccessToken($id);'
-                ],
-                [
-                    'type' => 'Button',
-                    'caption' => 'Connections laden',
-                    'onClick' => 'SMCARS_LoadConnections($id);'
-                ],
-                [
-                    'type' => 'List',
-                    'name' => 'Connections',
-                    'caption' => 'Verbundene Fahrzeuge',
-                    'rowCount' => 10,
-                    'add' => false,
-                    'delete' => false,
-                    'sort' => [
-                        'column' => 'caption',
-                        'direction' => 'ascending'
-                    ],
-                    'columns' => [
-                        ['caption' => 'Connection ID', 'name' => 'connectionId', 'width' => '250px', 'visible' => false],
-                        ['caption' => 'Vehicle ID', 'name' => 'vehicleId', 'width' => '250px'],
-                        ['caption' => 'Fahrzeug', 'name' => 'caption', 'width' => 'auto'],
-                        ['caption' => 'Modus', 'name' => 'mode', 'width' => '100px'],
-                        ['caption' => 'Powertrain', 'name' => 'powertrainType', 'width' => '120px']
-                    ],
-                    'values' => $connections
-                ],
-                [
-                    'type' => 'Button',
-                    'caption' => 'Fahrzeug-Instanzen erstellen/aktualisieren',
-                    'onClick' => 'SMCARS_CreateVehicleInstances($id);'
                 ]
             ]
         ];
@@ -148,6 +116,44 @@ class SmartcarSplitter extends IPSModuleStrict
         $this->SetStatus(102);
 
         return true;
+    }
+
+    public function ForwardData(string $JSONString): string
+    {
+        $data = json_decode($JSONString, true);
+        if (!is_array($data)) {
+            return json_encode(['success' => false, 'error' => 'Invalid JSON']);
+        }
+
+        $command = (string)($data['Command'] ?? '');
+
+        switch ($command) {
+            case 'LoadConnections':
+                return json_encode($this->LoadConnections(), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+            case 'GetVehicle':
+                return json_encode($this->ApiGetVehicle((string)$data['VehicleID']), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+            case 'GetSignals':
+                return json_encode($this->ApiGetSignals((string)$data['VehicleID']), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+            case 'GetSignal':
+                return json_encode($this->ApiGetSignal(
+                    (string)$data['VehicleID'],
+                    (string)$data['SignalCode']
+                ), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+            case 'Command':
+                return json_encode($this->ApiVehicleCommand(
+                    (string)$data['VehicleID'],
+                    (string)$data['Method'],
+                    (string)$data['Path'],
+                    isset($data['Body']) ? json_encode($data['Body']) : ''
+                ), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+            default:
+                return json_encode(['success' => false, 'error' => 'Unknown command']);
+        }
     }
 
     public function LoadConnections(): array
@@ -218,142 +224,7 @@ class SmartcarSplitter extends IPSModuleStrict
             ];
         }
 
-        $this->WriteAttributeString(
-            'ConnectionsCache',
-            json_encode($connections, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
-        );
-
-        $this->ReloadForm();
-
         return $connections;
-    }
-
-    public function GetConnection(string $connectionId): ?array
-    {
-        $token = $this->GetValidApplicationAccessToken();
-        if ($token === '' || $connectionId === '') {
-            return null;
-        }
-
-        $url = 'https://vehicle.api.smartcar.com/v3/connections/' . rawurlencode($connectionId);
-
-        $response = $this->HttpRequestRaw(
-            'GetConnection',
-            'GET',
-            $url,
-            [
-                'Authorization: Bearer ' . $token,
-                'Accept: application/json'
-            ]
-        );
-
-        if ($response === null || $response['statusCode'] !== 200) {
-            $this->SendDebug('GetConnection', 'Fehler: ' . json_encode($response), 0);
-            return null;
-        }
-
-        $data = json_decode($response['body'], true);
-        return is_array($data) ? $data : null;
-    }
-
-    public function RemoveConnection(string $connectionId): bool
-    {
-        $token = $this->GetValidApplicationAccessToken();
-        if ($token === '' || $connectionId === '') {
-            return false;
-        }
-
-        $url = 'https://vehicle.api.smartcar.com/v3/connections/' . rawurlencode($connectionId);
-
-        $response = $this->HttpRequestRaw(
-            'RemoveConnection',
-            'DELETE',
-            $url,
-            [
-                'Authorization: Bearer ' . $token,
-                'Accept: application/json'
-            ]
-        );
-
-        if ($response === null) {
-            return false;
-        }
-
-        $ok = ($response['statusCode'] >= 200 && $response['statusCode'] < 300);
-        $this->SendDebug('RemoveConnection', 'HTTP ' . $response['statusCode'] . ': ' . $response['body'], 0);
-
-        if ($ok) {
-            $this->LoadConnections();
-        }
-
-        return $ok;
-    }
-
-    public function CreateVehicleInstances(): void
-    {
-        $connections = $this->LoadConnections();
-
-        foreach ($connections as $connection) {
-            $vehicleId    = (string)$connection['vehicleId'];
-            $connectionId = (string)$connection['connectionId'];
-
-            $instanceId = $this->FindVehicleInstanceByVehicleId($vehicleId);
-
-            if ($instanceId === 0) {
-                $instanceId = IPS_CreateInstance('{1E1B7C9A-2D4F-4E8A-9C3B-7F6D5A4E2B10}');
-
-                // NICHT unter den Splitter hängen,
-                // sondern auf die gleiche Ebene wie der Splitter legen
-                IPS_SetParent($instanceId, IPS_GetParent($this->InstanceID));
-            }
-
-            // Technische Verbindung zum Splitter herstellen
-            IPS_ConnectInstance($instanceId, $this->InstanceID);
-
-            IPS_SetName($instanceId, $connection['caption'] !== '' ? $connection['caption'] : $vehicleId);
-
-            IPS_SetProperty($instanceId, 'VehicleID', $vehicleId);
-            IPS_SetProperty($instanceId, 'ConnectionID', $connectionId);
-            IPS_SetProperty($instanceId, 'VehicleCaption', (string)$connection['caption']);
-            IPS_SetProperty($instanceId, 'Make', (string)$connection['make']);
-            IPS_SetProperty($instanceId, 'Model', (string)$connection['model']);
-            IPS_SetProperty($instanceId, 'Year', (int)$connection['year']);
-            IPS_SetProperty($instanceId, 'PowertrainType', (string)$connection['powertrainType']);
-
-            IPS_ApplyChanges($instanceId);
-        }
-    }
-
-    public function ForwardData(string $JSONString): string
-    {
-        $data = json_decode($JSONString, true);
-        if (!is_array($data)) {
-            return json_encode(['success' => false, 'error' => 'Invalid JSON']);
-        }
-
-        $command = $data['Command'] ?? '';
-
-        switch ($command) {
-            case 'GetVehicle':
-                return json_encode($this->ApiGetVehicle((string)$data['VehicleID']));
-
-            case 'GetSignals':
-                return json_encode($this->ApiGetSignals((string)$data['VehicleID']));
-
-            case 'GetSignal':
-                return json_encode($this->ApiGetSignal((string)$data['VehicleID'], (string)$data['SignalCode']));
-
-            case 'Command':
-                return json_encode($this->ApiVehicleCommand(
-                    (string)$data['VehicleID'],
-                    (string)$data['Method'],
-                    (string)$data['Path'],
-                    isset($data['Body']) ? json_encode($data['Body']) : ''
-                ));
-
-            default:
-                return json_encode(['success' => false, 'error' => 'Unknown command']);
-        }
     }
 
     public function ApiGetVehicle(string $vehicleId): array
@@ -436,6 +307,7 @@ class SmartcarSplitter extends IPSModuleStrict
             if (!$this->RequestApplicationAccessToken()) {
                 return '';
             }
+
             $token = $this->ReadAttributeString('ApplicationAccessToken');
         }
 
@@ -485,33 +357,6 @@ class SmartcarSplitter extends IPSModuleStrict
         foreach ($headers as $header) {
             if (preg_match('#HTTP/\d+(?:\.\d+)?\s+(\d+)#', $header, $m)) {
                 return (int)$m[1];
-            }
-        }
-        return 0;
-    }
-
-    private function GetCachedConnectionsForForm(): array
-    {
-        $raw = $this->ReadAttributeString('ConnectionsCache');
-        $data = json_decode($raw, true);
-        return is_array($data) ? $data : [];
-    }
-
-    private function FindVehicleInstanceByVehicleId(string $vehicleId): int
-    {
-        foreach (IPS_GetChildrenIDs($this->InstanceID) as $childId) {
-            $obj = IPS_GetObject($childId);
-            if (($obj['ObjectType'] ?? -1) !== 1) {
-                continue;
-            }
-
-            $instance = @IPS_GetInstance($childId);
-            if (!is_array($instance) || ($instance['ModuleInfo']['ModuleID'] ?? '') !== '{1E1B7C9A-2D4F-4E8A-9C3B-7F6D5A4E2B10}') {
-                continue;
-            }
-
-            if (@IPS_GetProperty($childId, 'VehicleID') === $vehicleId) {
-                return $childId;
             }
         }
 
