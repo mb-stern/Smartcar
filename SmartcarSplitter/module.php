@@ -10,12 +10,8 @@ class SmartcarSplitter extends IPSModuleStrict
 
         $this->RegisterHook('smartcar_' . $this->InstanceID);
 
-        // Neue API credentials / M2M
         $this->RegisterPropertyString('ClientID', '');
         $this->RegisterPropertyString('ClientSecret', '');
-
-        // Connect client_id aus Legacy credentials / Legacy Keys
-        $this->RegisterPropertyString('ConnectClientID', '');
 
         $this->RegisterPropertyString('ManualRedirectURI', '');
 
@@ -80,11 +76,6 @@ class SmartcarSplitter extends IPSModuleStrict
                     'type' => 'ValidationTextBox',
                     'name' => 'ClientSecret',
                     'caption' => 'Client Secret'
-                ],
-                [
-                    'type' => 'ValidationTextBox',
-                    'name' => 'ConnectClientID',
-                    'caption' => 'Connect Client ID (Legacy credentials)'
                 ],
                 [
                     'type' => 'CheckBox',
@@ -501,6 +492,18 @@ class SmartcarSplitter extends IPSModuleStrict
     {
         $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
+        $this->SendDebug(
+            'Hook/Request',
+            'method=' . $method . ' query=' . json_encode($_GET, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            0
+        );
+
+        // Smartcar Connect Redirect
+        if ($method === 'GET') {
+            $this->HandleConnectRedirect();
+            return;
+        }
+
         if (!$this->ReadPropertyBoolean('EnableWebhook')) {
             http_response_code(200);
             echo 'ignored';
@@ -536,8 +539,9 @@ class SmartcarSplitter extends IPSModuleStrict
 
         $eventType = (string)($payload['eventType'] ?? '');
         $vehicleId = (string)($payload['data']['vehicle']['id'] ?? '');
+        $userId = (string)($payload['data']['user']['id'] ?? '');
 
-        $this->SendDebug('Webhook/Event', 'eventType=' . $eventType . ' vehicleId=' . $vehicleId, 0);
+        $this->SendDebug('Webhook/Event', 'eventType=' . $eventType . ' vehicleId=' . $vehicleId . ' userId=' . $userId, 0);
 
         if ($eventType === 'VEHICLE_STATE' && $vehicleId !== '') {
             $this->DispatchVehicleStateToVehicle($vehicleId, $payload);
@@ -649,7 +653,7 @@ class SmartcarSplitter extends IPSModuleStrict
 
     public function BuildConnectURL(string $mode, string $state, array $permissions): string
     {
-        $clientID = trim($this->ReadPropertyString('ConnectClientID'));
+        $clientID = trim($this->ReadPropertyString('ClientID'));
 
         $hookAddress = 'smartcar_' . $this->InstanceID;
         $hookPath = '/hook/' . $hookAddress;
@@ -660,7 +664,7 @@ class SmartcarSplitter extends IPSModuleStrict
         }
 
         if ($clientID === '') {
-            return 'Fehler: Connect Client ID fehlt. Diese steht bei Smartcar unter Legacy credentials / Legacy Keys.';
+            return 'Fehler: Client ID fehlt.';
         }
 
         if ($redirectURI === '') {
@@ -686,7 +690,11 @@ class SmartcarSplitter extends IPSModuleStrict
             'mode'          => $mode !== '' ? $mode : 'live'
         ];
 
-        return 'https://connect.smartcar.com/oauth/authorize?' . http_build_query($query);
+        $url = 'https://connect.smartcar.com/oauth/authorize?' . http_build_query($query);
+
+        $this->SendDebug('ConnectURL/Build', $url, 0);
+
+        return $url;
     }
 
     private function BuildSymconConnectURL(string $hookPath): string
@@ -720,5 +728,112 @@ class SmartcarSplitter extends IPSModuleStrict
 
         $this->SendDebug('ConnectURL', 'Keine Symcon-Connect-Adresse gefunden.', 0);
         return '';
+    }
+
+    private function HandleConnectRedirect(): void
+    {
+        $error = (string)($_GET['error'] ?? '');
+        if ($error !== '') {
+            $description = (string)($_GET['error_description'] ?? '');
+            $this->SendDebug('Connect/RedirectError', $error . ' ' . $description, 0);
+
+            http_response_code(200);
+            echo 'Smartcar Connect abgebrochen/fehlgeschlagen: ' . htmlspecialchars($error . ' ' . $description);
+            return;
+        }
+
+        $userId = (string)($_GET['user_id'] ?? ($_GET['userId'] ?? ''));
+        $state  = (string)($_GET['state'] ?? '');
+        $code   = (string)($_GET['code'] ?? '');
+
+        $this->SendDebug('Connect/Redirect', json_encode([
+            'user_id' => $userId,
+            'state'   => $state,
+            'code'    => $code !== '' ? '<present>' : ''
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+
+        if ($userId === '') {
+            http_response_code(200);
+            echo 'Smartcar Connect abgeschlossen, aber user_id fehlt. Debug prüfen.';
+            return;
+        }
+
+        $vehicleId = $this->ExtractVehicleIdFromState($state);
+        if ($vehicleId !== '') {
+            $this->UpdateVehicleUserId($vehicleId, $userId);
+        }
+
+        // Connections neu laden, damit ConnectionID/VehicleID/userId aus Smartcar synchronisiert werden
+        $connections = $this->LoadConnections();
+        $this->UpdateVehiclesFromConnections($connections);
+
+        http_response_code(200);
+        echo 'Smartcar Connect erfolgreich abgeschlossen. Dieses Fenster kann geschlossen werden.';
+    }
+
+    private function ExtractVehicleIdFromState(string $state): string
+    {
+        if (preg_match('/vehicle_([0-9a-fA-F-]{36})_/', $state, $m)) {
+            return $m[1];
+        }
+
+        return '';
+    }
+
+    private function UpdateVehicleUserId(string $vehicleId, string $userId): void
+    {
+        $instanceId = $this->FindVehicleInstanceByVehicleId($vehicleId);
+        if ($instanceId === 0) {
+            $this->SendDebug('Connect/UpdateUserID', 'Keine Vehicle-Instanz für VehicleID=' . $vehicleId, 0);
+            return;
+        }
+
+        IPS_SetProperty($instanceId, 'UserID', $userId);
+        IPS_ApplyChanges($instanceId);
+
+        $this->SendDebug('Connect/UpdateUserID', 'UserID gespeichert in Instanz ' . $instanceId, 0);
+    }
+
+    private function UpdateVehiclesFromConnections(array $connections): void
+    {
+        foreach ($connections as $connection) {
+            $vehicleId = (string)($connection['vehicleId'] ?? '');
+            if ($vehicleId === '') {
+                continue;
+            }
+
+            $instanceId = $this->FindVehicleInstanceByVehicleId($vehicleId);
+            if ($instanceId === 0) {
+                continue;
+            }
+
+            IPS_SetProperty($instanceId, 'ConnectionID', (string)($connection['connectionId'] ?? ''));
+            IPS_SetProperty($instanceId, 'UserID', (string)($connection['userId'] ?? ''));
+            IPS_SetProperty($instanceId, 'VehicleCaption', (string)($connection['caption'] ?? $vehicleId));
+            IPS_SetProperty($instanceId, 'Make', (string)($connection['make'] ?? ''));
+            IPS_SetProperty($instanceId, 'Model', (string)($connection['model'] ?? ''));
+            IPS_SetProperty($instanceId, 'Year', (int)($connection['year'] ?? 0));
+            IPS_SetProperty($instanceId, 'PowertrainType', (string)($connection['powertrainType'] ?? ''));
+
+            IPS_ApplyChanges($instanceId);
+        }
+    }
+
+    private function FindVehicleInstanceByVehicleId(string $vehicleId): int
+    {
+        $vehicleModuleId = '{1E1B7C9A-2D4F-4E8A-9C3B-7F6D5A4E2B10}';
+
+        $instanceIds = @IPS_GetInstanceListByModuleID($vehicleModuleId);
+        if (!is_array($instanceIds)) {
+            return 0;
+        }
+
+        foreach ($instanceIds as $instanceId) {
+            if ((string)@IPS_GetProperty($instanceId, 'VehicleID') === $vehicleId) {
+                return (int)$instanceId;
+            }
+        }
+
+        return 0;
     }
 }
