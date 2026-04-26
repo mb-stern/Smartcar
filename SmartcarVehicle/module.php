@@ -159,6 +159,7 @@ class SmartcarVehicle extends IPSModuleStrict
         }
 
         $values = [];
+        $seen = [];
 
         foreach ($data as $item) {
             $attributes = is_array($item['attributes'] ?? null) ? $item['attributes'] : [];
@@ -186,14 +187,23 @@ class SmartcarVehicle extends IPSModuleStrict
                     continue;
                 }
 
+                $code = (string)($capability['code'] ?? '');
+                $permission = (string)($capability['permission'] ?? '');
+                $uniqueKey = $key . '|' . $code . '|' . $permission;
+
+                if (isset($seen[$uniqueKey])) {
+                    continue;
+                }
+                $seen[$uniqueKey] = true;
+
                 $values[] = [
                     'selected'   => $selectedMap[$key] ?? false,
                     'capability' => $key,
                     'type'       => (string)($capability['type'] ?? ''),
                     'name'       => (string)($capability['name'] ?? $key),
                     'group'      => (string)($capability['group'] ?? ''),
-                    'code'       => (string)($capability['code'] ?? ''),
-                    'permission' => (string)($capability['permission'] ?? '')
+                    'code'       => $code,
+                    'permission' => $permission
                 ];
             }
         }
@@ -312,5 +322,12 @@ class SmartcarVehicle extends IPSModuleStrict
             'MERCEDES_BENZ', 'MERCEDES-BENZ' => 'MERCEDES-BENZ',
             default => trim($make)
         };
+    }
+    private function NormalizeText(string $text): string
+    {
+        $text = strtoupper(trim($text));
+        $text = str_replace(['_', '-'], ' ', $text);
+        $text = preg_replace('/\s+/', ' ', $text);
+        return $text;
     }
 }
