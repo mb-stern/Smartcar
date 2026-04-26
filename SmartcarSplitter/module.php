@@ -382,7 +382,7 @@ class SmartcarSplitter extends IPSModuleStrict
             $query['filter[make]'] = $make;
         }
 
-        if ($powertrainType !== '' && strtoupper($powertrainType) !== 'ICE') {
+        if ($powertrainType !== '') {
             $query['filter[powertrainType]'] = $powertrainType;
         }
 
