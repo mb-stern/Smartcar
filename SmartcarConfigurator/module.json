@@ -5,10 +5,12 @@
     "vendor": "Stefan Künzli",
     "aliases": ["Smartcar Configurator"],
     "parentRequirements": [
-        "{9F7A4B2C-3D1E-4A6F-8B20-6C5D4E3F2A10}"
+        "{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}"
     ],
     "childRequirements": [],
-    "implemented": [],
+    "implemented": [
+        "{8C5C7F4E-2A6D-4B9C-9D2A-1E3F5A7B9C10}"
+    ],
     "prefix": "SMCARCFG",
     "url": "https://github.com/mb-stern/Smartcar/tree/beta"
 }
