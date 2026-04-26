@@ -299,7 +299,7 @@ class SmartcarSplitter extends IPSModuleStrict
             $instanceId = $this->FindVehicleInstanceByVehicleId($vehicleId);
 
             if ($instanceId === 0) {
-                $instanceId = IPS_CreateInstance('{B54F3E1B-7A44-4D1F-9C83-0B0C7C6B1003}');
+                IPS_CreateInstance('{1E1B7C9A-2D4F-4E8A-9C3B-7F6D5A4E2B10}');
                 IPS_SetParent($instanceId, $this->InstanceID);
             }
 
@@ -316,7 +316,7 @@ class SmartcarSplitter extends IPSModuleStrict
         }
     }
 
-    public function ForwardData($JSONString)
+    public function ForwardData(string $JSONString): string
     {
         $data = json_decode($JSONString, true);
         if (!is_array($data)) {
@@ -484,7 +484,7 @@ class SmartcarSplitter extends IPSModuleStrict
             }
 
             $instance = @IPS_GetInstance($childId);
-            if (!is_array($instance) || ($instance['ModuleInfo']['ModuleID'] ?? '') !== '{B54F3E1B-7A44-4D1F-9C83-0B0C7C6B1003}') {
+            if (!is_array($instance) || ($instance['ModuleInfo']['ModuleID'] ?? '') !== '{1E1B7C9A-2D4F-4E8A-9C3B-7F6D5A4E2B10}') {
                 continue;
             }
 
