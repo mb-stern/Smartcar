@@ -81,64 +81,69 @@ class SmartcarVehicle extends IPSModuleStrict
                     ]
                 ],
                 [
-                    'type' => 'List',
-                    'name' => 'SelectedCapabilities',
-                    'caption' => 'Kompatible Signale / Befehle',
-                    'rowCount' => 10,
-                    'add' => false,
-                    'delete' => false,
-                    'sort' => [
-                        'column' => 'sortKey',
-                        'direction' => 'ascending'
+                'type' => 'List',
+                'name' => 'SelectedCapabilities',
+                'caption' => 'Kompatible Signale / Befehle',
+                'rowCount' => 10,
+                'add' => false,
+                'delete' => false,
+                'sort' => [
+                    'column' => 'sortKey',
+                    'direction' => 'ascending'
+                ],
+                'columns' => [
+                    [
+                        'caption' => '',
+                        'name' => 'sortKey',
+                        'width' => '0px',
+                        'visible' => false,
+                        'edit' => ['type' => 'ValidationTextBox']
                     ],
-                    'columns' => [
-                        [
-                            'caption' => '',
-                            'name' => 'sortKey',
-                            'width' => '0px',
-                            'visible' => false
-                        ],
-                        [
-                            'caption' => 'Aktiv',
-                            'name' => 'selected',
-                            'width' => '80px',
-                            'edit' => [
-                                'type' => 'CheckBox'
-                            ]
-                        ],
-                        [
-                            'caption' => 'Typ',
-                            'name' => 'type',
-                            'width' => '90px'
-                        ],
-                        [
-                            'caption' => 'Gruppe',
-                            'name' => 'group',
-                            'width' => '160px'
-                        ],
-                        [
-                            'caption' => 'Name',
-                            'name' => 'name',
-                            'width' => 'auto'
-                        ],
-                        [
-                            'caption' => 'Capability',
-                            'name' => 'capability',
-                            'width' => '220px'
-                        ],
-                        [
-                            'caption' => 'Code',
-                            'name' => 'code',
-                            'width' => '220px'
-                        ],
-                        [
-                            'caption' => 'Permission',
-                            'name' => 'permission',
-                            'width' => '180px'
-                        ]
+                    [
+                        'caption' => 'Aktiv',
+                        'name' => 'selected',
+                        'width' => '80px',
+                        'edit' => ['type' => 'CheckBox']
                     ],
-                    'values' => $capabilities
-                ]
+                    [
+                        'caption' => 'Typ',
+                        'name' => 'type',
+                        'width' => '90px',
+                        'edit' => ['type' => 'ValidationTextBox']
+                    ],
+                    [
+                        'caption' => 'Gruppe',
+                        'name' => 'group',
+                        'width' => '160px',
+                        'edit' => ['type' => 'ValidationTextBox']
+                    ],
+                    [
+                        'caption' => 'Name',
+                        'name' => 'name',
+                        'width' => 'auto',
+                        'edit' => ['type' => 'ValidationTextBox']
+                    ],
+                    [
+                        'caption' => 'Capability',
+                        'name' => 'capability',
+                        'width' => '220px',
+                        'edit' => ['type' => 'ValidationTextBox']
+                    ],
+                    [
+                        'caption' => 'Code',
+                        'name' => 'code',
+                        'width' => '220px',
+                        'edit' => ['type' => 'ValidationTextBox']
+                    ],
+                    [
+                        'caption' => 'Permission',
+                        'name' => 'permission',
+                        'width' => '180px',
+                        'edit' => ['type' => 'ValidationTextBox']
+                    ]
+                ],
+                'values' => $capabilities
+            ]
             ],
             'actions' => [
                 [
@@ -212,15 +217,29 @@ class SmartcarVehicle extends IPSModuleStrict
                 $uniqueKey = strtolower($type . '|' . $group . '|' . $code . '|' . $capKey);
 
                 if (!isset($temp[$uniqueKey])) {
-                    $temp[$uniqueKey] = [
-                        'selected'   => $selectedMap[$capKey] ?? false,
-                        'capability' => $capKey,
-                        'type'       => $type,
-                        'name'       => $name !== '' ? $name : $capKey,
-                        'group'      => $group,
-                        'code'       => $code,
-                        'permission' => $permission
-                    ];
+                    $displayName = $name !== '' ? $name : $capKey;
+
+                $typeOrder = match (strtolower($type)) {
+                    'signal'  => '0',
+                    'command' => '1',
+                    default   => '9'
+                };
+
+                $sortKey = $typeOrder
+                    . '|' . strtoupper($group)
+                    . '|' . strtoupper($displayName)
+                    . '|' . strtoupper($code);
+
+                $temp[$uniqueKey] = [
+                    'sortKey'    => $sortKey,
+                    'selected'   => $selectedMap[$capKey] ?? false,
+                    'capability' => $capKey,
+                    'type'       => $type,
+                    'name'       => $displayName,
+                    'group'      => $group,
+                    'code'       => $code,
+                    'permission' => $permission
+                ];
                     continue;
                 }
 
@@ -245,10 +264,6 @@ class SmartcarVehicle extends IPSModuleStrict
         });
 
         $this->SendDebug('Compatibility/Form', 'Capabilities für Liste nach Dedupe: ' . count($values), 0);
-
-        return $values;
-
-        $this->SendDebug('Compatibility/Form', 'Capabilities für Liste: ' . count($values), 0);
 
         return $values;
     }
