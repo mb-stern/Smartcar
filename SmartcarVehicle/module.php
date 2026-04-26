@@ -158,23 +158,10 @@ class SmartcarVehicle extends IPSModuleStrict
             }
         }
 
-        $values = [];
-        $seen = [];
+        $temp = [];
 
         foreach ($data as $item) {
             $attributes = is_array($item['attributes'] ?? null) ? $item['attributes'] : [];
-
-            $this->SendDebug(
-                'Compatibility/Item',
-                json_encode([
-                    'make'  => $attributes['make'] ?? '',
-                    'model' => $attributes['model'] ?? '',
-                    'years' => $attributes['years'] ?? null,
-                    'capabilities_count' => isset($attributes['capabilities']) && is_array($attributes['capabilities']) ? count($attributes['capabilities']) : 0
-                ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
-                0
-            );
-
             $capabilities = is_array($attributes['capabilities'] ?? null) ? $attributes['capabilities'] : [];
 
             foreach ($capabilities as $capability) {
@@ -182,33 +169,55 @@ class SmartcarVehicle extends IPSModuleStrict
                     continue;
                 }
 
-                $key = (string)($capability['capability'] ?? '');
-                if ($key === '') {
-                    continue;
-                }
-
-                $code = (string)($capability['code'] ?? '');
+                $type       = (string)($capability['type'] ?? '');
+                $group      = (string)($capability['group'] ?? '');
+                $name       = (string)($capability['name'] ?? '');
+                $code       = (string)($capability['code'] ?? '');
+                $capKey     = (string)($capability['capability'] ?? '');
                 $permission = (string)($capability['permission'] ?? '');
-                $uniqueKey = $key . '|' . $code . '|' . $permission;
 
-                if (isset($seen[$uniqueKey])) {
+                if ($code === '' && $capKey === '') {
                     continue;
                 }
-                $seen[$uniqueKey] = true;
 
-                $values[] = [
-                    'selected'   => $selectedMap[$key] ?? false,
-                    'capability' => $key,
-                    'type'       => (string)($capability['type'] ?? ''),
-                    'name'       => (string)($capability['name'] ?? $key),
-                    'group'      => (string)($capability['group'] ?? ''),
-                    'code'       => $code,
-                    'permission' => $permission
-                ];
+                $uniqueKey = strtolower($type . '|' . $group . '|' . $code . '|' . $capKey);
+
+                if (!isset($temp[$uniqueKey])) {
+                    $temp[$uniqueKey] = [
+                        'selected'   => $selectedMap[$capKey] ?? false,
+                        'capability' => $capKey,
+                        'type'       => $type,
+                        'name'       => $name !== '' ? $name : $capKey,
+                        'group'      => $group,
+                        'code'       => $code,
+                        'permission' => $permission
+                    ];
+                    continue;
+                }
+
+                if ($temp[$uniqueKey]['permission'] === '' && $permission !== '') {
+                    $temp[$uniqueKey]['permission'] = $permission;
+                }
+
+                if ($temp[$uniqueKey]['name'] === '' && $name !== '') {
+                    $temp[$uniqueKey]['name'] = $name;
+                }
             }
         }
 
-        usort($values, fn($a, $b) => strcmp((string)$a['name'], (string)$b['name']));
+        $values = array_values($temp);
+
+        usort($values, function ($a, $b) {
+            return
+                strcasecmp((string)$a['type'], (string)$b['type']) ?:
+                strcasecmp((string)$a['group'], (string)$b['group']) ?:
+                strcasecmp((string)$a['name'], (string)$b['name']) ?:
+                strcasecmp((string)$a['code'], (string)$b['code']);
+        });
+
+        $this->SendDebug('Compatibility/Form', 'Capabilities für Liste nach Dedupe: ' . count($values), 0);
+
+        return $values;
 
         $this->SendDebug('Compatibility/Form', 'Capabilities für Liste: ' . count($values), 0);
 
