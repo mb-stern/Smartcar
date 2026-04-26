@@ -67,14 +67,59 @@ class SmartcarVehicle extends IPSModuleStrict
                         ['caption' => 'Kanada', 'value' => 'CA']
                     ]
                 ],
-
                 [
-                    'type' => 'CheckBoxList',
-                    'name' => 'SelectedCapabilities',
-                    'caption' => 'Kompatible Signale / Befehle',
-                    'rowCount' => 20,
-                    'values' => $capabilities
-                ]
+                'type' => 'List',
+                'name' => 'SelectedCapabilities',
+                'caption' => 'Kompatible Signale / Befehle',
+                'rowCount' => 20,
+                'add' => false,
+                'delete' => false,
+                'sort' => [
+                    'column' => 'name',
+                    'direction' => 'ascending'
+                ],
+                'columns' => [
+                    [
+                        'caption' => 'Aktiv',
+                        'name' => 'selected',
+                        'width' => '80px',
+                        'edit' => [
+                            'type' => 'CheckBox'
+                        ]
+                    ],
+                    [
+                        'caption' => 'Typ',
+                        'name' => 'type',
+                        'width' => '90px'
+                    ],
+                    [
+                        'caption' => 'Gruppe',
+                        'name' => 'group',
+                        'width' => '160px'
+                    ],
+                    [
+                        'caption' => 'Name',
+                        'name' => 'name',
+                        'width' => 'auto'
+                    ],
+                    [
+                        'caption' => 'Capability',
+                        'name' => 'capability',
+                        'width' => '220px'
+                    ],
+                    [
+                        'caption' => 'Code',
+                        'name' => 'code',
+                        'width' => '220px'
+                    ],
+                    [
+                        'caption' => 'Permission',
+                        'name' => 'permission',
+                        'width' => '180px'
+                    ]
+                ],
+                'values' => $capabilities
+            ]
             ],
             'actions' => [
                 [
