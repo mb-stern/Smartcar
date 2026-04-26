@@ -582,21 +582,35 @@ class SmartcarVehicle extends IPSModuleStrict
 
     public function GenerateConnectURL(): string
     {
+        $this->SendDebug('Connect/Start', 'GenerateConnectURL gestartet.', 0);
+
         $permissions = $this->GetSelectedPermissions();
 
+        $this->SendDebug(
+            'Connect/Result',
+            'Permissions count=' . count($permissions) . ' values=' . json_encode($permissions, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            0
+        );
+
         if (empty($permissions)) {
-            return 'Fehler: Keine aktivierten Signale/Befehle mit Permission ausgewählt.';
+            return 'Fehler: Keine aktivierten Signale/Befehle mit Permission ausgewählt. Bitte Debug prüfen: Connect/SelectedCapabilitiesRaw, Connect/Entry und Connect/Summary.';
         }
 
         $state = 'vehicle_' . $this->ReadPropertyString('VehicleID') . '_' . bin2hex(random_bytes(8));
 
-        $result = $this->SendDataToParent(json_encode([
+        $request = [
             'DataID'      => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
             'Command'     => 'BuildConnectURL',
             'Mode'        => $this->ReadPropertyString('ConnectMode'),
             'State'       => $state,
             'Permissions' => $permissions
-        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        ];
+
+        $this->SendDebug('Connect/RequestToSplitter', json_encode($request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+
+        $result = $this->SendDataToParent(json_encode($request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+
+        $this->SendDebug('Connect/SplitterResponse', (string)$result, 0);
 
         $decoded = json_decode((string)$result, true);
         if (!is_array($decoded) || empty($decoded['success'])) {
@@ -613,51 +627,83 @@ class SmartcarVehicle extends IPSModuleStrict
         $this->SendDebug('Connect/SelectedCapabilitiesRaw', $raw, 0);
 
         $entries = json_decode($raw, true);
+
         if (!is_array($entries)) {
-            $this->SendDebug('Connect/Permissions', 'SelectedCapabilities ist kein JSON-Array.', 0);
+            $this->SendDebug('Connect/Error', 'SelectedCapabilities ist kein JSON-Array.', 0);
             return [];
         }
 
+        $total = count($entries);
+        $selectedCount = 0;
+        $selectedWithPermission = 0;
+        $selectedWithoutPermission = 0;
+        $notSelectedCount = 0;
+
         $permissions = [];
 
-        foreach ($entries as $entry) {
+        foreach ($entries as $index => $entry) {
             if (!is_array($entry)) {
+                $this->SendDebug('Connect/EntryInvalid', 'Index ' . $index . ' ist kein Array.', 0);
                 continue;
             }
 
-            $selected = filter_var($entry['selected'] ?? false, FILTER_VALIDATE_BOOLEAN);
+            $rawSelected = $entry['selected'] ?? null;
 
-            if (!$selected) {
-                continue;
-            }
+            $selected =
+                $rawSelected === true ||
+                $rawSelected === 1 ||
+                $rawSelected === '1' ||
+                strtolower((string)$rawSelected) === 'true';
 
             $permission = trim((string)($entry['permission'] ?? ''));
 
-            $this->SendDebug(
-                'Connect/SelectedEntry',
-                json_encode([
-                    'name'       => $entry['name'] ?? '',
-                    'type'       => $entry['type'] ?? '',
-                    'code'       => $entry['code'] ?? '',
-                    'permission' => $permission
-                ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
-                0
-            );
+            $debugEntry = [
+                'index'       => $index,
+                'rawSelected' => $rawSelected,
+                'selected'    => $selected,
+                'type'        => $entry['type'] ?? '',
+                'group'       => $entry['group'] ?? '',
+                'name'        => $entry['name'] ?? '',
+                'capability'  => $entry['capability'] ?? '',
+                'code'        => $entry['code'] ?? '',
+                'permission'  => $permission
+            ];
 
-            if ($permission === '') {
+            $this->SendDebug('Connect/Entry', json_encode($debugEntry, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+
+            if (!$selected) {
+                $notSelectedCount++;
                 continue;
             }
 
+            $selectedCount++;
+
+            if ($permission === '') {
+                $selectedWithoutPermission++;
+                $this->SendDebug(
+                    'Connect/SelectedNoPermission',
+                    'Ausgewählt aber ohne Permission: ' . json_encode($debugEntry, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                    0
+                );
+                continue;
+            }
+
+            $selectedWithPermission++;
             $permissions[$permission] = true;
         }
 
         $result = array_keys($permissions);
 
-        $this->SendDebug(
-            'Connect/Permissions',
-            'Ermittelte Permissions: ' . json_encode($result, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
-            0
-        );
+        $summary = [
+            'total'                     => $total,
+            'notSelected'               => $notSelectedCount,
+            'selected'                  => $selectedCount,
+            'selectedWithPermission'    => $selectedWithPermission,
+            'selectedWithoutPermission' => $selectedWithoutPermission,
+            'permissions'               => $result
+        ];
+
+        $this->SendDebug('Connect/Summary', json_encode($summary, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
         return $result;
     }
