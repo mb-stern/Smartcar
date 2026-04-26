@@ -669,14 +669,22 @@ class SmartcarSplitter extends IPSModuleStrict
             $hookPath = '/hook/' . ltrim($hookPath, '/');
         }
 
+        $this->SendDebug('ConnectURL', 'HookPath=' . $hookPath, 0);
+
         $connectAddress = '';
         $ids = @IPS_GetInstanceListByModuleID('{9486D575-BE8C-4ED8-B5B5-20930E26DE6F}');
+
+        $this->SendDebug('ConnectURL', 'Connect-Instanzen=' . json_encode($ids), 0);
 
         if (!empty($ids)) {
             if (function_exists('CC_GetUrl')) {
                 $connectAddress = @CC_GetUrl($ids[0]);
+                $this->SendDebug('ConnectURL', 'CC_GetUrl=' . $connectAddress, 0);
             } elseif (function_exists('CC_GetURL')) {
                 $connectAddress = @CC_GetURL($ids[0]);
+                $this->SendDebug('ConnectURL', 'CC_GetURL=' . $connectAddress, 0);
+            } else {
+                $this->SendDebug('ConnectURL', 'Weder CC_GetUrl noch CC_GetURL vorhanden.', 0);
             }
         }
 
@@ -684,6 +692,7 @@ class SmartcarSplitter extends IPSModuleStrict
             return rtrim($connectAddress, '/') . $hookPath;
         }
 
+        $this->SendDebug('ConnectURL', 'Keine Symcon-Connect-Adresse gefunden.', 0);
         return '';
     }
 }
