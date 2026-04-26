@@ -53,7 +53,13 @@ class SmartcarVehicle extends IPSModuleStrict
 
     public function GetConfigurationForm(): string
     {
-        $capabilities = $this->GetCompatibilityCapabilitiesForForm();
+        $capabilities = [];
+
+        if ($this->HasParentConnection()) {
+            $capabilities = $this->GetCompatibilityCapabilitiesForForm();
+        } else {
+            $this->SendDebug('Form', 'Kein Splitter/Parent verbunden. Compatibility-Liste wird nicht geladen.', 0);
+        }
 
         $form = [
             'elements' => [
@@ -844,6 +850,16 @@ class SmartcarVehicle extends IPSModuleStrict
         $this->SendDebug('Selected/Resolve', 'Ausgewählte Einträge: ' . count($result), 0);
 
         return $result;
+    }
+
+    private function HasParentConnection(): bool
+    {
+        $instance = @IPS_GetInstance($this->InstanceID);
+        if (!is_array($instance)) {
+            return false;
+        }
+
+        return ((int)($instance['ConnectionID'] ?? 0)) > 0;
     }
 
     private function HasParentConnection(): bool
