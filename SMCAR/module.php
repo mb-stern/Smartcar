@@ -52,7 +52,12 @@ class Smartcar extends IPSModuleStrict
         $hookPath    = '/hook/' . $hookAddress;
 
         $manual = trim($this->ReadPropertyString('ManualRedirectURI'));
-        $redirectURI = ($manual !== '') ? $manual : $this->BuildConnectURL($hookPath);
+
+        if ($manual !== '') {
+            $redirectURI = $manual;
+        } else {
+            $redirectURI = $this->BuildConnectURL($hookPath);
+        }
 
         $this->WriteAttributeString('RedirectURI', $redirectURI);
 
@@ -138,27 +143,12 @@ class Smartcar extends IPSModuleStrict
 
     public function GetConfigurationForm(): string
     {
-        $hookAddress = 'smartcar_' . $this->InstanceID;
-        $hookPath    = '/hook/' . $hookAddress;
-
-        $manual = trim($this->ReadPropertyString('ManualRedirectURI'));
-        $effectiveRedirect = ($manual !== '') ? $manual : $this->BuildConnectURL($hookPath);
-
-        if ($effectiveRedirect === '') {
-            $effectiveRedirect = $this->ReadAttributeString('RedirectURI');
-        }
-
-        $webhookText = $effectiveRedirect !== ''
-            ? $effectiveRedirect
-            : 'nicht verfügbar – IP-Symcon Connect prüfen oder manuelle Redirect-URI setzen';
-
+        $effectiveRedirect = $this->ReadAttributeString('RedirectURI');
         $tokenExpiresAt = $this->ReadAttributeInteger('ApplicationAccessTokenExpiresAt');
         $cacheAt = $this->ReadAttributeInteger('CompatibilityCacheAt');
 
         $form = [
             'elements' => [
-                ['type' => 'Label', 'caption' => 'Webhook-URL: ' . $webhookText],
-                ['type' => 'Label', 'caption' => 'Smartcar API V3 – nur Signals, keine Legacy/V2-Endpunkte'],
                 ['type' => 'Label', 'caption' => 'Redirect-/Callback-URI: ' . $effectiveRedirect],
 
                 [
@@ -166,6 +156,12 @@ class Smartcar extends IPSModuleStrict
                     'name' => 'ManualRedirectURI',
                     'caption' => 'Redirect-/Callback-URI überschreiben'
                 ],
+
+                ['type' => 'Label', 'caption' => '────────────────────────────────────────'],
+
+                ['type' => 'CheckBox', 'name' => 'EnableWebhook', 'caption' => 'Webhook-Empfang aktivieren'],
+                ['type' => 'CheckBox', 'name' => 'VerifyWebhookSignature', 'caption' => 'Webhook-Signatur prüfen'],
+                ['type' => 'ValidationTextBox', 'name' => 'ManagementToken', 'caption' => 'Application Management Token'],
 
                 ['type' => 'Label', 'caption' => '────────────────────────────────────────'],
 
@@ -211,12 +207,6 @@ class Smartcar extends IPSModuleStrict
                     ],
                     'values' => $this->GetSignalCheckboxValues()
                 ],
-
-                ['type' => 'Label', 'caption' => '────────────────────────────────────────'],
-
-                ['type' => 'CheckBox', 'name' => 'EnableWebhook', 'caption' => 'Webhook-Empfang aktivieren'],
-                ['type' => 'CheckBox', 'name' => 'VerifyWebhookSignature', 'caption' => 'Webhook-Signatur prüfen'],
-                ['type' => 'ValidationTextBox', 'name' => 'ManagementToken', 'caption' => 'Application Management Token']
             ],
             'actions' => [
                 ['type' => 'Button', 'caption' => 'App-Token abrufen', 'onClick' => 'SMCAR_RequestApplicationAccessToken($id);'],
@@ -228,7 +218,8 @@ class Smartcar extends IPSModuleStrict
 
         return json_encode($form);
     }
-        private function BuildConnectURL(string $hookPath): string
+
+    private function BuildConnectURL(string $hookPath): string
     {
         if ($hookPath === '' || strpos($hookPath, '/hook/') !== 0) {
             $hookPath = '/hook/' . ltrim($hookPath, '/');
