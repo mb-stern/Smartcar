@@ -138,13 +138,26 @@ class Smartcar extends IPSModuleStrict
 
     public function GetConfigurationForm(): string
     {
-        $effectiveRedirect = $this->ReadAttributeString('RedirectURI');
+        $hookAddress = 'smartcar_' . $this->InstanceID;
+        $hookPath    = '/hook/' . $hookAddress;
+
+        $manual = trim($this->ReadPropertyString('ManualRedirectURI'));
+        $effectiveRedirect = ($manual !== '') ? $manual : $this->BuildConnectURL($hookPath);
+
+        if ($effectiveRedirect === '') {
+            $effectiveRedirect = $this->ReadAttributeString('RedirectURI');
+        }
+
+        $webhookText = $effectiveRedirect !== ''
+            ? $effectiveRedirect
+            : 'nicht verfügbar – IP-Symcon Connect prüfen oder manuelle Redirect-URI setzen';
+
         $tokenExpiresAt = $this->ReadAttributeInteger('ApplicationAccessTokenExpiresAt');
         $cacheAt = $this->ReadAttributeInteger('CompatibilityCacheAt');
 
         $form = [
             'elements' => [
-                ['type' => 'Label', 'caption' => 'Webhook-URL: ' . $effectiveRedirect],
+                ['type' => 'Label', 'caption' => 'Webhook-URL: ' . $webhookText],
                 ['type' => 'Label', 'caption' => 'Smartcar API V3 – nur Signals, keine Legacy/V2-Endpunkte'],
                 ['type' => 'Label', 'caption' => 'Redirect-/Callback-URI: ' . $effectiveRedirect],
 
