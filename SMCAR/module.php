@@ -136,56 +136,6 @@ class Smartcar extends IPSModuleStrict
         return $token;
     }
 
-    public function ExchangeAuthCodeForUserToken(string $code): bool
-    {
-        $clientID     = trim($this->ReadPropertyString('ClientID'));
-        $clientSecret = trim($this->ReadPropertyString('ClientSecret'));
-        $redirectURI  = $this->ReadAttributeString('RedirectURI');
-
-        if ($clientID === '' || $clientSecret === '' || $redirectURI === '') {
-            $this->SendDebug('UserToken', 'ClientID/Secret/RedirectURI fehlt.', 0);
-            return false;
-        }
-
-        $url = 'https://auth.smartcar.com/oauth/token';
-
-        $postData = http_build_query([
-            'grant_type'    => 'authorization_code',
-            'code'          => $code,
-            'client_id'     => $clientID,
-            'client_secret' => $clientSecret,
-            'redirect_uri'  => $redirectURI
-        ]);
-
-        $opts = [
-            'http' => [
-                'header'        => "Content-Type: application/x-www-form-urlencoded\r\nAccept: application/json\r\n",
-                'method'        => 'POST',
-                'content'       => $postData,
-                'ignore_errors' => true
-            ]
-        ];
-
-        $response = @file_get_contents($url, false, stream_context_create($opts));
-        $headers  = $http_response_header ?? [];
-        $codeHttp = $this->GetStatusCodeFromHeaders($headers);
-        $data     = json_decode($response ?: '', true);
-
-        $this->SendDebug('UserToken', 'HTTP=' . $codeHttp . ' Antwort=' . ($response ?: '(leer)'), 0);
-
-        if ($codeHttp !== 200 || !is_array($data) || empty($data['access_token'])) {
-            return false;
-        }
-
-        // 🔥 DAS ist der wichtige Token für Fahrzeugdaten
-        $this->WriteAttributeString('UserAccessToken', (string)$data['access_token']);
-
-        // optional:
-        $this->WriteAttributeString('RefreshToken', (string)($data['refresh_token'] ?? ''));
-
-        return true;
-    }
-
     public function GetConfigurationForm(): string
     {
         $effectiveRedirect = $this->ReadAttributeString('RedirectURI');
@@ -740,22 +690,23 @@ class Smartcar extends IPSModuleStrict
         $this->SendDebug('Webhook', 'Request method=' . $method . ' uri=' . $uri . ' qs=' . $qs, 0);
 
         if ($method === 'GET' && isset($_GET['code'])) {
+            $this->SendDebug('OAuth', 'Connect abgeschlossen. Code empfangen.', 0);
 
-            $authCode = $_GET['code'];
-
-            if (!$this->ExchangeAuthCodeForUserToken($authCode)) {
-                echo 'User Token fehlgeschlagen';
+            if (!$this->RequestApplicationAccessToken()) {
+                http_response_code(500);
+                echo 'App-Token konnte nicht geholt werden.';
                 return;
             }
 
             if (!$this->LoadConnectionV3()) {
-                echo 'Connection laden fehlgeschlagen';
+                http_response_code(500);
+                echo 'Connection konnte nicht geladen werden.';
                 return;
             }
 
             $this->RefreshCompatibility();
 
-            echo 'Fahrzeug verbunden ✔';
+            echo 'Fahrzeug erfolgreich verbunden. Compatibility wurde geladen.';
             return;
         }
         
