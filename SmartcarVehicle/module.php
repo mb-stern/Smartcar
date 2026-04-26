@@ -608,8 +608,13 @@ class SmartcarVehicle extends IPSModuleStrict
 
     private function GetSelectedPermissions(): array
     {
-        $entries = json_decode($this->ReadPropertyString('SelectedCapabilities'), true);
+        $raw = $this->ReadPropertyString('SelectedCapabilities');
+
+        $this->SendDebug('Connect/SelectedCapabilitiesRaw', $raw, 0);
+
+        $entries = json_decode($raw, true);
         if (!is_array($entries)) {
+            $this->SendDebug('Connect/Permissions', 'SelectedCapabilities ist kein JSON-Array.', 0);
             return [];
         }
 
@@ -620,11 +625,25 @@ class SmartcarVehicle extends IPSModuleStrict
                 continue;
             }
 
-            if (!($entry['selected'] ?? false)) {
+            $selected = filter_var($entry['selected'] ?? false, FILTER_VALIDATE_BOOLEAN);
+
+            if (!$selected) {
                 continue;
             }
 
             $permission = trim((string)($entry['permission'] ?? ''));
+
+            $this->SendDebug(
+                'Connect/SelectedEntry',
+                json_encode([
+                    'name'       => $entry['name'] ?? '',
+                    'type'       => $entry['type'] ?? '',
+                    'code'       => $entry['code'] ?? '',
+                    'permission' => $permission
+                ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                0
+            );
+
             if ($permission === '') {
                 continue;
             }
@@ -632,6 +651,14 @@ class SmartcarVehicle extends IPSModuleStrict
             $permissions[$permission] = true;
         }
 
-        return array_keys($permissions);
+        $result = array_keys($permissions);
+
+        $this->SendDebug(
+            'Connect/Permissions',
+            'Ermittelte Permissions: ' . json_encode($result, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            0
+        );
+
+        return $result;
     }
 }
