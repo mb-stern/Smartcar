@@ -16,8 +16,14 @@ class SmartcarConfigurator extends IPSModuleStrict
     {
         parent::ApplyChanges();
 
-        $this->ConnectParent(self::DATA_ID);
         $this->SetStatus(102);
+    }
+
+    public function GetCompatibleParents(): string
+    {
+        return json_encode([
+            self::DATA_ID
+        ]);
     }
 
     public function GetConfigurationForm(): string
