@@ -143,7 +143,20 @@ class Smartcar extends IPSModuleStrict
 
     public function GetConfigurationForm(): string
     {
-        $effectiveRedirect = $this->ReadAttributeString('RedirectURI');
+        $hookAddress = 'smartcar_' . $this->InstanceID;
+        $hookPath    = '/hook/' . $hookAddress;
+
+        $manual = trim($this->ReadPropertyString('ManualRedirectURI'));
+
+        if ($manual !== '') {
+            $effectiveRedirect = $manual;
+        } else {
+            $effectiveRedirect = $this->ReadAttributeString('RedirectURI');
+
+            if ($effectiveRedirect === '') {
+                $effectiveRedirect = $this->BuildConnectURL($hookPath);
+            }
+        }
         $tokenExpiresAt = $this->ReadAttributeInteger('ApplicationAccessTokenExpiresAt');
         $cacheAt = $this->ReadAttributeInteger('CompatibilityCacheAt');
 
