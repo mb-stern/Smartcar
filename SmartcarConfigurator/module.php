@@ -46,6 +46,7 @@ class SmartcarConfigurator extends IPSModuleStrict
                 'instanceID'     => $instanceId,
                 'connectionId'   => (string)($connection['connectionId'] ?? ''),
                 'vehicleId'      => $vehicleId,
+                'userId'         => (string)($connection['userId'] ?? ''),
                 'caption'        => (string)($connection['caption'] ?? $vehicleId),
                 'make'           => (string)($connection['make'] ?? ''),
                 'model'          => (string)($connection['model'] ?? ''),
@@ -193,6 +194,7 @@ class SmartcarConfigurator extends IPSModuleStrict
 
         IPS_SetProperty($instanceId, 'VehicleID', $vehicleId);
         IPS_SetProperty($instanceId, 'ConnectionID', (string)($connection['connectionId'] ?? ''));
+        IPS_SetProperty($instanceId, 'UserID', (string)($connection['userId'] ?? ''));
         IPS_SetProperty($instanceId, 'VehicleCaption', $caption);
         IPS_SetProperty($instanceId, 'Make', (string)($connection['make'] ?? ''));
         IPS_SetProperty($instanceId, 'Model', (string)($connection['model'] ?? ''));

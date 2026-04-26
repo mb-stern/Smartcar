@@ -10,6 +10,7 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $this->RegisterPropertyString('VehicleID', '');
         $this->RegisterPropertyString('ConnectionID', '');
+        $this->RegisterPropertyString('UserID', '');
         $this->RegisterPropertyString('VehicleCaption', '');
 
         $this->RegisterPropertyString('Make', '');
@@ -56,6 +57,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 ['type' => 'Label', 'caption' => 'Connection ID: ' . $this->ReadPropertyString('ConnectionID')],
                 ['type' => 'Label', 'caption' => 'Fahrzeug: ' . $this->ReadPropertyString('VehicleCaption')],
                 ['type' => 'Label', 'caption' => 'Antrieb: ' . $this->ReadPropertyString('PowertrainType')],
+                ['type' => 'Label', 'caption' => 'User ID: ' . $this->ReadPropertyString('UserID')],
 
                 [
                     'type' => 'Select',
@@ -132,6 +134,11 @@ class SmartcarVehicle extends IPSModuleStrict
                     'type' => 'Button',
                     'caption' => 'Kompatibilitätsliste neu laden',
                     'onClick' => 'SMCARV_ReloadCompatibility($id);'
+                ],
+                [
+                    'type' => 'Button',
+                    'caption' => 'Aktivierte Signale jetzt abrufen',
+                    'onClick' => 'SMCARV_FetchSelectedSignals($id);'
                 ]
             ]
         ];
@@ -350,5 +357,210 @@ class SmartcarVehicle extends IPSModuleStrict
         $text = str_replace(['_', '-'], ' ', $text);
         $text = preg_replace('/\s+/', ' ', $text);
         return $text;
+    }
+
+    public function FetchSelectedSignals(): void
+    {
+        $entries = json_decode($this->ReadPropertyString('SelectedCapabilities'), true);
+        if (!is_array($entries)) {
+            $this->SendDebug('FetchSignals', 'SelectedCapabilities ist kein Array.', 0);
+            return;
+        }
+
+        $vehicleId = $this->ReadPropertyString('VehicleID');
+        $userId = $this->ReadPropertyString('UserID');
+
+        foreach ($entries as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+
+            if (!($entry['selected'] ?? false)) {
+                continue;
+            }
+
+            if (strtolower((string)($entry['type'] ?? '')) !== 'signal') {
+                continue;
+            }
+
+            $code = (string)($entry['code'] ?? '');
+            if ($code === '') {
+                continue;
+            }
+
+            $result = $this->SendDataToParent(json_encode([
+                'DataID' => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
+                'Command' => 'GetSignal',
+                'VehicleID' => $vehicleId,
+                'UserID' => $userId,
+                'SignalCode' => $code
+            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+
+            $this->SendDebug('FetchSignal/' . $code, (string)$result, 0);
+
+            $decoded = json_decode((string)$result, true);
+            if (!is_array($decoded) || empty($decoded['success'])) {
+                continue;
+            }
+
+            $body = $decoded['body']['data']['attributes']['body']
+                ?? $decoded['body']['attributes']['body']
+                ?? $decoded['body']['body']
+                ?? [];
+
+            $status = $decoded['body']['data']['attributes']['status']
+                ?? $decoded['body']['attributes']['status']
+                ?? $decoded['body']['status']
+                ?? null;
+
+            $this->ApplySignalFromV3(
+                $code,
+                is_array($body) ? $body : [],
+                is_array($status) ? $status : null,
+                $entry
+            );
+        }
+    }
+
+    public function ProcessWebhookSignals(string $payloadJson): void
+    {
+        $payload = json_decode($payloadJson, true);
+        if (!is_array($payload)) {
+            $this->SendDebug('Webhook', 'Payload ist kein JSON.', 0);
+            return;
+        }
+
+        $signals = $payload['data']['signals'] ?? [];
+        if (!is_array($signals)) {
+            $this->SendDebug('Webhook', 'Keine signals[] im Payload.', 0);
+            return;
+        }
+
+        $selectedMap = $this->GetSelectedSignalMap();
+
+        foreach ($signals as $signal) {
+            if (!is_array($signal)) {
+                continue;
+            }
+
+            $code = (string)($signal['code'] ?? '');
+            if ($code === '') {
+                continue;
+            }
+
+            if (!isset($selectedMap[$code])) {
+                $this->SendDebug('Webhook/Skip', 'Signal nicht aktiviert: ' . $code, 0);
+                continue;
+            }
+
+            $body = is_array($signal['body'] ?? null) ? $signal['body'] : [];
+            $status = is_array($signal['status'] ?? null) ? $signal['status'] : null;
+
+            $this->ApplySignalFromV3($code, $body, $status, $selectedMap[$code]);
+        }
+    }
+
+    private function GetSelectedSignalMap(): array
+    {
+        $entries = json_decode($this->ReadPropertyString('SelectedCapabilities'), true);
+        if (!is_array($entries)) {
+            return [];
+        }
+
+        $map = [];
+
+        foreach ($entries as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+
+            if (!($entry['selected'] ?? false)) {
+                continue;
+            }
+
+            if (strtolower((string)($entry['type'] ?? '')) !== 'signal') {
+                continue;
+            }
+
+            $code = (string)($entry['code'] ?? '');
+            if ($code === '') {
+                continue;
+            }
+
+            $map[$code] = $entry;
+        }
+
+        return $map;
+    }
+
+    private function ApplySignalFromV3(string $code, array $body, ?array $status, array $meta): void
+    {
+        $ident = $this->BuildSignalIdent($code);
+        $name = (string)($meta['name'] ?? $code);
+
+        if ($status !== null && isset($status['value']) && strtoupper((string)$status['value']) !== 'OK') {
+            $this->SendDebug('SignalStatus/' . $code, json_encode($status, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+        }
+
+        if (array_key_exists('value', $body)) {
+            $value = $body['value'];
+
+            if (is_bool($value)) {
+                $this->RegisterOrUpdateBoolean($ident, $name, $value);
+            } elseif (is_int($value)) {
+                $this->RegisterOrUpdateInteger($ident, $name, $value);
+            } elseif (is_float($value) || is_numeric($value)) {
+                $this->RegisterOrUpdateFloat($ident, $name, (float)$value);
+            } else {
+                $this->RegisterOrUpdateString($ident, $name, (string)$value);
+            }
+
+            return;
+        }
+
+        if (!empty($body)) {
+            $this->RegisterOrUpdateString($ident, $name, json_encode($body, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        }
+    }
+
+    private function BuildSignalIdent(string $code): string
+    {
+        return 'Sig_' . preg_replace('/[^A-Za-z0-9_]/', '_', $code);
+    }
+
+    private function RegisterOrUpdateBoolean(string $ident, string $name, bool $value): void
+    {
+        if (!@$this->GetIDForIdent($ident)) {
+            $this->RegisterVariableBoolean($ident, $name !== '' ? $name : $ident, '~Switch', 0);
+        }
+
+        $this->SetValue($ident, $value);
+    }
+
+    private function RegisterOrUpdateInteger(string $ident, string $name, int $value): void
+    {
+        if (!@$this->GetIDForIdent($ident)) {
+            $this->RegisterVariableInteger($ident, $name !== '' ? $name : $ident, '', 0);
+        }
+
+        $this->SetValue($ident, $value);
+    }
+
+    private function RegisterOrUpdateFloat(string $ident, string $name, float $value): void
+    {
+        if (!@$this->GetIDForIdent($ident)) {
+            $this->RegisterVariableFloat($ident, $name !== '' ? $name : $ident, '', 0);
+        }
+
+        $this->SetValue($ident, $value);
+    }
+
+    private function RegisterOrUpdateString(string $ident, string $name, string $value): void
+    {
+        if (!@$this->GetIDForIdent($ident)) {
+            $this->RegisterVariableString($ident, $name !== '' ? $name : $ident, '', 0);
+        }
+
+        $this->SetValue($ident, $value);
     }
 }

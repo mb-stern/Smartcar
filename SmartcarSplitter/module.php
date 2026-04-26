@@ -11,6 +11,12 @@ class SmartcarSplitter extends IPSModuleStrict
         $this->RegisterPropertyString('ClientID', '');
         $this->RegisterPropertyString('ClientSecret', '');
 
+        $this->RegisterPropertyBoolean('EnableWebhook', true);
+        $this->RegisterPropertyBoolean('VerifyWebhookSignature', true);
+        $this->RegisterPropertyString('ManagementToken', '');
+
+        $this->RegisterHook('smartcar_' . $this->InstanceID);
+
         $this->RegisterAttributeString('ApplicationAccessToken', '');
         $this->RegisterAttributeInteger('TokenExpiresAt', 0);
 
@@ -34,6 +40,8 @@ class SmartcarSplitter extends IPSModuleStrict
 
     public function GetConfigurationForm(): string
     {
+        $hookPath = '/hook/smartcar_' . $this->InstanceID;
+
         $form = [
             'elements' => [
                 [
@@ -45,6 +53,25 @@ class SmartcarSplitter extends IPSModuleStrict
                     'type' => 'ValidationTextBox',
                     'name' => 'ClientSecret',
                     'caption' => 'Client Secret'
+                ],
+                [
+                    'type' => 'Label',
+                    'caption' => 'Webhook-Pfad: ' . $hookPath
+                ],
+                [
+                    'type' => 'CheckBox',
+                    'name' => 'EnableWebhook',
+                    'caption' => 'Webhook aktivieren'
+                ],
+                [
+                    'type' => 'CheckBox',
+                    'name' => 'VerifyWebhookSignature',
+                    'caption' => 'Webhook-Signatur prüfen'
+                ],
+                [
+                    'type' => 'ValidationTextBox',
+                    'name' => 'ManagementToken',
+                    'caption' => 'Application Management Token'
                 ]
             ],
             'actions' => [
@@ -56,7 +83,7 @@ class SmartcarSplitter extends IPSModuleStrict
             ]
         ];
 
-        return json_encode($form);
+        return json_encode($form, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     }
 
     public function RequestApplicationAccessToken(): bool
@@ -132,15 +159,22 @@ class SmartcarSplitter extends IPSModuleStrict
                 return json_encode($this->LoadConnections(), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
             case 'GetVehicle':
-                return json_encode($this->ApiGetVehicle((string)$data['VehicleID']), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+                return json_encode($this->ApiGetVehicle(
+                    (string)$data['VehicleID'],
+                    (string)($data['UserID'] ?? '')
+                ), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
             case 'GetSignals':
-                return json_encode($this->ApiGetSignals((string)$data['VehicleID']), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+                return json_encode($this->ApiGetSignals(
+                    (string)$data['VehicleID'],
+                    (string)($data['UserID'] ?? '')
+                ), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
             case 'GetSignal':
                 return json_encode($this->ApiGetSignal(
                     (string)$data['VehicleID'],
-                    (string)$data['SignalCode']
+                    (string)$data['SignalCode'],
+                    (string)($data['UserID'] ?? '')
                 ), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
             case 'Command':
@@ -148,7 +182,8 @@ class SmartcarSplitter extends IPSModuleStrict
                     (string)$data['VehicleID'],
                     (string)$data['Method'],
                     (string)$data['Path'],
-                    isset($data['Body']) ? json_encode($data['Body']) : ''
+                    isset($data['Body']) ? json_encode($data['Body']) : '',
+                    (string)($data['UserID'] ?? '')
                 ), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
             case 'GetCompatibleVehicles':
@@ -201,6 +236,7 @@ class SmartcarSplitter extends IPSModuleStrict
             $vehicle      = is_array($attributes['vehicle'] ?? null) ? $attributes['vehicle'] : [];
 
             $vehicleId = (string)($item['relationships']['vehicle']['data']['id'] ?? '');
+            $userId    = (string)($item['relationships']['user']['data']['id'] ?? '');
 
             if ($connectionId === '' || $vehicleId === '') {
                 continue;
@@ -221,6 +257,7 @@ class SmartcarSplitter extends IPSModuleStrict
             $connections[] = [
                 'connectionId'   => $connectionId,
                 'vehicleId'      => $vehicleId,
+                'userId'         => $userId,
                 'caption'        => $caption,
                 'make'           => $make,
                 'model'          => $model,
@@ -234,22 +271,27 @@ class SmartcarSplitter extends IPSModuleStrict
         return $connections;
     }
 
-    public function ApiGetVehicle(string $vehicleId): array
+    public function ApiGetVehicle(string $vehicleId, string $userId = ''): array
     {
-        return $this->ApiRequest('GET', '/vehicles/' . rawurlencode($vehicleId));
+        return $this->ApiRequest('GET', '/vehicles/' . rawurlencode($vehicleId), null, $userId);
     }
 
-    public function ApiGetSignals(string $vehicleId): array
+    public function ApiGetSignals(string $vehicleId, string $userId = ''): array
     {
-        return $this->ApiRequest('GET', '/vehicles/' . rawurlencode($vehicleId) . '/signals');
+        return $this->ApiRequest('GET', '/vehicles/' . rawurlencode($vehicleId) . '/signals', null, $userId);
     }
 
-    public function ApiGetSignal(string $vehicleId, string $signalCode): array
+    public function ApiGetSignal(string $vehicleId, string $signalCode, string $userId = ''): array
     {
-        return $this->ApiRequest('GET', '/vehicles/' . rawurlencode($vehicleId) . '/signals/' . rawurlencode($signalCode));
+        return $this->ApiRequest(
+            'GET',
+            '/vehicles/' . rawurlencode($vehicleId) . '/signals/' . rawurlencode($signalCode),
+            null,
+            $userId
+        );
     }
 
-    public function ApiVehicleCommand(string $vehicleId, string $method, string $path, string $body = ''): array
+    public function ApiVehicleCommand(string $vehicleId, string $method, string $path, string $body = '', string $userId = ''): array
     {
         $decodedBody = null;
 
@@ -265,11 +307,12 @@ class SmartcarSplitter extends IPSModuleStrict
         return $this->ApiRequest(
             $method,
             '/vehicles/' . rawurlencode($vehicleId) . $path,
-            $decodedBody
+            $decodedBody,
+            $userId
         );
     }
 
-    private function ApiRequest(string $method, string $path, $body = null): array
+    private function ApiRequest(string $method, string $path, $body = null, string $userId = ''): array
     {
         $token = $this->GetValidApplicationAccessToken();
         if ($token === '') {
@@ -282,6 +325,10 @@ class SmartcarSplitter extends IPSModuleStrict
             'Authorization: Bearer ' . $token,
             'Accept: application/json'
         ];
+
+        if ($userId !== '') {
+            $headers[] = 'sc-user-id: ' . $userId;
+        }
 
         $content = null;
         if ($body !== null) {
@@ -382,10 +429,6 @@ class SmartcarSplitter extends IPSModuleStrict
             $query['filter[make]'] = $make;
         }
 
-        /*if ($powertrainType !== '' && strtoupper($powertrainType) !== 'ICE') {
-            $query['filter[powertrainType]'] = $powertrainType;
-        } */
-
         $url = 'https://compatibility.api.smartcar.com/v3/compatible-vehicles';
         if (!empty($query)) {
             $url .= '?' . http_build_query($query);
@@ -414,5 +457,155 @@ class SmartcarSplitter extends IPSModuleStrict
             'statusCode' => $response['statusCode'],
             'body' => is_array($decoded) ? $decoded : $response['body']
         ];
+    }
+
+    protected function ProcessHookData(): void
+    {
+        $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+
+        if (!$this->ReadPropertyBoolean('EnableWebhook')) {
+            http_response_code(200);
+            echo 'ignored';
+            return;
+        }
+
+        if ($method !== 'POST') {
+            http_response_code(200);
+            echo 'OK';
+            return;
+        }
+
+        $raw = file_get_contents('php://input') ?: '';
+        $this->SendDebug('Webhook/RAW', $raw, 0);
+
+        $payload = json_decode($raw, true);
+        if (!is_array($payload)) {
+            http_response_code(400);
+            echo 'Bad Request';
+            return;
+        }
+
+        if (($payload['eventType'] ?? '') === 'VERIFY') {
+            $this->HandleWebhookVerify($payload);
+            return;
+        }
+
+        if (!$this->VerifyWebhookSignature($raw)) {
+            http_response_code(401);
+            echo 'Unauthorized';
+            return;
+        }
+
+        $eventType = (string)($payload['eventType'] ?? '');
+        $vehicleId = (string)($payload['data']['vehicle']['id'] ?? '');
+
+        $this->SendDebug('Webhook/Event', 'eventType=' . $eventType . ' vehicleId=' . $vehicleId, 0);
+
+        if ($eventType === 'VEHICLE_STATE' && $vehicleId !== '') {
+            $this->DispatchVehicleStateToVehicle($vehicleId, $payload);
+        }
+
+        http_response_code(200);
+        echo 'ok';
+    }
+
+    private function HandleWebhookVerify(array $payload): void
+    {
+        $challenge = (string)($payload['data']['challenge'] ?? ($payload['challenge'] ?? ''));
+
+        if ($challenge === '') {
+            http_response_code(400);
+            echo 'Bad Request';
+            return;
+        }
+
+        $managementToken = trim($this->ReadPropertyString('ManagementToken'));
+
+        if ($this->ReadPropertyBoolean('VerifyWebhookSignature') && $managementToken !== '') {
+            $challenge = hash_hmac('sha256', $challenge, $managementToken);
+        }
+
+        header('Content-Type: application/json');
+        echo json_encode(['challenge' => $challenge], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    }
+
+    private function VerifyWebhookSignature(string $raw): bool
+    {
+        if (!$this->ReadPropertyBoolean('VerifyWebhookSignature')) {
+            $this->SendDebug('Webhook/Signature', 'Prüfung deaktiviert.', 0);
+            return true;
+        }
+
+        $managementToken = trim($this->ReadPropertyString('ManagementToken'));
+        if ($managementToken === '') {
+            $this->SendDebug('Webhook/Signature', 'ManagementToken fehlt.', 0);
+            return false;
+        }
+
+        $signature = $this->GetRequestHeader('SC-Signature') ?? $this->GetRequestHeader('X-Smartcar-Signature') ?? '';
+        if ($signature === '') {
+            $this->SendDebug('Webhook/Signature', 'Signatur-Header fehlt.', 0);
+            return false;
+        }
+
+        $calculated = hash_hmac('sha256', $raw, $managementToken);
+
+        if (!hash_equals($calculated, trim($signature))) {
+            $this->SendDebug('Webhook/Signature', 'Ungültig. expected=' . $calculated . ' received=' . $signature, 0);
+            return false;
+        }
+
+        $this->SendDebug('Webhook/Signature', 'OK', 0);
+        return true;
+    }
+
+    private function DispatchVehicleStateToVehicle(string $vehicleId, array $payload): void
+    {
+        $vehicleModuleId = '{1E1B7C9A-2D4F-4E8A-9C3B-7F6D5A4E2B10}';
+
+        $instanceIds = @IPS_GetInstanceListByModuleID($vehicleModuleId);
+        if (!is_array($instanceIds)) {
+            return;
+        }
+
+        $payloadJson = json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+        foreach ($instanceIds as $instanceId) {
+            $currentVehicleId = (string)@IPS_GetProperty($instanceId, 'VehicleID');
+
+            if ($currentVehicleId !== $vehicleId) {
+                continue;
+            }
+
+            $this->SendDebug('Webhook/Dispatch', 'Sende VEHICLE_STATE an Instanz ' . $instanceId, 0);
+
+            if (function_exists('SMCARV_ProcessWebhookSignals')) {
+                SMCARV_ProcessWebhookSignals($instanceId, $payloadJson);
+            }
+
+            return;
+        }
+
+        $this->SendDebug('Webhook/Dispatch', 'Keine Vehicle-Instanz für VehicleID ' . $vehicleId . ' gefunden.', 0);
+    }
+
+    private function GetRequestHeader(string $name): ?string
+    {
+        $target = strtolower($name);
+
+        if (function_exists('getallheaders')) {
+            foreach (getallheaders() as $key => $value) {
+                if (strtolower($key) === $target) {
+                    return (string)$value;
+                }
+            }
+        }
+
+        $serverKey = 'HTTP_' . strtoupper(str_replace('-', '_', $name));
+        if (isset($_SERVER[$serverKey])) {
+            return (string)$_SERVER[$serverKey];
+        }
+
+        return null;
     }
 }
