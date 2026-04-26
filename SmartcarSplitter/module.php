@@ -363,10 +363,24 @@ class SmartcarSplitter extends IPSModuleStrict
         return $this->ApiRequest('GET', '/vehicles/' . rawurlencode($vehicleId) . '/signals/' . rawurlencode($signalCode));
     }
 
-    public function ApiVehicleCommand(string $vehicleId, string $method, string $path, $body = null): array
+    public function ApiVehicleCommand(string $vehicleId, string $method, string $path, string $body = ''): array
     {
+        $decodedBody = null;
+
+        if ($body !== '') {
+            $decoded = json_decode($body, true);
+            if (is_array($decoded)) {
+                $decodedBody = $decoded;
+            }
+        }
+
         $path = '/' . ltrim($path, '/');
-        return $this->ApiRequest($method, '/vehicles/' . rawurlencode($vehicleId) . $path, $body);
+
+        return $this->ApiRequest(
+            $method,
+            '/vehicles/' . rawurlencode($vehicleId) . $path,
+            $decodedBody
+        );
     }
 
     private function ApiRequest(string $method, string $path, $body = null): array
