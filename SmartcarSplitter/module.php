@@ -798,6 +798,10 @@ class SmartcarSplitter extends IPSModuleStrict
         IPS_SetProperty($instanceId, 'UserID', $userId);
         IPS_ApplyChanges($instanceId);
 
+        if (function_exists('SMCARV_ApplySelectedCapabilities')) {
+            SMCARV_ApplySelectedCapabilities($instanceId);
+        }
+
         $this->SendDebug('Connect/UpdateUserID', 'UserID gespeichert in Instanz ' . $instanceId, 0);
     }
 

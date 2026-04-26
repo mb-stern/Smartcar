@@ -250,11 +250,7 @@ class SmartcarVehicle extends IPSModuleStrict
         $values = array_values($temp);
 
         usort($values, function ($a, $b) {
-            return
-                strcasecmp((string)$a['type'], (string)$b['type']) ?:
-                strcasecmp((string)$a['group'], (string)$b['group']) ?:
-                strcasecmp((string)$a['name'], (string)$b['name']) ?:
-                strcasecmp((string)$a['code'], (string)$b['code']);
+            return strcasecmp((string)$a['sortKey'], (string)$b['sortKey']);
         });
 
         $this->SendDebug('Compatibility/Form', 'Capabilities für Liste nach Dedupe: ' . count($values), 0);
@@ -397,8 +393,9 @@ class SmartcarVehicle extends IPSModuleStrict
         // Wichtig: vollständige Daten aus Compatibility wieder dazu holen
         $fullList = $this->GetCompatibilityCapabilitiesForForm();
 
-        $vehicleId = $this->ReadPropertyString('VehicleID');
-        $userId    = $this->ReadPropertyString('UserID');
+        $vehicleId  = $this->ReadPropertyString('VehicleID');
+        $userId     = $this->ReadPropertyString('UserID');
+        $entries    = $this->GetSelectedFullCapabilities();
 
         $this->SendDebug('FetchSignals/Vehicle', json_encode([
             'vehicleId'  => $vehicleId,
@@ -490,6 +487,17 @@ class SmartcarVehicle extends IPSModuleStrict
                 $this->SendDebug('FetchSignals/Error', 'success=false für ' . $signalCode . ': ' . json_encode($decoded, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
                 continue;
             }
+
+            $includedVehicle = $decoded['body']['included']['vehicle']['attributes'] ?? [];
+            $includedVehicleId = $decoded['body']['included']['vehicle']['id'] ?? '';
+
+            $this->SendDebug('FetchSignals/Plausibility/' . $signalCode, json_encode([
+                'requestedVehicleId' => $vehicleId,
+                'includedVehicleId'  => $includedVehicleId,
+                'includedVehicle'    => $includedVehicle,
+                'meta'               => $decoded['body']['meta'] ?? [],
+                'status'             => $decoded['body']['data']['attributes']['status'] ?? null
+            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
             $attributes = $decoded['body']['data']['attributes']
                 ?? $decoded['body']['attributes']
@@ -797,5 +805,76 @@ class SmartcarVehicle extends IPSModuleStrict
         $this->SendDebug('Connect/Summary', json_encode($summary, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
         return $result;
+    }
+
+    private function GetSelectedFullCapabilities(): array
+    {
+        $saved = json_decode($this->ReadPropertyString('SelectedCapabilities'), true);
+        if (!is_array($saved)) {
+            return [];
+        }
+
+        $fullList = $this->GetCompatibilityCapabilitiesForForm();
+
+        $fullBySortKey = [];
+        foreach ($fullList as $entry) {
+            if (is_array($entry) && isset($entry['sortKey'])) {
+                $fullBySortKey[(string)$entry['sortKey']] = $entry;
+            }
+        }
+
+        $selected = [];
+
+        foreach ($saved as $savedEntry) {
+            if (!is_array($savedEntry)) {
+                continue;
+            }
+
+            $isSelected =
+                ($savedEntry['selected'] ?? false) === true ||
+                ($savedEntry['selected'] ?? false) === 1 ||
+                ($savedEntry['selected'] ?? false) === '1' ||
+                strtolower((string)($savedEntry['selected'] ?? '')) === 'true';
+
+            if (!$isSelected) {
+                continue;
+            }
+
+            $sortKey = (string)($savedEntry['sortKey'] ?? '');
+            if ($sortKey === '' || !isset($fullBySortKey[$sortKey])) {
+                continue;
+            }
+
+            $entry = $fullBySortKey[$sortKey];
+            $entry['selected'] = true;
+
+            $selected[] = $entry;
+        }
+
+        return $selected;
+    }
+
+    public function ApplySelectedCapabilities(): void
+    {
+        $selected = $this->GetSelectedFullCapabilities();
+
+        foreach ($selected as $entry) {
+            if (strtolower((string)($entry['type'] ?? '')) !== 'signal') {
+                continue;
+            }
+
+            $signalCode = (string)($entry['capability'] ?? '');
+            if ($signalCode === '') {
+                continue;
+            }
+
+            $ident = $this->BuildSignalIdent($signalCode);
+            $name  = (string)($entry['name'] ?? $signalCode);
+
+            if (!@$this->GetIDForIdent($ident)) {
+                $this->RegisterVariableString($ident, $name !== '' ? $name : $ident, '', 0);
+                $this->SendDebug('Variables/Create', 'Variable erstellt: ' . $ident . ' (' . $name . ')', 0);
+            }
+        }
     }
 }
