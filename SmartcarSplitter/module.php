@@ -374,6 +374,14 @@ class SmartcarSplitter extends IPSModuleStrict
 
         $response = $this->HttpRequestRaw('ApiRequest', $method, $url, $headers, $content);
 
+        if (is_array($response)) {
+            $this->SendDebug(
+                'ApiRequest/Headers',
+                json_encode($response['headers'] ?? [], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                0
+            );
+        }
+
         if ($response === null) {
             return ['success' => false, 'error' => 'No response'];
         }

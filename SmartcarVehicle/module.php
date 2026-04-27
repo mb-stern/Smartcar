@@ -423,9 +423,18 @@ class SmartcarVehicle extends IPSModuleStrict
             return;
         }
 
-        $signals = $payload['data']['signals'] ?? [];
-        if (!is_array($signals)) {
-            $this->SendDebug('WebhookVehicle/Error', 'Keine signals[] im Payload: ' . $payloadJson, 0);
+        $signals = [];
+
+        if (isset($payload['data']['signals']) && is_array($payload['data']['signals'])) {
+            $signals = $payload['data']['signals'];
+        } elseif (isset($payload['data']['triggers']) && is_array($payload['data']['triggers'])) {
+            $signals = $payload['data']['triggers'];
+        } elseif (isset($payload['triggers']) && is_array($payload['triggers'])) {
+            $signals = $payload['triggers'];
+        }
+
+        if (empty($signals)) {
+            $this->SendDebug('WebhookVehicle/Error', 'Keine signals/triggers im Payload: ' . $payloadJson, 0);
             return;
         }
 
