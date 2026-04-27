@@ -695,11 +695,11 @@ class SmartcarVehicle extends IPSModuleStrict
     {
         if ($signalCode === 'location-preciselocation') {
             if (!@$this->GetIDForIdent('Latitude')) {
-                $this->RegisterVariableFloat('Latitude', 'Latitude', '', 0);
+                $this->RegisterVariableFloat('Latitude', 'Latitude', 'SMCAR.LatLon', 0);
             }
 
             if (!@$this->GetIDForIdent('Longitude')) {
-                $this->RegisterVariableFloat('Longitude', 'Longitude', '', 0);
+                $this->RegisterVariableFloat('Longitude', 'Longitude', 'SMCAR.LatLon', 0);
             }
 
             return;
@@ -990,7 +990,13 @@ class SmartcarVehicle extends IPSModuleStrict
         IPS_SetVariableProfileText('SMCAR.Energy', '', ' kWh');
         IPS_SetVariableProfileDigits('SMCAR.Energy', 1);
         IPS_SetVariableProfileValues('SMCAR.Energy', 0, 0, 0.1);
-    }
+
+        if (!IPS_VariableProfileExists('SMCAR.LatLon')) {
+            IPS_CreateVariableProfile('SMCAR.LatLon', VARIABLETYPE_FLOAT);
+        }
+        IPS_SetVariableProfileDigits('SMCAR.LatLon', 6);
+        IPS_SetVariableProfileText('SMCAR.LatLon', '', '°');
+            }
 
     private function GetSignalVariableDetails(string $code, array $body): array
     {
