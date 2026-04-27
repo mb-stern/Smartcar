@@ -398,11 +398,13 @@ class SmartcarVehicle extends IPSModuleStrict
                 continue;
             }
 
+            /*
             if (!isset($selectedMap[$signalCode])) {
                 $this->SendDebug('FetchSignals/Skip', 'Signal nicht aktiviert: ' . $signalCode, 0);
                 $skipped++;
                 continue;
             }
+                */
 
             $attributes = is_array($signal['attributes'] ?? null) ? $signal['attributes'] : $signal;
 
