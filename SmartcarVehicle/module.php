@@ -694,20 +694,6 @@ class SmartcarVehicle extends IPSModuleStrict
         return array_keys($permissions);
     }
 
-    private function CreateSignalVariable(string $signalCode, string $name): void
-    {
-        $ident = $this->BuildSignalIdent($signalCode);
-
-        if (@$this->GetIDForIdent($ident)) {
-            return;
-        }
-
-        // Erst als String anlegen. Beim ersten echten Wert kann später gezielt typisiert werden.
-        $this->RegisterVariableString($ident, $name !== '' ? $name : $signalCode, '', 0);
-
-        $this->SendDebug('Variables/Create', 'Variable erstellt: ' . $ident . ' (' . $name . ')', 0);
-    }
-
     public function ApplySelectedCapabilities(): void
     {
         $selected = $this->GetSelectedCapabilitiesResolved();
@@ -732,7 +718,6 @@ class SmartcarVehicle extends IPSModuleStrict
             $wantedIdents[$ident] = true;
 
             $name = (string)($entry['name'] ?? $signalCode);
-            $this->CreateSignalVariable($signalCode, $name);
         }
 
         foreach (IPS_GetChildrenIDs($this->InstanceID) as $childId) {
