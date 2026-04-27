@@ -420,7 +420,7 @@ class SmartcarVehicle extends IPSModuleStrict
             $applied++;
         }
 
-        $this->SendDebug('FetchSignals/Done', 'Fertig. applied=' . $applied . ' skipped=' . $skipped, 0);
+        //$this->SendDebug('FetchSignals/Done', 'Fertig. applied=' . $applied . ' skipped=' . $skipped, 0);
     }
 
     public function ProcessWebhookSignals(string $payloadJson): void
