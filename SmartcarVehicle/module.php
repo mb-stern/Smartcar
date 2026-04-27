@@ -342,7 +342,7 @@ class SmartcarVehicle extends IPSModuleStrict
 
     public function FetchSelectedSignals(): void
     {
-        $this->SendDebug('FetchSignals/Start', 'Aktiver Signalabruf gestartet.', 0);
+        $this->SendDebug('FetchSignals/Start', 'Sammelabruf aller Signale gestartet.', 0);
 
         if (!$this->HasParentConnection()) {
             $this->SendDebug('FetchSignals/Error', 'Kein Splitter/Parent verbunden.', 0);
@@ -352,92 +352,74 @@ class SmartcarVehicle extends IPSModuleStrict
         $vehicleId = $this->ReadPropertyString('VehicleID');
         $userId    = $this->ReadPropertyString('UserID');
 
-        if ($vehicleId === '') {
-            $this->SendDebug('FetchSignals/Error', 'VehicleID fehlt.', 0);
+        if ($vehicleId === '' || $userId === '') {
+            $this->SendDebug('FetchSignals/Error', 'VehicleID oder UserID fehlt.', 0);
             return;
         }
 
-        if ($userId === '') {
-            $this->SendDebug('FetchSignals/Error', 'UserID fehlt.', 0);
+        $result = $this->SendDataToParent(json_encode([
+            'DataID'    => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
+            'Command'   => 'GetSignals',
+            'VehicleID' => $vehicleId,
+            'UserID'    => $userId
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+
+        $this->SendDebug('FetchSignals/RAW', (string)$result, 0);
+
+        $decoded = json_decode((string)$result, true);
+        if (!is_array($decoded) || empty($decoded['success'])) {
+            $this->SendDebug('FetchSignals/Error', 'GetSignals fehlgeschlagen: ' . (string)$result, 0);
             return;
         }
 
-        $entries = $this->GetSelectedCapabilitiesResolved();
+        $signals = $decoded['body']['data']['signals']
+            ?? $decoded['body']['data']
+            ?? $decoded['body']['signals']
+            ?? [];
 
-        $fetched = 0;
+        if (!is_array($signals)) {
+            $this->SendDebug('FetchSignals/Error', 'Keine Signals im Response gefunden.', 0);
+            return;
+        }
+
+        $selectedMap = $this->GetSelectedSignalMap();
+
+        $applied = 0;
         $skipped = 0;
 
-        foreach ($entries as $entry) {
-            if (strtolower((string)($entry['type'] ?? '')) !== 'signal') {
-                $skipped++;
+        foreach ($signals as $signal) {
+            if (!is_array($signal)) {
                 continue;
             }
 
-            $signalCode = (string)($entry['capability'] ?? '');
-            if ($signalCode === '') {
-                $signalCode = (string)($entry['code'] ?? '');
-            }
-
+            $signalCode = (string)($signal['code'] ?? $signal['id'] ?? '');
             if ($signalCode === '') {
                 $skipped++;
                 continue;
             }
 
-            $result = $this->SendDataToParent(json_encode([
-                'DataID'     => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
-                'Command'    => 'GetSignal',
-                'VehicleID'  => $vehicleId,
-                'UserID'     => $userId,
-                'SignalCode' => $signalCode
-            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
-
-            $this->SendDebug('FetchSignals/Response/' . $signalCode, (string)$result, 0);
-
-            $decoded = json_decode((string)$result, true);
-            if (!is_array($decoded) || empty($decoded['success'])) {
-                $this->SendDebug('FetchSignals/Error', 'Fehler bei ' . $signalCode . ': ' . (string)$result, 0);
+            if (!isset($selectedMap[$signalCode])) {
+                $this->SendDebug('FetchSignals/Skip', 'Signal nicht aktiviert: ' . $signalCode, 0);
+                $skipped++;
                 continue;
             }
 
-            // 👉 NEU: Meta extrahieren
-            $meta = $decoded['body']['data']['meta'] ?? [];
-
-            // 👉 NEU: Zeitstempel loggen
-            if (is_array($meta) && !empty($meta)) {
-                $this->SendDebug('FetchSignals/Meta/' . $signalCode, json_encode([
-                    'ingestedAt'   => $this->FormatSmartcarTime($meta['ingestedAt'] ?? null),
-                    'retrievedAt'  => $this->FormatSmartcarTime($meta['retrievedAt'] ?? null),
-                    'oemUpdatedAt' => $this->FormatSmartcarTime($meta['oemUpdatedAt'] ?? null)
-                ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
-            }
-
-            $attributes = $decoded['body']['data']['attributes']
-                ?? $decoded['body']['attributes']
-                ?? [];
+            $attributes = is_array($signal['attributes'] ?? null) ? $signal['attributes'] : $signal;
 
             $body = is_array($attributes['body'] ?? null) ? $attributes['body'] : [];
             $status = is_array($attributes['status'] ?? null) ? $attributes['status'] : null;
+            $meta = is_array($attributes['meta'] ?? null) ? $attributes['meta'] : [];
 
-            $this->ApplySignalFromV3($signalCode, $body, $status, $entry);
-            $fetched++;
+            $this->SendDebug('FetchSignals/Meta/' . $signalCode, json_encode([
+                'retrievedAt'  => $this->FormatSmartcarTimestamp($meta['retrievedAt'] ?? null),
+                'oemUpdatedAt' => $this->FormatSmartcarTimestamp($meta['oemUpdatedAt'] ?? null)
+            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+
+            $this->ApplySignalFromV3($signalCode, $body, $status, $selectedMap[$signalCode]);
+            $applied++;
         }
 
-        $this->SendDebug('FetchSignals/Done', 'Fertig. fetched=' . $fetched . ' skipped=' . $skipped, 0);
-    }
-
-    private function FormatSmartcarTime(?string $ts): ?string
-    {
-        if ($ts === null || $ts === '') {
-            return null;
-        }
-
-        try {
-            $dt = new DateTime($ts);
-            $dt->setTimezone(new DateTimeZone(date_default_timezone_get()));
-            return $dt->format('d.m.Y H:i:s');
-        } catch (Exception $e) {
-            return $ts;
-        }
+        $this->SendDebug('FetchSignals/Done', 'Fertig. applied=' . $applied . ' skipped=' . $skipped, 0);
     }
 
     public function ProcessWebhookSignals(string $payloadJson): void
