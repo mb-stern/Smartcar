@@ -506,12 +506,10 @@ class SmartcarSplitter extends IPSModuleStrict
     protected function ProcessHookData(): void
     {
         $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+        $uri    = $_SERVER['REQUEST_URI'] ?? '';
+        $qs     = $_SERVER['QUERY_STRING'] ?? '';
 
-        $this->SendDebug(
-            'Hook/Request',
-            'method=' . $method . ' get=' . json_encode($_GET, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
-            0
-        );
+        $this->SendDebug('Webhook/Request', 'method=' . $method . ' uri=' . $uri . ' qs=' . $qs, 0);
 
         // Smartcar Connect Redirect
         if ($method === 'GET') {
@@ -520,28 +518,40 @@ class SmartcarSplitter extends IPSModuleStrict
         }
 
         if (!$this->ReadPropertyBoolean('EnableWebhook')) {
+            $this->SendDebug('Webhook', 'Empfang deaktiviert.', 0);
             http_response_code(200);
             echo 'ignored';
             return;
         }
 
         if ($method !== 'POST') {
+            $this->SendDebug('Webhook', 'Nicht-POST empfangen.', 0);
             http_response_code(200);
             echo 'OK';
             return;
         }
+
+        $sigHeader = $this->GetRequestHeader('SC-Signature')
+            ?? $this->GetRequestHeader('X-Smartcar-Signature')
+            ?? '';
+
+        $this->SendDebug('Webhook/SignatureHeader', $sigHeader !== '' ? $sigHeader : '(leer)', 0);
 
         $raw = file_get_contents('php://input') ?: '';
         $this->SendDebug('Webhook/RAW', $raw, 0);
 
         $payload = json_decode($raw, true);
         if (!is_array($payload)) {
+            $this->SendDebug('Webhook/Error', 'Ungültiges JSON.', 0);
             http_response_code(400);
             echo 'Bad Request';
             return;
         }
 
-        if (($payload['eventType'] ?? '') === 'VERIFY') {
+        $eventType = (string)($payload['eventType'] ?? '');
+
+        // VERIFY muss vor der normalen Signaturprüfung beantwortet werden
+        if ($eventType === 'VERIFY') {
             $this->HandleWebhookVerify($payload);
             return;
         }
@@ -552,17 +562,44 @@ class SmartcarSplitter extends IPSModuleStrict
             return;
         }
 
-        $eventType = (string)($payload['eventType'] ?? '');
-        $vehicleId = (string)($payload['data']['vehicle']['id'] ?? '');
+        $vehicleId = (string)(
+            $payload['vehicleId']
+            ?? $payload['data']['vehicle']['id']
+            ?? $payload['data']['vehicleId']
+            ?? ''
+        );
 
-        $this->SendDebug('Webhook/Event', 'eventType=' . $eventType . ' vehicleId=' . $vehicleId, 0);
+        $this->SendDebug('Webhook/Event', json_encode([
+            'eventType' => $eventType,
+            'vehicleId' => $vehicleId,
+            'eventId'   => $payload['eventId'] ?? '',
+            'meta'      => $payload['meta'] ?? []
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
-        if ($eventType === 'VEHICLE_STATE' && $vehicleId !== '') {
-            $this->DispatchVehicleStateToVehicle($vehicleId, $payload);
+        switch ($eventType) {
+            case 'VEHICLE_STATE':
+                if ($vehicleId !== '') {
+                    $this->DispatchVehicleStateToVehicle($vehicleId, $payload);
+                } else {
+                    $this->SendDebug('Webhook/VEHICLE_STATE', 'Keine VehicleID im Payload gefunden.', 0);
+                }
+
+                http_response_code(200);
+                echo 'ok';
+                return;
+
+            case 'VEHICLE_ERROR':
+                $this->HandleVehicleErrorWebhook($payload);
+                http_response_code(200);
+                echo 'ok';
+                return;
+
+            default:
+                $this->SendDebug('Webhook/UnknownEvent', 'Unbekannter eventType=' . $eventType, 0);
+                http_response_code(200);
+                echo 'ok';
+                return;
         }
-
-        http_response_code(200);
-        echo 'ok';
     }
 
     private function HandleWebhookVerify(array $payload): void
@@ -860,5 +897,34 @@ class SmartcarSplitter extends IPSModuleStrict
         }
 
         return '';
+    }
+
+    private function HandleVehicleErrorWebhook(array $payload): void
+    {
+        $data = is_array($payload['data'] ?? null) ? $payload['data'] : [];
+
+        $vehicleId = (string)(
+            $payload['vehicleId']
+            ?? $data['vehicle']['id']
+            ?? $data['vehicleId']
+            ?? ''
+        );
+
+        $err = $data['error'] ?? ($data['errors'][0] ?? $data);
+        if (!is_array($err)) {
+            $err = [];
+        }
+
+        $this->SendDebug('VEHICLE_ERROR', json_encode([
+            'eventId'     => $payload['eventId'] ?? '',
+            'vehicleId'   => $vehicleId,
+            'type'        => $err['type'] ?? '',
+            'code'        => $err['code'] ?? '',
+            'description' => $err['description'] ?? ($err['message'] ?? ''),
+            'requestId'   => $err['requestId'] ?? ($err['requestID'] ?? ''),
+            'docURL'      => $err['docURL'] ?? ($err['docUrl'] ?? ''),
+            'resolution'  => $err['resolution'] ?? null,
+            'meta'        => $payload['meta'] ?? []
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
     }
 }

@@ -450,27 +450,51 @@ class SmartcarVehicle extends IPSModuleStrict
             return;
         }
 
+        $payloadVehicleId = (string)(
+            $payload['vehicleId']
+            ?? $payload['data']['vehicle']['id']
+            ?? $payload['data']['vehicleId']
+            ?? ''
+        );
+
+        $myVehicleId = $this->ReadPropertyString('VehicleID');
+
+        if ($payloadVehicleId !== '' && $myVehicleId !== '' && $payloadVehicleId !== $myVehicleId) {
+            $this->SendDebug('WebhookVehicle/Skip', 'VehicleID passt nicht. payload=' . $payloadVehicleId . ' instance=' . $myVehicleId, 0);
+            return;
+        }
+
         $signals = [];
 
         if (isset($payload['data']['signals']) && is_array($payload['data']['signals'])) {
             $signals = $payload['data']['signals'];
-        } elseif (isset($payload['data']['triggers']) && is_array($payload['data']['triggers'])) {
-            $signals = $payload['data']['triggers'];
-        } elseif (isset($payload['triggers']) && is_array($payload['triggers'])) {
-            $signals = $payload['triggers'];
+        } elseif (isset($payload['signals']) && is_array($payload['signals'])) {
+            $signals = $payload['signals'];
         }
 
         if (empty($signals)) {
-            $this->SendDebug('WebhookVehicle/Error', 'Keine signals/triggers im Payload: ' . $payloadJson, 0);
+            $this->SendDebug('WebhookVehicle/Error', 'Keine signals[] im Payload: ' . $payloadJson, 0);
             return;
         }
 
-        $selectedMap = $this->GetSelectedSignalMap();
+        $triggers = [];
+        if (isset($payload['data']['triggers']) && is_array($payload['data']['triggers'])) {
+            $triggers = $payload['data']['triggers'];
+        } elseif (isset($payload['triggers']) && is_array($payload['triggers'])) {
+            $triggers = $payload['triggers'];
+        }
 
         $this->SendDebug('WebhookVehicle/Info', json_encode([
+            'eventId'         => $payload['eventId'] ?? '',
+            'vehicleId'       => $payloadVehicleId,
             'signalsReceived' => count($signals),
-            'selectedSignals' => array_keys($selectedMap)
+            'triggers'        => $triggers,
+            'meta'            => $payload['meta'] ?? []
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+
+        $selectedMap = $this->GetSelectedSignalMap();
+
+        $oemDates = [];
 
         foreach ($signals as $signal) {
             if (!is_array($signal)) {
@@ -481,6 +505,14 @@ class SmartcarVehicle extends IPSModuleStrict
             if ($signalCode === '') {
                 continue;
             }
+
+            $meta = is_array($signal['meta'] ?? null) ? $signal['meta'] : [];
+
+            $oemDates[$signalCode] = [
+                'ingestedAt'   => $this->FormatSmartcarTimestamp($meta['ingestedAt'] ?? null),
+                'retrievedAt'  => $this->FormatSmartcarTimestamp($meta['retrievedAt'] ?? null),
+                'oemUpdatedAt' => $this->FormatSmartcarTimestamp($meta['oemUpdatedAt'] ?? null)
+            ];
 
             if (!isset($selectedMap[$signalCode])) {
                 $this->SendDebug('WebhookVehicle/Skip', 'Signal nicht aktiviert: ' . $signalCode, 0);
@@ -496,6 +528,10 @@ class SmartcarVehicle extends IPSModuleStrict
             ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
             $this->ApplySignalFromV3($signalCode, $body, $status, $selectedMap[$signalCode]);
+        }
+
+        if (!empty($oemDates)) {
+            $this->SendDebug('WebhookVehicle/OEM-Date', json_encode($oemDates, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
         }
     }
 
@@ -830,5 +866,32 @@ class SmartcarVehicle extends IPSModuleStrict
         }
 
         return ((int)($instance['ConnectionID'] ?? 0)) > 0;
+    }
+
+    private function FormatSmartcarTimestamp($value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        try {
+            if (is_numeric($value)) {
+                $ts = (int)$value;
+
+                // Smartcar Webhook-Zeitstempel können ms sein
+                if ($ts > 20000000000) {
+                    $ts = (int)floor($ts / 1000);
+                }
+
+                return date('d.m.Y H:i:s', $ts);
+            }
+
+            $dt = new DateTime((string)$value);
+            $dt->setTimezone(new DateTimeZone(date_default_timezone_get()));
+
+            return $dt->format('d.m.Y H:i:s');
+        } catch (Throwable $e) {
+            return (string)$value;
+        }
     }
 }
