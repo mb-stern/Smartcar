@@ -364,7 +364,7 @@ class SmartcarVehicle extends IPSModuleStrict
             'UserID'    => $userId
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
 
-        $this->SendDebug('FetchSignals/RAW', (string)$result, 0);
+        //$this->SendDebug('FetchSignals/RAW', (string)$result, 0);
 
         $decoded = json_decode((string)$result, true);
         if (!is_array($decoded) || empty($decoded['success'])) {
@@ -409,7 +409,7 @@ class SmartcarVehicle extends IPSModuleStrict
 
             $body = is_array($attributes['body'] ?? null) ? $attributes['body'] : [];
             $status = is_array($attributes['status'] ?? null) ? $attributes['status'] : null;
-            $meta = is_array($attributes['meta'] ?? null) ? $attributes['meta'] : [];
+            $meta = is_array($signal['meta'] ?? null) ? $signal['meta'] : [];
 
             $this->SendDebug('FetchSignals/Meta/' . $signalCode, json_encode([
                 'retrievedAt'  => $this->FormatSmartcarTimestamp($meta['retrievedAt'] ?? null),
