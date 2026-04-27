@@ -554,30 +554,6 @@ class SmartcarVehicle extends IPSModuleStrict
             }
         }
 
-        if ($code === 'location-preciselocation') {
-            if (isset($body['latitude'])) {
-                $this->RegisterOrUpdateFloat('Latitude', 'Breitengrad', (float)$body['latitude']);
-            }
-
-            if (isset($body['longitude'])) {
-                $this->RegisterOrUpdateFloat('Longitude', 'Längengrad', (float)$body['longitude']);
-            }
-
-            if (isset($body['heading'])) {
-                $this->RegisterOrUpdateFloat('Heading', 'Fahrtrichtung (°)', (float)$body['heading']);
-            }
-
-            if (isset($body['direction'])) {
-                $this->RegisterOrUpdateString('Direction', 'Himmelsrichtung', (string)$body['direction']);
-            }
-
-            if (array_key_exists('locationType', $body)) {
-                $this->RegisterOrUpdateString('LocationType', 'Standort-Typ', (string)($body['locationType'] ?? ''));
-            }
-
-            return;
-        }
-
         $ident = $this->BuildSignalIdent($code);
         $name  = (string)($meta['name'] ?? $code);
 
