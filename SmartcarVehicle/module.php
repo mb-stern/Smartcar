@@ -554,24 +554,46 @@ class SmartcarVehicle extends IPSModuleStrict
             }
         }
 
-        $ident = $this->BuildSignalIdent($code);
-        $name  = (string)($meta['name'] ?? $code);
+        if ($code === 'location-preciselocation') {
+            if (isset($body['latitude'])) {
+                $this->RegisterOrUpdateFloat('Latitude', 'Breitengrad', (float)$body['latitude']);
+            }
+            if (isset($body['longitude'])) {
+                $this->RegisterOrUpdateFloat('Longitude', 'Längengrad', (float)$body['longitude']);
+            }
+            if (isset($body['heading'])) {
+                $this->RegisterOrUpdateFloat('Heading', 'Fahrtrichtung', (float)$body['heading']);
+            }
+            if (isset($body['direction'])) {
+                $this->RegisterOrUpdateString('Direction', 'Himmelsrichtung', (string)$body['direction']);
+            }
+            if (array_key_exists('locationType', $body)) {
+                $this->RegisterOrUpdateString('LocationType', 'Standort-Typ', (string)($body['locationType'] ?? ''));
+            }
+            return;
+        }
 
-        $details = $this->GetSignalVariableDetails($code, $body);
+        $ident = $this->BuildSignalIdent($code);
+        $name = (string)($meta['name'] ?? $code);
 
         if (array_key_exists('value', $body)) {
-            $this->RegisterOrUpdateTypedVariable($ident, $name, $body['value'], $details['type'], $details['profile']);
+            $value = $body['value'];
+
+            if (is_bool($value)) {
+                $this->RegisterOrUpdateBoolean($ident, $name, $value);
+            } elseif (is_int($value)) {
+                $this->RegisterOrUpdateInteger($ident, $name, $value);
+            } elseif (is_float($value) || is_numeric($value)) {
+                $this->RegisterOrUpdateFloat($ident, $name, (float)$value);
+            } else {
+                $this->RegisterOrUpdateString($ident, $name, (string)$value);
+            }
+
             return;
         }
 
         if (!empty($body)) {
-            $this->RegisterOrUpdateTypedVariable(
-                $ident,
-                $name,
-                json_encode($body, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
-                VARIABLETYPE_STRING,
-                ''
-            );
+            $this->RegisterOrUpdateString($ident, $name, json_encode($body, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
         }
     }
 
@@ -987,58 +1009,5 @@ class SmartcarVehicle extends IPSModuleStrict
         }
 
         return ['type' => VARIABLETYPE_STRING, 'profile' => ''];
-    }
-
-    private function RegisterOrUpdateTypedVariable(string $ident, string $name, mixed $value, int $type, string $profile): void
-    {
-        $id = @$this->GetIDForIdent($ident);
-
-        if ($id) {
-            $var = IPS_GetVariable($id);
-
-            if ((int)$var['VariableType'] !== $type) {
-                $this->SendDebug('Variables/Recreate', 'Typ geändert, Variable wird neu erstellt: ' . $ident, 0);
-                $this->UnregisterVariable($ident);
-                $id = false;
-            }
-        }
-
-        if (!$id) {
-            switch ($type) {
-                case VARIABLETYPE_BOOLEAN:
-                    $this->RegisterVariableBoolean($ident, $name, $profile, 0);
-                    break;
-
-                case VARIABLETYPE_INTEGER:
-                    $this->RegisterVariableInteger($ident, $name, $profile, 0);
-                    break;
-
-                case VARIABLETYPE_FLOAT:
-                    $this->RegisterVariableFloat($ident, $name, $profile, 0);
-                    break;
-
-                default:
-                    $this->RegisterVariableString($ident, $name, $profile, 0);
-                    break;
-            }
-        }
-
-        switch ($type) {
-            case VARIABLETYPE_BOOLEAN:
-                $this->SetValue($ident, (bool)$value);
-                break;
-
-            case VARIABLETYPE_INTEGER:
-                $this->SetValue($ident, (int)round((float)$value));
-                break;
-
-            case VARIABLETYPE_FLOAT:
-                $this->SetValue($ident, (float)$value);
-                break;
-
-            default:
-                $this->SetValue($ident, is_array($value) ? json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : (string)$value);
-                break;
-        }
     }
 }
