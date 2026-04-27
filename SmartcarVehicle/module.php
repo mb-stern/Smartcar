@@ -577,17 +577,15 @@ class SmartcarVehicle extends IPSModuleStrict
         $name = (string)($meta['name'] ?? $code);
 
         if (array_key_exists('value', $body)) {
-            $value = $body['value'];
+            $details = $this->GetSignalVariableDetails($code, $body);
 
-            if (is_bool($value)) {
-                $this->RegisterOrUpdateBoolean($ident, $name, $value);
-            } elseif (is_int($value)) {
-                $this->RegisterOrUpdateInteger($ident, $name, $value);
-            } elseif (is_float($value) || is_numeric($value)) {
-                $this->RegisterOrUpdateFloat($ident, $name, (float)$value);
-            } else {
-                $this->RegisterOrUpdateString($ident, $name, (string)$value);
-            }
+            $this->RegisterOrUpdateByDetails(
+                $ident,
+                $name,
+                $body['value'],
+                $details['type'],
+                $details['profile']
+            );
 
             return;
         }
@@ -994,5 +992,61 @@ class SmartcarVehicle extends IPSModuleStrict
         }
 
         return ['type' => VARIABLETYPE_STRING, 'profile' => ''];
+    }
+
+    private function RegisterOrUpdateByDetails(string $ident, string $name, mixed $value, int $type, string $profile): void
+    {
+        $id = @$this->GetIDForIdent($ident);
+
+        if ($id) {
+            $var = IPS_GetVariable($id);
+
+            if ((int)$var['VariableType'] !== $type) {
+                $this->SendDebug(
+                    'Variables/TypeMismatch',
+                    'Variable existiert mit falschem Typ und wird NICHT automatisch ersetzt: ' . $ident,
+                    0
+                );
+                return;
+            }
+        }
+
+        if (!$id) {
+            switch ($type) {
+                case VARIABLETYPE_BOOLEAN:
+                    $this->RegisterVariableBoolean($ident, $name, $profile, 0);
+                    break;
+
+                case VARIABLETYPE_INTEGER:
+                    $this->RegisterVariableInteger($ident, $name, $profile, 0);
+                    break;
+
+                case VARIABLETYPE_FLOAT:
+                    $this->RegisterVariableFloat($ident, $name, $profile, 0);
+                    break;
+
+                default:
+                    $this->RegisterVariableString($ident, $name, $profile, 0);
+                    break;
+            }
+        }
+
+        switch ($type) {
+            case VARIABLETYPE_BOOLEAN:
+                $this->SetValue($ident, (bool)$value);
+                break;
+
+            case VARIABLETYPE_INTEGER:
+                $this->SetValue($ident, (int)round((float)$value));
+                break;
+
+            case VARIABLETYPE_FLOAT:
+                $this->SetValue($ident, (float)$value);
+                break;
+
+            default:
+                $this->SetValue($ident, (string)$value);
+                break;
+        }
     }
 }
