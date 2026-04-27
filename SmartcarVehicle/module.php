@@ -674,14 +674,55 @@ class SmartcarVehicle extends IPSModuleStrict
 
     private function CreateSignalVariable(string $signalCode, string $name): void
     {
+        if ($signalCode === 'location-preciselocation') {
+            if (!@$this->GetIDForIdent('Latitude')) {
+                $this->RegisterVariableFloat('Latitude', 'Breitengrad', '', 0);
+            }
+
+            if (!@$this->GetIDForIdent('Longitude')) {
+                $this->RegisterVariableFloat('Longitude', 'Längengrad', '', 0);
+            }
+
+            if (!@$this->GetIDForIdent('Heading')) {
+                $this->RegisterVariableFloat('Heading', 'Fahrtrichtung', '', 0);
+            }
+
+            if (!@$this->GetIDForIdent('Direction')) {
+                $this->RegisterVariableString('Direction', 'Himmelsrichtung', '', 0);
+            }
+
+            if (!@$this->GetIDForIdent('LocationType')) {
+                $this->RegisterVariableString('LocationType', 'Standort-Typ', '', 0);
+            }
+
+            return;
+        }
+
         $ident = $this->BuildSignalIdent($signalCode);
 
         if (@$this->GetIDForIdent($ident)) {
             return;
         }
 
-        // Erst als String anlegen. Beim ersten echten Wert kann später gezielt typisiert werden.
-        $this->RegisterVariableString($ident, $name !== '' ? $name : $signalCode, '', 0);
+        $details = $this->GetSignalVariableDetails($signalCode, []);
+
+        switch ($details['type']) {
+            case VARIABLETYPE_BOOLEAN:
+                $this->RegisterVariableBoolean($ident, $name !== '' ? $name : $signalCode, $details['profile'], 0);
+                break;
+
+            case VARIABLETYPE_INTEGER:
+                $this->RegisterVariableInteger($ident, $name !== '' ? $name : $signalCode, $details['profile'], 0);
+                break;
+
+            case VARIABLETYPE_FLOAT:
+                $this->RegisterVariableFloat($ident, $name !== '' ? $name : $signalCode, $details['profile'], 0);
+                break;
+
+            default:
+                $this->RegisterVariableString($ident, $name !== '' ? $name : $signalCode, $details['profile'], 0);
+                break;
+        }
 
         $this->SendDebug('Variables/Create', 'Variable erstellt: ' . $ident . ' (' . $name . ')', 0);
     }
@@ -997,9 +1038,12 @@ class SmartcarVehicle extends IPSModuleStrict
             $var = IPS_GetVariable($id);
 
             if ((int)$var['VariableType'] !== $type) {
-                $this->SendDebug('Variables/Recreate', 'Typ geändert, Variable wird neu erstellt: ' . $ident, 0);
-                $this->UnregisterVariable($ident);
-                $id = false;
+                $this->SendDebug(
+                    'Variables/TypeMismatch',
+                    'Variable existiert mit falschem Typ und wird NICHT ersetzt: ' . $ident,
+                    0
+                );
+                return;
             }
         }
 
