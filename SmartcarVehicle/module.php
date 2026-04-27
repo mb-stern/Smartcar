@@ -31,6 +31,8 @@ class SmartcarVehicle extends IPSModuleStrict
     {
         parent::ApplyChanges();
 
+        $this->CreateProfile();
+
         if ($this->ReadPropertyString('VehicleID') === '') {
             $this->SetStatus(201);
             return;
@@ -543,31 +545,33 @@ class SmartcarVehicle extends IPSModuleStrict
 
     private function ApplySignalFromV3(string $code, array $body, ?array $status, array $meta): void
     {
-        $ident = $this->BuildSignalIdent($code);
-        $name = (string)($meta['name'] ?? $code);
+        if ($status !== null && isset($status['value'])) {
+            $statusValue = strtoupper((string)$status['value']);
 
-        if ($status !== null && isset($status['value']) && strtoupper((string)$status['value']) !== 'OK') {
-            $this->SendDebug('SignalStatus/' . $code, json_encode($status, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+            if ($statusValue !== 'SUCCESS' && $statusValue !== 'OK') {
+                $this->SendDebug('SignalStatus/' . $code, json_encode($status, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+                return;
+            }
         }
 
+        $ident = $this->BuildSignalIdent($code);
+        $name  = (string)($meta['name'] ?? $code);
+
+        $details = $this->GetSignalVariableDetails($code, $body);
+
         if (array_key_exists('value', $body)) {
-            $value = $body['value'];
-
-            if (is_bool($value)) {
-                $this->RegisterOrUpdateBoolean($ident, $name, $value);
-            } elseif (is_int($value)) {
-                $this->RegisterOrUpdateInteger($ident, $name, $value);
-            } elseif (is_float($value) || is_numeric($value)) {
-                $this->RegisterOrUpdateFloat($ident, $name, (float)$value);
-            } else {
-                $this->RegisterOrUpdateString($ident, $name, (string)$value);
-            }
-
+            $this->RegisterOrUpdateTypedVariable($ident, $name, $body['value'], $details['type'], $details['profile']);
             return;
         }
 
         if (!empty($body)) {
-            $this->RegisterOrUpdateString($ident, $name, json_encode($body, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+            $this->RegisterOrUpdateTypedVariable(
+                $ident,
+                $name,
+                json_encode($body, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                VARIABLETYPE_STRING,
+                ''
+            );
         }
     }
 
@@ -894,6 +898,147 @@ class SmartcarVehicle extends IPSModuleStrict
             return $dt->format('d.m.Y H:i:s');
         } catch (Throwable $e) {
             return (string)$value;
+        }
+    }
+
+    private function CreateProfile(): void
+    {
+        if (!IPS_VariableProfileExists('SMCAR.Progress')) {
+            IPS_CreateVariableProfile('SMCAR.Progress', VARIABLETYPE_FLOAT);
+        }
+        IPS_SetVariableProfileText('SMCAR.Progress', '', ' %');
+        IPS_SetVariableProfileDigits('SMCAR.Progress', 0);
+        IPS_SetVariableProfileValues('SMCAR.Progress', 0, 100, 1);
+
+        if (!IPS_VariableProfileExists('SMCAR.Odometer')) {
+            IPS_CreateVariableProfile('SMCAR.Odometer', VARIABLETYPE_FLOAT);
+        }
+        IPS_SetVariableProfileText('SMCAR.Odometer', '', ' km');
+        IPS_SetVariableProfileDigits('SMCAR.Odometer', 0);
+        IPS_SetVariableProfileValues('SMCAR.Odometer', 0, 0, 1);
+
+        if (!IPS_VariableProfileExists('SMCAR.Power')) {
+            IPS_CreateVariableProfile('SMCAR.Power', VARIABLETYPE_FLOAT);
+        }
+        IPS_SetVariableProfileText('SMCAR.Power', '', ' W');
+        IPS_SetVariableProfileDigits('SMCAR.Power', 0);
+        IPS_SetVariableProfileValues('SMCAR.Power', 0, 0, 1);
+
+        if (!IPS_VariableProfileExists('SMCAR.TimeMinutes')) {
+            IPS_CreateVariableProfile('SMCAR.TimeMinutes', VARIABLETYPE_INTEGER);
+        }
+        IPS_SetVariableProfileText('SMCAR.TimeMinutes', '', ' min');
+        IPS_SetVariableProfileValues('SMCAR.TimeMinutes', 0, 0, 1);
+
+        if (!IPS_VariableProfileExists('SMCAR.Energy')) {
+            IPS_CreateVariableProfile('SMCAR.Energy', VARIABLETYPE_FLOAT);
+        }
+        IPS_SetVariableProfileText('SMCAR.Energy', '', ' kWh');
+        IPS_SetVariableProfileDigits('SMCAR.Energy', 1);
+        IPS_SetVariableProfileValues('SMCAR.Energy', 0, 0, 0.1);
+    }
+
+    private function GetSignalVariableDetails(string $code, array $body): array
+    {
+        $code = strtolower($code);
+
+        return match ($code) {
+            'tractionbattery-stateofcharge' => [
+                'type' => VARIABLETYPE_FLOAT,
+                'profile' => 'SMCAR.Progress'
+            ],
+            'tractionbattery-range',
+            'odometer-traveleddistance' => [
+                'type' => VARIABLETYPE_FLOAT,
+                'profile' => 'SMCAR.Odometer'
+            ],
+            'charge-wattage' => [
+                'type' => VARIABLETYPE_FLOAT,
+                'profile' => 'SMCAR.Power'
+            ],
+            'charge-timetocomplete' => [
+                'type' => VARIABLETYPE_INTEGER,
+                'profile' => 'SMCAR.TimeMinutes'
+            ],
+            'tractionbattery-nominalcapacity' => [
+                'type' => VARIABLETYPE_FLOAT,
+                'profile' => 'SMCAR.Energy'
+            ],
+            default => $this->GuessVariableDetailsFromBody($body)
+        };
+    }
+
+    private function GuessVariableDetailsFromBody(array $body): array
+    {
+        if (array_key_exists('value', $body)) {
+            $value = $body['value'];
+
+            if (is_bool($value)) {
+                return ['type' => VARIABLETYPE_BOOLEAN, 'profile' => '~Switch'];
+            }
+
+            if (is_int($value)) {
+                return ['type' => VARIABLETYPE_INTEGER, 'profile' => ''];
+            }
+
+            if (is_float($value) || is_numeric($value)) {
+                return ['type' => VARIABLETYPE_FLOAT, 'profile' => ''];
+            }
+        }
+
+        return ['type' => VARIABLETYPE_STRING, 'profile' => ''];
+    }
+
+    private function RegisterOrUpdateTypedVariable(string $ident, string $name, mixed $value, int $type, string $profile): void
+    {
+        $id = @$this->GetIDForIdent($ident);
+
+        if ($id) {
+            $var = IPS_GetVariable($id);
+
+            if ((int)$var['VariableType'] !== $type) {
+                $this->SendDebug('Variables/Recreate', 'Typ geändert, Variable wird neu erstellt: ' . $ident, 0);
+                $this->UnregisterVariable($ident);
+                $id = false;
+            }
+        }
+
+        if (!$id) {
+            switch ($type) {
+                case VARIABLETYPE_BOOLEAN:
+                    $this->RegisterVariableBoolean($ident, $name, $profile, 0);
+                    break;
+
+                case VARIABLETYPE_INTEGER:
+                    $this->RegisterVariableInteger($ident, $name, $profile, 0);
+                    break;
+
+                case VARIABLETYPE_FLOAT:
+                    $this->RegisterVariableFloat($ident, $name, $profile, 0);
+                    break;
+
+                default:
+                    $this->RegisterVariableString($ident, $name, $profile, 0);
+                    break;
+            }
+        }
+
+        switch ($type) {
+            case VARIABLETYPE_BOOLEAN:
+                $this->SetValue($ident, (bool)$value);
+                break;
+
+            case VARIABLETYPE_INTEGER:
+                $this->SetValue($ident, (int)round((float)$value));
+                break;
+
+            case VARIABLETYPE_FLOAT:
+                $this->SetValue($ident, (float)$value);
+                break;
+
+            default:
+                $this->SetValue($ident, is_array($value) ? json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : (string)$value);
+                break;
         }
     }
 }
