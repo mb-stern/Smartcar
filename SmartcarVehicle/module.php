@@ -364,6 +364,8 @@ class SmartcarVehicle extends IPSModuleStrict
             'UserID'    => $userId
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
 
+        $this->SendDebug('FetchSignals/RAW', (string)$result, 0);
+
         $decoded = json_decode((string)$result, true);
         if (!is_array($decoded) || empty($decoded['success'])) {
             $this->SendDebug('FetchSignals/Error', 'GetSignals fehlgeschlagen: ' . (string)$result, 0);
@@ -407,18 +409,6 @@ class SmartcarVehicle extends IPSModuleStrict
             $body = is_array($attributes['body'] ?? null) ? $attributes['body'] : [];
             $status = is_array($attributes['status'] ?? null) ? $attributes['status'] : null;
             $meta = is_array($attributes['meta'] ?? null) ? $attributes['meta'] : [];
-
-            $statusValue = strtoupper((string)($status['value'] ?? ''));
-
-            if ($statusValue !== 'SUCCESS') {
-                $this->SendDebug(
-                    'FetchSignals/SkipStatus/' . $signalCode,
-                    json_encode($status, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
-                    0
-                );
-                $skipped++;
-                continue;
-            }
 
             $this->SendDebug('FetchSignals/Meta/' . $signalCode, json_encode([
                 'retrievedAt'  => $this->FormatSmartcarTimestamp($meta['retrievedAt'] ?? null),
@@ -555,13 +545,8 @@ class SmartcarVehicle extends IPSModuleStrict
         $ident = $this->BuildSignalIdent($code);
         $name = (string)($meta['name'] ?? $code);
 
-        if ($status !== null && isset($status['value'])) {
-            $statusValue = strtoupper((string)$status['value']);
-
-            if ($statusValue !== 'SUCCESS' && $statusValue !== 'OK') {
-                $this->SendDebug('SignalStatus/' . $code, json_encode($status, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
-                return;
-            }
+        if ($status !== null && isset($status['value']) && strtoupper((string)$status['value']) !== 'OK') {
+            $this->SendDebug('SignalStatus/' . $code, json_encode($status, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
         }
 
         if (array_key_exists('value', $body)) {
