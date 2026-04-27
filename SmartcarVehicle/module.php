@@ -554,13 +554,32 @@ class SmartcarVehicle extends IPSModuleStrict
             }
         }
 
+        if ($code === 'location-preciselocation') {
+            if (isset($body['latitude'])) {
+                $this->RegisterOrUpdateFloat('Latitude', 'Latitude', (float)$body['latitude']);
+            }
+
+            if (isset($body['longitude'])) {
+                $this->RegisterOrUpdateFloat('Longitude', 'Longitude', (float)$body['longitude']);
+            }
+
+            return;
+        }
+
         $ident = $this->BuildSignalIdent($code);
         $name  = (string)($meta['name'] ?? $code);
 
-        $details = $this->GetSignalVariableDetails($code, $body);
-
         if (array_key_exists('value', $body)) {
-            $this->RegisterOrUpdateTypedVariable($ident, $name, $body['value'], $details['type'], $details['profile']);
+            $details = $this->GetSignalVariableDetails($code, $body);
+
+            $this->RegisterOrUpdateTypedVariable(
+                $ident,
+                $name,
+                $body['value'],
+                $details['type'],
+                $details['profile']
+            );
+
             return;
         }
 
@@ -676,11 +695,11 @@ class SmartcarVehicle extends IPSModuleStrict
     {
         if ($signalCode === 'location-preciselocation') {
             if (!@$this->GetIDForIdent('Latitude')) {
-                $this->RegisterVariableFloat('Latitude', 'Breitengrad', '', 0);
+                $this->RegisterVariableFloat('Latitude', 'Latitude', '', 0);
             }
 
             if (!@$this->GetIDForIdent('Longitude')) {
-                $this->RegisterVariableFloat('Longitude', 'Längengrad', '', 0);
+                $this->RegisterVariableFloat('Longitude', 'Longitude', '', 0);
             }
 
             return;
@@ -693,26 +712,27 @@ class SmartcarVehicle extends IPSModuleStrict
         }
 
         $details = $this->GetSignalVariableDetails($signalCode, []);
+        $caption = $name !== '' ? $name : $signalCode;
 
         switch ($details['type']) {
             case VARIABLETYPE_BOOLEAN:
-                $this->RegisterVariableBoolean($ident, $name !== '' ? $name : $signalCode, $details['profile'], 0);
+                $this->RegisterVariableBoolean($ident, $caption, $details['profile'], 0);
                 break;
 
             case VARIABLETYPE_INTEGER:
-                $this->RegisterVariableInteger($ident, $name !== '' ? $name : $signalCode, $details['profile'], 0);
+                $this->RegisterVariableInteger($ident, $caption, $details['profile'], 0);
                 break;
 
             case VARIABLETYPE_FLOAT:
-                $this->RegisterVariableFloat($ident, $name !== '' ? $name : $signalCode, $details['profile'], 0);
+                $this->RegisterVariableFloat($ident, $caption, $details['profile'], 0);
                 break;
 
             default:
-                $this->RegisterVariableString($ident, $name !== '' ? $name : $signalCode, $details['profile'], 0);
+                $this->RegisterVariableString($ident, $caption, $details['profile'], 0);
                 break;
         }
 
-        $this->SendDebug('Variables/Create', 'Variable erstellt: ' . $ident . ' (' . $name . ')', 0);
+        $this->SendDebug('Variables/Create', 'Created variable: ' . $ident . ' (' . $caption . ')', 0);
     }
 
     public function ApplySelectedCapabilities(): void
