@@ -683,18 +683,6 @@ class SmartcarVehicle extends IPSModuleStrict
                 $this->RegisterVariableFloat('Longitude', 'Längengrad', '', 0);
             }
 
-            if (!@$this->GetIDForIdent('Heading')) {
-                $this->RegisterVariableFloat('Heading', 'Fahrtrichtung', '', 0);
-            }
-
-            if (!@$this->GetIDForIdent('Direction')) {
-                $this->RegisterVariableString('Direction', 'Himmelsrichtung', '', 0);
-            }
-
-            if (!@$this->GetIDForIdent('LocationType')) {
-                $this->RegisterVariableString('LocationType', 'Standort-Typ', '', 0);
-            }
-
             return;
         }
 
@@ -747,8 +735,13 @@ class SmartcarVehicle extends IPSModuleStrict
                 continue;
             }
 
-            $ident = $this->BuildSignalIdent($signalCode);
-            $wantedIdents[$ident] = true;
+            if ($signalCode === 'location-preciselocation') {
+                $wantedIdents['Latitude'] = true;
+                $wantedIdents['Longitude'] = true;
+            } else {
+                $ident = $this->BuildSignalIdent($signalCode);
+                $wantedIdents[$ident] = true;
+            }
 
             $name = (string)($entry['name'] ?? $signalCode);
             $this->CreateSignalVariable($signalCode, $name);
@@ -988,23 +981,39 @@ class SmartcarVehicle extends IPSModuleStrict
                 'type' => VARIABLETYPE_FLOAT,
                 'profile' => 'SMCAR.Progress'
             ],
+
             'tractionbattery-range',
             'odometer-traveleddistance' => [
                 'type' => VARIABLETYPE_FLOAT,
                 'profile' => 'SMCAR.Odometer'
             ],
+
             'charge-wattage' => [
                 'type' => VARIABLETYPE_FLOAT,
                 'profile' => 'SMCAR.Power'
             ],
+
             'charge-timetocomplete' => [
                 'type' => VARIABLETYPE_INTEGER,
                 'profile' => 'SMCAR.TimeMinutes'
             ],
+
             'tractionbattery-nominalcapacity' => [
                 'type' => VARIABLETYPE_FLOAT,
                 'profile' => 'SMCAR.Energy'
             ],
+
+            'charge-ischarging',
+            'charge-ischargingcableconnected' => [
+                'type' => VARIABLETYPE_BOOLEAN,
+                'profile' => '~Switch'
+            ],
+
+            'charge-detailedchargingstatus' => [
+                'type' => VARIABLETYPE_STRING,
+                'profile' => ''
+            ],
+
             default => $this->GuessVariableDetailsFromBody($body)
         };
     }
