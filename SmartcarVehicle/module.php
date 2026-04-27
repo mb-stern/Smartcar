@@ -410,6 +410,18 @@ class SmartcarVehicle extends IPSModuleStrict
             $status = is_array($attributes['status'] ?? null) ? $attributes['status'] : null;
             $meta = is_array($attributes['meta'] ?? null) ? $attributes['meta'] : [];
 
+            $statusValue = strtoupper((string)($status['value'] ?? ''));
+
+            if ($statusValue !== 'SUCCESS') {
+                $this->SendDebug(
+                    'FetchSignals/SkipStatus/' . $signalCode,
+                    json_encode($status, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                    0
+                );
+                $skipped++;
+                continue;
+            }
+
             $this->SendDebug('FetchSignals/Meta/' . $signalCode, json_encode([
                 'retrievedAt'  => $this->FormatSmartcarTimestamp($meta['retrievedAt'] ?? null),
                 'oemUpdatedAt' => $this->FormatSmartcarTimestamp($meta['oemUpdatedAt'] ?? null)
