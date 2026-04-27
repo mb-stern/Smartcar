@@ -399,11 +399,17 @@ class SmartcarVehicle extends IPSModuleStrict
                 continue;
             }
 
-            $this->SendDebug('FetchSignals/Meta/' . $signalCode, json_encode([
-                'ingestedAt'   => $this->FormatSmartcarTime($meta['ingestedAt'] ?? null),
-                'retrievedAt'  => $this->FormatSmartcarTime($meta['retrievedAt'] ?? null),
-                'oemUpdatedAt' => $this->FormatSmartcarTime($meta['oemUpdatedAt'] ?? null)
-            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+            // 👉 NEU: Meta extrahieren
+            $meta = $decoded['body']['data']['meta'] ?? [];
+
+            // 👉 NEU: Zeitstempel loggen
+            if (is_array($meta) && !empty($meta)) {
+                $this->SendDebug('FetchSignals/Meta/' . $signalCode, json_encode([
+                    'ingestedAt'   => $this->FormatSmartcarTime($meta['ingestedAt'] ?? null),
+                    'retrievedAt'  => $this->FormatSmartcarTime($meta['retrievedAt'] ?? null),
+                    'oemUpdatedAt' => $this->FormatSmartcarTime($meta['oemUpdatedAt'] ?? null)
+                ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+            }
 
             $attributes = $decoded['body']['data']['attributes']
                 ?? $decoded['body']['attributes']
