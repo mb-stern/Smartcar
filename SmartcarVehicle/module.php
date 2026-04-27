@@ -399,6 +399,12 @@ class SmartcarVehicle extends IPSModuleStrict
                 continue;
             }
 
+            $this->SendDebug('FetchSignals/Meta/' . $signalCode, json_encode([
+                'ingestedAt'   => $this->FormatSmartcarTime($meta['ingestedAt'] ?? null),
+                'retrievedAt'  => $this->FormatSmartcarTime($meta['retrievedAt'] ?? null),
+                'oemUpdatedAt' => $this->FormatSmartcarTime($meta['oemUpdatedAt'] ?? null)
+            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+
             $attributes = $decoded['body']['data']['attributes']
                 ?? $decoded['body']['attributes']
                 ?? [];
@@ -411,6 +417,21 @@ class SmartcarVehicle extends IPSModuleStrict
         }
 
         $this->SendDebug('FetchSignals/Done', 'Fertig. fetched=' . $fetched . ' skipped=' . $skipped, 0);
+    }
+
+    private function FormatSmartcarTime(?string $ts): ?string
+    {
+        if ($ts === null || $ts === '') {
+            return null;
+        }
+
+        try {
+            $dt = new DateTime($ts);
+            $dt->setTimezone(new DateTimeZone(date_default_timezone_get()));
+            return $dt->format('d.m.Y H:i:s');
+        } catch (Exception $e) {
+            return $ts;
+        }
     }
 
     public function ProcessWebhookSignals(string $payloadJson): void
