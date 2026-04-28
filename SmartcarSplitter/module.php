@@ -12,15 +12,9 @@ class SmartcarSplitter extends IPSModuleStrict
 
         $this->RegisterPropertyString('ClientID', '');
         $this->RegisterPropertyString('ClientSecret', '');
-
         $this->RegisterPropertyString('ManualRedirectURI', '');
-
-        $this->RegisterPropertyBoolean('EnableWebhook', true);
-        $this->RegisterPropertyBoolean('VerifyWebhookSignature', true);
-       
         $this->RegisterPropertyString('ManagementToken', '');
         $this->RegisterPropertyString('ApplicationID', '');
-
         $this->RegisterAttributeString('ApplicationAccessToken', '');
         $this->RegisterAttributeInteger('TokenExpiresAt', 0);
         $this->RegisterAttributeString('RedirectURI', '');
@@ -83,16 +77,6 @@ class SmartcarSplitter extends IPSModuleStrict
                     'type' => 'ValidationTextBox',
                     'name' => 'ApplicationID',
                     'caption' => 'Application ID für Smartcar Connect'
-                ],
-                [
-                    'type' => 'CheckBox',
-                    'name' => 'EnableWebhook',
-                    'caption' => 'Webhook aktivieren'
-                ],
-                [
-                    'type' => 'CheckBox',
-                    'name' => 'VerifyWebhookSignature',
-                    'caption' => 'Webhook-Signatur prüfen'
                 ],
                 [
                     'type' => 'ValidationTextBox',
@@ -517,13 +501,6 @@ class SmartcarSplitter extends IPSModuleStrict
             return;
         }
 
-        if (!$this->ReadPropertyBoolean('EnableWebhook')) {
-            $this->SendDebug('Webhook', 'Empfang deaktiviert.', 0);
-            http_response_code(200);
-            echo 'ignored';
-            return;
-        }
-
         if ($method !== 'POST') {
             $this->SendDebug('Webhook', 'Nicht-POST empfangen.', 0);
             http_response_code(200);
@@ -614,7 +591,7 @@ class SmartcarSplitter extends IPSModuleStrict
 
         $managementToken = trim($this->ReadPropertyString('ManagementToken'));
 
-        if ($this->ReadPropertyBoolean('VerifyWebhookSignature') && $managementToken !== '') {
+        if ($managementToken !== '') {
             $challenge = hash_hmac('sha256', $challenge, $managementToken);
         }
 
@@ -624,11 +601,6 @@ class SmartcarSplitter extends IPSModuleStrict
 
     private function VerifyWebhookSignature(string $raw): bool
     {
-        if (!$this->ReadPropertyBoolean('VerifyWebhookSignature')) {
-            $this->SendDebug('Webhook/Signature', 'Prüfung deaktiviert.', 0);
-            return true;
-        }
-
         $managementToken = trim($this->ReadPropertyString('ManagementToken'));
         if ($managementToken === '') {
             $this->SendDebug('Webhook/Signature', 'ManagementToken fehlt.', 0);

@@ -12,17 +12,11 @@ class SmartcarVehicle extends IPSModuleStrict
     $this->RegisterPropertyString('ConnectionID', '');
     $this->RegisterPropertyString('UserID', '');
     $this->RegisterPropertyString('VehicleCaption', '');
-
     $this->RegisterPropertyString('Make', '');
     $this->RegisterPropertyString('Model', '');
     $this->RegisterPropertyInteger('Year', 0);
     $this->RegisterPropertyString('PowertrainType', '');
-
-    $this->RegisterPropertyString('CompatibilityRegion', 'EUROPE');
     $this->RegisterPropertyString('SelectedCapabilities', '[]');
-
-    $this->RegisterPropertyString('ConnectMode', 'live');
-
     $this->RegisterAttributeString('CompatibilityCache', '[]');
     $this->RegisterAttributeInteger('CompatibilityCacheAt', 0);
 }
@@ -69,25 +63,6 @@ class SmartcarVehicle extends IPSModuleStrict
                 ['type' => 'Label', 'caption' => 'Fahrzeug: ' . $this->ReadPropertyString('VehicleCaption')],
                 ['type' => 'Label', 'caption' => 'Antrieb: ' . $this->ReadPropertyString('PowertrainType')],
 
-                [
-                    'type' => 'Select',
-                    'name' => 'ConnectMode',
-                    'caption' => 'Connect Modus',
-                    'options' => [
-                        ['caption' => 'Live', 'value' => 'live'],
-                        ['caption' => 'Simuliert', 'value' => 'simulated']
-                    ]
-                ],
-                [
-                    'type' => 'Select',
-                    'name' => 'CompatibilityRegion',
-                    'caption' => 'Compatibility Region',
-                    'options' => [
-                        ['caption' => 'Europa', 'value' => 'EUROPE'],
-                        ['caption' => 'USA', 'value' => 'US'],
-                        ['caption' => 'Kanada', 'value' => 'CA']
-                    ]
-                ],
                 [
                 'type' => 'List',
                 'name' => 'SelectedCapabilities',
@@ -237,7 +212,7 @@ class SmartcarVehicle extends IPSModuleStrict
         $model = $this->ReadPropertyString('Model');
         $year = $this->ReadPropertyInteger('Year');
         $powertrainType = $this->ReadPropertyString('PowertrainType');
-        $region = $this->ReadPropertyString('CompatibilityRegion');
+        $$region = 'EUROPE';
 
         $request = [
             'DataID' => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
@@ -678,7 +653,7 @@ class SmartcarVehicle extends IPSModuleStrict
         $request = [
             'DataID'      => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
             'Command'     => 'BuildConnectURL',
-            'Mode'        => $this->ReadPropertyString('ConnectMode'),
+            'Mode'        => 'live',
             'State'       => $state,
             'Permissions' => $permissions
         ];
