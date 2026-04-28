@@ -1224,6 +1224,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 'name'    => 'Nominal battery capacity',
                 'type'    => VARIABLETYPE_FLOAT,
                 'profile' => 'SMCAR.Energy',
+                'source'  => 'capacity',
                 'factor'  => 1
             ],
 
