@@ -796,7 +796,9 @@ class SmartcarVehicle extends IPSModuleStrict
             'name'    => $definition['name'],
             'type'    => $definition['type'],
             'profile' => $definition['profile'],
-            'source'  => 'value'
+            'source'  => $definition['source'] ?? 'value',
+            'factor'  => $definition['factor'] ?? 1,
+            'offset'  => $definition['offset'] ?? 0
         ]];
     }
 
