@@ -669,12 +669,13 @@ class SmartcarVehicle extends IPSModuleStrict
         return array_keys($permissions);
     }
 
-    private function CreateSignalVariable(string $signalCode, string $name): void
+    private function CreateSignalVariable(string $signalCode, string $name): bool
     {
         $definition = $this->GetSignalDefinition($signalCode, []);
+        $createdAny = false;
 
         foreach ($this->GetVariablesFromDefinition($definition, []) as $variable) {
-            $this->RegisterOrUpdateTypedVariable(
+            $created = $this->RegisterOrUpdateTypedVariable(
                 $variable['ident'],
                 $variable['name'],
                 $this->GetDefaultValueForType($variable['type']),
@@ -682,7 +683,58 @@ class SmartcarVehicle extends IPSModuleStrict
                 $variable['profile'],
                 true
             );
+
+            if ($created) {
+                $createdAny = true;
+            }
         }
+
+        return $createdAny;
+    }
+
+    private function FetchSingleSelectedSignal(string $signalCode): void
+    {
+        if (!$this->HasParentConnection()) {
+            return;
+        }
+
+        $vehicleId = $this->ReadPropertyString('VehicleID');
+        $userId = $this->ReadPropertyString('UserID');
+
+        if ($vehicleId === '' || $userId === '') {
+            return;
+        }
+
+        $result = $this->SendDataToParent(json_encode([
+            'DataID'     => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
+            'Command'    => 'GetSignal',
+            'VehicleID'  => $vehicleId,
+            'UserID'     => $userId,
+            'SignalCode' => $signalCode
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+
+        $decoded = json_decode((string)$result, true);
+        if (!is_array($decoded) || empty($decoded['success'])) {
+            $this->SendDebug('FetchSignal/Error/' . $signalCode, (string)$result, 0);
+            return;
+        }
+
+        $signal = $decoded['body']['data']
+            ?? $decoded['body']
+            ?? [];
+
+        if (!is_array($signal)) {
+            return;
+        }
+
+        $attributes = is_array($signal['attributes'] ?? null) ? $signal['attributes'] : $signal;
+
+        $body = is_array($attributes['body'] ?? null) ? $attributes['body'] : [];
+        $status = is_array($attributes['status'] ?? null) ? $attributes['status'] : null;
+
+        $definitionMeta = $this->GetSignalDefinition($signalCode, $body);
+
+        $this->ApplySignalFromV3($signalCode, $body, $status, $definitionMeta);
     }
 
     private function GetVariablesFromDefinition(array $definition, array $body): array
@@ -739,7 +791,11 @@ class SmartcarVehicle extends IPSModuleStrict
             }
 
             $name = (string)($entry['name'] ?? $signalCode);
-            $this->CreateSignalVariable($signalCode, $name);
+            $created = $this->CreateSignalVariable($signalCode, $name);
+
+            if ($created) {
+                $this->FetchSingleSelectedSignal($signalCode);
+            }
         }
 
         foreach (IPS_GetChildrenIDs($this->InstanceID) as $childId) {
@@ -1009,7 +1065,7 @@ class SmartcarVehicle extends IPSModuleStrict
         IPS_SetVariableProfileText('SMCAR.LatLon', '', '°');
     }
 
-    private function RegisterOrUpdateTypedVariable(string $ident, string $name, mixed $value, int $type, string $profile, bool $onlySetValueOnCreate = false): void
+    private function RegisterOrUpdateTypedVariable(string $ident, string $name, mixed $value, int $type, string $profile, bool $onlySetValueOnCreate = false): bool
     {
         $id = @$this->GetIDForIdent($ident);
         $created = false;
@@ -1018,12 +1074,8 @@ class SmartcarVehicle extends IPSModuleStrict
             $var = IPS_GetVariable($id);
 
             if ((int)$var['VariableType'] !== $type) {
-                $this->SendDebug(
-                    'Variables/TypeMismatch',
-                    'Variable existiert mit falschem Typ und wird NICHT ersetzt: ' . $ident,
-                    0
-                );
-                return;
+                $this->SendDebug('Variables/TypeMismatch', 'Variable existiert mit falschem Typ und wird NICHT ersetzt: ' . $ident, 0);
+                return false;
             }
         }
 
@@ -1034,15 +1086,12 @@ class SmartcarVehicle extends IPSModuleStrict
                 case VARIABLETYPE_BOOLEAN:
                     $this->RegisterVariableBoolean($ident, $name, $profile, 0);
                     break;
-
                 case VARIABLETYPE_INTEGER:
                     $this->RegisterVariableInteger($ident, $name, $profile, 0);
                     break;
-
                 case VARIABLETYPE_FLOAT:
                     $this->RegisterVariableFloat($ident, $name, $profile, 0);
                     break;
-
                 default:
                     $this->RegisterVariableString($ident, $name, $profile, 0);
                     break;
@@ -1050,26 +1099,25 @@ class SmartcarVehicle extends IPSModuleStrict
         }
 
         if ($onlySetValueOnCreate && !$created) {
-            return;
+            return false;
         }
 
         switch ($type) {
             case VARIABLETYPE_BOOLEAN:
                 $this->SetValue($ident, (bool)$value);
                 break;
-
             case VARIABLETYPE_INTEGER:
                 $this->SetValue($ident, (int)round((float)$value));
                 break;
-
             case VARIABLETYPE_FLOAT:
                 $this->SetValue($ident, (float)$value);
                 break;
-
             default:
                 $this->SetValue($ident, is_array($value) ? json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : (string)$value);
                 break;
         }
+
+        return $created;
     }
 
     private function GetSignalDefinition(string $code, array $body = []): array
