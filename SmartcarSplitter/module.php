@@ -257,6 +257,7 @@ class SmartcarSplitter extends IPSModuleStrict
     {
         $token = $this->GetValidApplicationAccessToken();
         if ($token === '') {
+            $this->SendDebug('Connections/Error', 'Kein Application Access Token vorhanden.', 0);
             return [];
         }
 
@@ -273,43 +274,98 @@ class SmartcarSplitter extends IPSModuleStrict
         );
 
         if ($response === null || $response['statusCode'] !== 200) {
-            $this->SendDebug('Connections', 'Fehler: ' . json_encode($response), 0);
+            $this->SendDebug('Connections/Error', 'Fehler: ' . json_encode($response, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
             return [];
         }
 
+        $this->SendDebug('Connections/RAW', $response['body'], 0);
+
         $data = json_decode($response['body'], true);
-        if (!is_array($data) || !isset($data['data']) || !is_array($data['data'])) {
-            $this->SendDebug('Connections', 'Unerwartete Antwort: ' . $response['body'], 0);
+        if (!is_array($data)) {
+            $this->SendDebug('Connections/Error', 'Antwort ist kein JSON: ' . $response['body'], 0);
             return [];
         }
+
+        if (!isset($data['data']) || !is_array($data['data'])) {
+            $this->SendDebug('Connections/Error', 'data[] fehlt in Antwort: ' . $response['body'], 0);
+            return [];
+        }
+
+        $this->SendDebug('Connections/CountRAW', 'RAW Connections: ' . count($data['data']), 0);
 
         $connections = [];
 
-        foreach ($data['data'] as $item) {
-            $connectionId = (string)($item['id'] ?? '');
-            $attributes   = is_array($item['attributes'] ?? null) ? $item['attributes'] : [];
-            $vehicle      = is_array($attributes['vehicle'] ?? null) ? $attributes['vehicle'] : [];
-
-            $vehicleId = (string)($item['relationships']['vehicle']['data']['id'] ?? '');
-            $userId    = (string)($item['relationships']['user']['data']['id'] ?? '');
-
-            if ($connectionId === '' || $vehicleId === '') {
+        foreach ($data['data'] as $index => $item) {
+            if (!is_array($item)) {
+                $this->SendDebug('Connections/ItemRaw/' . $index, 'Kein Array', 0);
                 continue;
             }
 
-            $make  = (string)($vehicle['make'] ?? '');
-            $model = (string)($vehicle['model'] ?? '');
-            $year  = (string)($vehicle['year'] ?? '');
+            $this->SendDebug(
+                'Connections/ItemRaw/' . $index,
+                json_encode($item, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                0
+            );
 
-            $modeValue      = (string)($vehicle['mode'] ?? ($attributes['mode'] ?? ''));
-            $powertrainType = (string)($vehicle['powertrainType'] ?? '');
+            $connectionId = (string)($item['id'] ?? '');
+
+            $attributes = is_array($item['attributes'] ?? null) ? $item['attributes'] : [];
+            $vehicle    = is_array($attributes['vehicle'] ?? null) ? $attributes['vehicle'] : [];
+
+            $relationships = is_array($item['relationships'] ?? null) ? $item['relationships'] : [];
+
+            $vehicleId = (string)(
+                $relationships['vehicle']['data']['id']
+                ?? $attributes['vehicleId']
+                ?? $vehicle['id']
+                ?? $item['vehicleId']
+                ?? ''
+            );
+
+            $userId = (string)(
+                $relationships['user']['data']['id']
+                ?? $attributes['userId']
+                ?? $item['userId']
+                ?? ''
+            );
+
+            if ($connectionId === '') {
+                $this->SendDebug('Connections/Skip/' . $index, 'connectionId fehlt.', 0);
+                continue;
+            }
+
+            if ($vehicleId === '') {
+                $this->SendDebug(
+                    'Connections/Skip/' . $index,
+                    'vehicleId fehlt. Item=' . json_encode($item, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                    0
+                );
+                continue;
+            }
+
+            $make  = (string)($vehicle['make'] ?? $attributes['make'] ?? '');
+            $model = (string)($vehicle['model'] ?? $attributes['model'] ?? '');
+            $year  = (string)($vehicle['year'] ?? $attributes['year'] ?? '');
+
+            $modeValue = (string)(
+                $vehicle['mode']
+                ?? $attributes['mode']
+                ?? $item['mode']
+                ?? ''
+            );
+
+            $powertrainType = (string)(
+                $vehicle['powertrainType']
+                ?? $attributes['powertrainType']
+                ?? ''
+            );
 
             $caption = trim($make . ' ' . $model . ' ' . $year);
             if ($caption === '') {
                 $caption = $vehicleId;
             }
 
-            $connections[] = [
+            $connection = [
                 'connectionId'   => $connectionId,
                 'vehicleId'      => $vehicleId,
                 'userId'         => $userId,
@@ -321,7 +377,17 @@ class SmartcarSplitter extends IPSModuleStrict
                 'powertrainType' => $powertrainType,
                 'permissions'    => $attributes['permissions'] ?? []
             ];
+
+            $this->SendDebug(
+                'Connections/Parsed/' . $index,
+                json_encode($connection, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                0
+            );
+
+            $connections[] = $connection;
         }
+
+        $this->SendDebug('Connections/CountParsed', 'Verarbeitete Connections: ' . count($connections), 0);
 
         return $connections;
     }

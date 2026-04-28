@@ -82,6 +82,11 @@ class SmartcarConfigurator extends IPSModuleStrict
                     'onClick' => 'echo SMCARCFG_GenerateSimulatedConnectURL($id);'
                 ],
                 [
+                    'type' => 'Button',
+                    'caption' => 'DEBUG: Fahrzeugliste vom Splitter laden',
+                    'onClick' => 'SMCARCFG_DebugConnections($id);'
+                ],
+                [
                     'type' => 'List',
                     'name' => 'Vehicles',
                     'caption' => 'Smartcar Fahrzeuge',
@@ -300,5 +305,22 @@ class SmartcarConfigurator extends IPSModuleStrict
         }
 
         return (string)($decoded['url'] ?? '');
+    }
+
+    public function DebugConnections(): void
+    {
+        $connections = $this->LoadConnectionsFromSplitter();
+
+        $this->SendDebug(
+            'Debug/Connections',
+            json_encode($connections, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            0
+        );
+
+        $this->SendDebug(
+            'Debug/ConnectionsCount',
+            'Anzahl Connections: ' . count($connections),
+            0
+        );
     }
 }
