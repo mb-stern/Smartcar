@@ -77,6 +77,11 @@ class SmartcarConfigurator extends IPSModuleStrict
                     'onClick' => 'SMCARCFG_CreateMissingVehicleInstances($id);'
                 ],
                 [
+                    'type' => 'Button',
+                    'caption' => 'Simuliertes Fahrzeug verbinden',
+                    'onClick' => 'echo SMCARCFG_GenerateSimulatedConnectURL($id);'
+                ],
+                [
                     'type' => 'List',
                     'name' => 'Vehicles',
                     'caption' => 'Smartcar Fahrzeuge',
@@ -280,5 +285,20 @@ class SmartcarConfigurator extends IPSModuleStrict
         }
 
         return (int)($instance['ConnectionID'] ?? 0);
+    }
+    public function GenerateSimulatedConnectURL(): string
+    {
+        $result = $this->SendDataToParent(json_encode([
+            'DataID'  => self::DATA_ID,
+            'Command' => 'BuildSimulatedConnectURL'
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+
+        $decoded = json_decode((string)$result, true);
+
+        if (!is_array($decoded) || empty($decoded['success'])) {
+            return 'Fehler beim Erzeugen der simulierten Connect URL: ' . (string)$result;
+        }
+
+        return (string)($decoded['url'] ?? '');
     }
 }

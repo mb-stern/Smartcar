@@ -229,6 +229,25 @@ class SmartcarSplitter extends IPSModuleStrict
                     (string)($data['Region'] ?? 'EUROPE')
                 ), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
+            case 'BuildSimulatedConnectURL':
+                return json_encode([
+                    'success' => true,
+                    'url' => $this->BuildConnectURL(
+                        'simulated',
+                        'simulated_' . bin2hex(random_bytes(8)),
+                        [
+                            'read_vehicle_info',
+                            'read_odometer',
+                            'read_location',
+                            'read_battery',
+                            'read_charge',
+                            'read_vin',
+                            'read_security',
+                            'read_tires'
+                        ]
+                    )
+                ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
             default:
                 return json_encode(['success' => false, 'error' => 'Unknown command']);
         }
