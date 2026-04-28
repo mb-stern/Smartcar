@@ -431,14 +431,6 @@ class SmartcarVehicle extends IPSModuleStrict
                 continue;
             }
 
-            $this->SendDebug(
-                'FetchSignals/Apply',
-                (!empty($onlyMap) ? '[NEU] ' : '') . $signalCode,
-                0
-            );
-
-            $this->ApplySignalFromV3($signalCode, $body, $status, $selectedMap[$signalCode]);
-
             $attributes = is_array($signal['attributes'] ?? null) ? $signal['attributes'] : $signal;
 
             $body = is_array($attributes['body'] ?? null) ? $attributes['body'] : [];
@@ -449,6 +441,12 @@ class SmartcarVehicle extends IPSModuleStrict
                 'retrievedAt'  => $this->FormatSmartcarTimestamp($meta['retrievedAt'] ?? null),
                 'oemUpdatedAt' => $this->FormatSmartcarTimestamp($meta['oemUpdatedAt'] ?? null)
             ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+
+             $this->SendDebug(
+                'FetchSignals/Apply',
+                (!empty($onlyMap) ? '[NEU] ' : '') . $signalCode,
+                0
+            );
 
             $this->ApplySignalFromV3($signalCode, $body, $status, $selectedMap[$signalCode]);
             $applied++;
@@ -807,6 +805,7 @@ class SmartcarVehicle extends IPSModuleStrict
     {
         $selected = $this->GetSelectedCapabilitiesResolved();
         $wantedIdents = [];
+        $newSignalCodes = [];
 
         foreach ($selected as $entry) {
             if (strtolower((string)($entry['type'] ?? '')) !== 'signal') {
