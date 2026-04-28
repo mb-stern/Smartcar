@@ -161,7 +161,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 [
                     'type' => 'Button',
                     'caption' => 'Aktivierte Signale abrufen',
-                    'onClick' => 'SMCARV_FetchSelectedSignals($id);'
+                    'onClick' => 'SMCARV_FetchSelectedSignals($id, []);'
                 ]
             ]
         ];
