@@ -1091,8 +1091,8 @@ class SmartcarVehicle extends IPSModuleStrict
         if (!IPS_VariableProfileExists('SMCAR.Power')) {
             IPS_CreateVariableProfile('SMCAR.Power', VARIABLETYPE_FLOAT);
         }
-        IPS_SetVariableProfileText('SMCAR.Power', '', ' W');
-        IPS_SetVariableProfileDigits('SMCAR.Power', 0);
+        IPS_SetVariableProfileText('SMCAR.Power', '', ' kW');
+        IPS_SetVariableProfileDigits('SMCAR.Power', 1);
         IPS_SetVariableProfileValues('SMCAR.Power', 0, 0, 1);
 
         if (!IPS_VariableProfileExists('SMCAR.TimeMinutes')) {
