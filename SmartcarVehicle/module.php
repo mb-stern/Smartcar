@@ -344,7 +344,15 @@ class SmartcarVehicle extends IPSModuleStrict
 
     public function FetchSelectedSignals(array $onlySignalCodes = []): void
     {
-        $this->SendDebug('FetchSignals/Start', 'Sammelabruf aller Signale gestartet.', 0);
+        if (!empty($onlySignalCodes)) {
+            $this->SendDebug(
+                'FetchSignals/Start',
+                'Teilabruf für neue Signale: ' . implode(', ', $onlySignalCodes),
+                0
+            );
+        } else {
+            $this->SendDebug('FetchSignals/Start', 'Sammelabruf aller Signale gestartet.', 0);
+        }
 
         if (!$this->HasParentConnection()) {
             $this->SendDebug('FetchSignals/Error', 'Kein Splitter/Parent verbunden.', 0);
@@ -412,10 +420,24 @@ class SmartcarVehicle extends IPSModuleStrict
 
             
             if (!isset($selectedMap[$signalCode])) {
-                //$this->SendDebug('FetchSignals/Skip', 'Signal nicht aktiviert: ' . $signalCode, 0);
+                $this->SendDebug('FetchSignals/SkipNotSelected', $signalCode, 0);
                 $skipped++;
                 continue;
             }
+
+            if (!empty($onlyMap) && !isset($onlyMap[$signalCode])) {
+                $this->SendDebug('FetchSignals/SkipNotNew', $signalCode, 0);
+                $skipped++;
+                continue;
+            }
+
+            $this->SendDebug(
+                'FetchSignals/Apply',
+                (!empty($onlyMap) ? '[NEU] ' : '') . $signalCode,
+                0
+            );
+
+            $this->ApplySignalFromV3($signalCode, $body, $status, $selectedMap[$signalCode]);
 
             $attributes = is_array($signal['attributes'] ?? null) ? $signal['attributes'] : $signal;
 
@@ -432,7 +454,16 @@ class SmartcarVehicle extends IPSModuleStrict
             $applied++;
         }
 
-        //$this->SendDebug('FetchSignals/Done', 'Fertig. applied=' . $applied . ' skipped=' . $skipped, 0);
+        $this->SendDebug(
+            'FetchSignals/Done',
+            json_encode([
+                'mode'    => empty($onlySignalCodes) ? 'full' : 'partial',
+                'requested' => count($onlySignalCodes),
+                'applied' => $applied,
+                'skipped' => $skipped
+            ]),
+            0
+        );
     }
 
     public function ProcessWebhookSignals(string $payloadJson): void
