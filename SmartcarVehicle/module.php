@@ -1439,29 +1439,6 @@ class SmartcarVehicle extends IPSModuleStrict
                         'type' => VARIABLETYPE_FLOAT,
                         'profile' => 'SMCAR.LatLon',
                         'source' => 'longitude'
-                    ],
-                    [
-                        'ident' => 'Heading',
-                        'name' => 'Fahrtrichtung (°)',
-                        'type' => VARIABLETYPE_FLOAT,
-                        'profile' => '',
-                        'source' => 'heading'
-                    ],
-                    [
-                        'ident' => 'Direction',
-                        'name' => 'Himmelsrichtung',
-                        'type' => VARIABLETYPE_STRING,
-                        'profile' => '',
-                        'source' => 'direction',
-                        'convert' => fn(array $body) => strtoupper((string)($body['direction'] ?? ''))
-                    ],
-                    [
-                        'ident' => 'LocationType',
-                        'name' => 'Standort-Typ',
-                        'type' => VARIABLETYPE_STRING,
-                        'profile' => '',
-                        'source' => 'locationType',
-                        'convert' => fn(array $body) => strtoupper((string)($body['locationType'] ?? ''))
                     ]
                 ]
             ],
