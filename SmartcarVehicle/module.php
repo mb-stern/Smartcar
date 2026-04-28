@@ -212,7 +212,7 @@ class SmartcarVehicle extends IPSModuleStrict
         $model = $this->ReadPropertyString('Model');
         $year = $this->ReadPropertyInteger('Year');
         $powertrainType = $this->ReadPropertyString('PowertrainType');
-        $$region = 'EUROPE';
+        $region = 'EUROPE';
 
         $request = [
             'DataID' => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
