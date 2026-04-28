@@ -83,11 +83,6 @@ class SmartcarSplitter extends IPSModuleStrict
                     'name' => 'ManagementToken',
                     'caption' => 'Application Management Token'
                 ]
-            ],
-            'actions' => [
-                [
-                //leer
-                ]
             ]
         ];
 
