@@ -431,12 +431,6 @@ class SmartcarVehicle extends IPSModuleStrict
                 continue;
             }
 
-            $this->SendDebug(
-                'FetchSignals/Apply',
-                (!empty($onlyMap) ? '[NEU] ' : '') . $signalCode,
-                0
-            );
-
             $this->ApplySignalFromV3($signalCode, $body, $status, $selectedMap[$signalCode]);
 
             $attributes = is_array($signal['attributes'] ?? null) ? $signal['attributes'] : $signal;
