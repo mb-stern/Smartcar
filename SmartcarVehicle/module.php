@@ -679,7 +679,8 @@ class SmartcarVehicle extends IPSModuleStrict
                 $variable['name'],
                 $this->GetDefaultValueForType($variable['type']),
                 $variable['type'],
-                $variable['profile']
+                $variable['profile'],
+                true
             );
         }
     }
@@ -1008,9 +1009,10 @@ class SmartcarVehicle extends IPSModuleStrict
         IPS_SetVariableProfileText('SMCAR.LatLon', '', '°');
     }
 
-    private function RegisterOrUpdateTypedVariable(string $ident, string $name, mixed $value, int $type, string $profile): void
+    private function RegisterOrUpdateTypedVariable(string $ident, string $name, mixed $value, int $type, string $profile, bool $onlySetValueOnCreate = false): void
     {
         $id = @$this->GetIDForIdent($ident);
+        $created = false;
 
         if ($id) {
             $var = IPS_GetVariable($id);
@@ -1026,6 +1028,8 @@ class SmartcarVehicle extends IPSModuleStrict
         }
 
         if (!$id) {
+            $created = true;
+
             switch ($type) {
                 case VARIABLETYPE_BOOLEAN:
                     $this->RegisterVariableBoolean($ident, $name, $profile, 0);
@@ -1043,6 +1047,10 @@ class SmartcarVehicle extends IPSModuleStrict
                     $this->RegisterVariableString($ident, $name, $profile, 0);
                     break;
             }
+        }
+
+        if ($onlySetValueOnCreate && !$created) {
+            return;
         }
 
         switch ($type) {
