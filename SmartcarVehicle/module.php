@@ -623,12 +623,8 @@ class SmartcarVehicle extends IPSModuleStrict
 
             $value = $body[$source];
 
-            if (isset($variable['factor']) && is_numeric($value)) {
-                $value = (float)$value * (float)$variable['factor'];
-            }
-
-            if (isset($variable['offset']) && is_numeric($value)) {
-                $value = (float)$value + (float)$variable['offset'];
+            if (isset($variable['convert']) && is_callable($variable['convert'])) {
+                $value = $variable['convert']($body);
             }
 
             $this->RegisterOrUpdateTypedVariable(
@@ -792,13 +788,12 @@ class SmartcarVehicle extends IPSModuleStrict
         }
 
         return [[
-            'ident'   => $definition['ident'],
-            'name'    => $definition['name'],
-            'type'    => $definition['type'],
-            'profile' => $definition['profile'],
+            'ident'   => $definition['ident'] ?? '',
+            'name'    => $definition['name'] ?? '',
+            'type'    => $definition['type'] ?? VARIABLETYPE_STRING,
+            'profile' => $definition['profile'] ?? '',
             'source'  => $definition['source'] ?? 'value',
-            'factor'  => $definition['factor'] ?? 1,
-            'offset'  => $definition['offset'] ?? 0
+            'convert' => $definition['convert'] ?? null
         ]];
     }
 
@@ -1179,99 +1174,572 @@ class SmartcarVehicle extends IPSModuleStrict
     {
         $code = strtolower($code);
 
-        return match ($code) {
+        $milesToKm = function (array $body): float {
+            $val  = (float)($body['value'] ?? 0);
+            $unit = strtolower((string)($body['unit'] ?? 'km'));
+            return $unit === 'miles' ? $val * 1.609344 : $val;
+        };
 
+        $timeToComplete = function (array $body): string {
+            $raw = str_replace(',', '.', (string)($body['value'] ?? ''));
+
+            if (strpos($raw, '.') !== false) {
+                $v = (float)$raw;
+                $h = (int)floor($v);
+                $m = (int)round(($v - $h) * 60);
+
+                if ($m >= 60) {
+                    $m -= 60;
+                    $h++;
+                }
+
+                return sprintf('%02d:%02d Uhr', $h % 24, $m);
+            }
+
+            $mins = (int)$raw;
+            return sprintf('%02d:%02d Uhr', intdiv($mins, 60) % 24, $mins % 60);
+        };
+
+        $openClosed = function (array $body): string {
+            return !empty($body['isOpen']) ? 'OPEN' : 'CLOSED';
+        };
+
+        return match ($code) {
+            // ---------- Batterie ----------
             'tractionbattery-stateofcharge' => [
-                'ident'   => $this->BuildSignalIdent($code),
-                'name'    => 'State of charge',
-                'type'    => VARIABLETYPE_FLOAT,
-                'profile' => 'SMCAR.Progress',
-                'factor'  => 1
+                'ident' => 'BatteryLevel',
+                'name' => 'Batterieladestand (SOC)',
+                'type' => VARIABLETYPE_FLOAT,
+                'profile' => 'SMCAR.Progress'
             ],
 
             'tractionbattery-range' => [
-                'ident'   => $this->BuildSignalIdent($code),
-                'name'    => 'Range',
-                'type'    => VARIABLETYPE_FLOAT,
+                'ident' => 'BatteryRange',
+                'name' => 'Reichweite Batterie',
+                'type' => VARIABLETYPE_FLOAT,
                 'profile' => 'SMCAR.Odometer',
-                'factor'  => 1
-            ],
-
-            'odometer-traveleddistance' => [
-                'ident'   => $this->BuildSignalIdent($code),
-                'name'    => 'Odometer',
-                'type'    => VARIABLETYPE_FLOAT,
-                'profile' => 'SMCAR.Odometer',
-                'factor'  => 1
-            ],
-
-            'charge-wattage' => [
-                'ident'   => $this->BuildSignalIdent($code),
-                'name'    => 'Charge power',
-                'type'    => VARIABLETYPE_FLOAT,
-                'profile' => 'SMCAR.Power',
-                'factor'  => 1
-            ],
-
-            'charge-timetocomplete' => [
-                'ident'   => $this->BuildSignalIdent($code),
-                'name'    => 'Time to complete',
-                'type'    => VARIABLETYPE_INTEGER,
-                'profile' => 'SMCAR.TimeMinutes',
-                'factor'  => 1
+                'convert' => $milesToKm
             ],
 
             'tractionbattery-nominalcapacity' => [
-                'ident'   => $this->BuildSignalIdent($code),
-                'name'    => 'Nominal battery capacity',
-                'type'    => VARIABLETYPE_FLOAT,
+                'ident' => 'BatteryCapacity',
+                'name' => 'Batteriekapazität',
+                'type' => VARIABLETYPE_FLOAT,
                 'profile' => 'SMCAR.Energy',
-                'source'  => 'capacity',
-                'factor'  => 1
+                'source' => 'capacity'
+            ],
+
+            'tractionbattery-chargecompletiontime' => [
+                'ident' => 'ChargeEndTime',
+                'name' => 'Fertig geladen',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'convert' => $timeToComplete
+            ],
+
+            'tractionbattery-maxrangechargecounter' => [
+                'ident' => 'MaxRangeChargeCounter',
+                'name' => 'Max-Range-Ladezyklen',
+                'type' => VARIABLETYPE_FLOAT,
+                'profile' => ''
+            ],
+
+            'tractionbattery-nominalcapacities' => [
+                'ident' => 'BatteryNominalCapacities',
+                'name' => 'Nominalkapazitäten',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'values',
+                'convert' => fn(array $body) => json_encode($body['values'] ?? [], JSON_UNESCAPED_UNICODE)
+            ],
+
+            // ---------- Laden ----------
+            'charge-detailedchargingstatus' => [
+                'ident' => 'ChargeStatus',
+                'name' => 'Ladestatus',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => 'SMCAR.Charge',
+                'convert' => fn(array $body) => strtoupper((string)($body['value'] ?? ''))
             ],
 
             'charge-ischarging' => [
-                'ident'   => $this->BuildSignalIdent($code),
-                'name'    => 'Charging',
-                'type'    => VARIABLETYPE_BOOLEAN,
-                'profile' => '~Switch',
-                'factor'  => 1
+                'ident' => 'IsCharging',
+                'name' => 'Lädt',
+                'type' => VARIABLETYPE_BOOLEAN,
+                'profile' => '~Switch'
             ],
 
             'charge-ischargingcableconnected' => [
-                'ident'   => $this->BuildSignalIdent($code),
-                'name'    => 'Charging cable connected',
-                'type'    => VARIABLETYPE_BOOLEAN,
-                'profile' => '~Switch',
-                'factor'  => 1
+                'ident' => 'PluggedIn',
+                'name' => 'Ladekabel eingesteckt',
+                'type' => VARIABLETYPE_BOOLEAN,
+                'profile' => '~Switch'
             ],
 
-            'charge-detailedchargingstatus' => [
-                'ident'   => $this->BuildSignalIdent($code),
-                'name'    => 'Detailed charging status',
-                'type'    => VARIABLETYPE_STRING,
+            'charge-chargelimits' => [
+                'ident' => 'ChargeLimit',
+                'name' => 'Aktuelles Ladelimit',
+                'type' => VARIABLETYPE_FLOAT,
+                'profile' => 'SMCAR.Progress',
+                'source' => 'values',
+                'convert' => function (array $body) {
+                    foreach (($body['values'] ?? []) as $cfg) {
+                        if (($cfg['type'] ?? '') === 'global' && isset($cfg['limit'])) {
+                            return (float)$cfg['limit'] * 100;
+                        }
+                    }
+                    return 0.0;
+                }
+            ],
+
+            'charge-amperage' => [
+                'ident' => 'ChargeAmperage',
+                'name' => 'Ladestrom (A)',
+                'type' => VARIABLETYPE_FLOAT,
+                'profile' => ''
+            ],
+
+            'charge-amperagemax',
+            'charge-maximumamperage' => [
+                'ident' => 'ChargeAmperageMax',
+                'name' => 'Max. Ladestrom (A)',
+                'type' => VARIABLETYPE_FLOAT,
+                'profile' => ''
+            ],
+
+            'charge-amperagerequested' => [
+                'ident' => 'ChargeAmperageRequested',
+                'name' => 'Angeforderter Ladestrom (A)',
+                'type' => VARIABLETYPE_FLOAT,
+                'profile' => ''
+            ],
+
+            'charge-chargerate' => [
+                'ident' => 'ChargeRate',
+                'name' => 'Laderate',
+                'type' => VARIABLETYPE_FLOAT,
+                'profile' => ''
+            ],
+
+            'charge-voltage' => [
+                'ident' => 'ChargeVoltage',
+                'name' => 'Ladespannung (V)',
+                'type' => VARIABLETYPE_FLOAT,
+                'profile' => ''
+            ],
+
+            'charge-wattage',
+            'charge-power' => [
+                'ident' => 'ChargeWattage',
+                'name' => 'Ladeleistung',
+                'type' => VARIABLETYPE_FLOAT,
+                'profile' => 'SMCAR.Power'
+            ],
+
+            'charge-energyadded' => [
+                'ident' => 'ChargeEnergyAdded',
+                'name' => 'Energie hinzugefügt',
+                'type' => VARIABLETYPE_FLOAT,
+                'profile' => 'SMCAR.Energy'
+            ],
+
+            'charge-timetocomplete' => [
+                'ident' => 'ChargeTimeToComplete',
+                'name' => 'Fertiggeladen',
+                'type' => VARIABLETYPE_STRING,
                 'profile' => '',
-                'factor'  => 1
+                'convert' => $timeToComplete
             ],
 
+            'charge-fastchargertype' => [
+                'ident' => 'FastChargerType',
+                'name' => 'Schnelllader-Typ',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => ''
+            ],
+
+            'charge-isfastchargerpresent' => [
+                'ident' => 'IsFastChargerPresent',
+                'name' => 'Schnelllader erkannt',
+                'type' => VARIABLETYPE_BOOLEAN,
+                'profile' => '~Switch'
+            ],
+
+            'charge-chargingconnectortype' => [
+                'ident' => 'ChargingConnectorType',
+                'name' => 'Steckertyp',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => ''
+            ],
+
+            'charge-chargerphases' => [
+                'ident' => 'ChargerPhases',
+                'name' => 'Phasen',
+                'type' => VARIABLETYPE_FLOAT,
+                'profile' => ''
+            ],
+
+            'charge-chargetimers' => [
+                'ident' => 'ChargeTimers',
+                'name' => 'Lade-Timer',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'values',
+                'convert' => fn(array $body) => json_encode($body['values'] ?? [], JSON_UNESCAPED_UNICODE)
+            ],
+
+            'charge-records',
+            'charge-chargerecords' => [
+                'ident' => 'ChargeRecords',
+                'name' => 'Lade-Records',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'values',
+                'convert' => fn(array $body) => json_encode($body['values'] ?? [], JSON_UNESCAPED_UNICODE)
+            ],
+
+            'charge-ischargingcablelatched' => [
+                'ident' => 'IsChargingCableLatched',
+                'name' => 'Ladekabel verriegelt',
+                'type' => VARIABLETYPE_BOOLEAN,
+                'profile' => '~Switch'
+            ],
+
+            'charge-ischargingportflapopen' => [
+                'ident' => 'ChargingPortFlap',
+                'name' => 'Ladeport-Klappe',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => 'SMCAR.Status',
+                'source' => 'isOpen',
+                'convert' => $openClosed
+            ],
+
+            'charge-chargeportstatuscolor',
+            'closure-chargeportstatuscolor' => [
+                'ident' => 'ChargingPortStatusColor',
+                'name' => 'Ladeport-Statusfarbe',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => ''
+            ],
+
+            // ---------- Standort ----------
             'location-preciselocation' => [
                 'special' => 'multiple',
                 'variables' => [
                     [
-                        'ident'   => 'Latitude',
-                        'name'    => 'Latitude',
-                        'type'    => VARIABLETYPE_FLOAT,
+                        'ident' => 'Latitude',
+                        'name' => 'Breitengrad',
+                        'type' => VARIABLETYPE_FLOAT,
                         'profile' => 'SMCAR.LatLon',
-                        'source'  => 'latitude'
+                        'source' => 'latitude'
                     ],
                     [
-                        'ident'   => 'Longitude',
-                        'name'    => 'Longitude',
-                        'type'    => VARIABLETYPE_FLOAT,
+                        'ident' => 'Longitude',
+                        'name' => 'Längengrad',
+                        'type' => VARIABLETYPE_FLOAT,
                         'profile' => 'SMCAR.LatLon',
-                        'source'  => 'longitude'
+                        'source' => 'longitude'
+                    ],
+                    [
+                        'ident' => 'Heading',
+                        'name' => 'Fahrtrichtung (°)',
+                        'type' => VARIABLETYPE_FLOAT,
+                        'profile' => '',
+                        'source' => 'heading'
+                    ],
+                    [
+                        'ident' => 'Direction',
+                        'name' => 'Himmelsrichtung',
+                        'type' => VARIABLETYPE_STRING,
+                        'profile' => '',
+                        'source' => 'direction',
+                        'convert' => fn(array $body) => strtoupper((string)($body['direction'] ?? ''))
+                    ],
+                    [
+                        'ident' => 'LocationType',
+                        'name' => 'Standort-Typ',
+                        'type' => VARIABLETYPE_STRING,
+                        'profile' => '',
+                        'source' => 'locationType',
+                        'convert' => fn(array $body) => strtoupper((string)($body['locationType'] ?? ''))
                     ]
                 ]
+            ],
+
+            // ---------- Kilometerstand ----------
+            'odometer-traveleddistance' => [
+                'ident' => 'Odometer',
+                'name' => 'Kilometerstand',
+                'type' => VARIABLETYPE_FLOAT,
+                'profile' => 'SMCAR.Odometer',
+                'convert' => $milesToKm
+            ],
+
+            // ---------- Security / Closure ----------
+            'closure-islocked' => [
+                'ident' => 'DoorsLocked',
+                'name' => 'Fahrzeug verriegelt',
+                'type' => VARIABLETYPE_BOOLEAN,
+                'profile' => '~Lock'
+            ],
+
+            'closure-doors' => [
+                'ident' => 'Doors',
+                'name' => 'Türen',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'convert' => fn(array $body) => json_encode($body, JSON_UNESCAPED_UNICODE)
+            ],
+
+            'closure-windows' => [
+                'ident' => 'Windows',
+                'name' => 'Fenster',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'convert' => fn(array $body) => json_encode($body, JSON_UNESCAPED_UNICODE)
+            ],
+
+            'closure-sunroof' => [
+                'ident' => 'Sunroof',
+                'name' => 'Schiebedach',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => 'SMCAR.Status',
+                'source' => 'isOpen',
+                'convert' => $openClosed
+            ],
+
+            'closure-enginecover' => [
+                'ident' => 'EngineCover',
+                'name' => 'Motorhaube',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'convert' => fn(array $body) => json_encode($body, JSON_UNESCAPED_UNICODE)
+            ],
+
+            'closure-fronttrunk' => [
+                'ident' => 'FrontTrunk',
+                'name' => 'Front-Kofferraum',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'convert' => fn(array $body) => json_encode($body, JSON_UNESCAPED_UNICODE)
+            ],
+
+            'closure-reartrunk' => [
+                'ident' => 'RearTrunk',
+                'name' => 'Heck-Kofferraum',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'convert' => fn(array $body) => json_encode($body, JSON_UNESCAPED_UNICODE)
+            ],
+
+            'closure-tailgate' => [
+                'ident' => 'Tailgate',
+                'name' => 'Heckklappe',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'convert' => fn(array $body) => json_encode($body, JSON_UNESCAPED_UNICODE)
+            ],
+
+            // ---------- Connectivity ----------
+            'connectivitystatus-isonline' => [
+                'ident' => 'IsOnline',
+                'name' => 'Online',
+                'type' => VARIABLETYPE_BOOLEAN,
+                'profile' => '~Switch'
+            ],
+
+            'connectivitystatus-isasleep' => [
+                'ident' => 'IsAsleep',
+                'name' => 'Schlafmodus',
+                'type' => VARIABLETYPE_BOOLEAN,
+                'profile' => '~Switch'
+            ],
+
+            'connectivitystatus-isdigitalkeypaired' => [
+                'ident' => 'IsDigitalKeyPaired',
+                'name' => 'Digitalschlüssel gekoppelt',
+                'type' => VARIABLETYPE_BOOLEAN,
+                'profile' => '~Switch'
+            ],
+
+            'connectivitysoftware-currentfirmwareversion' => [
+                'ident' => 'FirmwareVersion',
+                'name' => 'Firmware-Version',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => ''
+            ],
+
+            // ---------- ICE ----------
+            'internalcombustionengine-fuellevel' => [
+                'ident' => 'FuelLevel',
+                'name' => 'Tankfüllstand',
+                'type' => VARIABLETYPE_FLOAT,
+                'profile' => 'SMCAR.Progress'
+            ],
+
+            'internalcombustionengine-oillife' => [
+                'ident' => 'OilLife',
+                'name' => 'Öl-Lebensdauer',
+                'type' => VARIABLETYPE_FLOAT,
+                'profile' => 'SMCAR.Progress'
+            ],
+
+            'internalcombustionengine-oilpressure' => [
+                'ident' => 'OilPressure',
+                'name' => 'Öldruck',
+                'type' => VARIABLETYPE_FLOAT,
+                'profile' => ''
+            ],
+
+            'internalcombustionengine-oiltemperature' => [
+                'ident' => 'OilTemperature',
+                'name' => 'Öltemperatur',
+                'type' => VARIABLETYPE_FLOAT,
+                'profile' => ''
+            ],
+
+            'internalcombustionengine-waterinfuel' => [
+                'ident' => 'WaterInFuel',
+                'name' => 'Wasser im Kraftstoff',
+                'type' => VARIABLETYPE_BOOLEAN,
+                'profile' => '~Switch'
+            ],
+
+            // ---------- Klima ----------
+            'climatecontrol-isheateractive',
+            'tractionbattery-isheateractive' => [
+                'ident' => 'IsHeaterActive',
+                'name' => 'Heizung aktiv',
+                'type' => VARIABLETYPE_BOOLEAN,
+                'profile' => '~Switch'
+            ],
+
+            'climate-externaltemperature' => [
+                'ident' => 'ExternalTemperature',
+                'name' => 'Außentemperatur',
+                'type' => VARIABLETYPE_FLOAT,
+                'profile' => '~Temperature'
+            ],
+
+            'climate-internaltemperature' => [
+                'ident' => 'InternalTemperature',
+                'name' => 'Innentemperatur',
+                'type' => VARIABLETYPE_FLOAT,
+                'profile' => '~Temperature'
+            ],
+
+            // ---------- Reifen ----------
+            'tires-pressure' => [
+                'special' => 'multiple',
+                'variables' => [
+                    [
+                        'ident' => 'TireFrontLeft',
+                        'name' => 'Reifendruck Vorderreifen Links',
+                        'type' => VARIABLETYPE_FLOAT,
+                        'profile' => 'SMCAR.Pressure',
+                        'source' => 'frontLeft',
+                        'convert' => fn(array $body) => (float)($body['frontLeft'] ?? 0) * 0.01
+                    ],
+                    [
+                        'ident' => 'TireFrontRight',
+                        'name' => 'Reifendruck Vorderreifen Rechts',
+                        'type' => VARIABLETYPE_FLOAT,
+                        'profile' => 'SMCAR.Pressure',
+                        'source' => 'frontRight',
+                        'convert' => fn(array $body) => (float)($body['frontRight'] ?? 0) * 0.01
+                    ],
+                    [
+                        'ident' => 'TireBackLeft',
+                        'name' => 'Reifendruck Hinterreifen Links',
+                        'type' => VARIABLETYPE_FLOAT,
+                        'profile' => 'SMCAR.Pressure',
+                        'source' => 'backLeft',
+                        'convert' => fn(array $body) => (float)($body['backLeft'] ?? 0) * 0.01
+                    ],
+                    [
+                        'ident' => 'TireBackRight',
+                        'name' => 'Reifendruck Hinterreifen Rechts',
+                        'type' => VARIABLETYPE_FLOAT,
+                        'profile' => 'SMCAR.Pressure',
+                        'source' => 'backRight',
+                        'convert' => fn(array $body) => (float)($body['backRight'] ?? 0) * 0.01
+                    ]
+                ]
+            ],
+
+            // ---------- Vehicle Identification ----------
+            'vehicleidentification-vin' => [
+                'ident' => 'VIN',
+                'name' => 'Fahrgestellnummer (VIN)',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => ''
+            ],
+
+            'vehicleidentification-trim' => [
+                'ident' => 'Trim',
+                'name' => 'Ausstattungslinie (Trim)',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => ''
+            ],
+
+            'vehicleidentification-exteriorcolor' => [
+                'ident' => 'ExteriorColor',
+                'name' => 'Außenfarbe',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => ''
+            ],
+
+            'vehicleidentification-packages' => [
+                'ident' => 'Packages',
+                'name' => 'Pakete',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'values',
+                'convert' => fn(array $body) => implode(', ', array_map('strval', $body['values'] ?? []))
+            ],
+
+            'vehicleidentification-nickname' => [
+                'ident' => 'Nickname',
+                'name' => 'Fahrzeug-Spitzname',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => ''
+            ],
+
+            'vehicleidentification-make' => [
+                'ident' => 'VehicleMake',
+                'name' => 'Fahrzeug Hersteller',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => ''
+            ],
+
+            'vehicleidentification-model' => [
+                'ident' => 'VehicleModel',
+                'name' => 'Fahrzeug Modell',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => ''
+            ],
+
+            'vehicleidentification-year' => [
+                'ident' => 'VehicleYear',
+                'name' => 'Fahrzeug Baujahr',
+                'type' => VARIABLETYPE_INTEGER,
+                'profile' => ''
+            ],
+
+            // ---------- Vehicle User Account ----------
+            'vehicleuseraccount-permissions' => [
+                'ident' => 'VehicleUserPermissions',
+                'name' => 'Benutzer-Berechtigungen',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'convert' => fn(array $body) => json_encode($body, JSON_UNESCAPED_UNICODE)
+            ],
+
+            'vehicleuseraccount-role' => [
+                'ident' => 'VehicleUserRole',
+                'name' => 'Benutzer-Rolle',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => ''
             ],
 
             default => $this->GuessSignalDefinition($code, $body)
