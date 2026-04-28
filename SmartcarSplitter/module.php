@@ -86,9 +86,6 @@ class SmartcarSplitter extends IPSModuleStrict
             ],
             'actions' => [
                 [
-                    'type' => 'Button',
-                    'caption' => 'Application Token holen',
-                    'onClick' => 'SMCARS_RequestApplicationAccessToken($id);'
                 ]
             ]
         ];
