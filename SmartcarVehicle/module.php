@@ -342,7 +342,7 @@ class SmartcarVehicle extends IPSModuleStrict
         return $text;
     }
 
-    public function FetchSelectedSignals(): void
+    public function FetchSelectedSignals(array $onlySignalCodes = []): void
     {
         $this->SendDebug('FetchSignals/Start', 'Sammelabruf aller Signale gestartet.', 0);
 
@@ -386,6 +386,11 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $selectedMap = $this->GetSelectedSignalMap();
 
+        $onlyMap = [];
+        foreach ($onlySignalCodes as $code) {
+            $onlyMap[(string)$code] = true;
+        }
+
         $applied = 0;
         $skipped = 0;
 
@@ -396,6 +401,11 @@ class SmartcarVehicle extends IPSModuleStrict
 
             $signalCode = (string)($signal['code'] ?? $signal['id'] ?? '');
             if ($signalCode === '') {
+                $skipped++;
+                continue;
+            }
+
+            if (!empty($onlyMap) && !isset($onlyMap[$signalCode])) {
                 $skipped++;
                 continue;
             }
@@ -794,7 +804,7 @@ class SmartcarVehicle extends IPSModuleStrict
             $created = $this->CreateSignalVariable($signalCode, $name);
 
             if ($created) {
-                $this->FetchSingleSelectedSignal($signalCode);
+                $newSignalCodes[$signalCode] = true;
             }
         }
 
@@ -819,6 +829,10 @@ class SmartcarVehicle extends IPSModuleStrict
                 $this->SendDebug('Variables/Delete', 'Lösche nicht mehr ausgewählte Variable: ' . $ident, 0);
                 $this->UnregisterVariable($ident);
             }
+        }
+
+        if (!empty($newSignalCodes)) {
+            $this->FetchSelectedSignals(array_keys($newSignalCodes));
         }
     }
 
