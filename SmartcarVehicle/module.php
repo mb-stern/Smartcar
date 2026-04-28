@@ -549,44 +549,58 @@ class SmartcarVehicle extends IPSModuleStrict
             $statusValue = strtoupper((string)$status['value']);
 
             if ($statusValue !== 'SUCCESS' && $statusValue !== 'OK') {
-                $this->SendDebug('SignalStatus/' . $code, json_encode($status, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+                $this->SendDebug(
+                    'SignalStatus/' . $code,
+                    json_encode($status, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                    0
+                );
                 return;
             }
         }
 
-        if ($code === 'location-preciselocation') {
-            if (isset($body['latitude'])) {
-                $this->RegisterOrUpdateFloat('Latitude', 'Latitude', (float)$body['latitude']);
+        $definition = $this->GetSignalDefinition($code, $body);
+        $variables = $this->GetVariablesFromDefinition($definition, $body);
+
+        foreach ($variables as $variable) {
+            $ident = (string)($variable['ident'] ?? '');
+            if ($ident === '') {
+                continue;
             }
 
-            if (isset($body['longitude'])) {
-                $this->RegisterOrUpdateFloat('Longitude', 'Longitude', (float)$body['longitude']);
+            $source = (string)($variable['source'] ?? 'value');
+
+            if (!array_key_exists($source, $body)) {
+                continue;
             }
 
-            return;
-        }
+            $value = $body[$source];
 
-        $ident = $this->BuildSignalIdent($code);
-        $name  = (string)($meta['name'] ?? $code);
+            if (isset($variable['factor']) && is_numeric($value)) {
+                $value = (float)$value * (float)$variable['factor'];
+            }
 
-        if (array_key_exists('value', $body)) {
-            $details = $this->GetSignalVariableDetails($code, $body);
+            if (isset($variable['offset']) && is_numeric($value)) {
+                $value = (float)$value + (float)$variable['offset'];
+            }
 
             $this->RegisterOrUpdateTypedVariable(
                 $ident,
-                $name,
-                $body['value'],
-                $details['type'],
-                $details['profile']
+                (string)($variable['name'] ?? $ident),
+                $value,
+                (int)$variable['type'],
+                (string)($variable['profile'] ?? '')
             );
-
-            return;
         }
 
-        if (!empty($body)) {
+        if (empty($variables) && !empty($body)) {
+            $ident = (string)($definition['ident'] ?? '');
+            if ($ident === '') {
+                return;
+            }
+
             $this->RegisterOrUpdateTypedVariable(
                 $ident,
-                $name,
+                (string)($definition['name'] ?? $code),
                 json_encode($body, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
                 VARIABLETYPE_STRING,
                 ''
@@ -597,42 +611,6 @@ class SmartcarVehicle extends IPSModuleStrict
     private function BuildSignalIdent(string $code): string
     {
         return 'Sig_' . preg_replace('/[^A-Za-z0-9_]/', '_', $code);
-    }
-
-    private function RegisterOrUpdateBoolean(string $ident, string $name, bool $value): void
-    {
-        if (!@$this->GetIDForIdent($ident)) {
-            $this->RegisterVariableBoolean($ident, $name !== '' ? $name : $ident, '~Switch', 0);
-        }
-
-        $this->SetValue($ident, $value);
-    }
-
-    private function RegisterOrUpdateInteger(string $ident, string $name, int $value): void
-    {
-        if (!@$this->GetIDForIdent($ident)) {
-            $this->RegisterVariableInteger($ident, $name !== '' ? $name : $ident, '', 0);
-        }
-
-        $this->SetValue($ident, $value);
-    }
-
-    private function RegisterOrUpdateFloat(string $ident, string $name, float $value): void
-    {
-        if (!@$this->GetIDForIdent($ident)) {
-            $this->RegisterVariableFloat($ident, $name !== '' ? $name : $ident, '', 0);
-        }
-
-        $this->SetValue($ident, $value);
-    }
-
-    private function RegisterOrUpdateString(string $ident, string $name, string $value): void
-    {
-        if (!@$this->GetIDForIdent($ident)) {
-            $this->RegisterVariableString($ident, $name !== '' ? $name : $ident, '', 0);
-        }
-
-        $this->SetValue($ident, $value);
     }
 
     public function GenerateConnectURL(): string
@@ -693,52 +671,47 @@ class SmartcarVehicle extends IPSModuleStrict
 
     private function CreateSignalVariable(string $signalCode, string $name): void
     {
-        if ($signalCode === 'location-preciselocation') {
-            if (!@$this->GetIDForIdent('Latitude')) {
-                $this->RegisterVariableFloat('Latitude', 'Latitude', 'SMCAR.LatLon', 0);
-            }
+        $definition = $this->GetSignalDefinition($signalCode, []);
 
-            if (!@$this->GetIDForIdent('Longitude')) {
-                $this->RegisterVariableFloat('Longitude', 'Longitude', 'SMCAR.LatLon', 0);
-            }
+        foreach ($this->GetVariablesFromDefinition($definition, []) as $variable) {
+            $this->RegisterOrUpdateTypedVariable(
+                $variable['ident'],
+                $variable['name'],
+                $this->GetDefaultValueForType($variable['type']),
+                $variable['type'],
+                $variable['profile']
+            );
+        }
+    }
 
-            return;
+    private function GetVariablesFromDefinition(array $definition, array $body): array
+    {
+        if (($definition['special'] ?? '') === 'multiple') {
+            return $definition['variables'] ?? [];
         }
 
-        $ident = $this->BuildSignalIdent($signalCode);
+        return [[
+            'ident'   => $definition['ident'],
+            'name'    => $definition['name'],
+            'type'    => $definition['type'],
+            'profile' => $definition['profile'],
+            'source'  => 'value'
+        ]];
+    }
 
-        if (@$this->GetIDForIdent($ident)) {
-            return;
-        }
-
-        $details = $this->GetSignalVariableDetails($signalCode, []);
-        $caption = $name !== '' ? $name : $signalCode;
-
-        switch ($details['type']) {
-            case VARIABLETYPE_BOOLEAN:
-                $this->RegisterVariableBoolean($ident, $caption, $details['profile'], 0);
-                break;
-
-            case VARIABLETYPE_INTEGER:
-                $this->RegisterVariableInteger($ident, $caption, $details['profile'], 0);
-                break;
-
-            case VARIABLETYPE_FLOAT:
-                $this->RegisterVariableFloat($ident, $caption, $details['profile'], 0);
-                break;
-
-            default:
-                $this->RegisterVariableString($ident, $caption, $details['profile'], 0);
-                break;
-        }
-
-        $this->SendDebug('Variables/Create', 'Created variable: ' . $ident . ' (' . $caption . ')', 0);
+    private function GetDefaultValueForType(int $type): mixed
+    {
+        return match ($type) {
+            VARIABLETYPE_BOOLEAN => false,
+            VARIABLETYPE_INTEGER => 0,
+            VARIABLETYPE_FLOAT   => 0.0,
+            default              => ''
+        };
     }
 
     public function ApplySelectedCapabilities(): void
     {
         $selected = $this->GetSelectedCapabilitiesResolved();
-
         $wantedIdents = [];
 
         foreach ($selected as $entry) {
@@ -755,12 +728,13 @@ class SmartcarVehicle extends IPSModuleStrict
                 continue;
             }
 
-            if ($signalCode === 'location-preciselocation') {
-                $wantedIdents['Latitude'] = true;
-                $wantedIdents['Longitude'] = true;
-            } else {
-                $ident = $this->BuildSignalIdent($signalCode);
-                $wantedIdents[$ident] = true;
+            $definition = $this->GetSignalDefinition($signalCode, []);
+
+            foreach ($this->GetVariablesFromDefinition($definition, []) as $variable) {
+                $ident = (string)($variable['ident'] ?? '');
+                if ($ident !== '') {
+                    $wantedIdents[$ident] = true;
+                }
             }
 
             $name = (string)($entry['name'] ?? $signalCode);
@@ -771,7 +745,16 @@ class SmartcarVehicle extends IPSModuleStrict
             $object = IPS_GetObject($childId);
             $ident = (string)($object['ObjectIdent'] ?? '');
 
-            if ($ident === '' || strpos($ident, 'Sig_') !== 0) {
+            if ($ident === '') {
+                continue;
+            }
+
+            $isManagedVariable =
+                strpos($ident, 'Sig_') === 0 ||
+                $ident === 'Latitude' ||
+                $ident === 'Longitude';
+
+            if (!$isManagedVariable) {
                 continue;
             }
 
@@ -955,6 +938,33 @@ class SmartcarVehicle extends IPSModuleStrict
         }
     }
 
+    private function GuessSignalDefinition(string $code, array $body): array
+    {
+        $type = VARIABLETYPE_STRING;
+        $profile = '';
+
+        if (array_key_exists('value', $body)) {
+            $value = $body['value'];
+
+            if (is_bool($value)) {
+                $type = VARIABLETYPE_BOOLEAN;
+                $profile = '~Switch';
+            } elseif (is_int($value)) {
+                $type = VARIABLETYPE_INTEGER;
+            } elseif (is_float($value) || is_numeric($value)) {
+                $type = VARIABLETYPE_FLOAT;
+            }
+        }
+
+        return [
+            'ident'   => $this->BuildSignalIdent($code),
+            'name'    => $code,
+            'type'    => $type,
+            'profile' => $profile,
+            'factor'  => 1
+        ];
+    }
+
     private function CreateProfile(): void
     {
         if (!IPS_VariableProfileExists('SMCAR.Progress')) {
@@ -996,73 +1006,6 @@ class SmartcarVehicle extends IPSModuleStrict
         }
         IPS_SetVariableProfileDigits('SMCAR.LatLon', 6);
         IPS_SetVariableProfileText('SMCAR.LatLon', '', '°');
-            }
-
-    private function GetSignalVariableDetails(string $code, array $body): array
-    {
-        $code = strtolower($code);
-
-        return match ($code) {
-            'tractionbattery-stateofcharge' => [
-                'type' => VARIABLETYPE_FLOAT,
-                'profile' => 'SMCAR.Progress'
-            ],
-
-            'tractionbattery-range',
-            'odometer-traveleddistance' => [
-                'type' => VARIABLETYPE_FLOAT,
-                'profile' => 'SMCAR.Odometer'
-            ],
-
-            'charge-wattage' => [
-                'type' => VARIABLETYPE_FLOAT,
-                'profile' => 'SMCAR.Power'
-            ],
-
-            'charge-timetocomplete' => [
-                'type' => VARIABLETYPE_INTEGER,
-                'profile' => 'SMCAR.TimeMinutes'
-            ],
-
-            'tractionbattery-nominalcapacity' => [
-                'type' => VARIABLETYPE_FLOAT,
-                'profile' => 'SMCAR.Energy'
-            ],
-
-            'charge-ischarging',
-            'charge-ischargingcableconnected' => [
-                'type' => VARIABLETYPE_BOOLEAN,
-                'profile' => '~Switch'
-            ],
-
-            'charge-detailedchargingstatus' => [
-                'type' => VARIABLETYPE_STRING,
-                'profile' => ''
-            ],
-
-            default => $this->GuessVariableDetailsFromBody($body)
-        };
-    }
-
-    private function GuessVariableDetailsFromBody(array $body): array
-    {
-        if (array_key_exists('value', $body)) {
-            $value = $body['value'];
-
-            if (is_bool($value)) {
-                return ['type' => VARIABLETYPE_BOOLEAN, 'profile' => '~Switch'];
-            }
-
-            if (is_int($value)) {
-                return ['type' => VARIABLETYPE_INTEGER, 'profile' => ''];
-            }
-
-            if (is_float($value) || is_numeric($value)) {
-                return ['type' => VARIABLETYPE_FLOAT, 'profile' => ''];
-            }
-        }
-
-        return ['type' => VARIABLETYPE_STRING, 'profile' => ''];
     }
 
     private function RegisterOrUpdateTypedVariable(string $ident, string $name, mixed $value, int $type, string $profile): void
@@ -1119,5 +1062,107 @@ class SmartcarVehicle extends IPSModuleStrict
                 $this->SetValue($ident, is_array($value) ? json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : (string)$value);
                 break;
         }
+    }
+
+    private function GetSignalDefinition(string $code, array $body = []): array
+    {
+        $code = strtolower($code);
+
+        return match ($code) {
+
+            'tractionbattery-stateofcharge' => [
+                'ident'   => $this->BuildSignalIdent($code),
+                'name'    => 'State of charge',
+                'type'    => VARIABLETYPE_FLOAT,
+                'profile' => 'SMCAR.Progress',
+                'factor'  => 1
+            ],
+
+            'tractionbattery-range' => [
+                'ident'   => $this->BuildSignalIdent($code),
+                'name'    => 'Range',
+                'type'    => VARIABLETYPE_FLOAT,
+                'profile' => 'SMCAR.Odometer',
+                'factor'  => 1
+            ],
+
+            'odometer-traveleddistance' => [
+                'ident'   => $this->BuildSignalIdent($code),
+                'name'    => 'Odometer',
+                'type'    => VARIABLETYPE_FLOAT,
+                'profile' => 'SMCAR.Odometer',
+                'factor'  => 1
+            ],
+
+            'charge-wattage' => [
+                'ident'   => $this->BuildSignalIdent($code),
+                'name'    => 'Charge power',
+                'type'    => VARIABLETYPE_FLOAT,
+                'profile' => 'SMCAR.Power',
+                'factor'  => 1
+            ],
+
+            'charge-timetocomplete' => [
+                'ident'   => $this->BuildSignalIdent($code),
+                'name'    => 'Time to complete',
+                'type'    => VARIABLETYPE_INTEGER,
+                'profile' => 'SMCAR.TimeMinutes',
+                'factor'  => 1
+            ],
+
+            'tractionbattery-nominalcapacity' => [
+                'ident'   => $this->BuildSignalIdent($code),
+                'name'    => 'Nominal battery capacity',
+                'type'    => VARIABLETYPE_FLOAT,
+                'profile' => 'SMCAR.Energy',
+                'factor'  => 1
+            ],
+
+            'charge-ischarging' => [
+                'ident'   => $this->BuildSignalIdent($code),
+                'name'    => 'Charging',
+                'type'    => VARIABLETYPE_BOOLEAN,
+                'profile' => '~Switch',
+                'factor'  => 1
+            ],
+
+            'charge-ischargingcableconnected' => [
+                'ident'   => $this->BuildSignalIdent($code),
+                'name'    => 'Charging cable connected',
+                'type'    => VARIABLETYPE_BOOLEAN,
+                'profile' => '~Switch',
+                'factor'  => 1
+            ],
+
+            'charge-detailedchargingstatus' => [
+                'ident'   => $this->BuildSignalIdent($code),
+                'name'    => 'Detailed charging status',
+                'type'    => VARIABLETYPE_STRING,
+                'profile' => '',
+                'factor'  => 1
+            ],
+
+            'location-preciselocation' => [
+                'special' => 'multiple',
+                'variables' => [
+                    [
+                        'ident'   => 'Latitude',
+                        'name'    => 'Latitude',
+                        'type'    => VARIABLETYPE_FLOAT,
+                        'profile' => 'SMCAR.LatLon',
+                        'source'  => 'latitude'
+                    ],
+                    [
+                        'ident'   => 'Longitude',
+                        'name'    => 'Longitude',
+                        'type'    => VARIABLETYPE_FLOAT,
+                        'profile' => 'SMCAR.LatLon',
+                        'source'  => 'longitude'
+                    ]
+                ]
+            ],
+
+            default => $this->GuessSignalDefinition($code, $body)
+        };
     }
 }
