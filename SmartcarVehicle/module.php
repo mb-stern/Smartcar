@@ -420,7 +420,7 @@ class SmartcarVehicle extends IPSModuleStrict
 
             
             if (!isset($selectedMap[$signalCode])) {
-                $this->SendDebug('FetchSignals/SkipNotSelected', $signalCode, 0);
+                //$this->SendDebug('FetchSignals/SkipNotSelected', $signalCode, 0);
                 $skipped++;
                 continue;
             }
