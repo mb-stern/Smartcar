@@ -130,7 +130,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 ],
                 [
                     'type' => 'Button',
-                    'caption' => 'Mit SMartcar verbinden',
+                    'caption' => 'Gewählte Signale bei Smartcar registrieren',
                     'onClick' => 'echo SMCARV_GenerateConnectURL($id);'
                 ],
                 [
