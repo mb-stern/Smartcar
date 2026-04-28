@@ -811,8 +811,40 @@ class SmartcarVehicle extends IPSModuleStrict
     {
         $selected = $this->GetSelectedCapabilitiesResolved();
         $wantedIdents = [];
+        $managedIdents = [];
         $newSignalCodes = [];
 
+        // Alle möglichen Signal-Variablen aus der Compatibility-Liste sammeln
+        $cache = json_decode($this->ReadAttributeString('CompatibilityCache'), true);
+        if (is_array($cache)) {
+            $allCapabilities = $this->BuildCapabilitiesListFromCompatibilityItems($cache);
+
+            foreach ($allCapabilities as $entry) {
+                if (strtolower((string)($entry['type'] ?? '')) !== 'signal') {
+                    continue;
+                }
+
+                $signalCode = (string)($entry['capability'] ?? '');
+                if ($signalCode === '') {
+                    $signalCode = (string)($entry['code'] ?? '');
+                }
+
+                if ($signalCode === '') {
+                    continue;
+                }
+
+                $definition = $this->GetSignalDefinition($signalCode, []);
+
+                foreach ($this->GetVariablesFromDefinition($definition, []) as $variable) {
+                    $ident = (string)($variable['ident'] ?? '');
+                    if ($ident !== '') {
+                        $managedIdents[$ident] = true;
+                    }
+                }
+            }
+        }
+
+        // Ausgewählte Variablen erstellen und als gewünscht markieren
         foreach ($selected as $entry) {
             if (strtolower((string)($entry['type'] ?? '')) !== 'signal') {
                 continue;
@@ -833,6 +865,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 $ident = (string)($variable['ident'] ?? '');
                 if ($ident !== '') {
                     $wantedIdents[$ident] = true;
+                    $managedIdents[$ident] = true;
                 }
             }
 
@@ -844,6 +877,7 @@ class SmartcarVehicle extends IPSModuleStrict
             }
         }
 
+        // Nicht mehr gewünschte, aber vom Modul verwaltete Variablen löschen
         foreach (IPS_GetChildrenIDs($this->InstanceID) as $childId) {
             $object = IPS_GetObject($childId);
             $ident = (string)($object['ObjectIdent'] ?? '');
@@ -852,12 +886,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 continue;
             }
 
-            $isManagedVariable =
-                strpos($ident, 'Sig_') === 0 ||
-                $ident === 'Latitude' ||
-                $ident === 'Longitude';
-
-            if (!$isManagedVariable) {
+            if (!isset($managedIdents[$ident])) {
                 continue;
             }
 
