@@ -8,8 +8,6 @@ class SmartcarConfigurator extends IPSModuleStrict
     public function Create(): void
     {
         parent::Create();
-
-        $this->RegisterPropertyBoolean('AutoReload', true);
     }
 
     public function ApplyChanges(): void
@@ -58,19 +56,7 @@ class SmartcarConfigurator extends IPSModuleStrict
         }
 
         $form = [
-            'elements' => [
-                [
-                    'type' => 'CheckBox',
-                    'name' => 'AutoReload',
-                    'caption' => 'Fahrzeugliste beim Öffnen automatisch laden'
-                ]
-            ],
             'actions' => [
-                [
-                    'type' => 'Button',
-                    'caption' => 'Fahrzeugliste aktualisieren',
-                    'onClick' => 'IPS_ApplyChanges($id);'
-                ],
                 [
                     'type' => 'Button',
                     'caption' => 'Alle fehlenden Fahrzeug-Instanzen erstellen',
