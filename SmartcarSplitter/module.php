@@ -86,6 +86,7 @@ class SmartcarSplitter extends IPSModuleStrict
             ],
             'actions' => [
                 [
+                //leer
                 ]
             ]
         ];
