@@ -77,16 +77,6 @@ class SmartcarConfigurator extends IPSModuleStrict
                     'onClick' => 'SMCARCFG_CreateMissingVehicleInstances($id);'
                 ],
                 [
-                    'type' => 'Button',
-                    'caption' => 'Simuliertes Fahrzeug verbinden',
-                    'onClick' => 'echo SMCARCFG_GenerateSimulatedConnectURL($id);'
-                ],
-                [
-                    'type' => 'Button',
-                    'caption' => 'DEBUG: Fahrzeugliste vom Splitter laden',
-                    'onClick' => 'SMCARCFG_DebugConnections($id);'
-                ],
-                [
                     'type' => 'List',
                     'name' => 'Vehicles',
                     'caption' => 'Smartcar Fahrzeuge',
@@ -187,56 +177,16 @@ class SmartcarConfigurator extends IPSModuleStrict
 
     private function LoadConnectionsFromSplitter(): array
     {
-        $request = [
+        $result = $this->SendDataToParent(json_encode([
             'DataID' => self::DATA_ID,
             'Command' => 'LoadConnections'
-        ];
-
-        $this->SendDebug(
-            'Connections/Request',
-            json_encode($request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
-            0
-        );
-
-        $result = $this->SendDataToParent(json_encode($request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
-
-        $this->SendDebug('Connections/RAW', (string)$result, 0);
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
 
         $decoded = json_decode((string)$result, true);
 
         if (!is_array($decoded)) {
-            $this->SendDebug('Connections/Error', 'Ungültige Antwort vom Splitter: ' . (string)$result, 0);
+            $this->SendDebug('Connections', 'Ungültige Antwort vom Splitter: ' . (string)$result, 0);
             return [];
-        }
-
-        $this->SendDebug(
-            'Connections/Count',
-            'Anzahl Connections: ' . count($decoded),
-            0
-        );
-
-        foreach ($decoded as $index => $connection) {
-            if (!is_array($connection)) {
-                $this->SendDebug('Connections/Item/' . $index, 'Kein Array', 0);
-                continue;
-            }
-
-            $this->SendDebug(
-                'Connections/Item/' . $index,
-                json_encode([
-                    'connectionId'   => $connection['connectionId'] ?? '',
-                    'vehicleId'      => $connection['vehicleId'] ?? '',
-                    'userId'         => $connection['userId'] ?? '',
-                    'caption'        => $connection['caption'] ?? '',
-                    'make'           => $connection['make'] ?? '',
-                    'model'          => $connection['model'] ?? '',
-                    'year'           => $connection['year'] ?? '',
-                    'mode'           => $connection['mode'] ?? '',
-                    'powertrainType' => $connection['powertrainType'] ?? '',
-                    'permissions'    => $connection['permissions'] ?? []
-                ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
-                0
-            );
         }
 
         return $decoded;
@@ -290,37 +240,5 @@ class SmartcarConfigurator extends IPSModuleStrict
         }
 
         return (int)($instance['ConnectionID'] ?? 0);
-    }
-    public function GenerateSimulatedConnectURL(): string
-    {
-        $result = $this->SendDataToParent(json_encode([
-            'DataID'  => self::DATA_ID,
-            'Command' => 'BuildSimulatedConnectURL'
-        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
-
-        $decoded = json_decode((string)$result, true);
-
-        if (!is_array($decoded) || empty($decoded['success'])) {
-            return 'Fehler beim Erzeugen der simulierten Connect URL: ' . (string)$result;
-        }
-
-        return (string)($decoded['url'] ?? '');
-    }
-
-    public function DebugConnections(): void
-    {
-        $connections = $this->LoadConnectionsFromSplitter();
-
-        $this->SendDebug(
-            'Debug/Connections',
-            json_encode($connections, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
-            0
-        );
-
-        $this->SendDebug(
-            'Debug/ConnectionsCount',
-            'Anzahl Connections: ' . count($connections),
-            0
-        );
     }
 }
