@@ -317,10 +317,17 @@ class SmartcarVehicle extends IPSModuleStrict
                 str_contains($itemModel, $normalizedVehicleModel) ||
                 str_contains($normalizedVehicleModel, explode(' ', $itemModel)[0] ?? $itemModel);
 
-            if ($yearMatches && $modelMatches) {
+            $itemPowertrainType = strtoupper((string)($attributes['powertrainType'] ?? ''));
+            $wantedPowertrainType = strtoupper($powertrainType);
+
+            $powertrainMatches =
+                $wantedPowertrainType === '' ||
+                $itemPowertrainType === '' ||
+                $itemPowertrainType === $wantedPowertrainType;
+
+            if ($yearMatches && $modelMatches && $powertrainMatches) {
                 $filtered[] = $item;
             }
-        }
 
         $this->SendDebug('Compatibility/FilteredCount', 'Gefilterte Einträge: ' . count($filtered), 0);
 
