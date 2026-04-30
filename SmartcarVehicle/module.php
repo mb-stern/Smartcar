@@ -328,6 +328,7 @@ class SmartcarVehicle extends IPSModuleStrict
             if ($yearMatches && $modelMatches && $powertrainMatches) {
                 $filtered[] = $item;
             }
+        }
 
         $this->SendDebug('Compatibility/FilteredCount', 'Gefilterte Einträge: ' . count($filtered), 0);
 
