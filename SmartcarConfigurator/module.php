@@ -6,12 +6,11 @@ class SmartcarConfigurator extends IPSModuleStrict
     private const VEHICLE_MODULE_ID = '{1E1B7C9A-2D4F-4E8A-9C3B-7F6D5A4E2B10}';
 
     public function Create(): void
-    {
-        parent::Create();
+{
+    parent::Create();
 
-        $this->RegisterPropertyString('SimulatedVehicleID', '');
-        $this->RegisterPropertyString('SimulatedVehicleName', 'Smartcar Testfahrzeug');
-    }
+    $this->RegisterPropertyString('SimulatedVehicleID', '');
+}
 
     public function ApplyChanges(): void
     {
@@ -59,23 +58,19 @@ class SmartcarConfigurator extends IPSModuleStrict
         }
 
         $form = [
+
             'elements' => [
                 [
                     'type' => 'ValidationTextBox',
                     'name' => 'SimulatedVehicleID',
                     'caption' => 'Testfahrzeug VehicleID'
-                ],
-                [
-                    'type' => 'ValidationTextBox',
-                    'name' => 'SimulatedVehicleName',
-                    'caption' => 'Name der Testfahrzeug-Instanz'
                 ]
             ],
             'actions' => [
                 [
                     'type' => 'Button',
-                    'caption' => 'Testfahrzeug-Instanz erstellen',
-                    'onClick' => 'echo SMCARCFG_CreateSimulatedVehicleInstance($id);'
+                    'caption' => 'Testfahrzeug verbinden',
+                    'onClick' => 'echo SMCARCFG_GenerateSimulatedConnectURL($id);'
                 ],
                 [
                     'type' => 'Button',
@@ -217,7 +212,7 @@ class SmartcarConfigurator extends IPSModuleStrict
         IPS_SetProperty($instanceId, 'Model', (string)($connection['model'] ?? ''));
         IPS_SetProperty($instanceId, 'Year', (int)($connection['year'] ?? 0));
         IPS_SetProperty($instanceId, 'PowertrainType', (string)($connection['powertrainType'] ?? ''));
-        IPS_SetProperty($instanceId, 'IsSimulated', strtolower((string)($connection['mode'] ?? '')) === 'simulated');
+        IPS_SetProperty($instanceId, 'IsSimulated', strtolower((string)($connection['mode'] ?? '')) === 'simulated');S
 
         IPS_ApplyChanges($instanceId);
     }
@@ -249,53 +244,45 @@ class SmartcarConfigurator extends IPSModuleStrict
         return (int)($instance['ConnectionID'] ?? 0);
     }
 
-    public function CreateSimulatedVehicleInstance(): string
+    public function GenerateSimulatedConnectURL(): string
     {
         $vehicleId = trim($this->ReadPropertyString('SimulatedVehicleID'));
-        $caption = trim($this->ReadPropertyString('SimulatedVehicleName'));
 
         if ($vehicleId === '') {
             return 'Bitte zuerst die VehicleID des Testfahrzeugs eintragen und übernehmen.';
         }
 
-        if ($caption === '') {
-            $caption = 'Smartcar Testfahrzeug';
+        $permissions = [
+            'read_vehicle_info',
+            'read_vin',
+            'read_odometer',
+            'read_location',
+            'read_battery',
+            'read_charge',
+            'read_security',
+            'read_tires',
+            'read_engine_oil',
+            'read_fuel',
+            'control_charge',
+            'control_security'
+        ];
+
+        $state = 'simvehicle_' . $vehicleId . '_' . bin2hex(random_bytes(8));
+
+        $result = $this->SendDataToParent(json_encode([
+            'DataID'      => self::DATA_ID,
+            'Command'     => 'BuildConnectURL',
+            'Mode'        => 'simulated',
+            'State'       => $state,
+            'Permissions' => $permissions
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+
+        $decoded = json_decode((string)$result, true);
+
+        if (!is_array($decoded) || empty($decoded['success'])) {
+            return 'Fehler beim Erzeugen der Connect URL: ' . (string)$result;
         }
 
-        $instanceId = $this->FindVehicleInstanceByVehicleId($vehicleId);
-
-        if ($instanceId === 0) {
-            $instanceId = IPS_CreateInstance(self::VEHICLE_MODULE_ID);
-
-            $targetParentId = IPS_GetParent($this->InstanceID);
-            $currentParentId = IPS_GetParent($instanceId);
-
-            if ($targetParentId > 0 && $currentParentId !== $targetParentId) {
-                @IPS_SetParent($instanceId, $targetParentId);
-            }
-        }
-
-        $splitterId = $this->GetSplitterInstanceID();
-        if ($splitterId > 0) {
-            @IPS_ConnectInstance($instanceId, $splitterId);
-        }
-
-        IPS_SetName($instanceId, $caption);
-
-        IPS_SetProperty($instanceId, 'VehicleID', $vehicleId);
-        IPS_SetProperty($instanceId, 'ConnectionID', '');
-        IPS_SetProperty($instanceId, 'UserID', '');
-        IPS_SetProperty($instanceId, 'VehicleCaption', $caption);
-        IPS_SetProperty($instanceId, 'Make', 'SMARTCAR');
-        IPS_SetProperty($instanceId, 'Model', 'SIMULATED');
-        IPS_SetProperty($instanceId, 'Year', (int)date('Y'));
-        IPS_SetProperty($instanceId, 'PowertrainType', 'BEV');
-        IPS_SetProperty($instanceId, 'IsSimulated', true);
-
-        IPS_ApplyChanges($instanceId);
-
-        $this->ReloadForm();
-
-        return 'Testfahrzeug-Instanz erstellt/aktualisiert: ' . $instanceId . '. Danach dort „Gewählte Signale bei Smartcar registrieren“ klicken.';
+        return (string)($decoded['url'] ?? '');
     }
 }
