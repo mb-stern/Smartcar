@@ -29,7 +29,7 @@ class SmartcarVehicle extends IPSModuleStrict
         $this->CreateProfile();
 
         if ($this->ReadPropertyString('VehicleID') === '') {
-            $this->SetStatus($this->ReadPropertyBoolean('IsSimulated') ? 102 : 201);
+            $this->SetStatus(201);
             return;
         }
 
@@ -240,11 +240,6 @@ class SmartcarVehicle extends IPSModuleStrict
         $this->SendDebug('Compatibility/Error', 'Kein Splitter/Parent verbunden.', 0);
         return [];
     }
-
-    if ($this->ReadPropertyString('VehicleID') === '' || $this->ReadPropertyString('Make') === '') {
-    $this->SendDebug('Compatibility/Skip', 'Keine Compatibility geladen: VehicleID oder Make fehlt.', 0);
-    return [];
-}
         $cacheAt = $this->ReadAttributeInteger('CompatibilityCacheAt');
         $cacheRaw = $this->ReadAttributeString('CompatibilityCache');
 
@@ -686,29 +681,22 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $permissions = $this->GetSelectedPermissions();
 
-        if (empty($permissions) && $this->ReadPropertyBoolean('IsSimulated')) {
-            $permissions = $this->GetDefaultSimulatedPermissions();
-            $this->SendDebug('Connect/Permissions', 'Default-Simulated-Permissions verwendet.', 0);
-        }
+        $this->SendDebug(
+            'Connect/Result',
+            'Permissions count=' . count($permissions) . ' values=' . json_encode($permissions, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            0
+        );
 
         if (empty($permissions)) {
-            return 'Fehler: Keine aktivierten Signale/Befehle mit Permission ausgewählt.';
+            return 'Fehler: Keine aktivierten Signale/Befehle mit Permission ausgewählt. Bitte Debug prüfen: Connect/SelectedCapabilitiesRaw, Connect/Entry und Connect/Summary.';
         }
 
-        $vehicleId = $this->ReadPropertyString('VehicleID');
-
-        $mode = $this->ReadPropertyBoolean('IsSimulated') || $vehicleId === ''
-            ? 'simulated'
-            : 'live';
-
-        $state = $vehicleId !== ''
-            ? 'vehicle_' . $vehicleId . '_' . bin2hex(random_bytes(8))
-            : 'instance_' . $this->InstanceID . '_' . bin2hex(random_bytes(8));
+        $state = 'vehicle_' . $this->ReadPropertyString('VehicleID') . '_' . bin2hex(random_bytes(8));
 
         $request = [
             'DataID'      => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
             'Command'     => 'BuildConnectURL',
-            'Mode'        => $mode,
+            'Mode'        => $this->ReadPropertyBoolean('IsSimulated') ? 'simulated' : 'live',
             'State'       => $state,
             'Permissions' => $permissions
         ];
@@ -725,22 +713,6 @@ class SmartcarVehicle extends IPSModuleStrict
         }
 
         return (string)($decoded['url'] ?? '');
-    }
-
-    private function GetDefaultSimulatedPermissions(): array
-    {
-        return [
-            'read_vehicle_info',
-            'read_vin',
-            'read_odometer',
-            'read_location',
-            'read_battery',
-            'read_charge',
-            'read_security',
-            'read_tires',
-            'control_charge',
-            'control_security'
-        ];
     }
 
     private function GetSelectedPermissions(): array

@@ -753,48 +753,44 @@ class SmartcarSplitter extends IPSModuleStrict
 
         if ($error !== '') {
             $this->SendDebug('Connect/RedirectError', $error . ' ' . $errorDescription, 0);
+
             http_response_code(200);
-            echo 'Smartcar Connect fehlgeschlagen: ' . htmlspecialchars($error . ' ' . $errorDescription);
+            header('Content-Type: text/html; charset=utf-8');
+            echo '<!doctype html><html><head><meta charset="utf-8"><title>Smartcar Connect</title></head><body>';
+            echo '<h2>Smartcar Connect fehlgeschlagen</h2>';
+            echo '<p>' . htmlspecialchars($error . ' ' . $errorDescription) . '</p>';
+            echo '<p>Dieses Fenster kann geschlossen werden.</p>';
+            echo '</body></html>';
             return;
         }
 
         $code = (string)($_GET['code'] ?? '');
         $userId = (string)($_GET['user_id'] ?? ($_GET['userId'] ?? ''));
         $state = (string)($_GET['state'] ?? '');
-        $redirectVehicleId = (string)($_GET['vehicle_id'] ?? ($_GET['vehicleId'] ?? ''));
 
         $this->SendDebug('Connect/Redirect', json_encode([
-            'code'      => $code !== '' ? '<present>' : '',
-            'user_id'   => $userId,
-            'vehicle_id'=> $redirectVehicleId,
-            'state'     => $state
+            'code'    => $code !== '' ? '<present>' : '',
+            'user_id' => $userId,
+            'state'   => $state
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
-        $stateVehicleId = $this->ExtractVehicleIdFromState($state);
-        $targetInstanceId = $this->ExtractInstanceIdFromState($state);
+        $vehicleId = $this->ExtractVehicleIdFromState($state);
+
+        if ($vehicleId !== '' && $userId !== '') {
+            $this->UpdateVehicleUserId($vehicleId, $userId);
+        }
 
         $connections = $this->LoadConnections();
-
-        if ($targetInstanceId > 0) {
-            $this->UpdateSpecificVehicleInstanceFromConnections(
-                $targetInstanceId,
-                $connections,
-                $userId,
-                $redirectVehicleId
-            );
-        } else {
-            if ($stateVehicleId !== '' && $userId !== '') {
-                $this->UpdateVehicleUserId($stateVehicleId, $userId);
-            }
-
-            $this->UpdateVehiclesFromConnections($connections);
-        }
+        $this->UpdateVehiclesFromConnections($connections);
 
         http_response_code(200);
         header('Content-Type: text/html; charset=utf-8');
-        echo '<!doctype html><html><head><meta charset="utf-8"><title>Smartcar Connect</title></head><body>';
-        echo '<h2>Smartcar erfolgreich verbunden</h2>';
-        echo '<p>Du kannst dieses Fenster jetzt schließen.</p>';
+        echo '<!doctype html><html><head><meta charset="utf-8"><title>Smartcar Connect</title>';
+        echo '<style>body{font-family:Arial,sans-serif;margin:40px;color:#222} .ok{color:#16803c}</style>';
+        echo '</head><body>';
+        echo '<h2 class="ok">Smartcar erfolgreich verbunden</h2>';
+        echo '<p>Die Verbindung zum OEM wurde bestätigt.</p>';
+        echo '<p>Du kannst dieses Fenster jetzt schließen und zu IP-Symcon zurückkehren.</p>';
         echo '</body></html>';
     }
 
@@ -836,6 +832,7 @@ class SmartcarSplitter extends IPSModuleStrict
             IPS_SetProperty($instanceId, 'Model', (string)($connection['model'] ?? ''));
             IPS_SetProperty($instanceId, 'Year', (int)($connection['year'] ?? 0));
             IPS_SetProperty($instanceId, 'PowertrainType', (string)($connection['powertrainType'] ?? ''));
+            IPS_SetProperty($instanceId, 'IsSimulated', strtolower((string)($connection['mode'] ?? '')) === 'simulated');
 
             IPS_ApplyChanges($instanceId);
         }
@@ -895,127 +892,5 @@ class SmartcarSplitter extends IPSModuleStrict
             'resolution'  => $err['resolution'] ?? null,
             'meta'        => $payload['meta'] ?? []
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
-    }
-
-    private function ExtractInstanceIdFromState(string $state): int
-    {
-        if (preg_match('/instance_(\d+)_/', $state, $m)) {
-            return (int)$m[1];
-        }
-
-        return 0;
-    }
-
-    private function UpdateSpecificVehicleInstanceFromConnections(
-        int $instanceId,
-        array $connections,
-        string $userId = '',
-        string $preferredVehicleId = ''
-    ): void {
-        if ($instanceId <= 0 || !@IPS_InstanceExists($instanceId)) {
-            $this->SendDebug('Connect/Simulated', 'Zielinstanz existiert nicht: ' . $instanceId, 0);
-            return;
-        }
-
-        $this->SendDebug('Connect/Simulated/Search', json_encode([
-            'targetInstanceId'    => $instanceId,
-            'userId'              => $userId,
-            'preferredVehicleId'  => $preferredVehicleId,
-            'connectionsCount'    => count($connections)
-        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
-
-        $candidate = null;
-
-        foreach ($connections as $connection) {
-            $vehicleId = (string)($connection['vehicleId'] ?? '');
-            $connectionUserId = (string)($connection['userId'] ?? '');
-            $mode = strtolower((string)($connection['mode'] ?? ''));
-
-            if ($vehicleId === '') {
-                continue;
-            }
-
-            if ($preferredVehicleId !== '' && $vehicleId !== $preferredVehicleId) {
-                continue;
-            }
-
-            if ($userId !== '' && $connectionUserId !== '' && $connectionUserId !== $userId) {
-                continue;
-            }
-
-            if ($this->IsVehicleIdAssignedToOtherInstance($vehicleId, $instanceId)) {
-                continue;
-            }
-
-            $candidate = $connection;
-            break;
-        }
-
-        if ($candidate === null) {
-            foreach ($connections as $connection) {
-                $vehicleId = (string)($connection['vehicleId'] ?? '');
-
-                if ($vehicleId === '') {
-                    continue;
-                }
-
-                if ($this->IsVehicleIdAssignedToOtherInstance($vehicleId, $instanceId)) {
-                    continue;
-                }
-
-                $candidate = $connection;
-                break;
-            }
-        }
-
-        if ($candidate === null) {
-            $this->SendDebug('Connect/Simulated', 'Keine passende Connection gefunden.', 0);
-            return;
-        }
-
-        $vehicleId = (string)($candidate['vehicleId'] ?? '');
-
-        IPS_SetProperty($instanceId, 'VehicleID', $vehicleId);
-        IPS_SetProperty($instanceId, 'ConnectionID', (string)($candidate['connectionId'] ?? ''));
-        IPS_SetProperty($instanceId, 'UserID', (string)($candidate['userId'] ?? $userId));
-        IPS_SetProperty($instanceId, 'VehicleCaption', (string)($candidate['caption'] ?? $vehicleId));
-        IPS_SetProperty($instanceId, 'Make', (string)($candidate['make'] ?? ''));
-        IPS_SetProperty($instanceId, 'Model', (string)($candidate['model'] ?? ''));
-        IPS_SetProperty($instanceId, 'Year', (int)($candidate['year'] ?? 0));
-        IPS_SetProperty($instanceId, 'PowertrainType', (string)($candidate['powertrainType'] ?? ''));
-        IPS_SetProperty($instanceId, 'IsSimulated', strtolower((string)($candidate['mode'] ?? '')) === 'simulated');
-
-        IPS_SetName($instanceId, (string)($candidate['caption'] ?? $vehicleId));
-
-        IPS_ApplyChanges($instanceId);
-
-        $this->SendDebug('Connect/Simulated/Updated', json_encode([
-            'instanceId' => $instanceId,
-            'vehicleId'  => $vehicleId,
-            'caption'    => $candidate['caption'] ?? '',
-            'mode'       => $candidate['mode'] ?? ''
-        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
-    }
-
- private function IsVehicleIdAssignedToOtherInstance(string $vehicleId, int $currentInstanceId): bool
-    {
-        $vehicleModuleId = '{1E1B7C9A-2D4F-4E8A-9C3B-7F6D5A4E2B10}';
-
-        $instanceIds = @IPS_GetInstanceListByModuleID($vehicleModuleId);
-        if (!is_array($instanceIds)) {
-            return false;
-        }
-
-        foreach ($instanceIds as $instanceId) {
-            if ((int)$instanceId === $currentInstanceId) {
-                continue;
-            }
-
-            if ((string)@IPS_GetProperty($instanceId, 'VehicleID') === $vehicleId) {
-                return true;
-            }
-        }
-
-        return false;
     }
 }
