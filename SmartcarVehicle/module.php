@@ -280,7 +280,7 @@ class SmartcarVehicle extends IPSModuleStrict
         $decoded = json_decode((string)$result, true);
 
         if (!is_array($decoded)) {
-            $this->SendDebug('Compatibility/Error', 'Antwort ist kein JSON.', 0);
+           // $this->SendDebug('Compatibility/Error', 'Antwort ist kein JSON.', 0);
             return [];
         }
 
