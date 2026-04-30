@@ -275,7 +275,7 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $result = $this->SendDataToParent(json_encode($request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
 
-        //$this->SendDebug('Compatibility/RAW', (string)$result, 0);  Macht Probleme beim Verbiden mit Simuliertem Fahrzeug
+        $this->SendDebug('Compatibility/RAW', (string)$result, 0);
 
         $decoded = json_decode((string)$result, true);
 
