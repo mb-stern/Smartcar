@@ -762,6 +762,21 @@ class SmartcarVehicle extends IPSModuleStrict
         return array_keys($permissions);
     }
 
+    private function SendDataToParentSafe(array $request, string $debugContext): ?string
+    {
+        if (!$this->HasParentConnection()) {
+            $this->SendDebug($debugContext . '/Error', 'Kein gültiger Splitter verbunden.', 0);
+            return null;
+        }
+
+        try {
+            return $this->SendDataToParent(json_encode($request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        } catch (Throwable $e) {
+            $this->SendDebug($debugContext . '/Exception', $e->getMessage(), 0);
+            return null;
+        }
+    }
+
     private function CreateSignalVariable(string $signalCode, string $name): bool
     {
         $definition = $this->GetSignalDefinition($signalCode, []);
@@ -1146,7 +1161,17 @@ class SmartcarVehicle extends IPSModuleStrict
             return false;
         }
 
-        return ((int)($instance['ConnectionID'] ?? 0)) > 0;
+        $connectionId = (int)($instance['ConnectionID'] ?? 0);
+        if ($connectionId <= 0 || !@IPS_InstanceExists($connectionId)) {
+            return false;
+        }
+
+        $parent = @IPS_GetInstance($connectionId);
+        if (!is_array($parent)) {
+            return false;
+        }
+
+        return (string)($parent['ModuleInfo']['ModuleID'] ?? '') === self::SPLITTER_MODULE_ID;
     }
 
     private function FormatSmartcarTimestamp($value): ?string
@@ -1251,7 +1276,11 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $this->SendDebug('Command/Request/' . $command, json_encode($request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
-        $result = $this->SendDataToParent(json_encode($request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        $result = $this->SendDataToParentSafe($request, 'Compatibility');
+
+        if ($result === null) {
+            return [];
+        }
 
         $this->SendDebug('Command/Response/' . $command, (string)$result, 0);
 
