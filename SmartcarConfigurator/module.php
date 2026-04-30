@@ -212,7 +212,7 @@ class SmartcarConfigurator extends IPSModuleStrict
         IPS_SetProperty($instanceId, 'Model', (string)($connection['model'] ?? ''));
         IPS_SetProperty($instanceId, 'Year', (int)($connection['year'] ?? 0));
         IPS_SetProperty($instanceId, 'PowertrainType', (string)($connection['powertrainType'] ?? ''));
-        IPS_SetProperty($instanceId, 'IsSimulated', strtolower((string)($connection['mode'] ?? '')) === 'simulated');S
+        IPS_SetProperty($instanceId, 'IsSimulated', strtolower((string)($connection['mode'] ?? '')) === 'simulated');
 
         IPS_ApplyChanges($instanceId);
     }
