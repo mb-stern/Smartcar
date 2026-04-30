@@ -706,7 +706,11 @@ class SmartcarVehicle extends IPSModuleStrict
             return 'Fehler: Keine aktivierten Signale/Befehle mit Permission ausgewählt.';
         }
 
-        $state = 'vehicle_' . $this->ReadPropertyString('VehicleID') . '_' . bin2hex(random_bytes(8));
+        $vehicleId = $this->ReadPropertyString('VehicleID');
+
+        $state = $this->ReadPropertyBoolean('IsSimulated')
+            ? 'simvehicle_' . $vehicleId . '_' . bin2hex(random_bytes(8))
+            : 'vehicle_' . $vehicleId . '_' . bin2hex(random_bytes(8));
 
         $request = [
             'DataID'      => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',

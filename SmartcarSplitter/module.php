@@ -948,7 +948,7 @@ class SmartcarSplitter extends IPSModuleStrict
         IPS_SetName($instanceId, $caption);
 
         IPS_SetProperty($instanceId, 'VehicleID', $vehicleId);
-        IPS_SetProperty($instanceId, 'ConnectionID', '');
+        IPS_SetProperty($instanceId, 'ConnectionID', 'simulated');
         IPS_SetProperty($instanceId, 'UserID', $userId);
         IPS_SetProperty($instanceId, 'VehicleCaption', $caption);
         IPS_SetProperty($instanceId, 'Make', $make);
