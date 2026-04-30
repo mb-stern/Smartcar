@@ -95,6 +95,7 @@ class SmartcarVehicle extends IPSModuleStrict
         $capabilities = [];
 
         if (
+            !$this->ReadPropertyBoolean('IsSimulated') &&
             $this->HasParentConnection() &&
             $this->ReadPropertyString('VehicleID') !== '' &&
             $this->ReadPropertyString('Make') !== ''
