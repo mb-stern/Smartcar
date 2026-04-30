@@ -37,6 +37,48 @@ class SmartcarVehicle extends IPSModuleStrict
         $this->ApplySelectedCapabilities();
     }
 
+    public function RequestAction($Ident, $Value): void
+    {
+        switch ($Ident) {
+            case 'CommandChargeStart':
+                if ((bool)$Value) {
+                    $this->ExecuteVehicleCommand('charge-start');
+                    $this->SetValue($Ident, false);
+                }
+                return;
+
+            case 'CommandChargeStop':
+                if ((bool)$Value) {
+                    $this->ExecuteVehicleCommand('charge-stop');
+                    $this->SetValue($Ident, false);
+                }
+                return;
+
+            case 'CommandSecurityLock':
+                if ((bool)$Value) {
+                    $this->ExecuteVehicleCommand('security-lock');
+                    $this->SetValue($Ident, false);
+                }
+                return;
+
+            case 'CommandSecurityUnlock':
+                if ((bool)$Value) {
+                    $this->ExecuteVehicleCommand('security-unlock');
+                    $this->SetValue($Ident, false);
+                }
+                return;
+
+            case 'CommandChargeLimit':
+                $this->ExecuteVehicleCommand('charge-set-limit', [
+                    'percent' => max(0, min(100, (int)$Value))
+                ]);
+                $this->SetValue($Ident, max(0, min(100, (int)$Value)));
+                return;
+        }
+
+        throw new Exception('Invalid Ident');
+    }
+
     public function GetCompatibleParents(): string
     {
         return json_encode([
@@ -789,16 +831,57 @@ class SmartcarVehicle extends IPSModuleStrict
         $managedIdents = [];
         $newSignalCodes = [];
 
-        // Alle möglichen Signal-Variablen aus der Compatibility-Liste sammeln
+        // Alle möglichen Signal- und Command-Variablen aus der Compatibility-Liste sammeln
         $cache = json_decode($this->ReadAttributeString('CompatibilityCache'), true);
         if (is_array($cache)) {
             $allCapabilities = $this->BuildCapabilitiesListFromCompatibilityItems($cache);
 
             foreach ($allCapabilities as $entry) {
-                if (strtolower((string)($entry['type'] ?? '')) !== 'signal') {
+                $type = strtolower((string)($entry['type'] ?? ''));
+
+                if ($type === 'signal') {
+                    $signalCode = (string)($entry['capability'] ?? '');
+                    if ($signalCode === '') {
+                        $signalCode = (string)($entry['code'] ?? '');
+                    }
+
+                    if ($signalCode === '') {
+                        continue;
+                    }
+
+                    $definition = $this->GetSignalDefinition($signalCode, []);
+
+                    foreach ($this->GetVariablesFromDefinition($definition, []) as $variable) {
+                        $ident = (string)($variable['ident'] ?? '');
+                        if ($ident !== '') {
+                            $managedIdents[$ident] = true;
+                        }
+                    }
+
                     continue;
                 }
 
+                if ($type === 'command') {
+                    $commandKey = $this->GetCommandKeyFromCapability($entry);
+                    $definition = $this->GetCommandDefinition($commandKey);
+
+                    if (!empty($definition)) {
+                        $ident = (string)($definition['ident'] ?? '');
+                        if ($ident !== '') {
+                            $managedIdents[$ident] = true;
+                        }
+                    }
+
+                    continue;
+                }
+            }
+        }
+
+        // Ausgewählte Signale und Commands erstellen und als gewünscht markieren
+        foreach ($selected as $entry) {
+            $type = strtolower((string)($entry['type'] ?? ''));
+
+            if ($type === 'signal') {
                 $signalCode = (string)($entry['capability'] ?? '');
                 if ($signalCode === '') {
                     $signalCode = (string)($entry['code'] ?? '');
@@ -813,42 +896,54 @@ class SmartcarVehicle extends IPSModuleStrict
                 foreach ($this->GetVariablesFromDefinition($definition, []) as $variable) {
                     $ident = (string)($variable['ident'] ?? '');
                     if ($ident !== '') {
+                        $wantedIdents[$ident] = true;
                         $managedIdents[$ident] = true;
                     }
                 }
-            }
-        }
 
-        // Ausgewählte Variablen erstellen und als gewünscht markieren
-        foreach ($selected as $entry) {
-            if (strtolower((string)($entry['type'] ?? '')) !== 'signal') {
-                continue;
-            }
+                $name = (string)($entry['name'] ?? $signalCode);
+                $created = $this->CreateSignalVariable($signalCode, $name);
 
-            $signalCode = (string)($entry['capability'] ?? '');
-            if ($signalCode === '') {
-                $signalCode = (string)($entry['code'] ?? '');
-            }
-
-            if ($signalCode === '') {
-                continue;
-            }
-
-            $definition = $this->GetSignalDefinition($signalCode, []);
-
-            foreach ($this->GetVariablesFromDefinition($definition, []) as $variable) {
-                $ident = (string)($variable['ident'] ?? '');
-                if ($ident !== '') {
-                    $wantedIdents[$ident] = true;
-                    $managedIdents[$ident] = true;
+                if ($created) {
+                    $newSignalCodes[$signalCode] = true;
                 }
+
+                continue;
             }
 
-            $name = (string)($entry['name'] ?? $signalCode);
-            $created = $this->CreateSignalVariable($signalCode, $name);
+            if ($type === 'command') {
+                $commandKey = $this->GetCommandKeyFromCapability($entry);
+                $definition = $this->GetCommandDefinition($commandKey);
 
-            if ($created) {
-                $newSignalCodes[$signalCode] = true;
+                if (empty($definition)) {
+                    $this->SendDebug(
+                        'Commands/Unknown',
+                        json_encode($entry, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                        0
+                    );
+                    continue;
+                }
+
+                $ident = (string)($definition['ident'] ?? '');
+                if ($ident === '') {
+                    continue;
+                }
+
+                $wantedIdents[$ident] = true;
+                $managedIdents[$ident] = true;
+
+                $this->RegisterOrUpdateTypedVariable(
+                    $ident,
+                    (string)($definition['name'] ?? $ident),
+                    $this->GetDefaultValueForType((int)($definition['type'] ?? VARIABLETYPE_STRING)),
+                    (int)($definition['type'] ?? VARIABLETYPE_STRING),
+                    (string)($definition['profile'] ?? ''),
+                    true
+                );
+
+                $this->EnableAction($ident);
+
+                continue;
             }
         }
 
@@ -1074,6 +1169,125 @@ class SmartcarVehicle extends IPSModuleStrict
             'profile' => $profile,
             'factor'  => 1
         ];
+    }
+
+    private function ExecuteVehicleCommand(string $command, array $params = []): bool
+    {
+        if (!$this->HasParentConnection()) {
+            $this->SendDebug('Command/Error', 'Kein Splitter/Parent verbunden.', 0);
+            return false;
+        }
+
+        $vehicleId = $this->ReadPropertyString('VehicleID');
+        $userId    = $this->ReadPropertyString('UserID');
+
+        if ($vehicleId === '' || $userId === '') {
+            $this->SendDebug('Command/Error', 'VehicleID oder UserID fehlt.', 0);
+            return false;
+        }
+
+        $definition = $this->GetCommandDefinition($command);
+        if (empty($definition)) {
+            $this->SendDebug('Command/Error', 'Unbekannter Command: ' . $command, 0);
+            return false;
+        }
+
+        $body = null;
+
+        if ($command === 'charge-set-limit') {
+            $body = [
+                'data' => [
+                    'attributes' => [
+                        'percent' => (int)($params['percent'] ?? 80)
+                    ]
+                ]
+            ];
+        }
+
+        $request = [
+            'DataID'    => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
+            'Command'   => 'Command',
+            'VehicleID' => $vehicleId,
+            'UserID'    => $userId,
+            'Method'    => 'POST',
+            'Path'      => $definition['path']
+        ];
+
+        if ($body !== null) {
+            $request['Body'] = $body;
+        }
+
+        $this->SendDebug('Command/Request/' . $command, json_encode($request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+
+        $result = $this->SendDataToParent(json_encode($request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+
+        $this->SendDebug('Command/Response/' . $command, (string)$result, 0);
+
+        $decoded = json_decode((string)$result, true);
+        if (!is_array($decoded) || empty($decoded['success'])) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private function GetCommandDefinition(string $command): array
+    {
+        return match (strtolower($command)) {
+            'charge-start' => [
+                'ident' => 'CommandChargeStart',
+                'name'  => 'Laden starten',
+                'type'  => VARIABLETYPE_BOOLEAN,
+                'profile' => '~Switch',
+                'path'  => '/commands/charge/start'
+            ],
+            'charge-stop' => [
+                'ident' => 'CommandChargeStop',
+                'name'  => 'Laden stoppen',
+                'type'  => VARIABLETYPE_BOOLEAN,
+                'profile' => '~Switch',
+                'path'  => '/commands/charge/stop'
+            ],
+            'charge-set-limit' => [
+                'ident' => 'CommandChargeLimit',
+                'name'  => 'Ladelimit setzen',
+                'type'  => VARIABLETYPE_INTEGER,
+                'profile' => 'SMCAR.Progress',
+                'path'  => '/commands/charge/set-limit'
+            ],
+            'security-lock' => [
+                'ident' => 'CommandSecurityLock',
+                'name'  => 'Fahrzeug verriegeln',
+                'type'  => VARIABLETYPE_BOOLEAN,
+                'profile' => '~Switch',
+                'path'  => '/commands/security/lock'
+            ],
+            'security-unlock' => [
+                'ident' => 'CommandSecurityUnlock',
+                'name'  => 'Fahrzeug entriegeln',
+                'type'  => VARIABLETYPE_BOOLEAN,
+                'profile' => '~Switch',
+                'path'  => '/commands/security/unlock'
+            ],
+            default => []
+        };
+    }
+
+    private function GetCommandKeyFromCapability(array $entry): string
+    {
+        $capability = strtolower((string)($entry['capability'] ?? ''));
+        $code       = strtolower((string)($entry['code'] ?? ''));
+
+        $key = $capability !== '' ? $capability : $code;
+
+        return match ($key) {
+            'charge-start', 'charge-startcharging', 'start-charge', 'start-charging' => 'charge-start',
+            'charge-stop', 'charge-stopcharging', 'stop-charge', 'stop-charging' => 'charge-stop',
+            'charge-set-limit', 'charge-chargelimit', 'set-charge-limit' => 'charge-set-limit',
+            'security-lock', 'closure-lock', 'lock', 'lock-doors' => 'security-lock',
+            'security-unlock', 'closure-unlock', 'unlock', 'unlock-doors' => 'security-unlock',
+            default => $key
+        };
     }
 
     private function CreateProfile(): void
