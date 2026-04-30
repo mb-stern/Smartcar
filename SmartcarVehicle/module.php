@@ -696,8 +696,12 @@ class SmartcarVehicle extends IPSModuleStrict
             0
         );
 
+        if (empty($permissions) && $this->ReadPropertyBoolean('IsSimulated')) {
+            $permissions = $this->GetDefaultSimulatedPermissions();
+        }
+
         if (empty($permissions)) {
-            return 'Fehler: Keine aktivierten Signale/Befehle mit Permission ausgewählt. Bitte Debug prüfen: Connect/SelectedCapabilitiesRaw, Connect/Entry und Connect/Summary.';
+            return 'Fehler: Keine aktivierten Signale/Befehle mit Permission ausgewählt.';
         }
 
         $state = 'vehicle_' . $this->ReadPropertyString('VehicleID') . '_' . bin2hex(random_bytes(8));
@@ -722,6 +726,24 @@ class SmartcarVehicle extends IPSModuleStrict
         }
 
         return (string)($decoded['url'] ?? '');
+    }
+
+    private function GetDefaultSimulatedPermissions(): array
+    {
+        return [
+            'read_vehicle_info',
+            'read_vin',
+            'read_odometer',
+            'read_location',
+            'read_battery',
+            'read_charge',
+            'read_security',
+            'read_tires',
+            'read_engine_oil',
+            'read_fuel',
+            'control_charge',
+            'control_security'
+        ];
     }
 
     private function GetSelectedPermissions(): array
