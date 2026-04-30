@@ -58,6 +58,14 @@ class SmartcarConfigurator extends IPSModuleStrict
         }
 
         $form = [
+
+            'elements' => [
+                [
+                    'type' => 'ValidationTextBox',
+                    'name' => 'SimulatedVehicleID',
+                    'caption' => 'Testfahrzeug VehicleID'
+                ]
+            ],
             'actions' => [
                 [
                     'type' => 'Button',
