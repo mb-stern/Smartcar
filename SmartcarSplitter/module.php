@@ -775,13 +775,19 @@ class SmartcarSplitter extends IPSModuleStrict
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
         $vehicleId = $this->ExtractVehicleIdFromState($state);
-
-        if ($vehicleId !== '' && $userId !== '') {
-            $this->UpdateVehicleUserId($vehicleId, $userId);
-        }
+        $targetInstanceId = $this->ExtractInstanceIdFromState($state);
 
         $connections = $this->LoadConnections();
-        $this->UpdateVehiclesFromConnections($connections);
+
+        if ($targetInstanceId > 0) {
+            $this->UpdateSpecificVehicleInstanceFromConnections($targetInstanceId, $connections, $userId);
+        } else {
+            if ($vehicleId !== '' && $userId !== '') {
+                $this->UpdateVehicleUserId($vehicleId, $userId);
+            }
+
+            $this->UpdateVehiclesFromConnections($connections);
+        }
 
         http_response_code(200);
         header('Content-Type: text/html; charset=utf-8');
@@ -891,5 +897,82 @@ class SmartcarSplitter extends IPSModuleStrict
             'resolution'  => $err['resolution'] ?? null,
             'meta'        => $payload['meta'] ?? []
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+    }
+
+    private function ExtractInstanceIdFromState(string $state): int
+    {
+        if (preg_match('/instance_(\d+)_/', $state, $m)) {
+            return (int)$m[1];
+        }
+
+        return 0;
+    }
+
+    private function UpdateSpecificVehicleInstanceFromConnections(int $instanceId, array $connections, string $userId): void
+    {
+        if ($instanceId <= 0 || !@IPS_InstanceExists($instanceId)) {
+            $this->SendDebug('Connect/Simulated', 'Zielinstanz existiert nicht: ' . $instanceId, 0);
+            return;
+        }
+
+        foreach ($connections as $connection) {
+            $connectionUserId = (string)($connection['userId'] ?? '');
+
+            if ($userId !== '' && $connectionUserId !== '' && $connectionUserId !== $userId) {
+                continue;
+            }
+
+            $vehicleId = (string)($connection['vehicleId'] ?? '');
+            if ($vehicleId === '') {
+                continue;
+            }
+
+            if ($this->IsVehicleIdAssignedToOtherInstance($vehicleId, $instanceId)) {
+                continue;
+            }
+
+            IPS_SetProperty($instanceId, 'VehicleID', $vehicleId);
+            IPS_SetProperty($instanceId, 'ConnectionID', (string)($connection['connectionId'] ?? ''));
+            IPS_SetProperty($instanceId, 'UserID', $connectionUserId);
+            IPS_SetProperty($instanceId, 'VehicleCaption', (string)($connection['caption'] ?? $vehicleId));
+            IPS_SetProperty($instanceId, 'Make', (string)($connection['make'] ?? ''));
+            IPS_SetProperty($instanceId, 'Model', (string)($connection['model'] ?? ''));
+            IPS_SetProperty($instanceId, 'Year', (int)($connection['year'] ?? 0));
+            IPS_SetProperty($instanceId, 'PowertrainType', (string)($connection['powertrainType'] ?? ''));
+            IPS_SetProperty($instanceId, 'IsSimulated', strtolower((string)($connection['mode'] ?? '')) === 'simulated');
+
+            IPS_SetName($instanceId, (string)($connection['caption'] ?? $vehicleId));
+
+            IPS_SetProperty($instanceId, 'IsSimulated', strtolower((string)($connection['mode'] ?? '')) === 'simulated');
+
+            IPS_ApplyChanges($instanceId);
+
+            $this->SendDebug('Connect/Simulated', 'Instanz aktualisiert: ' . $instanceId . ' VehicleID=' . $vehicleId, 0);
+            return;
+        }
+
+        $this->SendDebug('Connect/Simulated', 'Keine passende neue Connection für Instanz ' . $instanceId . ' gefunden.', 0);
+    }
+
+    private function IsVehicleIdAssignedToOtherInstance(string $vehicleId, int $currentInstanceId): bool
+    {
+        $vehicleModuleId = '{1E1B7C9A-2D4F-4E8A-9C3B-7F6D5A4E2B10}';
+
+        $instanceIds = @IPS_GetInstanceListByModuleID($vehicleModuleId);
+        if (!is_array($instanceIds)) {
+            return false;
+        }
+
+        foreach ($instanceIds as $instanceId) {
+            if ((int)$instanceId === $currentInstanceId) {
+                continue;
+            }
+
+            if ((string)@IPS_GetProperty($instanceId, 'VehicleID') === $vehicleId) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
