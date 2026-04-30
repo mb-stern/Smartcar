@@ -94,7 +94,11 @@ class SmartcarVehicle extends IPSModuleStrict
     {
         $capabilities = [];
 
-        if ($this->HasParentConnection()) {
+        if (
+            $this->HasParentConnection() &&
+            $this->ReadPropertyString('VehicleID') !== '' &&
+            $this->ReadPropertyString('Make') !== ''
+        ) {
             $capabilities = $this->GetCompatibilityCapabilitiesForForm();
         }
 
@@ -238,6 +242,11 @@ class SmartcarVehicle extends IPSModuleStrict
 
     if (!$this->HasParentConnection()) {
         $this->SendDebug('Compatibility/Error', 'Kein Splitter/Parent verbunden.', 0);
+        return [];
+    }
+
+    if ($this->ReadPropertyString('VehicleID') === '' || $this->ReadPropertyString('Make') === '') {
+        $this->SendDebug('Compatibility/Skip', 'VehicleID oder Make fehlt. Compatibility wird nicht geladen.', 0);
         return [];
     }
         $cacheAt = $this->ReadAttributeInteger('CompatibilityCacheAt');
