@@ -19,7 +19,6 @@ class SmartcarVehicle extends IPSModuleStrict
     $this->RegisterPropertyString('SelectedCapabilities', '[]');
     $this->RegisterAttributeString('CompatibilityCache', '[]');
     $this->RegisterAttributeInteger('CompatibilityCacheAt', 0);
-    $this->RegisterPropertyBoolean('IsSimulated', false);
 }
 
     public function ApplyChanges(): void
@@ -94,13 +93,7 @@ class SmartcarVehicle extends IPSModuleStrict
     {
         $capabilities = [];
 
-        if ($this->ReadPropertyBoolean('IsSimulated')) {
-            $capabilities = $this->GetSimulatedCapabilitiesForForm();
-        } elseif (
-            $this->HasParentConnection() &&
-            $this->ReadPropertyString('VehicleID') !== '' &&
-            $this->ReadPropertyString('Make') !== ''
-        ) {
+        if ($this->HasParentConnection()) {
             $capabilities = $this->GetCompatibilityCapabilitiesForForm();
         }
 
@@ -244,11 +237,6 @@ class SmartcarVehicle extends IPSModuleStrict
 
     if (!$this->HasParentConnection()) {
         $this->SendDebug('Compatibility/Error', 'Kein Splitter/Parent verbunden.', 0);
-        return [];
-    }
-
-    if ($this->ReadPropertyString('VehicleID') === '' || $this->ReadPropertyString('Make') === '') {
-        $this->SendDebug('Compatibility/Skip', 'VehicleID oder Make fehlt. Compatibility wird nicht geladen.', 0);
         return [];
     }
         $cacheAt = $this->ReadAttributeInteger('CompatibilityCacheAt');
@@ -698,24 +686,16 @@ class SmartcarVehicle extends IPSModuleStrict
             0
         );
 
-        if (empty($permissions) && $this->ReadPropertyBoolean('IsSimulated')) {
-            $permissions = $this->GetDefaultSimulatedPermissions();
-        }
-
         if (empty($permissions)) {
-            return 'Fehler: Keine aktivierten Signale/Befehle mit Permission ausgewählt.';
+            return 'Fehler: Keine aktivierten Signale/Befehle mit Permission ausgewählt. Bitte Debug prüfen: Connect/SelectedCapabilitiesRaw, Connect/Entry und Connect/Summary.';
         }
 
-        $vehicleId = $this->ReadPropertyString('VehicleID');
-
-        $state = $this->ReadPropertyBoolean('IsSimulated')
-            ? 'simvehicle_' . $vehicleId . '_' . bin2hex(random_bytes(8))
-            : 'vehicle_' . $vehicleId . '_' . bin2hex(random_bytes(8));
+        $state = 'vehicle_' . $this->ReadPropertyString('VehicleID') . '_' . bin2hex(random_bytes(8));
 
         $request = [
             'DataID'      => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
             'Command'     => 'BuildConnectURL',
-            'Mode'        => $this->ReadPropertyBoolean('IsSimulated') ? 'simulated' : 'live',
+            'Mode'        => 'live',
             'State'       => $state,
             'Permissions' => $permissions
         ];
@@ -734,189 +714,6 @@ class SmartcarVehicle extends IPSModuleStrict
         return (string)($decoded['url'] ?? '');
     }
 
-    private function GetSimulatedCapabilitiesForForm(): array
-    {
-        $values = $this->GetSimulatedCapabilitiesBaseList();
-
-        $selected = json_decode($this->ReadPropertyString('SelectedCapabilities'), true);
-        if (!is_array($selected)) {
-            $selected = [];
-        }
-
-        $selectedBySortKey = [];
-
-        foreach ($selected as $entry) {
-            if (!is_array($entry)) {
-                continue;
-            }
-
-            $sortKey = (string)($entry['sortKey'] ?? '');
-            if ($sortKey === '') {
-                continue;
-            }
-
-            $selectedBySortKey[$sortKey] =
-                ($entry['selected'] ?? false) === true ||
-                ($entry['selected'] ?? false) === 1 ||
-                ($entry['selected'] ?? false) === '1' ||
-                strtolower((string)($entry['selected'] ?? '')) === 'true';
-        }
-
-        foreach ($values as &$entry) {
-            $sortKey = (string)($entry['sortKey'] ?? '');
-            if ($sortKey !== '' && isset($selectedBySortKey[$sortKey])) {
-                $entry['selected'] = $selectedBySortKey[$sortKey];
-            }
-        }
-        unset($entry);
-
-        return $values;
-    }
-
-    private function GetSimulatedCapabilitiesBaseList(): array
-    {
-        return [
-            [
-                'sortKey' => '0|BATTERY|Batterieladestand|TRACTIONBATTERY-STATEOFCHARGE',
-                'selected' => false,
-                'type' => 'signal',
-                'group' => 'Battery',
-                'name' => 'Batterieladestand',
-                'capability' => 'tractionbattery-stateofcharge',
-                'code' => 'tractionbattery-stateofcharge',
-                'permission' => 'read_battery'
-            ],
-            [
-                'sortKey' => '0|BATTERY|Reichweite Batterie|TRACTIONBATTERY-RANGE',
-                'selected' => false,
-                'type' => 'signal',
-                'group' => 'Battery',
-                'name' => 'Reichweite Batterie',
-                'capability' => 'tractionbattery-range',
-                'code' => 'tractionbattery-range',
-                'permission' => 'read_battery'
-            ],
-            [
-                'sortKey' => '0|CHARGE|Ladestatus|CHARGE-DETAILEDCHARGINGSTATUS',
-                'selected' => false,
-                'type' => 'signal',
-                'group' => 'Charge',
-                'name' => 'Ladestatus',
-                'capability' => 'charge-detailedchargingstatus',
-                'code' => 'charge-detailedchargingstatus',
-                'permission' => 'read_charge'
-            ],
-            [
-                'sortKey' => '0|CHARGE|Lädt|CHARGE-ISCHARGING',
-                'selected' => false,
-                'type' => 'signal',
-                'group' => 'Charge',
-                'name' => 'Lädt',
-                'capability' => 'charge-ischarging',
-                'code' => 'charge-ischarging',
-                'permission' => 'read_charge'
-            ],
-            [
-                'sortKey' => '0|LOCATION|Standort|LOCATION-PRECISELOCATION',
-                'selected' => false,
-                'type' => 'signal',
-                'group' => 'Location',
-                'name' => 'Standort',
-                'capability' => 'location-preciselocation',
-                'code' => 'location-preciselocation',
-                'permission' => 'read_location'
-            ],
-            [
-                'sortKey' => '0|ODOMETER|Kilometerstand|ODOMETER-TRAVELEDDISTANCE',
-                'selected' => false,
-                'type' => 'signal',
-                'group' => 'Odometer',
-                'name' => 'Kilometerstand',
-                'capability' => 'odometer-traveleddistance',
-                'code' => 'odometer-traveleddistance',
-                'permission' => 'read_odometer'
-            ],
-            [
-                'sortKey' => '0|SECURITY|Verriegelt|CLOSURE-ISLOCKED',
-                'selected' => false,
-                'type' => 'signal',
-                'group' => 'Security',
-                'name' => 'Verriegelt',
-                'capability' => 'closure-islocked',
-                'code' => 'closure-islocked',
-                'permission' => 'read_security'
-            ],
-            [
-                'sortKey' => '1|CHARGE|Laden starten|CHARGE-START',
-                'selected' => false,
-                'type' => 'command',
-                'group' => 'Charge',
-                'name' => 'Laden starten',
-                'capability' => 'charge-start',
-                'code' => 'charge-start',
-                'permission' => 'control_charge'
-            ],
-            [
-                'sortKey' => '1|CHARGE|Laden stoppen|CHARGE-STOP',
-                'selected' => false,
-                'type' => 'command',
-                'group' => 'Charge',
-                'name' => 'Laden stoppen',
-                'capability' => 'charge-stop',
-                'code' => 'charge-stop',
-                'permission' => 'control_charge'
-            ],
-            [
-                'sortKey' => '1|CHARGE|Ladelimit setzen|CHARGE-SET-LIMIT',
-                'selected' => false,
-                'type' => 'command',
-                'group' => 'Charge',
-                'name' => 'Ladelimit setzen',
-                'capability' => 'charge-set-limit',
-                'code' => 'charge-set-limit',
-                'permission' => 'control_charge'
-            ],
-            [
-                'sortKey' => '1|SECURITY|Verriegeln|SECURITY-LOCK',
-                'selected' => false,
-                'type' => 'command',
-                'group' => 'Security',
-                'name' => 'Verriegeln',
-                'capability' => 'security-lock',
-                'code' => 'security-lock',
-                'permission' => 'control_security'
-            ],
-            [
-                'sortKey' => '1|SECURITY|Entriegeln|SECURITY-UNLOCK',
-                'selected' => false,
-                'type' => 'command',
-                'group' => 'Security',
-                'name' => 'Entriegeln',
-                'capability' => 'security-unlock',
-                'code' => 'security-unlock',
-                'permission' => 'control_security'
-            ]
-        ];
-    }
-
-    private function GetDefaultSimulatedPermissions(): array
-    {
-        return [
-            'read_vehicle_info',
-            'read_vin',
-            'read_odometer',
-            'read_location',
-            'read_battery',
-            'read_charge',
-            'read_security',
-            'read_tires',
-            'read_engine_oil',
-            'read_fuel',
-            'control_charge',
-            'control_security'
-        ];
-    }
-
     private function GetSelectedPermissions(): array
     {
         $entries = $this->GetSelectedCapabilitiesResolved();
@@ -931,21 +728,6 @@ class SmartcarVehicle extends IPSModuleStrict
         }
 
         return array_keys($permissions);
-    }
-
-    private function SendDataToParentSafe(array $request, string $debugContext): ?string
-    {
-        if (!$this->HasParentConnection()) {
-            $this->SendDebug($debugContext . '/Error', 'Kein gültiger Splitter verbunden.', 0);
-            return null;
-        }
-
-        try {
-            return $this->SendDataToParent(json_encode($request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
-        } catch (Throwable $e) {
-            $this->SendDebug($debugContext . '/Exception', $e->getMessage(), 0);
-            return null;
-        }
     }
 
     private function CreateSignalVariable(string $signalCode, string $name): bool
@@ -1265,23 +1047,19 @@ class SmartcarVehicle extends IPSModuleStrict
             return [];
         }
 
-        if ($this->ReadPropertyBoolean('IsSimulated')) {
-            $fullList = $this->GetSimulatedCapabilitiesBaseList();
-        } else {
-            $cache = json_decode($this->ReadAttributeString('CompatibilityCache'), true);
+        $cache = json_decode($this->ReadAttributeString('CompatibilityCache'), true);
 
-            if (!is_array($cache) || empty($cache)) {
-                $this->SendDebug('Selected/Resolve', 'Cache leer, lade Compatibility neu.', 0);
-                $cache = $this->LoadCompatibility(false);
-            }
-
-            if (!is_array($cache) || empty($cache)) {
-                $this->SendDebug('Selected/Resolve', 'Keine Compatibility-Daten vorhanden.', 0);
-                return [];
-            }
-
-            $fullList = $this->BuildCapabilitiesListFromCompatibilityItems($cache);
+        if (!is_array($cache) || empty($cache)) {
+            $this->SendDebug('Selected/Resolve', 'Cache leer, lade Compatibility neu.', 0);
+            $cache = $this->LoadCompatibility(false);
         }
+
+        if (!is_array($cache) || empty($cache)) {
+            $this->SendDebug('Selected/Resolve', 'Keine Compatibility-Daten vorhanden.', 0);
+            return [];
+        }
+
+        $fullList = $this->BuildCapabilitiesListFromCompatibilityItems($cache);
 
         $fullBySortKey = [];
         foreach ($fullList as $entry) {
@@ -1336,17 +1114,7 @@ class SmartcarVehicle extends IPSModuleStrict
             return false;
         }
 
-        $connectionId = (int)($instance['ConnectionID'] ?? 0);
-        if ($connectionId <= 0 || !@IPS_InstanceExists($connectionId)) {
-            return false;
-        }
-
-        $parent = @IPS_GetInstance($connectionId);
-        if (!is_array($parent)) {
-            return false;
-        }
-
-        return (string)($parent['ModuleInfo']['ModuleID'] ?? '') === self::SPLITTER_MODULE_ID;
+        return ((int)($instance['ConnectionID'] ?? 0)) > 0;
     }
 
     private function FormatSmartcarTimestamp($value): ?string
@@ -1451,11 +1219,7 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $this->SendDebug('Command/Request/' . $command, json_encode($request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
-        $result = $this->SendDataToParentSafe($request, 'Compatibility');
-
-        if ($result === null) {
-            return [];
-        }
+        $result = $this->SendDataToParent(json_encode($request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
 
         $this->SendDebug('Command/Response/' . $command, (string)$result, 0);
 

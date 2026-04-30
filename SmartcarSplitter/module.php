@@ -767,20 +767,6 @@ class SmartcarSplitter extends IPSModuleStrict
         $code = (string)($_GET['code'] ?? '');
         $userId = (string)($_GET['user_id'] ?? ($_GET['userId'] ?? ''));
         $state = (string)($_GET['state'] ?? '');
-        $simulatedVehicleId = $this->ExtractSimulatedVehicleIdFromState($state);
-
-        if ($simulatedVehicleId !== '' && $userId !== '') {
-            $connections = $this->LoadConnections();
-            $this->CreateOrUpdateSimulatedVehicleInstanceFromConnections($simulatedVehicleId, $userId, $connections);
-
-            http_response_code(200);
-            header('Content-Type: text/html; charset=utf-8');
-            echo '<!doctype html><html><body>';
-            echo '<h2>Smartcar Testfahrzeug verarbeitet</h2>';
-            echo '<p>Bitte Debug prüfen: Connect/SimulatedVehicle.</p>';
-            echo '</body></html>';
-            return;
-        }
 
         $this->SendDebug('Connect/Redirect', json_encode([
             'code'    => $code !== '' ? '<present>' : '',
@@ -796,19 +782,6 @@ class SmartcarSplitter extends IPSModuleStrict
 
         $connections = $this->LoadConnections();
         $this->UpdateVehiclesFromConnections($connections);
-
-        if ($simulatedVehicleId !== '' && $userId !== '') {
-            $this->CreateOrUpdateSimulatedVehicleInstance($simulatedVehicleId, $userId);
-
-            http_response_code(200);
-            header('Content-Type: text/html; charset=utf-8');
-            echo '<!doctype html><html><head><meta charset="utf-8"><title>Smartcar Connect</title></head><body>';
-            echo '<h2>Smartcar Testfahrzeug verbunden</h2>';
-            echo '<p>Die Testfahrzeug-Instanz wurde angelegt oder aktualisiert.</p>';
-            echo '<p>Du kannst dieses Fenster jetzt schließen.</p>';
-            echo '</body></html>';
-            return;
-        }
 
         http_response_code(200);
         header('Content-Type: text/html; charset=utf-8');
@@ -918,102 +891,5 @@ class SmartcarSplitter extends IPSModuleStrict
             'resolution'  => $err['resolution'] ?? null,
             'meta'        => $payload['meta'] ?? []
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
-    }
-
-    private function ExtractSimulatedVehicleIdFromState(string $state): string
-    {
-        if (preg_match('/simvehicle_([0-9a-fA-F-]{36})_/', $state, $m)) {
-            return $m[1];
-        }
-
-        return '';
-    }
-
-    private function CreateOrUpdateSimulatedVehicleInstance(string $vehicleId, string $userId): void
-    {
-        $vehicleModuleId = '{1E1B7C9A-2D4F-4E8A-9C3B-7F6D5A4E2B10}';
-
-        $instanceId = $this->FindVehicleInstanceByVehicleId($vehicleId);
-
-        if ($instanceId === 0) {
-            $instanceId = IPS_CreateInstance($vehicleModuleId);
-            IPS_SetParent($instanceId, IPS_GetParent($this->InstanceID));
-            @IPS_ConnectInstance($instanceId, $this->InstanceID);
-        }
-
-        $vehicleData = $this->ApiGetVehicle($vehicleId, $userId);
-
-        $body = is_array($vehicleData['body'] ?? null) ? $vehicleData['body'] : [];
-        $attributes = is_array($body['data']['attributes'] ?? null)
-            ? $body['data']['attributes']
-            : [];
-
-        $make = (string)($attributes['make'] ?? 'SMARTCAR');
-        $model = (string)($attributes['model'] ?? 'SIMULATED');
-        $year = (int)($attributes['year'] ?? date('Y'));
-        $powertrainType = (string)($attributes['powertrainType'] ?? 'BEV');
-
-        $caption = trim($make . ' ' . $model . ' ' . $year);
-        if ($caption === '') {
-            $caption = 'Smartcar Testfahrzeug';
-        }
-
-        IPS_SetName($instanceId, $caption);
-
-        IPS_SetProperty($instanceId, 'VehicleID', $vehicleId);
-        IPS_SetProperty($instanceId, 'ConnectionID', 'simulated');
-        IPS_SetProperty($instanceId, 'UserID', $userId);
-        IPS_SetProperty($instanceId, 'VehicleCaption', $caption);
-        IPS_SetProperty($instanceId, 'Make', $make);
-        IPS_SetProperty($instanceId, 'Model', $model);
-        IPS_SetProperty($instanceId, 'Year', $year);
-        IPS_SetProperty($instanceId, 'PowertrainType', $powertrainType);
-        IPS_SetProperty($instanceId, 'IsSimulated', true);
-
-        IPS_ApplyChanges($instanceId);
-
-        $this->SendDebug('Connect/SimulatedVehicle', 'Instanz=' . $instanceId . ' VehicleID=' . $vehicleId, 0);
-    }
-
-    private function CreateOrUpdateSimulatedVehicleInstanceFromConnections(string $fallbackVehicleId, string $userId, array $connections): void
-    {
-        foreach ($connections as $connection) {
-            if ((string)($connection['userId'] ?? '') !== $userId) {
-                continue;
-            }
-
-            $vehicleId = (string)($connection['vehicleId'] ?? '');
-            if ($vehicleId === '') {
-                continue;
-            }
-
-            $instanceId = $this->FindVehicleInstanceByVehicleId($vehicleId);
-            if ($instanceId === 0) {
-                $instanceId = IPS_CreateInstance('{1E1B7C9A-2D4F-4E8A-9C3B-7F6D5A4E2B10}');
-                IPS_SetParent($instanceId, IPS_GetParent($this->InstanceID));
-                @IPS_ConnectInstance($instanceId, $this->InstanceID);
-            }
-
-            IPS_SetName($instanceId, (string)($connection['caption'] ?? $vehicleId));
-            IPS_SetProperty($instanceId, 'VehicleID', $vehicleId);
-            IPS_SetProperty($instanceId, 'ConnectionID', (string)($connection['connectionId'] ?? ''));
-            IPS_SetProperty($instanceId, 'UserID', $userId);
-            IPS_SetProperty($instanceId, 'VehicleCaption', (string)($connection['caption'] ?? $vehicleId));
-            IPS_SetProperty($instanceId, 'Make', (string)($connection['make'] ?? ''));
-            IPS_SetProperty($instanceId, 'Model', (string)($connection['model'] ?? ''));
-            IPS_SetProperty($instanceId, 'Year', (int)($connection['year'] ?? 0));
-            IPS_SetProperty($instanceId, 'PowertrainType', (string)($connection['powertrainType'] ?? ''));
-            IPS_SetProperty($instanceId, 'IsSimulated', true);
-            IPS_ApplyChanges($instanceId);
-
-            $this->SendDebug('Connect/SimulatedVehicle', 'OK: Instanz=' . $instanceId . ' VehicleID=' . $vehicleId . ' ConnectionID=' . (string)($connection['connectionId'] ?? ''), 0);
-            return;
-        }
-
-        $this->SendDebug(
-            'Connect/SimulatedVehicle',
-            'Keine passende Connection für userId=' . $userId . '. Dashboard-ID NICHT übernommen: ' . $fallbackVehicleId,
-            0
-        );
     }
 }

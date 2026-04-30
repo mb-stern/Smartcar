@@ -6,11 +6,9 @@ class SmartcarConfigurator extends IPSModuleStrict
     private const VEHICLE_MODULE_ID = '{1E1B7C9A-2D4F-4E8A-9C3B-7F6D5A4E2B10}';
 
     public function Create(): void
-{
-    parent::Create();
-
-    $this->RegisterPropertyString('SimulatedVehicleID', '');
-}
+    {
+        parent::Create();
+    }
 
     public function ApplyChanges(): void
     {
@@ -58,20 +56,7 @@ class SmartcarConfigurator extends IPSModuleStrict
         }
 
         $form = [
-
-            'elements' => [
-                [
-                    'type' => 'ValidationTextBox',
-                    'name' => 'SimulatedVehicleID',
-                    'caption' => 'Testfahrzeug VehicleID'
-                ]
-            ],
             'actions' => [
-                [
-                    'type' => 'Button',
-                    'caption' => 'Testfahrzeug verbinden',
-                    'onClick' => 'echo SMCARCFG_GenerateSimulatedConnectURL($id);'
-                ],
                 [
                     'type' => 'Button',
                     'caption' => 'Alle fehlenden Fahrzeug-Instanzen erstellen',
@@ -212,7 +197,6 @@ class SmartcarConfigurator extends IPSModuleStrict
         IPS_SetProperty($instanceId, 'Model', (string)($connection['model'] ?? ''));
         IPS_SetProperty($instanceId, 'Year', (int)($connection['year'] ?? 0));
         IPS_SetProperty($instanceId, 'PowertrainType', (string)($connection['powertrainType'] ?? ''));
-        IPS_SetProperty($instanceId, 'IsSimulated', strtolower((string)($connection['mode'] ?? '')) === 'simulated');
 
         IPS_ApplyChanges($instanceId);
     }
@@ -242,47 +226,5 @@ class SmartcarConfigurator extends IPSModuleStrict
         }
 
         return (int)($instance['ConnectionID'] ?? 0);
-    }
-
-    public function GenerateSimulatedConnectURL(): string
-    {
-        $vehicleId = trim($this->ReadPropertyString('SimulatedVehicleID'));
-
-        if ($vehicleId === '') {
-            return 'Bitte zuerst die VehicleID des Testfahrzeugs eintragen und übernehmen.';
-        }
-
-        $permissions = [
-            'read_vehicle_info',
-            'read_vin',
-            'read_odometer',
-            'read_location',
-            'read_battery',
-            'read_charge',
-            'read_security',
-            'read_tires',
-            'read_engine_oil',
-            'read_fuel',
-            'control_charge',
-            'control_security'
-        ];
-
-        $state = 'simvehicle_' . $vehicleId . '_' . bin2hex(random_bytes(8));
-
-        $result = $this->SendDataToParent(json_encode([
-            'DataID'      => self::DATA_ID,
-            'Command'     => 'BuildConnectURL',
-            'Mode'        => 'simulated',
-            'State'       => $state,
-            'Permissions' => $permissions
-        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
-
-        $decoded = json_decode((string)$result, true);
-
-        if (!is_array($decoded) || empty($decoded['success'])) {
-            return 'Fehler beim Erzeugen der Connect URL: ' . (string)$result;
-        }
-
-        return (string)($decoded['url'] ?? '');
     }
 }
