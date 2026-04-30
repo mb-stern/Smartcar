@@ -240,6 +240,11 @@ class SmartcarVehicle extends IPSModuleStrict
         $this->SendDebug('Compatibility/Error', 'Kein Splitter/Parent verbunden.', 0);
         return [];
     }
+
+    if ($this->ReadPropertyString('VehicleID') === '' || $this->ReadPropertyString('Make') === '') {
+    $this->SendDebug('Compatibility/Skip', 'Keine Compatibility geladen: VehicleID oder Make fehlt.', 0);
+    return [];
+}
         $cacheAt = $this->ReadAttributeInteger('CompatibilityCacheAt');
         $cacheRaw = $this->ReadAttributeString('CompatibilityCache');
 
@@ -275,12 +280,12 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $result = $this->SendDataToParent(json_encode($request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
 
-        //$this->SendDebug('Compatibility/RAW', (string)$result, 0);  Macht Probleme beim Verbiden mit Simuliertem Fahrzeug
+        $this->SendDebug('Compatibility/RAW', (string)$result, 0);
 
         $decoded = json_decode((string)$result, true);
 
         if (!is_array($decoded)) {
-           // $this->SendDebug('Compatibility/Error', 'Antwort ist kein JSON.', 0);
+            $this->SendDebug('Compatibility/Error', 'Antwort ist kein JSON.', 0);
             return [];
         }
 
