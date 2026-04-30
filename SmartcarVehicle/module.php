@@ -29,7 +29,7 @@ class SmartcarVehicle extends IPSModuleStrict
         $this->CreateProfile();
 
         if ($this->ReadPropertyString('VehicleID') === '') {
-            $this->SetStatus(201);
+            $this->SetStatus($this->ReadPropertyBoolean('IsSimulated') ? 102 : 201);
             return;
         }
 
