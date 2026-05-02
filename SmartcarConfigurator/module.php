@@ -70,7 +70,7 @@ class SmartcarConfigurator extends IPSModuleStrict
                 [
                     'type' => 'Button',
                     'caption' => 'Liste aktualisieren',
-                    'onClick' => 'IPS_ApplyChanges($id);'
+                    'onClick' => 'SMCARCFG_ReloadConfiguratorForm($id);'
                 ],
                 [
                     'type' => 'Button',
@@ -278,5 +278,10 @@ class SmartcarConfigurator extends IPSModuleStrict
         }
 
         return (string)($decoded['url'] ?? '');
+    }
+
+    public function ReloadConfiguratorForm(): void
+    {
+        $this->ReloadForm();
     }
 }
