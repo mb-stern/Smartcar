@@ -382,7 +382,7 @@ class SmartcarVehicle extends IPSModuleStrict
         return $text;
     }
 
-    public function FetchSelectedSignals(array $onlySignalCodes = []): void
+    public function FetchSelectedSignals($onlySignalCodes = []): void
     {
         if (!is_array($onlySignalCodes)) {
             $onlySignalCodes = [];
