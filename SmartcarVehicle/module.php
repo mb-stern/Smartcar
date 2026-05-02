@@ -184,9 +184,8 @@ class SmartcarVehicle extends IPSModuleStrict
                     'type' => 'Button',
                     'caption' => 'Aktivierte Signale abrufen',
                     'onClick' => 'SMCARV_FetchSelectedSignals($id, []);'
-                ]
-            ],
-            [
+                ];
+                [
                     'type'    => 'Label',
                     'caption' => ''
                 ],
@@ -201,9 +200,10 @@ class SmartcarVehicle extends IPSModuleStrict
                         [
                             'type'    => 'Label',
                             'caption' => "Sag danke und unterstütze den Modulentwickler: paypal.me/mbstern"
-                        ],
-                    ],
-                ],
+                         ]
+                    ]
+                ]
+            ]
         ];
 
         return json_encode($form, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
