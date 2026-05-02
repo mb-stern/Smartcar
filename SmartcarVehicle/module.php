@@ -1073,22 +1073,14 @@ class SmartcarVehicle extends IPSModuleStrict
         $fullList = $this->BuildCapabilitiesListFromCompatibilityItems($cache);
 
         $fullBySortKey = [];
-        $fullByCapabilityKey = [];
-
         foreach ($fullList as $entry) {
             $sortKey = (string)($entry['sortKey'] ?? '');
             if ($sortKey !== '') {
                 $fullBySortKey[$sortKey] = $entry;
             }
-
-            $capabilityKey = $this->BuildCapabilityMatchKey($entry);
-            if ($capabilityKey !== '') {
-                $fullByCapabilityKey[$capabilityKey] = $entry;
-            }
         }
 
         $result = [];
-        $seen = [];
 
         foreach ($saved as $savedEntry) {
             if (!is_array($savedEntry)) {
@@ -1105,68 +1097,25 @@ class SmartcarVehicle extends IPSModuleStrict
                 continue;
             }
 
-            $entry = null;
             $sortKey = (string)($savedEntry['sortKey'] ?? '');
-
-            if ($sortKey !== '' && isset($fullBySortKey[$sortKey])) {
-                $entry = $fullBySortKey[$sortKey];
-            } else {
-                $capabilityKey = $this->BuildCapabilityMatchKey($savedEntry);
-
-                if ($capabilityKey !== '' && isset($fullByCapabilityKey[$capabilityKey])) {
-                    $entry = $fullByCapabilityKey[$capabilityKey];
-                    $this->SendDebug(
-                        'Selected/ResolveFallback',
-                        'Eintrag per capability/code gefunden. oldSortKey=' . $sortKey . ' matchKey=' . $capabilityKey,
-                        0
-                    );
-                }
-            }
-
-            if ($entry === null) {
-                $this->SendDebug(
-                    'Selected/ResolveMissing',
-                    'Kein FullEntry gefunden. sortKey=' . $sortKey . ' matchKey=' . $this->BuildCapabilityMatchKey($savedEntry),
-                    0
-                );
+            if ($sortKey === '') {
                 continue;
             }
 
-            $resultKey = $this->BuildCapabilityMatchKey($entry);
-            if ($resultKey === '') {
-                $resultKey = (string)($entry['sortKey'] ?? '');
-            }
-
-            if ($resultKey !== '' && isset($seen[$resultKey])) {
+            if (!isset($fullBySortKey[$sortKey])) {
+                $this->SendDebug('Selected/ResolveMissing', 'Kein FullEntry für sortKey=' . $sortKey, 0);
                 continue;
             }
 
-            if ($resultKey !== '') {
-                $seen[$resultKey] = true;
-            }
-
+            $entry = $fullBySortKey[$sortKey];
             $entry['selected'] = true;
+
             $result[] = $entry;
         }
 
         $this->SendDebug('Selected/Resolve', 'Ausgewählte Einträge: ' . count($result), 0);
 
         return $result;
-    }
-
-    private function BuildCapabilityMatchKey(array $entry): string
-    {
-        $type = strtolower(trim((string)($entry['type'] ?? '')));
-        $capability = strtolower(trim((string)($entry['capability'] ?? '')));
-        $code = strtolower(trim((string)($entry['code'] ?? '')));
-
-        if ($type === '' || ($capability === '' && $code === '')) {
-            return '';
-        }
-
-        // capability ist bei Smartcar meistens der eigentliche stabile Signal-/Command-Schlüssel.
-        // code bleibt als Zusatz drin, damit gleichnamige Capabilities mit unterschiedlichem Code nicht kollidieren.
-        return $type . '|' . $capability . '|' . $code;
     }
 
     private function HasParentConnection(): bool
