@@ -476,12 +476,6 @@ class SmartcarVehicle extends IPSModuleStrict
                 continue;
             }
 
-            if (!empty($onlyMap) && !isset($onlyMap[$signalCode])) {
-                $this->SendDebug('FetchSignals/SkipNotNew', $signalCode, 0);
-                $skipped++;
-                continue;
-            }
-
             $attributes = is_array($signal['attributes'] ?? null) ? $signal['attributes'] : $signal;
 
             $body = is_array($attributes['body'] ?? null) ? $attributes['body'] : [];
@@ -629,9 +623,9 @@ class SmartcarVehicle extends IPSModuleStrict
                 continue;
             }
 
-            $signalCode = (string)($entry['capability'] ?? '');
+            $signalCode = (string)($entry['code'] ?? '');
             if ($signalCode === '') {
-                $signalCode = (string)($entry['code'] ?? '');
+                $signalCode = (string)($entry['capability'] ?? '');
             }
 
             if ($signalCode !== '') {
@@ -874,9 +868,9 @@ class SmartcarVehicle extends IPSModuleStrict
                 $type = strtolower((string)($entry['type'] ?? ''));
 
                 if ($type === 'signal') {
-                    $signalCode = (string)($entry['capability'] ?? '');
+                    $signalCode = (string)($entry['code'] ?? '');
                     if ($signalCode === '') {
-                        $signalCode = (string)($entry['code'] ?? '');
+                        $signalCode = (string)($entry['capability'] ?? '');
                     }
 
                     if ($signalCode === '') {
@@ -916,9 +910,9 @@ class SmartcarVehicle extends IPSModuleStrict
             $type = strtolower((string)($entry['type'] ?? ''));
 
             if ($type === 'signal') {
-                $signalCode = (string)($entry['capability'] ?? '');
+                $signalCode = (string)($entry['code'] ?? '');
                 if ($signalCode === '') {
-                    $signalCode = (string)($entry['code'] ?? '');
+                    $signalCode = (string)($entry['capability'] ?? '');
                 }
 
                 if ($signalCode === '') {
