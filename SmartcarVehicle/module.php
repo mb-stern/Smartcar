@@ -384,6 +384,10 @@ class SmartcarVehicle extends IPSModuleStrict
 
     public function FetchSelectedSignals(array $onlySignalCodes = []): void
     {
+        if (!is_array($onlySignalCodes)) {
+            $onlySignalCodes = [];
+        }
+
         if (!empty($onlySignalCodes)) {
             $this->SendDebug(
                 'FetchSignals/Start',
