@@ -18,6 +18,7 @@ class SmartcarVehicle extends IPSModuleStrict
     $this->RegisterPropertyString('PowertrainType', '');
     $this->RegisterPropertyString('SelectedCapabilities', '[]');
     $this->RegisterPropertyString('ConnectState', '');
+    $this->RegisterPropertyString('ConnectMode', '');
     $this->RegisterAttributeString('CompatibilityCache', '[]');
     $this->RegisterAttributeInteger('CompatibilityCacheAt', 0);
 }
