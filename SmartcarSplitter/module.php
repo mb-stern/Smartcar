@@ -475,6 +475,8 @@ class SmartcarSplitter extends IPSModuleStrict
             ];
         }
 
+        $this->SendDebug('Connections/RAW', $response['body'], 0);
+
         $decoded = json_decode($response['body'], true);
 
         return [
