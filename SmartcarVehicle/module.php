@@ -117,6 +117,13 @@ class SmartcarVehicle extends IPSModuleStrict
                 'columns' => [
                     [
                         'caption' => '',
+                        'name' => 'sortKey',
+                        'width' => '0px',
+                        'visible' => false,
+                        'edit' => ['type' => 'ValidationTextBox']
+                    ],
+                    [
+                        'caption' => '',
                         'name' => 'capabilityKey',
                         'width' => '0px',
                         'visible' => false,
