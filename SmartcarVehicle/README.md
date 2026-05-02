@@ -26,7 +26,7 @@
 
 - Das Modul kann direkt über den **Symcon Module Store** installiert werden.
 - Wärend der Installation des Smartcar Moduls ist zuerst der **Smartcar Configurator** zu erstellen.
-- Der Splitter wir automatisch erstellt.
+- Der Splitter und die Fahrzeug - Instanz wir automatisch erstellt.
 
 ---
 
