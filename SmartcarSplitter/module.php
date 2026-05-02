@@ -2,8 +2,6 @@
 
 class SmartcarSplitter extends IPSModuleStrict
 {
-    private const DATA_ID = '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}';
-
     public function Create(): void
     {
         parent::Create();

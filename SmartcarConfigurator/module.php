@@ -2,8 +2,6 @@
 
 class SmartcarConfigurator extends IPSModuleStrict
 {
-    private const DATA_ID = '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}';
-    private const VEHICLE_MODULE_ID = '{1E1B7C9A-2D4F-4E8A-9C3B-7F6D5A4E2B10}';
 
     public function Create(): void
     {
@@ -151,7 +149,7 @@ class SmartcarConfigurator extends IPSModuleStrict
                 continue;
             }
 
-            $instanceId = IPS_CreateInstance(self::VEHICLE_MODULE_ID);
+            $instanceId = IPS_CreateInstance('{1E1B7C9A-2D4F-4E8A-9C3B-7F6D5A4E2B10}');
 
             $targetParentId = IPS_GetParent($this->InstanceID);
             $currentParentId = IPS_GetParent($instanceId);
@@ -174,7 +172,7 @@ class SmartcarConfigurator extends IPSModuleStrict
     private function LoadConnectionsFromSplitter(): array
     {
         $result = $this->SendDataToParent(json_encode([
-            'DataID' => self::DATA_ID,
+            'DataID' => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
             'Command' => 'LoadConnections'
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
 
@@ -213,7 +211,7 @@ class SmartcarConfigurator extends IPSModuleStrict
 
     private function FindVehicleInstanceByVehicleId(string $vehicleId): int
     {
-        $instanceIds = @IPS_GetInstanceListByModuleID(self::VEHICLE_MODULE_ID);
+        $instanceIds = @IPS_GetInstanceListByModuleID('{1E1B7C9A-2D4F-4E8A-9C3B-7F6D5A4E2B10}');
         if (!is_array($instanceIds)) {
             return 0;
         }
@@ -259,7 +257,7 @@ class SmartcarConfigurator extends IPSModuleStrict
         $state = 'configurator_' . $mode . '_' . bin2hex(random_bytes(8));
 
         $result = $this->SendDataToParent(json_encode([
-            'DataID'      => self::DATA_ID,
+            'DataID'      => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
             'Command'     => 'BuildConnectURL',
             'Mode'        => $mode,
             'State'       => $state,
