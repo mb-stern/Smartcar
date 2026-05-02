@@ -33,12 +33,12 @@ Das Modul wird automatisch zusammen mit dem Smartcar-Modul installiert.
 
 | Feld / Aktion | Beschreibung |
 |------|---------------|
-| **Redirect URI** | Wird vom Modul angezeigt und muss auch in der Smartcar Konfiguration eingetragen werden. Ebenfalls gehört diese URI auch in die Webhook-Konfiguration des Fahrzeuges |
-| **Manuelle Redirect URI** | Optional. Nur verwenden, wenn nicht automatisch die Symcon-Connect-URL genutzt werden soll |
-| **Client ID** | Client ID aus der Smartcar Application |
-| **Client Secret** | Client Secret aus der Smartcar Application |
-| **Application ID** | ID aus der Smartcar Application |
-| **Application Management Token** | Token aus der Smartcar Application |
+| **Redirect URI** | Wird vom Modul angezeigt und muss in der Smartcar Application hinterlegt werden (OAuth Redirect URI). |
+| **Manuelle Redirect URI** | Optional. Nur verwenden, wenn nicht automatisch die Symcon-Connect-URL genutzt werden soll. |
+| **Client ID** | Client ID aus der Smartcar Application. |
+| **Client Secret** | Client Secret aus der Smartcar Application. |
+| **Application ID** | ID der Smartcar Application. |
+| **Application Management Token** | Management-Token der Smartcar Application (z. B. für Webhook-Verifizierung). |
 
 ---
 
@@ -46,33 +46,35 @@ Das Modul wird automatisch zusammen mit dem Smartcar-Modul installiert.
 
 Die Verbindung erfolgt über OAuth2:
 
-1. Klick auf **"Mit Smartcar verbinden"**  
+1. Klick auf **„Mit Smartcar verbinden“**  
 2. Login beim Fahrzeughersteller  
 3. Bestätigung der Berechtigungen  
 4. Rückleitung zu IP-Symcon  
 
-Access- und Refresh-Tokens werden automatisch verwaltet.
+Access- und Refresh-Tokens werden automatisch verwaltet und regelmäßig erneuert.
 
 ---
 
 ## 6. Webhooks (Push)
 
 - Smartcar sendet Ereignisse an den Webhook des Splitters.  
-- Der Splitter validiert und verarbeitet die Daten.  
-- Anschließend werden die Daten an die entsprechenden Fahrzeug-Instanzen weitergeleitet.  
+- Der Splitter validiert und verarbeitet die eingehenden Daten.  
+- Anschließend werden die Signale an die entsprechenden Fahrzeug-Instanzen weitergeleitet.  
+
+> Hinweis: Die Webhook-URL wird automatisch durch das Modul generiert und muss in der Smartcar Application hinterlegt werden.
 
 ---
 
 ## 7. Datenverarbeitung
 
-- Kommunikation erfolgt über interne IPS-Nachrichten (DataID).  
-- Der Splitter fungiert als zentrale Schnittstelle zwischen API und Fahrzeugmodulen.  
+- Die Kommunikation erfolgt über interne IPS-Nachrichten (DataID).  
+- Der Splitter fungiert als zentrale Schnittstelle zwischen Smartcar API und Fahrzeugmodulen.  
 
 ---
 
 ## 8. Debugging
 
-Alle API-Anfragen und Webhook-Daten können im Debug-Fenster analysiert werden.
+Alle API-Anfragen, Token-Vorgänge und Webhook-Daten können im Debug-Fenster analysiert werden.
 
 ---
 

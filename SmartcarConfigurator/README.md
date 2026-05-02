@@ -5,9 +5,9 @@
 
 - Anzeige aller verbundenen Smartcar-Fahrzeuge.  
 - Erstellung von Fahrzeug-Instanzen in IP-Symcon.  
-- Auswahl und Konfiguration der gewünschten Signale.  
 - Übersicht über kompatible Fahrzeuge und deren Fähigkeiten.  
 - Vereinfachte Einrichtung neuer Fahrzeuge.  
+- Zentrale Verwaltung aller Fahrzeuge innerhalb von IP-Symcon.  
 
 ---
 
@@ -34,11 +34,10 @@ Die Oberfläche stellt automatisch alle verfügbaren Fahrzeuge und Aktionen bere
 
 | Aktion | Beschreibung |
 |--------|--------------|
-| **Neues Live-Fahrzeug verbinden** | Hiermit wird der Connect Prozess gestartet, um ein noch nicht vorhandenes Fahrezug zur Smartcar-Konfiguration hinzuzufügen |
-| **Liste aktualisieren** | Hiermit kann die Fahrezugliste aktualisiert werden, ohne ds Konfigurationsformular neu zu starten, zum Beispiel nach dem Hinzufügen eines neuen Fahrzeuges |
-| **Alle fehlenden Fahrezug-Instanzen verbinden** | Hiermit werden für alle in der Smartcar-Konfiguration vorhandenen Fahrezuge die entsprechenden Fahrzeug-Instanzen angelegt |
-| **Smartcar-Fahrzeuge** | Hier werden alle in der Smartcar-Konfiguratieon vorhandenen Fahrzeuge gelistet|
-
+| **Neues Live-Fahrzeug verbinden** | Startet den Smartcar-Connect-Prozess, um ein neues Fahrzeug mit deinem Smartcar-Account zu verbinden. |
+| **Liste aktualisieren** | Aktualisiert die Fahrzeugliste, ohne das Konfigurationsformular neu zu laden (z. B. nach dem Hinzufügen eines Fahrzeugs). |
+| **Alle fehlenden Fahrzeug-Instanzen erstellen** | Erstellt automatisch für alle in Smartcar vorhandenen Fahrzeuge die entsprechenden IP-Symcon Fahrzeug-Instanzen. |
+| **Smartcar-Fahrzeuge** | Zeigt alle in deinem Smartcar-Account vorhandenen Fahrzeuge an. |
 
 ---
 
@@ -48,34 +47,38 @@ Der Konfigurator zeigt:
 
 - Alle verfügbaren Fahrzeuge aus deinem Smartcar-Account  
 - Fahrzeugdetails wie Marke, Modell und Baujahr  
-- Möglichkeit zur Erstellung einer neuen Fahrzeug-Instanz  
+- Status der bereits angelegten Fahrzeug-Instanzen  
+- Möglichkeit zur Erstellung neuer Fahrzeug-Instanzen  
 
 ---
 
 ## 6. Fahrzeug hinzufügen
 
 1. Konfigurator öffnen  
-2. Fahrzeug auswählen  
-3. Instanz erstellen  
-4. Signale im Fahrzeugmodul auswählen  
+2. **„Neues Live-Fahrzeug verbinden“** auswählen  
+3. Smartcar-Connect-Prozess durchführen  
+4. Fahrzeug wird automatisch im Konfigurator angezeigt  
+5. Fahrzeug-Instanz erstellen  
+6. Signale im Fahrzeugmodul auswählen  
 
 ---
 
-## 6. Kompatibilität
+## 7. Kompatibilität
 
-- Die verfügbaren Signale werden automatisch anhand des Fahrzeugs gefiltert.  
+- Die verfügbaren Signale und Befehle werden automatisch anhand des Fahrzeugs gefiltert.  
 - Nicht unterstützte Funktionen werden ausgeblendet.  
 
 ---
 
-## 7. Hinweise
+## 8. Hinweise
 
-- Der Konfigurator dient ausschließlich zur Einrichtung.  
+- Der Konfigurator dient ausschließlich zur Einrichtung und Verwaltung der Fahrzeuge.  
 - Die eigentliche Datenverarbeitung erfolgt im Fahrzeugmodul.  
+- Änderungen an Fahrzeugen werden automatisch synchronisiert.  
 
 ---
 
-## 8. Lizenz
+## 9. Lizenz
 
 Dieses Modul steht unter der **MIT-Lizenz**.  
 © 2025 Stefan Künzli  

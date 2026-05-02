@@ -3,9 +3,9 @@
 
 ## 1. Funktionsumfang
 
-- Verbindung eines Fahrzeugs über Smartcar (Test-Fahrzeuge sind nicht unterstützt).  
+- Verbindung eines Fahrzeugs über Smartcar (Testfahrzeuge werden nicht unterstützt).  
 - Automatische Ermittlung der kompatiblen Signale und Befehle pro Fahrzeug.  
-- Auswahl der gewünschten Signale und Befehle über Checkbox-Liste.  
+- Auswahl der gewünschten Signale und Befehle über eine Checkbox-Liste.  
 - Manuelle oder externe Abfrage aktivierter Signale über die Smartcar API (Pull).  
 - Unterstützung von **Smartcar Signals (Webhooks)** zur automatischen Aktualisierung direkt vom OEM-Backend (Push).  
 - Steuerung von Funktionen wie Zentralverriegelung, Ladevorgang oder Ladelimit.  
@@ -18,7 +18,7 @@
 
 - IP-Symcon ab Version **8.2**  
 - Smartcar-Konto  
-- Mit Smartcar kompatibles Fahrzeug welches mit dem OEM-Portal verbunden ist
+- Mit Smartcar kompatibles Fahrzeug, welches mit dem OEM-Portal verbunden ist  
 
 ---
 
@@ -36,20 +36,20 @@ Unter *Instanz hinzufügen* das Modul **Smartcar** auswählen.
 
 | Feld | Beschreibung |
 |------|---------------|
-| **Kompatible Signale / Befehle** | Diese Liste wird automatisch beim Installieren der Fahrezuginstanz asu dem Konfigurator geladen. Sie kann auch über den Button 'Kompatibilitätsliste neu laden' neu abgefragt werden. Die Liste wird 24h durch das Modul gecacht. |
-| **Kompatibilität neu laden** | Damit kann die Kompatibilitätsliste neu geladen werden. Die Liste wird 24h durch das Modul gecacht. |
-| **Gewählte Signale bei Smartcar registrieren** | Damit können die aus der Kompatibilitätsliste ausgewählten Signale bei Smartcar registriert werden, ansonsten die Signale nicht einwandfrei bzw. gar nicht empfangen werden können. |
-| **Aktivierte Signale abrufen** | Damit lassen sich alle aktivierten Signale auf einmal abrufen. |
+| **Kompatible Signale / Befehle** | Diese Liste wird automatisch beim Erstellen der Fahrzeuginstanz aus dem Konfigurator geladen. Sie kann auch über den Button **„Kompatibilitätsliste neu laden“** aktualisiert werden. Die Liste wird 24 Stunden im Modul gecacht. |
+| **Kompatibilität neu laden** | Lädt die Kompatibilitätsliste erneut von Smartcar. |
+| **Gewählte Signale bei Smartcar registrieren** | Registriert die ausgewählten Signale bei Smartcar. Ohne diese Registrierung werden Signale unter Umständen nicht oder unvollständig empfangen. |
+| **Aktivierte Signale abrufen** | Ruft alle aktivierten Signale auf einmal über die API ab (Pull). |
 
 ---
 
 ## 5. Smartcar Signals
 
-Es gibt diverse Möglichkeiten, die Signale zu aktualisieren.
-1. Durch akualieren über den entsprechenden Button 'AKtivierte Signale abrufen' im Konfigurationsformular (Pull).  
-2. Durch akualisieren aller oder einzelner Signale über ein Script (Pull)
-3. Durch empfangen der Signale über den Webhook, sobald diese beim OEM aktualisiert wurden (Push).
+Es gibt mehrere Möglichkeiten, die Signale zu aktualisieren:
 
+1. Über den Button **„Aktivierte Signale abrufen“** im Konfigurationsformular (Pull)  
+2. Über ein Script zum Abrufen einzelner oder aller Signale (Pull)  
+3. Automatisch über den Webhook, sobald sich Daten beim OEM ändern (Push)  
 
 ### Signalgruppen und Befehle (Beispiele)
 
@@ -66,16 +66,15 @@ Es gibt diverse Möglichkeiten, die Signale zu aktualisieren.
 | **Klima** | `climate-*`, `climatecontrol-*` | `climate-externaltemperature`, `climatecontrol-isheateractive` | Innen-/Außentemperatur, Heizung |
 | **Sonstige** | `vehicle-*`, `telematics-*`, `energy-*`, `evse-*` | `vehicle-speed`, `telematics-*`, `energy-*`, `evse-*` | Nur bei Premium-/Fleet-Plänen verfügbar |
 
-> Es gibt weit über 100 mögliche Signaltypen und mehrere mögliche Fahrzeugbefehle.  
-> Es sind bei weitem nicht alle Signale und Befehle mit allen Fahrzeugen kompatibel. Das Modul filtert automatisch.
-
+> Es gibt weit über 100 mögliche Signaltypen und mehrere Fahrzeugbefehle.  
+> Nicht alle Signale und Befehle sind mit allen Fahrzeugen kompatibel. Das Modul filtert automatisch.
 
 ---
 
 ## 6. Statusvariablen und Profile
 
-Profile werden automatisch angelegt.
-Variablen werden angelegt, sobald diese im Konfigurationsformular ausgewählt sind.  
+Profile werden automatisch angelegt.  
+Variablen werden erstellt, sobald sie im Konfigurationsformular ausgewählt sind.  
 Das Löschen einzelner Variablen kann zu Fehlfunktionen führen.
 
 | Profil | Typ | Beschreibung |
@@ -99,7 +98,8 @@ Steuere Fahrzeugfunktionen direkt aus dem WebFront:
 - Ladelimit setzen  
 - Ladevorgang starten / stoppen  
 
-Nicht alle Fahrzeuge unterstützen alle Befehle. Das Modul zeigt nur kompatible Befehle aus der Smartcar-Kompatibilitätsliste an.  
+Nicht alle Fahrzeuge unterstützen alle Befehle.  
+Das Modul zeigt nur kompatible Befehle aus der Smartcar-Kompatibilitätsliste an.  
 
 ---
 
@@ -108,15 +108,15 @@ Nicht alle Fahrzeuge unterstützen alle Befehle. Das Modul zeigt nur kompatible 
 | Befehl | Beschreibung |
 |--------|---------------|
 | `SMCARV_FetchSelectedSignals(12345, []);` | Alle aktivierten Signale abrufen |
-| `SMCARV_FetchSelectedSignals(12345, ['tractionbattery-stateofcharge']);` | Signal für SOC abrufen |
+| `SMCARV_FetchSelectedSignals(12345, ['tractionbattery-stateofcharge']);` | Nur das SOC-Signal abrufen |
 
-> Die Namen der einzelnen Signale entnimmst du der Liste der kompatiblen Signale unter der Spalte 'Capability'.
+> Die Namen der einzelnen Signale entnimmst du der Liste der kompatiblen Signale (Spalte „Capability“).
 
 ---
 
 ## 9. Bekannte Einschränkungen
 
-- Simmulierte Fahrzeuge werden aktuell nicht unterstützt.  
+- Simulierte Fahrzeuge werden aktuell nicht unterstützt.  
 
 ---
 
@@ -124,4 +124,4 @@ Nicht alle Fahrzeuge unterstützen alle Befehle. Das Modul zeigt nur kompatible 
 
 Dieses Modul steht unter der **MIT-Lizenz**.  
 © 2025 Stefan Künzli  
-[https://opensource.org/licenses/MIT](https://opensource.org/licenses/MIT)
+https://opensource.org/licenses/MIT
