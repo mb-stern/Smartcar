@@ -920,37 +920,21 @@ class SmartcarSplitter extends IPSModuleStrict
 
         $this->SendDebug('Connect/PreparedVehicle', 'Vorbereitete Instanz gefunden: ' . $instanceId, 0);
 
-        // Falls das Fahrzeug doch in /connections auftaucht, sauber übernehmen
-        foreach ($connections as $connection) {
-            $vehicleId = (string)($connection['vehicleId'] ?? '');
-            if ($vehicleId === '') {
-                continue;
-            }
+        IPS_SetProperty($instanceId, 'UserID', $userId);
 
-            IPS_SetName($instanceId, (string)($connection['caption'] ?? $vehicleId));
-            IPS_SetProperty($instanceId, 'VehicleID', $vehicleId);
-            IPS_SetProperty($instanceId, 'ConnectionID', (string)($connection['connectionId'] ?? ''));
-            IPS_SetProperty($instanceId, 'UserID', (string)($connection['userId'] ?? $userId));
-            IPS_SetProperty($instanceId, 'VehicleCaption', (string)($connection['caption'] ?? $vehicleId));
-            IPS_SetProperty($instanceId, 'Make', (string)($connection['make'] ?? ''));
-            IPS_SetProperty($instanceId, 'Model', (string)($connection['model'] ?? ''));
-            IPS_SetProperty($instanceId, 'Year', (int)($connection['year'] ?? 0));
-            IPS_SetProperty($instanceId, 'PowertrainType', (string)($connection['powertrainType'] ?? ''));
-
+        if (str_starts_with($state, 'configurator_simulated_')) {
+            IPS_SetProperty($instanceId, 'VehicleCaption', 'Smartcar Simulated Vehicle');
             IPS_ApplyChanges($instanceId);
+
+            $this->SendDebug(
+                'Connect/PreparedVehicle',
+                'Simulated Connect abgeschlossen, aber keine VehicleID aus /connections erhalten.',
+                0
+            );
             return;
         }
 
-        // Simulated: taucht nicht in /connections auf
-        IPS_SetProperty($instanceId, 'UserID', $userId);
-        IPS_SetProperty($instanceId, 'VehicleCaption', 'Smartcar Simulated Vehicle');
         IPS_ApplyChanges($instanceId);
-
-        $this->SendDebug(
-            'Connect/PreparedVehicle',
-            'Keine Connection gefunden. Simulierte Instanz nur mit UserID aktualisiert.',
-            0
-        );
     }
 
     private function FindVehicleInstanceByConnectState(string $state): int
