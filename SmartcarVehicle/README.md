@@ -47,8 +47,6 @@ Das Modul kann direkt über den **Symcon Module Store** installiert werden.
 
 ## 4. Einrichten der Instanz
 
-![alt text](image.png)
-
 Unter *Instanz hinzufügen* das Modul **Smartcar** auswählen.
 
 | Feld | Beschreibung |
