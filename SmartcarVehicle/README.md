@@ -1,23 +1,6 @@
 # 🚗 Smartcar Modul für IP-Symcon
 
 
-## 📑 Inhaltsverzeichnis
-
-1. [Funktionsumfang](#1-funktionsumfang)  
-2. [Voraussetzungen](#2-voraussetzungen)  
-3. [Installation](#3-installation)  
-4. [Einrichten der Instanz](#4-einrichten-der-instanz)  
-5. [Smartcar Signals](#5-smartcars-signals)  
-6. [Smartcar Signals (Webhooks)](#6-smartcar-signals-webhooks)  
-7. [Statusvariablen und Profile](#7-statusvariablen-und-profile)  
-8. [WebFront](#8-webfront)  
-9. [PHP-Befehlsreferenz](#9-php-befehlsreferenz)  
-10. [Bekannte Einschränkungen](#10-bekannte-einschränkungen)  
-11. [Versionen](#11-versionen)  
-12. [Lizenz](#12-lizenz)
-
----
-
 ## 1. Funktionsumfang
 
 - Verbindung eines Fahrzeugs über Smartcar (Test-Fahrzeuge sind nicht unterstützt).  
