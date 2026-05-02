@@ -7,7 +7,7 @@
 2. [Voraussetzungen](#2-voraussetzungen)  
 3. [Installation](#3-installation)  
 4. [Einrichten der Instanz](#4-einrichten-der-instanz)  
-5. [Scopes (Berechtigungen)](#5-scopes-berechtigungen)  
+5. [Smartcar Signals](#5-smartcars-signals)  
 6. [Smartcar Signals (Webhooks)](#6-smartcar-signals-webhooks)  
 7. [Statusvariablen und Profile](#7-statusvariablen-und-profile)  
 8. [WebFront](#8-webfront)  
