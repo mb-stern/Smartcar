@@ -95,7 +95,12 @@ class SmartcarVehicle extends IPSModuleStrict
     {
         $capabilities = [];
 
-        if ($this->HasParentConnection()) {
+        if (
+            $this->HasParentConnection() &&
+            $this->ReadPropertyString('VehicleID') !== '' &&
+            $this->ReadPropertyString('Make') !== '' &&
+            $this->ReadPropertyString('Model') !== ''
+        ) {
             $capabilities = $this->GetCompatibilityCapabilitiesForForm();
         }
 
@@ -190,6 +195,16 @@ class SmartcarVehicle extends IPSModuleStrict
 
     public function ReloadCompatibility(): void
     {
+        if (
+            $this->ReadPropertyString('VehicleID') === '' ||
+            $this->ReadPropertyString('Make') === '' ||
+            $this->ReadPropertyString('Model') === ''
+        ) {
+            $this->SendDebug('Compatibility/Skip', 'Fahrzeugdaten fehlen. Compatibility wird nicht geladen.', 0);
+            $this->ReloadForm();
+            return;
+        }
+
         $this->LoadCompatibility(true);
         $this->ReloadForm();
     }
