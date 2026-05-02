@@ -57,6 +57,16 @@ class SmartcarConfigurator extends IPSModuleStrict
 
         $form = [
             'actions' => [
+               [
+                    'type' => 'Button',
+                    'caption' => 'Neues Live-Fahrzeug verbinden',
+                    'onClick' => 'echo SMCARCFG_GenerateConnectURL($id, "live");'
+                ],
+                [
+                    'type' => 'Button',
+                    'caption' => 'Neues simuliertes Fahrzeug verbinden',
+                    'onClick' => 'echo SMCARCFG_GenerateConnectURL($id, "simulated");'
+                ],
                 [
                     'type' => 'Button',
                     'caption' => 'Alle fehlenden Fahrzeug-Instanzen erstellen',
@@ -226,5 +236,42 @@ class SmartcarConfigurator extends IPSModuleStrict
         }
 
         return (int)($instance['ConnectionID'] ?? 0);
+    }
+
+    public function GenerateConnectURL(string $mode): string
+    {
+        $mode = strtolower(trim($mode));
+        if ($mode !== 'simulated') {
+            $mode = 'live';
+        }
+
+        $permissions = [
+            'read_vin',
+            'read_vehicle_info',
+            'read_odometer',
+            'read_location',
+            'read_battery',
+            'read_charge',
+            'read_tires',
+            'read_security'
+        ];
+
+        $state = 'configurator_' . $mode . '_' . bin2hex(random_bytes(8));
+
+        $result = $this->SendDataToParent(json_encode([
+            'DataID'      => self::DATA_ID,
+            'Command'     => 'BuildConnectURL',
+            'Mode'        => $mode,
+            'State'       => $state,
+            'Permissions' => $permissions
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+
+        $decoded = json_decode((string)$result, true);
+
+        if (!is_array($decoded) || empty($decoded['success'])) {
+            return 'Fehler beim Erzeugen der Connect URL: ' . (string)$result;
+        }
+
+        return (string)($decoded['url'] ?? '');
     }
 }

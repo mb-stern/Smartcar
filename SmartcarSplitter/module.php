@@ -827,8 +827,15 @@ class SmartcarSplitter extends IPSModuleStrict
             }
 
             $instanceId = $this->FindVehicleInstanceByVehicleId($vehicleId);
+
             if ($instanceId === 0) {
-                continue;
+                $instanceId = IPS_CreateInstance('{1E1B7C9A-2D4F-4E8A-9C3B-7F6D5A4E2B10}');
+
+                $this->SendDebug(
+                    'Connect/CreateVehicle',
+                    'Neue Vehicle-Instanz erstellt: ' . $instanceId . ' für VehicleID=' . $vehicleId,
+                    0
+                );
             }
 
             IPS_SetProperty($instanceId, 'ConnectionID', (string)($connection['connectionId'] ?? ''));
