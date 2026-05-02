@@ -446,7 +446,7 @@ class SmartcarVehicle extends IPSModuleStrict
         $selectedMap = $this->GetSelectedSignalMap();
 
         $onlyMap = [];
-        foreach ($onlySignalCodes as $code) {
+        foreach ($onlySignalCodesArray as $code) {
             $onlyMap[(string)$code] = true;
         }
 
@@ -515,8 +515,8 @@ class SmartcarVehicle extends IPSModuleStrict
         $this->SendDebug(
             'FetchSignals/Done',
             json_encode([
-                'mode'    => empty($onlySignalCodes) ? 'full' : 'partial',
-                'requested' => count($onlySignalCodes),
+                'mode' => empty($onlySignalCodesArray) ? 'full' : 'partial',
+                'requested' => count($onlySignalCodesArray),
                 'applied' => $applied,
                 'skipped' => $skipped
             ]),
@@ -1001,7 +1001,7 @@ class SmartcarVehicle extends IPSModuleStrict
         }
 
         if (!empty($newSignalCodes)) {
-            $this->FetchSelectedSignals(array_keys($newSignalCodes));
+            $this->FetchSelectedSignals(implode(',', array_keys($newSignalCodes)));
         }
     }
 
