@@ -1355,6 +1355,21 @@ class SmartcarVehicle extends IPSModuleStrict
         }
         IPS_SetVariableProfileDigits('SMCAR.LatLon', 6);
         IPS_SetVariableProfileText('SMCAR.LatLon', '', '°');
+
+        if (!IPS_VariableProfileExists('SMCAR.Pressure')) {
+            IPS_CreateVariableProfile('SMCAR.Pressure', VARIABLETYPE_FLOAT);
+        }
+        IPS_SetVariableProfileText('SMCAR.Pressure', '', ' bar');
+        IPS_SetVariableProfileDigits('SMCAR.Pressure', 2);
+
+        if (!IPS_VariableProfileExists('SMCAR.Status')) {
+            IPS_CreateVariableProfile('SMCAR.Status', VARIABLETYPE_STRING);
+        }
+        IPS_SetVariableProfileAssociation('SMCAR.Status', 'OPEN', 'Offen', '', 0x00FF00);
+        IPS_SetVariableProfileAssociation('SMCAR.Status', 'CLOSED', 'Geschlossen', '', 0xFF0000);
+
+        if (!IPS_VariableProfileExists('SMCAR.Charge')) {
+            IPS_CreateVariableProfile('SMCAR.Charge', VARIABLETYPE_STRING);
     }
 
     private function RegisterOrUpdateTypedVariable(string $ident, string $name, mixed $value, int $type, string $profile, bool $onlySetValueOnCreate = false): bool
