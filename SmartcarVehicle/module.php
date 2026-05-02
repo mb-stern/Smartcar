@@ -253,12 +253,7 @@ class SmartcarVehicle extends IPSModuleStrict
         $make = $this->NormalizeCompatibilityMake($this->ReadPropertyString('Make'));
         $model = $this->ReadPropertyString('Model');
         $year = $this->ReadPropertyInteger('Year');
-        $powertrainType = strtoupper(trim($this->ReadPropertyString('PowertrainType')));
-
-        if ($powertrainType === 'ICE') {
-            $powertrainType = '';
-        }
-
+        $powertrainType = $this->ReadPropertyString('PowertrainType');
         $region = 'EUROPE';
 
         $request = [
