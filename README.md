@@ -12,7 +12,7 @@ Du findest alle Funktionen für das Smartcar-Symcon-Repository in den entspreche
 - __SmartcarSplitter__ ([Dokumentation](SmartcarSplitter))  
 - __SmartcarConfigurator__ ([Dokumentation](SmartcarConfigurator))  
 
-> Wichtig: Beim Installieren des Moduls in Symcon muss zuerst ein **Smartcar Configurator** erstellt werden. Alle anderen Module werden automatisch angelegt.
+> Wichtig: Beim Installieren des Moduls in Symcon muss zuerst ein **Smartcar Configurator** erstellt werden. Alle anderen Instanzen werden automatisch erstellt.
 
 ## Versionen
 
