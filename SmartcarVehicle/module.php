@@ -183,7 +183,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 [
                     'type' => 'Button',
                     'caption' => 'Aktivierte Signale abrufen',
-                    'onClick' => 'SMCARV_FetchSelectedSignals($id);'
+                    'onClick' => 'SMCARV_FetchSelectedSignals($id, []);'
                 ]
             ]
         ];
@@ -382,23 +382,12 @@ class SmartcarVehicle extends IPSModuleStrict
         return $text;
     }
 
-    public function FetchSelectedSignals(string $onlySignalCodes = ''): void
+    public function FetchSelectedSignals(array $onlySignalCodes = []): void
     {
-        $onlySignalCodes = trim($onlySignalCodes);
-
-        if ($onlySignalCodes === '') {
-            $onlySignalCodesArray = [];
-        } else {
-            $onlySignalCodesArray = array_filter(
-                array_map('trim', explode(',', $onlySignalCodes)),
-                fn($code) => $code !== ''
-            );
-        }
-
-        if (!empty($onlySignalCodesArray)) {
+        if (!empty($onlySignalCodes)) {
             $this->SendDebug(
                 'FetchSignals/Start',
-                'Teilabruf für neue Signale: ' . implode(', ', $onlySignalCodesArray),
+                'Teilabruf für neue Signale: ' . implode(', ', $onlySignalCodes),
                 0
             );
         } else {
@@ -445,14 +434,8 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $selectedMap = $this->GetSelectedSignalMap();
 
-        $this->SendDebug(
-            'FetchSignals/SelectedMap',
-            json_encode(array_keys($selectedMap), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
-            0
-        );
-
         $onlyMap = [];
-        foreach ($onlySignalCodesArray as $code) {
+        foreach ($onlySignalCodes as $code) {
             $onlyMap[(string)$code] = true;
         }
 
@@ -464,14 +447,11 @@ class SmartcarVehicle extends IPSModuleStrict
                 continue;
             }
 
-            $attributes = is_array($signal['attributes'] ?? null) ? $signal['attributes'] : $signal;
-
-            $signalCode = (string)(
-                $signal['code']
-                ?? $attributes['code']
-                ?? $signal['id']
-                ?? ''
-            );
+            $signalCode = (string)($signal['code'] ?? $signal['id'] ?? '');
+            if ($signalCode === '') {
+                $skipped++;
+                continue;
+            }
 
             if (!empty($onlyMap) && !isset($onlyMap[$signalCode])) {
                 $skipped++;
@@ -484,6 +464,14 @@ class SmartcarVehicle extends IPSModuleStrict
                 $skipped++;
                 continue;
             }
+
+            if (!empty($onlyMap) && !isset($onlyMap[$signalCode])) {
+                $this->SendDebug('FetchSignals/SkipNotNew', $signalCode, 0);
+                $skipped++;
+                continue;
+            }
+
+            $attributes = is_array($signal['attributes'] ?? null) ? $signal['attributes'] : $signal;
 
             $body = is_array($attributes['body'] ?? null) ? $attributes['body'] : [];
             $status = is_array($attributes['status'] ?? null) ? $attributes['status'] : null;
@@ -516,8 +504,8 @@ class SmartcarVehicle extends IPSModuleStrict
         $this->SendDebug(
             'FetchSignals/Done',
             json_encode([
-                'mode' => empty($onlySignalCodesArray) ? 'full' : 'partial',
-                'requested' => count($onlySignalCodesArray),
+                'mode'    => empty($onlySignalCodes) ? 'full' : 'partial',
+                'requested' => count($onlySignalCodes),
                 'applied' => $applied,
                 'skipped' => $skipped
             ]),
@@ -630,9 +618,9 @@ class SmartcarVehicle extends IPSModuleStrict
                 continue;
             }
 
-            $signalCode = (string)($entry['code'] ?? '');
+            $signalCode = (string)($entry['capability'] ?? '');
             if ($signalCode === '') {
-                $signalCode = (string)($entry['capability'] ?? '');
+                $signalCode = (string)($entry['code'] ?? '');
             }
 
             if ($signalCode !== '') {
@@ -875,9 +863,9 @@ class SmartcarVehicle extends IPSModuleStrict
                 $type = strtolower((string)($entry['type'] ?? ''));
 
                 if ($type === 'signal') {
-                    $signalCode = (string)($entry['code'] ?? '');
+                    $signalCode = (string)($entry['capability'] ?? '');
                     if ($signalCode === '') {
-                        $signalCode = (string)($entry['capability'] ?? '');
+                        $signalCode = (string)($entry['code'] ?? '');
                     }
 
                     if ($signalCode === '') {
@@ -917,9 +905,9 @@ class SmartcarVehicle extends IPSModuleStrict
             $type = strtolower((string)($entry['type'] ?? ''));
 
             if ($type === 'signal') {
-                $signalCode = (string)($entry['code'] ?? '');
+                $signalCode = (string)($entry['capability'] ?? '');
                 if ($signalCode === '') {
-                    $signalCode = (string)($entry['capability'] ?? '');
+                    $signalCode = (string)($entry['code'] ?? '');
                 }
 
                 if ($signalCode === '') {
@@ -1002,7 +990,7 @@ class SmartcarVehicle extends IPSModuleStrict
         }
 
         if (!empty($newSignalCodes)) {
-            $this->FetchSelectedSignals(implode(',', array_keys($newSignalCodes)));
+            $this->FetchSelectedSignals(array_keys($newSignalCodes));
         }
     }
 
