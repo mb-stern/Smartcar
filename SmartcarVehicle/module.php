@@ -1370,6 +1370,7 @@ class SmartcarVehicle extends IPSModuleStrict
 
         if (!IPS_VariableProfileExists('SMCAR.Charge')) {
             IPS_CreateVariableProfile('SMCAR.Charge', VARIABLETYPE_STRING);
+        }
     }
 
     private function RegisterOrUpdateTypedVariable(string $ident, string $name, mixed $value, int $type, string $profile, bool $onlySetValueOnCreate = false): bool
