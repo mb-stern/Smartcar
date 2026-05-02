@@ -99,9 +99,10 @@ class SmartcarSplitter extends IPSModuleStrict
                         [
                             'type'    => 'Label',
                             'caption' => "Sag danke und unterstütze den Modulentwickler: paypal.me/mbstern"
-                        ],
-                    ],
-                ],
+                        ]
+                    ]
+                ]
+            ]
         ];
 
         return json_encode($form, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
