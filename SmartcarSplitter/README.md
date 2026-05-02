@@ -33,7 +33,7 @@ Das Modul wird automatisch zusammen mit dem Smartcar-Modul installiert.
 
 | Feld / Aktion | Beschreibung |
 |------|---------------|
-| **Redirect URI** | Wird vom Modul angezeigt und muss auch in der Smartcar Konfiguration eingetragen werden |
+| **Redirect URI** | Wird vom Modul angezeigt und muss auch in der Smartcar Konfiguration eingetragen werden. Ebenfalls gehört diese URI auch in dei Webhook-Konfiguration des Fahrzeuges |
 | **Manuelle Redirect URI** | Optional. Nur verwenden, wenn nicht automatisch die Symcon-Connect-URL genutzt werden soll |
 | **Client ID** | Client ID aus der Smartcar Application |
 | **Client Secret** | Client Secret aus der Smartcar Application |
