@@ -82,9 +82,7 @@ class SmartcarSplitter extends IPSModuleStrict
                     'caption' => 'Application Management Token'
                 ]
             ],
-
-               'actions' => [
-                [
+            [
                     'type'    => 'Label',
                     'caption' => ''
                 ],
@@ -102,7 +100,6 @@ class SmartcarSplitter extends IPSModuleStrict
                         ]
                     ]
                 ]
-            ]
         ];
 
         return json_encode($form, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
