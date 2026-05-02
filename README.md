@@ -8,9 +8,9 @@ Prüfe hier, welche Endpunkte dein Fahrzeug unterstützt:
 
 Du findest alle Funktionen für das Smartcar Symcon Repository in den entsprechenden Modul-Teilen.
 
-- __Smartcar__ ([Dokumentation](SmartcarVehicle))   
-- __Smartcar__ ([Dokumentation](SmartcarSplitter))  
-- __Smartcar__ ([Dokumentation](SmartcarConfigurator))  
+- __SmartcarVehicle__ ([Dokumentation](SmartcarVehicle))   
+- __SmartcarSplitter__ ([Dokumentation](SmartcarSplitter))  
+- __SmartcarConfigurator__ ([Dokumentation](SmartcarConfigurator))  
 
 
 ## Versionen
