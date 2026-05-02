@@ -263,6 +263,32 @@ class SmartcarConfigurator extends IPSModuleStrict
 
         $state = 'configurator_' . $mode . '_' . bin2hex(random_bytes(8));
 
+        if ($mode === 'simulated') {
+            $instanceId = IPS_CreateInstance(self::VEHICLE_MODULE_ID);
+
+            $caption = 'Smartcar Simulated Vehicle';
+
+            IPS_SetName($instanceId, $caption);
+
+            $targetParentId = IPS_GetParent($this->InstanceID);
+            if ($targetParentId > 0) {
+                @IPS_SetParent($instanceId, $targetParentId);
+            }
+
+            $splitterId = $this->GetSplitterInstanceID();
+            if ($splitterId > 0) {
+                @IPS_ConnectInstance($instanceId, $splitterId);
+            }
+
+            IPS_SetProperty($instanceId, 'VehicleCaption', $caption);
+            IPS_SetProperty($instanceId, 'ConnectMode', 'simulated');
+            IPS_SetProperty($instanceId, 'ConnectState', $state);
+
+            IPS_ApplyChanges($instanceId);
+
+            $this->ReloadForm();
+        }
+
         $result = $this->SendDataToParent(json_encode([
             'DataID'      => self::DATA_ID,
             'Command'     => 'BuildConnectURL',
