@@ -1,33 +1,5 @@
 # 🚗 Smartcar Modul für IP-Symcon
 
-Dieses Modul ermöglicht es, Fahrzeugdaten über die [Smartcar-Plattform](https://smartcar.com/de) in IP-Symcon abzufragen und Fahrzeugfunktionen zu steuern.  
-Smartcar unterstützt aktuell über **40 Fahrzeugmarken**.
-
-👉 Prüfe hier, welche Endpunkte dein Fahrzeug unterstützt:  
-[Smartcar – Kompatible Fahrzeuge](https://smartcar.com/de/product/compatible-vehicles)
-
----
-
-## ⚙️ Wichtig zur Konfiguration
-
-Das Modul nutzt **OAuth 2.0** zur Verbindung mit der Smartcar API.  
-Dazu ist eine **Redirect URI** in der Smartcar-Konfiguration erforderlich.
-
-Diese URI ist **identisch mit der Webhook-Adresse**, die das Modul automatisch erstellt.  
-Sie setzt sich aus deiner **Symcon Connect-Adresse** und dem **Webhook-Pfad** zusammen.
-
-Beispiel:
-```
-https://<deineID>.ipmagic.de/hook/smartcar_15583
-```
-
-Diese Adresse muss in Smartcar eingetragen werden unter:  
-- *Configuration → Redirect URIs*  
-- *Integrations → Webhook*
-
-> ⚠️ Wenn du Scopes im Konfigurationsformular änderst, müssen die Berechtigungen über den Button **„Mit Smartcar verbinden“** neu autorisiert werden.
-
----
 
 ## 📑 Inhaltsverzeichnis
 
@@ -48,7 +20,7 @@ Diese Adresse muss in Smartcar eingetragen werden unter:
 
 ## 1. Funktionsumfang
 
-- Verbindung eines Fahrzeugs über Smartcar (Test- oder Live-Fahrzeug).  
+- Verbindung eines Fahrzeugs über Smartcar (Test-Fahrzeuge sind nicht unterstützt).  
 - Abruf der wichtigsten Fahrzeugdaten über API-Endpunkte.  
 - Steuerung von Funktionen wie Zentralverriegelung oder Ladelimit.  
 - Unterstützung von **Smartcar Signals (Webhooks)** zur automatischen Aktualisierung direkt vom OEM-Backend gepusht.  
@@ -62,8 +34,8 @@ Diese Adresse muss in Smartcar eingetragen werden unter:
 ## 2. Voraussetzungen
 
 - IP-Symcon ab Version **8.2**  
-- Smartcar-Konto mit Test- oder Live-Fahrzeug  
-- Eingetragene Redirect-/Webhook-URI in Smartcar
+- Smartcar-Konto  
+- Mit Smartcar kompatibles Fahrzeug
 
 ---
 
