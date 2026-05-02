@@ -17,8 +17,6 @@ class SmartcarVehicle extends IPSModuleStrict
     $this->RegisterPropertyInteger('Year', 0);
     $this->RegisterPropertyString('PowertrainType', '');
     $this->RegisterPropertyString('SelectedCapabilities', '[]');
-    $this->RegisterPropertyString('ConnectState', '');
-    $this->RegisterPropertyString('ConnectMode', '');
     $this->RegisterAttributeString('CompatibilityCache', '[]');
     $this->RegisterAttributeInteger('CompatibilityCacheAt', 0);
 }
@@ -95,12 +93,7 @@ class SmartcarVehicle extends IPSModuleStrict
     {
         $capabilities = [];
 
-        if (
-            $this->HasParentConnection() &&
-            $this->ReadPropertyString('VehicleID') !== '' &&
-            $this->ReadPropertyString('Make') !== '' &&
-            $this->ReadPropertyString('Model') !== ''
-        ) {
+        if ($this->HasParentConnection()) {
             $capabilities = $this->GetCompatibilityCapabilitiesForForm();
         }
 
@@ -195,16 +188,6 @@ class SmartcarVehicle extends IPSModuleStrict
 
     public function ReloadCompatibility(): void
     {
-        if (
-            $this->ReadPropertyString('VehicleID') === '' ||
-            $this->ReadPropertyString('Make') === '' ||
-            $this->ReadPropertyString('Model') === ''
-        ) {
-            $this->SendDebug('Compatibility/Skip', 'Fahrzeugdaten fehlen. Compatibility wird nicht geladen.', 0);
-            $this->ReloadForm();
-            return;
-        }
-
         $this->LoadCompatibility(true);
         $this->ReloadForm();
     }

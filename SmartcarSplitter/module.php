@@ -788,7 +788,6 @@ class SmartcarSplitter extends IPSModuleStrict
 
         $connections = $this->LoadConnections();
         $this->UpdateVehiclesFromConnections($connections);
-        $this->UpdatePreparedVehicleFromState($state, $userId, $connections);
 
         http_response_code(200);
         header('Content-Type: text/html; charset=utf-8');
@@ -905,57 +904,5 @@ class SmartcarSplitter extends IPSModuleStrict
             'resolution'  => $err['resolution'] ?? null,
             'meta'        => $payload['meta'] ?? []
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
-    }
-
-    private function UpdatePreparedVehicleFromState(string $state, string $userId, array $connections): void
-    {
-        if ($state === '') {
-            return;
-        }
-
-        $instanceId = $this->FindVehicleInstanceByConnectState($state);
-        if ($instanceId === 0) {
-            return;
-        }
-
-        $this->SendDebug('Connect/PreparedVehicle', 'Vorbereitete Instanz gefunden: ' . $instanceId, 0);
-
-        IPS_SetProperty($instanceId, 'UserID', $userId);
-
-        if (str_starts_with($state, 'configurator_simulated_')) {
-            IPS_SetProperty($instanceId, 'VehicleCaption', 'Smartcar Simulated Vehicle');
-            IPS_ApplyChanges($instanceId);
-
-            $this->SendDebug(
-                'Connect/PreparedVehicle',
-                'Simulated Connect abgeschlossen, aber keine VehicleID aus /connections erhalten.',
-                0
-            );
-            return;
-        }
-
-        IPS_ApplyChanges($instanceId);
-    }
-
-    private function FindVehicleInstanceByConnectState(string $state): int
-    {
-        if ($state === '') {
-            return 0;
-        }
-
-        $vehicleModuleId = '{1E1B7C9A-2D4F-4E8A-9C3B-7F6D5A4E2B10}';
-        $instanceIds = @IPS_GetInstanceListByModuleID($vehicleModuleId);
-
-        if (!is_array($instanceIds)) {
-            return 0;
-        }
-
-        foreach ($instanceIds as $instanceId) {
-            if ((string)@IPS_GetProperty($instanceId, 'ConnectState') === $state) {
-                return (int)$instanceId;
-            }
-        }
-
-        return 0;
     }
 }
