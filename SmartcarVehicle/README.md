@@ -36,7 +36,7 @@ Unter *Instanz hinzufügen* das Modul **Smartcar** auswählen.
 
 | Feld | Beschreibung |
 |------|---------------|
-| **Kompatible Signale / Befehle** | Diese Liste wird automatisch beim Erstellen der Fahrzeuginstanz aus dem Konfigurator geladen. Sie kann auch über den Button **„Kompatibilitätsliste neu laden“** aktualisiert werden. Die Liste wird 24 Stunden im Modul gecacht. |
+| **Kompatible Signale / Befehle** | Diese Liste wird automatisch beim Erstellen der Fahrzeuginstanz aus dem Konfigurator geladen. Sie kann auch über den Button **„Kompatibilitätsliste neu laden“** aktualisiert werden. Die Liste wird 24 Stunden im Modul gecacht. Es kann sein, dass nicht restlos alle Signale in dieser Liste wirklich kompatibel sind. |
 | **Kompatibilität neu laden** | Lädt die Kompatibilitätsliste erneut von Smartcar. |
 | **Gewählte Signale bei Smartcar registrieren** | Registriert die ausgewählten Signale bei Smartcar. Ohne diese Registrierung werden Signale unter Umständen nicht oder unvollständig empfangen. |
 | **Aktivierte Signale abrufen** | Ruft alle aktivierten Signale auf einmal über die API ab (Pull). |
