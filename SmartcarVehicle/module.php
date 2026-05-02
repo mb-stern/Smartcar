@@ -183,7 +183,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 [
                     'type' => 'Button',
                     'caption' => 'Aktivierte Signale abrufen',
-                    'onClick' => 'SMCARV_FetchSelectedSignals($id, []);'
+                    'onClick' => 'SMCARV_FetchSelectedSignals($id);'
                 ]
             ]
         ];
@@ -382,8 +382,27 @@ class SmartcarVehicle extends IPSModuleStrict
         return $text;
     }
 
-    public function FetchSelectedSignals(array $onlySignalCodes = []): void
+    public function FetchSelectedSignals($onlySignalCodes = []): void
     {
+        if ($onlySignalCodes === null || $onlySignalCodes === '') {
+            $onlySignalCodes = [];
+        }
+
+        if (is_string($onlySignalCodes)) {
+            $onlySignalCodes = trim($onlySignalCodes);
+
+            if ($onlySignalCodes === '') {
+                $onlySignalCodes = [];
+            } else {
+                $onlySignalCodes = array_map('trim', explode(',', $onlySignalCodes));
+                $onlySignalCodes = array_filter($onlySignalCodes, fn($code) => $code !== '');
+            }
+        }
+
+        if (!is_array($onlySignalCodes)) {
+            $onlySignalCodes = [];
+        }
+
         if (!empty($onlySignalCodes)) {
             $this->SendDebug(
                 'FetchSignals/Start',
