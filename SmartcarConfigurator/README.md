@@ -14,14 +14,16 @@
 ## 2. Voraussetzungen
 
 - IP-Symcon ab Version **8.2**  
-- Eingerichtetes Smartcar Splitter Modul  
-- Erfolgreich verbundene Smartcar-Session  
+- Smartcar-Konto  
+- Mit Smartcar kompatibles Fahrzeug, welches mit dem OEM-Portal verbunden ist
 
 ---
 
 ## 3. Installation
 
-Das Modul wird automatisch zusammen mit dem Smartcar-Modul installiert.
+Das Modul kann direkt über den **Symcon Module Store** installiert werden.
+Wärend der Installation des Smartcar Moduls ist zuerst der **Smartcar Configurator** zu erstellen.
+Der Splitter wir automatisch erstellt.
 
 ---
 
