@@ -1,9 +1,9 @@
 # Modul für Smartcar für IP-Symcon
 Folgende Funktionen beinhaltet das Smartcar Symcon Repository
 
-- __Smartcar__ ([Dokumentation](SMCAR))   
+- __SmartcarVehicle__ ([Dokumentation](SMCAR))   
 
-Dieses Modul ermöglicht es, Fahrzeugdaten über die [Smartcar-Plattform](https://smartcar.com/de) in IP-Symcon abzufragen und bestimmte Fahrzeugfunktionen zu steuern.
+Dieses Modul ermöglicht es, Signale über die [Smartcar-Plattform](https://smartcar.com/de) in IP-Symcon zu empfangen und abzufragen, und bestimmte Fahrzeugfunktionen zu steuern.
 
 Smartcar unterstützt aktuell über **40 Fahrzeugmarken**.  
 Prüfe hier, welche Endpunkte dein Fahrzeug unterstützt:  
