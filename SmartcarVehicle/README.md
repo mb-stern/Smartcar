@@ -60,19 +60,22 @@ Unter *Instanz hinzufügen* das Modul **Smartcar** auswählen.
 
 ---
 
-## 6. Smartcar Signals
+## 5. Smartcar Signals
 
-Es gibt zwei möglichkeiten, um die Signale zu aktualisieren.
+Es gibt diverse Möglichkeiten, die Signale zu aktualisieren.
 1. Durch akualieren über den entsprechenden Button 'AKtivierte Signale abrufen' im Konfigurationsformular (Pull).  
-2. Durch empfangen der Signale über den Webhook, sobald diese beim OEM aktualisiert wurden (Push).
+2. Durch akualisieren aller oder einzelner Signale über ein Script (Pull)
+3. Durch empfangen der Signale über den Webhook, sobald diese beim OEM aktualisiert wurden (Push).
 
 
-### Signalgruppen (Beispiele)
+### Signalgruppen und Befehle (Beispiele)
 
-| Kategorie | Signaltyp | Beispiel-Signale | Beschreibung |
-|------------|------------|------------------|---------------|
+| Kategorie | Signaltyp / Befehlstyp | Beispiel-Signale / Befehle | Beschreibung |
+|------------|------------------------|-----------------------------|---------------|
 | **Batterie & Laden** | `tractionbattery-*`, `charge-*` | `tractionbattery-stateofcharge`, `charge-ischarging`, `charge-chargelimits` | SOC, Ladezustand, Ladelimit |
-| **Sicherheit & Türen** | `closure-*` | `closure-islocked`, `closure-doors`, `closure-windows` | Verriegelungsstatus, offene Türen/Fenster |
+| **Ladebefehle** | `charge-*` Commands | `charge-start`, `charge-stop`, `charge-set-limit` | Ladevorgang starten/stoppen, Ladelimit setzen |
+| **Sicherheit & Türen** | `closure-*`, `security-*` | `closure-islocked`, `closure-doors`, `closure-windows` | Verriegelungsstatus, offene Türen/Fenster |
+| **Türbefehle** | `security-*` Commands | `security-lock`, `security-unlock` | Fahrzeug verriegeln/entriegeln |
 | **Fahrzeugbewegung** | `location-*`, `odometer-*` | `location-preciselocation`, `odometer-traveleddistance` | GPS, Kilometerstand |
 | **Fahrzeuginfo** | `vehicleidentification-*`, `internalcombustionengine-*` | `vehicleidentification-*`, `internalcombustionengine-fuellevel` | Stammdaten & Motorstatus |
 | **Reifendruck** | `tires-*` | `tires-pressure` | Druckwerte aller Reifen |
@@ -80,13 +83,13 @@ Es gibt zwei möglichkeiten, um die Signale zu aktualisieren.
 | **Klima** | `climate-*`, `climatecontrol-*` | `climate-externaltemperature`, `climatecontrol-isheateractive` | Innen-/Außentemperatur, Heizung |
 | **Sonstige** | `vehicle-*`, `telematics-*`, `energy-*`, `evse-*` | `vehicle-speed`, `telematics-*`, `energy-*`, `evse-*` | Nur bei Premium-/Fleet-Plänen verfügbar |
 
-> Es gibt weit über 100 mögliche Signaltypen.  
-> Es sind bei weitem nicht alle Signale mit allen Fahrzeugen kompatibel. Das Modul filtert automatisch.
+> Es gibt weit über 100 mögliche Signaltypen und mehrere mögliche Fahrzeugbefehle.  
+> Es sind bei weitem nicht alle Signale und Befehle mit allen Fahrzeugen kompatibel. Das Modul filtert automatisch.
 
 
 ---
 
-## 7. Statusvariablen und Profile
+## 6. Statusvariablen und Profile
 
 Variablen werden automatisch angelegt, wenn sie benötigt werden.  
 Das Löschen einzelner Variablen kann zu Fehlfunktionen führen.
@@ -105,16 +108,18 @@ Das Löschen einzelner Variablen kann zu Fehlfunktionen führen.
 
 ---
 
-## 8. WebFront
+## 7. WebFront
 
 Steuere Fahrzeugfunktionen direkt aus dem WebFront:  
-- Türen verriegeln/entriegeln  
+- Fahrzeug verriegeln / entriegeln  
 - Ladelimit setzen  
-- Ladevorgang starten/stoppen  
+- Ladevorgang starten / stoppen  
+
+Nicht alle Fahrzeuge unterstützen alle Befehle. Das Modul zeigt nur kompatible Befehle aus der Smartcar-Kompatibilitätsliste an.  
 
 ---
 
-## 9. PHP-Befehlsreferenz
+## 8. PHP-Befehlsreferenz
 
 | Befehl | Beschreibung |
 |--------|---------------|
@@ -125,13 +130,13 @@ Steuere Fahrzeugfunktionen direkt aus dem WebFront:
 
 ---
 
-## 10. Bekannte Einschränkungen
+## 9. Bekannte Einschränkungen
 
 - Simmulierte Fahrzeuge werden aktuell nicht unterstützt.  
 
 ---
 
-## 11. Lizenz
+## 10. Lizenz
 
 Dieses Modul steht unter der **MIT-Lizenz**.  
 © 2025 Stefan Künzli  
