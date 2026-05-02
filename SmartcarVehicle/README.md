@@ -35,7 +35,7 @@
 
 - IP-Symcon ab Version **8.2**  
 - Smartcar-Konto  
-- Mit Smartcar kompatibles Fahrzeug
+- Mit Smartcar kompatibles Fahrzeug welches mit dem OEM-Portal verbunden ist
 
 ---
 
@@ -60,73 +60,29 @@ Unter *Instanz hinzufügen* das Modul **Smartcar** auswählen.
 
 ---
 
-## 5. Scopes (Berechtigungen)
+## 6. Smartcar Signals
 
-Die folgenden Scopes können über die API abgefragt werden.  
-Sie definieren, welche Daten das Modul aktiv abrufen darf.
+Es gibt zwei möglichkeiten, um die Signale zu aktualisieren.
+1. Durch akualieren über den entsprechenden Button 'AKtivierte Signale abrufen' im Konfigurationsformular (Pull).  
+2. Durch empfangen der Signale über den Webhook, sobald diese beim OEM aktualisiert wurden (Push).
 
-| Scope | API-Endpunkte | Beschreibung |
-|--------|----------------|---------------|
-| `read_vehicle_info` | `/` | Allgemeine Fahrzeuginformationen |
-| `read_vin` | `/vin` | Fahrgestellnummer |
-| `read_location` | `/location` | GPS-Koordinaten |
-| `read_tires` | `/tires/pressure` | Reifendruck |
-| `read_odometer` | `/odometer` | Kilometerstand |
-| `read_battery` | `/battery`, `/battery/nominal_capacity` | Batteriedaten |
-| `read_fuel` | `/fuel` | Tankfüllstand und Reichweite |
-| `read_security` | `/security` | Verriegelungsstatus |
-| `read_charge` | `/charge`, `/charge/limit` | Ladestatus & Ladelimit |
-| `read_engine_oil` | `/engine/oil` | Ölzustand |
-
-> Tipp: Aktiviere nur Scopes, die du wirklich brauchst.  
-> Jeder API-Aufruf verbraucht dein monatliches Kontingent.
-
----
-
-## 6. Smartcar Signals (Webhooks)
-
-Smartcar Signals liefern **Echtzeitdaten** deines Fahrzeugs an das Modul.  
-Sobald ein Signal eintrifft, legt das Modul automatisch passende Variablen an und aktualisiert sie.
-
-> Smartcar Signals stehen nur bei Fahrzeugen und Tarifen zur Verfügung, die sie unterstützen.  
-> Simulatoren senden keine Signals.
-
-### Einrichtung
-
-1. Im Modul den **Webhook aktivieren**.  
-2. Die automatisch angezeigte URI in Smartcar als **Integration Webhook** eintragen.  
-3. **Application Management Token** im Modul hinterlegen.  
-4. (Optional) **Fahrzeug verifizieren** aktivieren, um nur gültige Vehicle-IDs zuzulassen.  
-5. (Optional) **Letzte Aktualisierung** aktivieren.
-
-### Sicherheit
-
-- **VERIFY-Event:** Smartcar sendet bei der Einrichtung ein `eventType:"VERIFY"`.  
-  Das Modul antwortet automatisch mit einem HMAC-SHA256 über das Management Token.  
-- **Signaturprüfung:** Alle eingehenden Signale werden anhand des Headers `SC-Signature` validiert.  
-- **Fahrzeugfilter:** Bei aktivierter Prüfung werden fremde Vehicle-IDs ignoriert.
 
 ### Signalgruppen (Beispiele)
 
-| Kategorie | Beispiel-Signale | Beschreibung |
-|------------|------------------|---------------|
-| **Batterie & Laden** | `tractionbattery-stateofcharge`, `charge-ischarging`, `charge-chargelimits` | SOC, Ladezustand, Ladelimit |
-| **Sicherheit & Türen** | `closure-islocked`, `closure-doors`, `closure-windows` | Verriegelungsstatus, offene Türen/Fenster |
-| **Fahrzeugbewegung** | `location-preciselocation`, `odometer-traveleddistance` | GPS, Kilometerstand |
-| **Fahrzeuginfo** | `vehicleidentification-*`, `engine-*` | Stammdaten & Motorstatus |
-| **Reifendruck** | `tires-pressure` | Druckwerte aller Reifen |
-| **Sonstige** | `vehicle-speed`, `telematics-*`, `energy-*`, `evse-*` | Nur bei Premium-/Fleet-Plänen verfügbar |
+| Kategorie | Signaltyp | Beispiel-Signale | Beschreibung |
+|------------|------------|------------------|---------------|
+| **Batterie & Laden** | `tractionbattery-*`, `charge-*` | `tractionbattery-stateofcharge`, `charge-ischarging`, `charge-chargelimits` | SOC, Ladezustand, Ladelimit |
+| **Sicherheit & Türen** | `closure-*` | `closure-islocked`, `closure-doors`, `closure-windows` | Verriegelungsstatus, offene Türen/Fenster |
+| **Fahrzeugbewegung** | `location-*`, `odometer-*` | `location-preciselocation`, `odometer-traveleddistance` | GPS, Kilometerstand |
+| **Fahrzeuginfo** | `vehicleidentification-*`, `internalcombustionengine-*` | `vehicleidentification-*`, `internalcombustionengine-fuellevel` | Stammdaten & Motorstatus |
+| **Reifendruck** | `tires-*` | `tires-pressure` | Druckwerte aller Reifen |
+| **Konnektivität** | `connectivitystatus-*`, `connectivitysoftware-*` | `connectivitystatus-isonline`, `connectivitysoftware-currentfirmwareversion` | Online-Status, Firmware |
+| **Klima** | `climate-*`, `climatecontrol-*` | `climate-externaltemperature`, `climatecontrol-isheateractive` | Innen-/Außentemperatur, Heizung |
+| **Sonstige** | `vehicle-*`, `telematics-*`, `energy-*`, `evse-*` | `vehicle-speed`, `telematics-*`, `energy-*`, `evse-*` | Nur bei Premium-/Fleet-Plänen verfügbar |
 
 > Es gibt weit über 100 mögliche Signaltypen.  
-> Das Modul legt Variablen **automatisch** an, sobald ein neues Signal empfangen wird.
+> Es sind bei weitem nicht alle Signale mit allen Fahrzeugen kompatibel. Das Modul filtert automatisch.
 
-
-### Hinweise
-
-- Fehlende Variablen = falscher Webhook, fehlendes Token oder ungültige Signatur.  
-- VERIFY schlägt fehl → Management Token prüfen.  
-- Simulatoren senden keine Webhooks.  
-- Doppelte Signale werden idempotent verarbeitet (keine Duplikate).
 
 ---
 
@@ -137,13 +93,15 @@ Das Löschen einzelner Variablen kann zu Fehlfunktionen führen.
 
 | Profil | Typ | Beschreibung |
 |---------|-----|--------------|
-| `SMCAR.Odometer` | Float | Kilometerstand |
-| `SMCAR.Pressure` | Float | Reifendruck |
-| `SMCAR.Progress` | Float | Prozentwerte |
-| `SMCAR.Status` | String | Statusanzeige |
-| `SMCAR.Charge` | String | Ladezustand (Text) |
-| `SMCAR.Health` | String | Batteriezustand |
-| `SMCAR.ChargeLimitSet` | Float | Ladelimit |
+| `SMCAR.Odometer` | Float | Kilometerstand und Reichweite |
+| `SMCAR.Pressure` | Float | Reifendruck in bar |
+| `SMCAR.Progress` | Float | Prozentwerte (z. B. Batterieladestand, Ladelimit, Tankfüllstand, Öl-Lebensdauer) |
+| `SMCAR.Status` | String | Statusanzeige (z. B. OPEN / CLOSED) |
+| `SMCAR.Charge` | String | Ladezustand (Text, z. B. CHARGING, COMPLETED) |
+| `SMCAR.Power` | Float | Ladeleistung in kW |
+| `SMCAR.Energy` | Float | Energie in kWh (z. B. geladen oder Kapazität) |
+| `SMCAR.TimeMinutes` | Integer | Zeitangaben in Minuten |
+| `SMCAR.LatLon` | Float | GPS-Koordinaten (Latitude / Longitude) |
 
 ---
 
@@ -173,7 +131,7 @@ Steuere Fahrzeugfunktionen direkt aus dem WebFront:
 
 ---
 
-## 12. Lizenz
+## 11. Lizenz
 
 Dieses Modul steht unter der **MIT-Lizenz**.  
 © 2025 Stefan Künzli  
