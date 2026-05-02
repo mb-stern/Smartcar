@@ -1,16 +1,16 @@
-# 🚗 Smartcar Modul für IP-Symcon
+# 🚗 Smartcar Modul für IP-Symcon (Vehicle Instanz)
 
 
 ## 1. Funktionsumfang
 
 - Verbindung eines Fahrzeugs über Smartcar (Test-Fahrzeuge sind nicht unterstützt).  
-- Abruf der wichtigsten Fahrzeugdaten über API-Endpunkte.  
-- Steuerung von Funktionen wie Zentralverriegelung oder Ladelimit.  
-- Unterstützung von **Smartcar Signals (Webhooks)** zur automatischen Aktualisierung direkt vom OEM-Backend gepusht.  
+- Automatische Ermittlung der kompatiblen Signale und Befehle pro Fahrzeug.  
+- Auswahl der gewünschten Signale und Befehle über Checkbox-Liste.  
+- Manuelle oder externe Abfrage aktivierter Signale über die Smartcar API (Pull).  
+- Unterstützung von **Smartcar Signals (Webhooks)** zur automatischen Aktualisierung direkt vom OEM-Backend (Push).  
+- Steuerung von Funktionen wie Zentralverriegelung, Ladevorgang oder Ladelimit.  
 - Automatische Erstellung und Verwaltung der Statusvariablen.  
-- Fehler- und Debug-Ausgaben im Symcon-Debug-Fenster.  
-- Unterstützung mehrerer Fahrzeuge über mehrere Modulinstanzen.  
-- **Rate-Limit-Handling** mit automatischer Wiederholung nach Wartezeit.
+- Fehler- und Debug-Ausgaben im Symcon-Debug-Fenster.   
 
 ---
 
@@ -74,7 +74,8 @@ Es gibt diverse Möglichkeiten, die Signale zu aktualisieren.
 
 ## 6. Statusvariablen und Profile
 
-Variablen werden automatisch angelegt, wenn sie benötigt werden.  
+Profile werden automatisch angelegt.
+Variablen werden angelegt, sobald diese im Konfigurationsformular ausgewählt sind.  
 Das Löschen einzelner Variablen kann zu Fehlfunktionen führen.
 
 | Profil | Typ | Beschreibung |
