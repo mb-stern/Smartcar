@@ -117,7 +117,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 'columns' => [
                     [
                         'caption' => '',
-                        'name' => 'sortKey',
+                        'name' => 'capabilityKey',
                         'width' => '0px',
                         'visible' => false,
                         'edit' => ['type' => 'ValidationTextBox']
@@ -190,6 +190,11 @@ class SmartcarVehicle extends IPSModuleStrict
         $this->ReloadForm();
     }
 
+    private function BuildCapabilityKey(string $type, string $capability, string $code): string
+    {
+        return strtolower(trim($type) . '|' . trim($capability) . '|' . trim($code));
+    }
+
     private function GetCompatibilityCapabilitiesForForm(): array
     {
         $data = $this->LoadCompatibility(false);
@@ -200,19 +205,19 @@ class SmartcarVehicle extends IPSModuleStrict
             $selected = [];
         }
 
-        $selectedBySortKey = [];
+        $selectedByCapabilityKey = [];
 
         foreach ($selected as $entry) {
             if (!is_array($entry)) {
                 continue;
             }
 
-            $sortKey = (string)($entry['sortKey'] ?? '');
-            if ($sortKey === '') {
+            $capabilityKey = (string)($entry['capabilityKey'] ?? '');
+            if ($capabilityKey === '') {
                 continue;
             }
 
-            $selectedBySortKey[$sortKey] =
+            $selectedByCapabilityKey[$capabilityKey] =
                 ($entry['selected'] ?? false) === true ||
                 ($entry['selected'] ?? false) === 1 ||
                 ($entry['selected'] ?? false) === '1' ||
@@ -220,9 +225,9 @@ class SmartcarVehicle extends IPSModuleStrict
         }
 
         foreach ($values as &$entry) {
-            $sortKey = (string)($entry['sortKey'] ?? '');
-            if ($sortKey !== '' && isset($selectedBySortKey[$sortKey])) {
-                $entry['selected'] = $selectedBySortKey[$sortKey];
+            $capabilityKey = (string)($entry['capabilityKey'] ?? '');
+            if ($capabilityKey !== '' && isset($selectedByCapabilityKey[$capabilityKey])) {
+                $entry['selected'] = $selectedByCapabilityKey[$capabilityKey];
             }
         }
         unset($entry);
@@ -1023,15 +1028,16 @@ class SmartcarVehicle extends IPSModuleStrict
                         . '|' . strtoupper($code);
 
                     $temp[$uniqueKey] = [
-                        'sortKey'    => $sortKey,
-                        'selected'   => false,
-                        'capability' => $capKey,
-                        'type'       => $type,
-                        'name'       => $displayName,
-                        'group'      => $group,
-                        'code'       => $code,
-                        'permission' => $permission
-                    ];
+                    'sortKey'       => $sortKey,
+                    'capabilityKey' => $this->BuildCapabilityKey($type, $capKey, $code),
+                    'selected'      => false,
+                    'capability'    => $capKey,
+                    'type'          => $type,
+                    'name'          => $displayName,
+                    'group'         => $group,
+                    'code'          => $code,
+                    'permission'    => $permission
+                ];
                     continue;
                 }
 
@@ -1072,11 +1078,11 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $fullList = $this->BuildCapabilitiesListFromCompatibilityItems($cache);
 
-        $fullBySortKey = [];
+        $fullByCapabilityKey = [];
         foreach ($fullList as $entry) {
-            $sortKey = (string)($entry['sortKey'] ?? '');
-            if ($sortKey !== '') {
-                $fullBySortKey[$sortKey] = $entry;
+            $capabilityKey = (string)($entry['capabilityKey'] ?? '');
+            if ($capabilityKey !== '') {
+                $fullByCapabilityKey[$capabilityKey] = $entry;
             }
         }
 
@@ -1097,17 +1103,17 @@ class SmartcarVehicle extends IPSModuleStrict
                 continue;
             }
 
-            $sortKey = (string)($savedEntry['sortKey'] ?? '');
-            if ($sortKey === '') {
+            $capabilityKey = (string)($savedEntry['capabilityKey'] ?? '');
+            if ($capabilityKey === '') {
                 continue;
             }
 
-            if (!isset($fullBySortKey[$sortKey])) {
-                $this->SendDebug('Selected/ResolveMissing', 'Kein FullEntry für sortKey=' . $sortKey, 0);
+            if (!isset($fullByCapabilityKey[$capabilityKey])) {
+                $this->SendDebug('Selected/ResolveMissing', 'Kein FullEntry für capabilityKey=' . $capabilityKey, 0);
                 continue;
             }
 
-            $entry = $fullBySortKey[$sortKey];
+            $entry = $fullByCapabilityKey[$capabilityKey];
             $entry['selected'] = true;
 
             $result[] = $entry;
