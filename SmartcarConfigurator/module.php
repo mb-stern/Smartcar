@@ -69,6 +69,11 @@ class SmartcarConfigurator extends IPSModuleStrict
                 ],
                 [
                     'type' => 'Button',
+                    'caption' => 'Liste aktualisieren',
+                    'onClick' => 'SMCARCFG_ReloadForm($id);'
+                ],
+                [
+                    'type' => 'Button',
                     'caption' => 'Alle fehlenden Fahrzeug-Instanzen erstellen',
                     'onClick' => 'SMCARCFG_CreateMissingVehicleInstances($id);'
                 ],
@@ -273,5 +278,10 @@ class SmartcarConfigurator extends IPSModuleStrict
         }
 
         return (string)($decoded['url'] ?? '');
+    }
+
+    public function ReloadConfiguratorForm(): void
+    {
+        $this->ReloadForm();
     }
 }
