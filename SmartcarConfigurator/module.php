@@ -330,5 +330,4 @@ class SmartcarConfigurator extends IPSModuleStrict
         IPS_ApplyChanges($instanceId);
 
         return $this->GenerateConnectURL('simulated');
-            }
 }
