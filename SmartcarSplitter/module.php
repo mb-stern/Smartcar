@@ -216,7 +216,7 @@ class SmartcarSplitter extends IPSModuleStrict
             return [];
         }
 
-        $url = 'https://vehicle.api.smartcar.com/v3/connections?page[size]=100';
+        $url = 'https://vehicle.api.smartcar.com/v3/connections?page[number]=1&page[size]=100';
 
         $response = $this->HttpRequestRaw(
             'Connections',
