@@ -322,9 +322,9 @@ class SmartcarConfigurator extends IPSModuleStrict
 
         IPS_SetProperty($instanceId, 'VehicleID', $vehicleId);
         IPS_SetProperty($instanceId, 'VehicleCaption', 'Smartcar Simulation');
-        IPS_SetProperty($instanceId, 'Make', 'SMARTCAR');
-        IPS_SetProperty($instanceId, 'Model', 'Simulated');
-        IPS_SetProperty($instanceId, 'Year', (int)date('Y'));
+        IPS_SetProperty($instanceId, 'Make', 'MERCEDES_BENZ');
+        IPS_SetProperty($instanceId, 'Model', 'EQ SERIES');
+        IPS_SetProperty($instanceId, 'Year', 2025);
         IPS_SetProperty($instanceId, 'PowertrainType', 'BEV');
 
         IPS_ApplyChanges($instanceId);
