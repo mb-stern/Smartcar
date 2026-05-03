@@ -63,14 +63,14 @@ class SmartcarConfigurator extends IPSModuleStrict
                     'onClick' => 'echo SMCARCFG_GenerateConnectURL($id, "live");'
                 ],
                 [
-                    'type' => 'Button',
-                    'caption' => 'Neues simuliertes Fahrzeug verbinden',
-                    'onClick' => 'SMCARCFG_CreateSimulatedVehicleInstance($id);'
-                ],
-                [
                     'type' => 'ValidationTextBox',
                     'name' => 'SimulatedVehicleID',
                     'caption' => 'Simulierte Vehicle ID'
+                ],
+                [
+                    'type' => 'Button',
+                    'caption' => 'Neues simuliertes Fahrzeug verbinden',
+                    'onClick' => 'SMCARCFG_CreateSimulatedVehicleInstance($id);'
                 ],
                 [
                     'type' => 'Button',
