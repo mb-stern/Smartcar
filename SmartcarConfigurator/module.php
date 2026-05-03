@@ -8,6 +8,7 @@ class SmartcarConfigurator extends IPSModuleStrict
         parent::Create();
 
         $this->RegisterPropertyString('SimulatedVehicleID', '');
+        $this->RegisterPropertyString('SimulatedUserID', '');
     }
 
     public function ApplyChanges(): void
@@ -61,7 +62,12 @@ class SmartcarConfigurator extends IPSModuleStrict
                     'type' => 'ValidationTextBox',
                     'name' => 'SimulatedVehicleID',
                     'caption' => 'Simulierte Vehicle ID'
-                ]
+                ],
+                [
+                'type' => 'ValidationTextBox',
+                'name' => 'SimulatedUserID',
+                'caption' => 'Simulierte User ID'
+            ]
             ],
             'actions' => [
                [
@@ -300,6 +306,12 @@ class SmartcarConfigurator extends IPSModuleStrict
             return 'Bitte zuerst die simulierte Vehicle ID eintragen.';
         }
 
+        $userId = trim($this->ReadPropertyString('SimulatedUserID'));
+
+        if ($userId === '') {
+            return 'Bitte zuerst die simulierte User ID eintragen.';
+        }
+
         $existingId = $this->FindVehicleInstanceByVehicleId($vehicleId);
         if ($existingId > 0) {
             return 'Instanz existiert bereits: ' . $existingId;
@@ -319,6 +331,8 @@ class SmartcarConfigurator extends IPSModuleStrict
         }
 
         IPS_SetProperty($instanceId, 'VehicleID', $vehicleId);
+        IPS_SetProperty($instanceId, 'UserID', $userId);
+        IPS_SetProperty($instanceId, 'ConnectionID', '');
         IPS_SetProperty($instanceId, 'VehicleCaption', 'Smartcar Simulation');
         IPS_SetProperty($instanceId, 'Make', 'MERCEDES_BENZ');
         IPS_SetProperty($instanceId, 'Model', 'EQ SERIES');
