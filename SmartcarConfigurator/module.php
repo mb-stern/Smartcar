@@ -72,7 +72,7 @@ class SmartcarConfigurator extends IPSModuleStrict
                 [
                     'type' => 'Button',
                     'caption' => 'Neues simuliertes Fahrzeug verbinden',
-                    'onClick' => 'SMCARCFG_CreateSimulatedVehicleInstance($id);'
+                    'onClick' => 'echo SMCARCFG_CreateSimulatedVehicleInstance($id);'
                 ],
                 [
                     'type' => 'Button',
@@ -292,19 +292,17 @@ class SmartcarConfigurator extends IPSModuleStrict
         $this->ReloadForm();
     }
 
-    public function CreateSimulatedVehicleInstance(): void
+    public function CreateSimulatedVehicleInstance(): string
     {
         $vehicleId = trim($this->ReadPropertyString('SimulatedVehicleID'));
 
         if ($vehicleId === '') {
-            echo 'Bitte zuerst die simulierte Vehicle ID eintragen.';
-            return;
+            return 'Bitte zuerst die simulierte Vehicle ID eintragen.';
         }
 
         $existingId = $this->FindVehicleInstanceByVehicleId($vehicleId);
         if ($existingId > 0) {
-            echo 'Instanz existiert bereits: ' . $existingId;
-            return;
+            return 'Instanz existiert bereits: ' . $existingId;
         }
 
         $instanceId = IPS_CreateInstance('{1E1B7C9A-2D4F-4E8A-9C3B-7F6D5A4E2B10}');
@@ -329,6 +327,6 @@ class SmartcarConfigurator extends IPSModuleStrict
 
         IPS_ApplyChanges($instanceId);
 
-    return $this->GenerateConnectURL('simulated');
-        }
+        return $this->GenerateConnectURL('simulated');
+    }
 }
