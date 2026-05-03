@@ -211,15 +211,32 @@ class SmartcarSplitter extends IPSModuleStrict
 
     public function LoadConnections(): array
     {
+        $connections = [];
+
+        foreach (['live', 'simulated'] as $mode) {
+            $connections = array_merge($connections, $this->LoadConnectionsByMode($mode));
+        }
+
+        return $connections;
+    }
+
+    private function LoadConnectionsByMode(string $mode): array
+    {
         $token = $this->GetValidApplicationAccessToken();
         if ($token === '') {
             return [];
         }
 
-        $url = 'https://vehicle.api.smartcar.com/v3/connections?page[size]=100';
+        $query = http_build_query([
+            'filter[vehicle.mode]' => $mode,
+            'page[number]' => 1,
+            'page[size]' => 100
+        ]);
+
+        $url = 'https://vehicle.api.smartcar.com/v3/connections?' . $query;
 
         $response = $this->HttpRequestRaw(
-            'Connections',
+            'Connections/' . $mode,
             'GET',
             $url,
             [
@@ -229,15 +246,21 @@ class SmartcarSplitter extends IPSModuleStrict
         );
 
         if ($response === null || $response['statusCode'] !== 200) {
-            $this->SendDebug('Connections', 'Fehler: ' . json_encode($response), 0);
+            $this->SendDebug('Connections/' . $mode, 'Fehler: ' . json_encode($response), 0);
             return [];
         }
 
         $data = json_decode($response['body'], true);
         if (!is_array($data) || !isset($data['data']) || !is_array($data['data'])) {
-            $this->SendDebug('Connections', 'Unerwartete Antwort: ' . $response['body'], 0);
+            $this->SendDebug('Connections/' . $mode, 'Unerwartete Antwort: ' . $response['body'], 0);
             return [];
         }
+
+        $this->SendDebug(
+            'Connections/' . $mode . '/Count',
+            'totalCount=' . (string)($data['meta']['totalCount'] ?? count($data['data'])),
+            0
+        );
 
         $connections = [];
 
@@ -257,7 +280,7 @@ class SmartcarSplitter extends IPSModuleStrict
             $model = (string)($vehicle['model'] ?? '');
             $year  = (string)($vehicle['year'] ?? '');
 
-            $modeValue      = (string)($vehicle['mode'] ?? ($attributes['mode'] ?? ''));
+            $modeValue      = (string)($vehicle['mode'] ?? ($attributes['mode'] ?? $mode));
             $powertrainType = (string)($vehicle['powertrainType'] ?? '');
 
             $caption = trim($make . ' ' . $model . ' ' . $year);
