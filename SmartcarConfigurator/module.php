@@ -72,7 +72,7 @@ class SmartcarConfigurator extends IPSModuleStrict
                 [
                     'type' => 'Button',
                     'caption' => 'Neues simuliertes Fahrzeug verbinden',
-                    'onClick' => 'SMCARCFG_CreateSimulatedVehicleInstance($id);'
+                    'onClick' => 'echo SMCARCFG_CreateSimulatedVehicleInstance($id);'
                 ],
                 [
                     'type' => 'Button',
@@ -329,6 +329,6 @@ class SmartcarConfigurator extends IPSModuleStrict
 
         IPS_ApplyChanges($instanceId);
 
-        echo 'Simulierte Fahrzeug-Instanz erstellt: ' . $instanceId;
-    }
+        return $this->GenerateConnectURL('simulated');
+            }
 }
