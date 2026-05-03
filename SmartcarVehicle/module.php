@@ -17,6 +17,8 @@ class SmartcarVehicle extends IPSModuleStrict
     $this->RegisterPropertyString('SelectedCapabilities', '[]');
     $this->RegisterAttributeString('CompatibilityCache', '[]');
     $this->RegisterAttributeInteger('CompatibilityCacheAt', 0);
+
+    $this->RegisterVariableInteger('LastSignalsAt', 'Letzte Signale', '~UnixTimestamp');
 }
 
     public function ApplyChanges(): void
@@ -663,6 +665,8 @@ class SmartcarVehicle extends IPSModuleStrict
                 return;
             }
         }
+
+        $this->SetValue('LastSignalsAt', time());
 
         $definition = $this->GetSignalDefinition($code, $body);
         $variables = $this->GetVariablesFromDefinition($definition, $body);
