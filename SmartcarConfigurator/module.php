@@ -6,9 +6,6 @@ class SmartcarConfigurator extends IPSModuleStrict
     public function Create(): void
     {
         parent::Create();
-
-        $this->RegisterPropertyString('SimulatedVehicleID', '');
-        $this->RegisterPropertyString('SimulatedUserID', '');
     }
 
     public function ApplyChanges(): void
@@ -57,28 +54,11 @@ class SmartcarConfigurator extends IPSModuleStrict
         }
 
         $form = [
-            'elements' => [
-                [
-                    'type' => 'ValidationTextBox',
-                    'name' => 'SimulatedVehicleID',
-                    'caption' => 'Simulierte Vehicle ID'
-                ],
-                [
-                'type' => 'ValidationTextBox',
-                'name' => 'SimulatedUserID',
-                'caption' => 'Simulierte User ID'
-            ]
-            ],
             'actions' => [
                [
                     'type' => 'Button',
                     'caption' => 'Neues Live-Fahrzeug verbinden',
                     'onClick' => 'echo SMCARCFG_GenerateConnectURL($id, "live");'
-                ],
-                [
-                    'type' => 'Button',
-                    'caption' => 'Neues simuliertes Fahrzeug verbinden',
-                    'onClick' => 'echo SMCARCFG_CreateSimulatedVehicleInstance($id);'
                 ],
                 [
                     'type' => 'Button',
@@ -296,51 +276,5 @@ class SmartcarConfigurator extends IPSModuleStrict
     public function ReloadConfiguratorForm(): void
     {
         $this->ReloadForm();
-    }
-
-    public function CreateSimulatedVehicleInstance(): string
-    {
-        $vehicleId = trim($this->ReadPropertyString('SimulatedVehicleID'));
-
-        if ($vehicleId === '') {
-            return 'Bitte zuerst die simulierte Vehicle ID eintragen.';
-        }
-
-        $userId = trim($this->ReadPropertyString('SimulatedUserID'));
-
-        if ($userId === '') {
-            return 'Bitte zuerst die simulierte User ID eintragen.';
-        }
-
-        $existingId = $this->FindVehicleInstanceByVehicleId($vehicleId);
-        if ($existingId > 0) {
-            return 'Instanz existiert bereits: ' . $existingId;
-        }
-
-        $instanceId = IPS_CreateInstance('{1E1B7C9A-2D4F-4E8A-9C3B-7F6D5A4E2B10}');
-        IPS_SetName($instanceId, 'Smartcar Simulation');
-
-        $targetParentId = IPS_GetParent($this->InstanceID);
-        if ($targetParentId > 0) {
-            @IPS_SetParent($instanceId, $targetParentId);
-        }
-
-        $splitterId = $this->GetSplitterInstanceID();
-        if ($splitterId > 0) {
-            @IPS_ConnectInstance($instanceId, $splitterId);
-        }
-
-        IPS_SetProperty($instanceId, 'VehicleID', $vehicleId);
-        IPS_SetProperty($instanceId, 'UserID', $userId);
-        IPS_SetProperty($instanceId, 'ConnectionID', '');
-        IPS_SetProperty($instanceId, 'VehicleCaption', 'Smartcar Simulation');
-        IPS_SetProperty($instanceId, 'Make', 'MERCEDES_BENZ');
-        IPS_SetProperty($instanceId, 'Model', 'EQ SERIES');
-        IPS_SetProperty($instanceId, 'Year', 2025);
-        IPS_SetProperty($instanceId, 'PowertrainType', 'BEV');
-
-        IPS_ApplyChanges($instanceId);
-
-        return $this->GenerateConnectURL('simulated');
     }
 }
