@@ -6,7 +6,6 @@
     "aliases": ["Smartcar Splitter"],
     "parentRequirements": [],
     "childRequirements": [
-        "{0088C953-79BA-4BAA-167C-72F3BECFCBF1}",
         "{BACEC0C5-6EED-0A1C-52D2-A99D2D41F04C}"
     ],
     "implemented": [
