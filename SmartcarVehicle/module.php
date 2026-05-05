@@ -767,6 +767,10 @@ class SmartcarVehicle extends IPSModuleStrict
         foreach ($entries as $entry) {
             $permission = trim((string)($entry['permission'] ?? ''));
 
+            if ($permission === '' && strtolower((string)($entry['type'] ?? '')) === 'command') {
+                $permission = $this->GetCommandPermission((string)($entry['code'] ?? ''));
+            }
+
             if ($permission !== '') {
                 $permissions[$permission] = true;
             }
@@ -1035,6 +1039,10 @@ class SmartcarVehicle extends IPSModuleStrict
                 $code       = (string)($capability['code'] ?? '');
                 $capKey     = (string)($capability['capability'] ?? '');
                 $permission = (string)($capability['permission'] ?? '');
+
+                if ($permission === '' && strtolower($type) === 'command') {
+                    $permission = $this->GetCommandPermission($code);
+                }
 
                 if ($code === '' && $capKey === '') {
                     continue;
@@ -1333,6 +1341,22 @@ class SmartcarVehicle extends IPSModuleStrict
             'security-lock', 'closure-lock', 'lock', 'lock-doors' => 'security-lock',
             'security-unlock', 'closure-unlock', 'unlock', 'unlock-doors' => 'security-unlock',
             default => $key
+        };
+    }
+
+    private function GetCommandPermission(string $code): string
+    {
+        return match (strtolower(trim($code))) {
+            'charge-start',
+            'charge-stop',
+            'charge-set-limit' => 'control_charge',
+
+            'security-lock',
+            'security-unlock' => 'control_security',
+
+            'navigation-set-destination' => 'control_navigation',
+
+            default => ''
         };
     }
 
