@@ -1323,6 +1323,13 @@ class SmartcarVehicle extends IPSModuleStrict
                 'profile' => '~Switch',
                 'path'  => '/commands/security/unlock'
             ],
+            'navigation-set-destination' => [
+                'ident' => 'CommandNavigationDestination',
+                'name'  => 'Ziel setzen',
+                'type'  => VARIABLETYPE_STRING,
+                'profile' => '', // kein Standardprofil sinnvoll
+                'path'  => '/commands/navigation/set-destination'
+            ],
             default => []
         };
     }
