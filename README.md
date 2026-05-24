@@ -1,4 +1,4 @@
-# Modul für Smartcar für IP-Symcon
+# Smartcar Integration für IP-Symcon
 
 Dieses Modul ermöglicht es, Signale über die [Smartcar-Plattform](https://smartcar.com/de) in IP-Symcon zu empfangen bzw. abzufragen und bestimmte Fahrzeugfunktionen zu steuern.
 
