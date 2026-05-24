@@ -1,4 +1,4 @@
-# 🚗 Smartcar Modul für IP-Symcon (Vehicle Instanz)
+# 🚗 Smartcar Integration für IP-Symcon (Vehicle Instanz)
 
 
 ## 1. Funktionsumfang
