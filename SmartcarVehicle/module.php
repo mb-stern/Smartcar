@@ -2098,6 +2098,199 @@ class SmartcarVehicle extends IPSModuleStrict
                 'profile' => ''
             ],
 
+            // ---------- Diagnostics ----------
+            'diagnostics-dtccount' => [
+                'ident' => 'DTCCount',
+                'name' => 'Anzahl Fehlercodes',
+                'type' => VARIABLETYPE_INTEGER,
+                'profile' => ''
+            ],
+
+            'diagnostics-dtclist' => [
+                'ident' => 'DTCList',
+                'name' => 'Fehlercode-Liste',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'activeCodes',
+                'convert' => fn(array $body) => json_encode($body['activeCodes'] ?? [], JSON_UNESCAPED_UNICODE)
+            ],
+
+            'diagnostics-abs' => [
+                'ident' => 'DiagnosticsABS',
+                'name' => 'ABS-System',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'status'
+            ],
+
+            'diagnostics-activesafety' => [
+                'ident' => 'DiagnosticsActiveSafety',
+                'name' => 'Aktive Sicherheitssysteme',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'status'
+            ],
+
+            'diagnostics-airbag' => [
+                'ident' => 'DiagnosticsAirbag',
+                'name' => 'Airbag-System',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'status'
+            ],
+
+            'diagnostics-brakefluid' => [
+                'ident' => 'DiagnosticsBrakeFluid',
+                'name' => 'Bremsflüssigkeit',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'status'
+            ],
+
+            'diagnostics-driverassistance' => [
+                'ident' => 'DiagnosticsDriverAssistance',
+                'name' => 'Fahrerassistenz',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'status'
+            ],
+
+            'diagnostics-emissions' => [
+                'ident' => 'DiagnosticsEmissions',
+                'name' => 'Abgassystem',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'status'
+            ],
+
+            'diagnostics-engine' => [
+                'ident' => 'DiagnosticsEngine',
+                'name' => 'Motor',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'status'
+            ],
+
+            'diagnostics-evbatteryconditioning' => [
+                'ident' => 'DiagnosticsEVBatteryConditioning',
+                'name' => 'EV Batteriekonditionierung',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'status'
+            ],
+
+            'diagnostics-evcharging' => [
+                'ident' => 'DiagnosticsEVCharging',
+                'name' => 'EV Ladesystem',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'status'
+            ],
+
+            'diagnostics-evdriveunit' => [
+                'ident' => 'DiagnosticsEVDriveUnit',
+                'name' => 'EV Antriebseinheit',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'status'
+            ],
+
+            'diagnostics-evhvbattery' => [
+                'ident' => 'DiagnosticsEVHVBattery',
+                'name' => 'EV Hochvoltbatterie',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'status'
+            ],
+
+            'diagnostics-lighting' => [
+                'ident' => 'DiagnosticsLighting',
+                'name' => 'Beleuchtungssystem',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'status'
+            ],
+
+            'diagnostics-mil' => [
+                'ident' => 'DiagnosticsMIL',
+                'name' => 'Motorkontrollleuchte',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'status'
+            ],
+
+            'diagnostics-oillife',
+            'internalcombustionengine-oillife' => [
+                'ident' => 'OilLife',
+                'name' => 'Öl-Lebensdauer',
+                'type' => VARIABLETYPE_FLOAT,
+                'profile' => 'SMCAR.Progress'
+            ],
+
+            'diagnostics-oilpressure',
+            'internalcombustionengine-oilpressure' => [
+                'ident' => 'OilPressure',
+                'name' => 'Öldruck',
+                'type' => VARIABLETYPE_FLOAT,
+                'profile' => ''
+            ],
+
+            'diagnostics-oiltemperature',
+            'internalcombustionengine-oiltemperature' => [
+                'ident' => 'OilTemperature',
+                'name' => 'Öltemperatur',
+                'type' => VARIABLETYPE_FLOAT,
+                'profile' => '~Temperature'
+            ],
+
+            'diagnostics-telematics' => [
+                'ident' => 'DiagnosticsTelematics',
+                'name' => 'Telematiksystem',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'status'
+            ],
+
+            'diagnostics-tirepressure' => [
+                'ident' => 'DiagnosticsTirePressure',
+                'name' => 'Reifendrucksystem',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'status'
+            ],
+
+            'diagnostics-tirepressuremonitoring' => [
+                'ident' => 'DiagnosticsTPMS',
+                'name' => 'Reifendrucküberwachung',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'status'
+            ],
+
+            'diagnostics-transmission' => [
+                'ident' => 'DiagnosticsTransmission',
+                'name' => 'Getriebe',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'status'
+            ],
+
+            'diagnostics-washerfluid' => [
+                'ident' => 'DiagnosticsWasherFluid',
+                'name' => 'Waschwasser',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'status'
+            ],
+
+            'diagnostics-waterinfuel',
+            'internalcombustionengine-waterinfuel' => [
+                'ident' => 'WaterInFuel',
+                'name' => 'Wasser im Kraftstoff',
+                'type' => VARIABLETYPE_BOOLEAN,
+                'profile' => '~Switch'
+            ],
+
             default => $this->GuessSignalDefinition($code, $body)
         };
     }
