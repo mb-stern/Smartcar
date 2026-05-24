@@ -434,7 +434,7 @@ class SmartcarVehicle extends IPSModuleStrict
             'UserID'    => $userId
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
 
-        //$this->SendDebug('FetchSignals/RAW', (string)$result, 0);
+        $this->SendDebug('FetchSignals/RAW', (string)$result, 0);
 
         $decoded = json_decode((string)$result, true);
         if (!is_array($decoded) || empty($decoded['success'])) {
