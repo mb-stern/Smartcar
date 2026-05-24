@@ -2111,8 +2111,8 @@ class SmartcarVehicle extends IPSModuleStrict
                 'name' => 'Fehlercode-Liste',
                 'type' => VARIABLETYPE_STRING,
                 'profile' => '',
-                'source' => 'activeCodes',
-                'convert' => fn(array $body) => json_encode($body['activeCodes'] ?? [], JSON_UNESCAPED_UNICODE)
+                'source' => 'values',
+                'convert' => fn(array $body) => json_encode($body['values'] ?? [], JSON_UNESCAPED_UNICODE)
             ],
 
             'diagnostics-abs' => [
@@ -2289,6 +2289,67 @@ class SmartcarVehicle extends IPSModuleStrict
                 'name' => 'Wasser im Kraftstoff',
                 'type' => VARIABLETYPE_BOOLEAN,
                 'profile' => '~Switch'
+            ],
+
+            // ---------- HVAC ----------
+            'hvac-cabintargettemperature' => [
+                'ident' => 'CabinTargetTemperature',
+                'name' => 'Zieltemperatur Innenraum',
+                'type' => VARIABLETYPE_FLOAT,
+                'profile' => '~Temperature'
+            ],
+
+            'hvac-iscabinhvacactive' => [
+                'ident' => 'IsCabinHVACActive',
+                'name' => 'Innenraum-Klimatisierung aktiv',
+                'type' => VARIABLETYPE_BOOLEAN,
+                'profile' => '~Switch'
+            ],
+
+            'hvac-isfrontdefrosteractive' => [
+                'ident' => 'IsFrontDefrosterActive',
+                'name' => 'Frontscheiben-Defroster aktiv',
+                'type' => VARIABLETYPE_BOOLEAN,
+                'profile' => '~Switch'
+            ],
+
+            'hvac-isreardefrosteractive' => [
+                'ident' => 'IsRearDefrosterActive',
+                'name' => 'Heckscheibenheizung aktiv',
+                'type' => VARIABLETYPE_BOOLEAN,
+                'profile' => '~Switch'
+            ],
+
+            'hvac-issteeringheateractive' => [
+                'ident' => 'IsSteeringHeaterActive',
+                'name' => 'Lenkradheizung aktiv',
+                'type' => VARIABLETYPE_BOOLEAN,
+                'profile' => '~Switch'
+            ],
+
+            // ---------- Motion ----------
+            'motion-currentspeed' => [
+                'ident' => 'CurrentSpeed',
+                'name' => 'Aktuelle Geschwindigkeit',
+                'type' => VARIABLETYPE_FLOAT,
+                'profile' => ''
+            ],
+
+            // ---------- Service ----------
+            'service-isinservice' => [
+                'ident' => 'IsInService',
+                'name' => 'In Werkstatt / Service',
+                'type' => VARIABLETYPE_BOOLEAN,
+                'profile' => '~Switch'
+            ],
+
+            'service-records' => [
+                'ident' => 'ServiceRecords',
+                'name' => 'Service-Historie',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'values',
+                'convert' => fn(array $body) => json_encode($body['values'] ?? [], JSON_UNESCAPED_UNICODE)
             ],
 
             default => $this->GuessSignalDefinition($code, $body)
