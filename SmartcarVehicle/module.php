@@ -1920,7 +1920,7 @@ class SmartcarVehicle extends IPSModuleStrict
                         'source' => 'values',
                         'convert' => fn(array $body) => (float)(array_values(array_filter($body['values'] ?? [], fn($v) =>
                             is_array($v) && (int)($v['row'] ?? -1) === 0 && (int)($v['column'] ?? -1) === 0
-                        ))[0]['tirePressure'] ?? 0)
+                        ))[0]['tirePressure'] ?? 0) * 0.01
                     ],
                     [
                         'ident' => 'TireFrontRight',
@@ -1930,7 +1930,7 @@ class SmartcarVehicle extends IPSModuleStrict
                         'source' => 'values',
                         'convert' => fn(array $body) => (float)(array_values(array_filter($body['values'] ?? [], fn($v) =>
                             is_array($v) && (int)($v['row'] ?? -1) === 0 && (int)($v['column'] ?? -1) === 1
-                        ))[0]['tirePressure'] ?? 0)
+                        ))[0]['tirePressure'] ?? 0) * 0.01
                     ],
                     [
                         'ident' => 'TireBackLeft',
@@ -1940,7 +1940,7 @@ class SmartcarVehicle extends IPSModuleStrict
                         'source' => 'values',
                         'convert' => fn(array $body) => (float)(array_values(array_filter($body['values'] ?? [], fn($v) =>
                             is_array($v) && (int)($v['row'] ?? -1) === 1 && (int)($v['column'] ?? -1) === 0
-                        ))[0]['tirePressure'] ?? 0)
+                        ))[0]['tirePressure'] ?? 0) * 0.01
                     ],
                     [
                         'ident' => 'TireBackRight',
@@ -1950,7 +1950,7 @@ class SmartcarVehicle extends IPSModuleStrict
                         'source' => 'values',
                         'convert' => fn(array $body) => (float)(array_values(array_filter($body['values'] ?? [], fn($v) =>
                             is_array($v) && (int)($v['row'] ?? -1) === 1 && (int)($v['column'] ?? -1) === 1
-                        ))[0]['tirePressure'] ?? 0)
+                        ))[0]['tirePressure'] ?? 0) * 0.01
                     ]
                 ]
             ],
