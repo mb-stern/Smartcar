@@ -1592,15 +1592,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 'name' => 'Aktuelles Ladelimit',
                 'type' => VARIABLETYPE_FLOAT,
                 'profile' => 'SMCAR.Progress',
-                'source' => 'values',
-                'convert' => function (array $body) {
-                    foreach (($body['values'] ?? []) as $cfg) {
-                        if (($cfg['type'] ?? '') === 'global' && isset($cfg['limit'])) {
-                            return (float)$cfg['limit'] * 100;
-                        }
-                    }
-                    return 0.0;
-                }
+                'source' => 'activeLimit'
             ],
 
             'charge-amperage' => [
@@ -1917,7 +1909,7 @@ class SmartcarVehicle extends IPSModuleStrict
             ],
 
             // ---------- Reifen ----------
-            'tires-pressure' => [
+            'wheel-tires' => [
                 'special' => 'multiple',
                 'variables' => [
                     [
@@ -1925,34 +1917,49 @@ class SmartcarVehicle extends IPSModuleStrict
                         'name' => 'Reifendruck Vorderreifen Links',
                         'type' => VARIABLETYPE_FLOAT,
                         'profile' => 'SMCAR.Pressure',
-                        'source' => 'frontLeft',
-                        'convert' => fn(array $body) => (float)($body['frontLeft'] ?? 0) * 0.01
+                        'source' => 'values',
+                        'convert' => fn(array $body) => (float)(array_values(array_filter($body['values'] ?? [], fn($v) =>
+                            is_array($v) && (int)($v['row'] ?? -1) === 0 && (int)($v['column'] ?? -1) === 0
+                        ))[0]['tirePressure'] ?? 0)
                     ],
                     [
                         'ident' => 'TireFrontRight',
                         'name' => 'Reifendruck Vorderreifen Rechts',
                         'type' => VARIABLETYPE_FLOAT,
                         'profile' => 'SMCAR.Pressure',
-                        'source' => 'frontRight',
-                        'convert' => fn(array $body) => (float)($body['frontRight'] ?? 0) * 0.01
+                        'source' => 'values',
+                        'convert' => fn(array $body) => (float)(array_values(array_filter($body['values'] ?? [], fn($v) =>
+                            is_array($v) && (int)($v['row'] ?? -1) === 0 && (int)($v['column'] ?? -1) === 1
+                        ))[0]['tirePressure'] ?? 0)
                     ],
                     [
                         'ident' => 'TireBackLeft',
                         'name' => 'Reifendruck Hinterreifen Links',
                         'type' => VARIABLETYPE_FLOAT,
                         'profile' => 'SMCAR.Pressure',
-                        'source' => 'backLeft',
-                        'convert' => fn(array $body) => (float)($body['backLeft'] ?? 0) * 0.01
+                        'source' => 'values',
+                        'convert' => fn(array $body) => (float)(array_values(array_filter($body['values'] ?? [], fn($v) =>
+                            is_array($v) && (int)($v['row'] ?? -1) === 1 && (int)($v['column'] ?? -1) === 0
+                        ))[0]['tirePressure'] ?? 0)
                     ],
                     [
                         'ident' => 'TireBackRight',
                         'name' => 'Reifendruck Hinterreifen Rechts',
                         'type' => VARIABLETYPE_FLOAT,
                         'profile' => 'SMCAR.Pressure',
-                        'source' => 'backRight',
-                        'convert' => fn(array $body) => (float)($body['backRight'] ?? 0) * 0.01
+                        'source' => 'values',
+                        'convert' => fn(array $body) => (float)(array_values(array_filter($body['values'] ?? [], fn($v) =>
+                            is_array($v) && (int)($v['row'] ?? -1) === 1 && (int)($v['column'] ?? -1) === 1
+                        ))[0]['tirePressure'] ?? 0)
                     ]
                 ]
+            ],
+
+            'wheel-style' => [
+                'ident' => 'WheelStyle',
+                'name' => 'Felgenstil',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => ''
             ],
 
             // ---------- Vehicle Identification ----------
@@ -2026,6 +2033,67 @@ class SmartcarVehicle extends IPSModuleStrict
             'vehicleuseraccount-role' => [
                 'ident' => 'VehicleUserRole',
                 'name' => 'Benutzer-Rolle',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => ''
+            ],
+
+            // ---------- Niedervolt-Batterie ----------
+            'lowvoltagebattery-stateofcharge' => [
+                'ident' => 'LowVoltageBatteryLevel',
+                'name' => '12V-Batterie',
+                'type' => VARIABLETYPE_FLOAT,
+                'profile' => 'SMCAR.Progress'
+            ],
+
+            // ---------- ICE Erweiterungen ----------
+            'internalcombustionengine-amountremaining' => [
+                'ident' => 'FuelAmountRemaining',
+                'name' => 'Kraftstoffmenge',
+                'type' => VARIABLETYPE_FLOAT,
+                'profile' => ''
+            ],
+
+            'lowvoltagebattery-status' => [
+                'ident' => 'LowVoltageBatteryStatus',
+                'name' => '12V-Batterie Status',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => ''
+            ],
+
+            'internalcombustionengine-range' => [
+                'ident' => 'FuelRange',
+                'name' => 'Reichweite Kraftstoff',
+                'type' => VARIABLETYPE_FLOAT,
+                'profile' => 'SMCAR.Odometer',
+                'convert' => $milesToKm
+            ],
+
+            // ---------- Getriebe ----------
+            'transmission-gearstate' => [
+                'ident' => 'GearState',
+                'name' => 'Gang / Fahrstufe',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => ''
+            ],
+
+            'transmission-drivemode' => [
+                    'ident' => 'DriveMode',
+                    'name' => 'Fahrmodus',
+                    'type' => VARIABLETYPE_STRING,
+                    'profile' => ''
+                ],
+
+            // ---------- Überwachung ----------
+            'surveillance-isenabled' => [
+                'ident' => 'SurveillanceEnabled',
+                'name' => 'Überwachung aktiv',
+                'type' => VARIABLETYPE_BOOLEAN,
+                'profile' => '~Switch'
+            ],
+
+            'surveillance-brand' => [
+                'ident' => 'SurveillanceBrand',
+                'name' => 'Überwachung Hersteller',
                 'type' => VARIABLETYPE_STRING,
                 'profile' => ''
             ],
