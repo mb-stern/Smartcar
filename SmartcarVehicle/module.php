@@ -434,7 +434,7 @@ class SmartcarVehicle extends IPSModuleStrict
             'UserID'    => $userId
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
 
-        //$this->SendDebug('FetchSignals/RAW', (string)$result, 0);
+        $this->SendDebug('FetchSignals/RAW', (string)$result, 0);
 
         $decoded = json_decode((string)$result, true);
         if (!is_array($decoded) || empty($decoded['success'])) {
@@ -1592,15 +1592,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 'name' => 'Aktuelles Ladelimit',
                 'type' => VARIABLETYPE_FLOAT,
                 'profile' => 'SMCAR.Progress',
-                'source' => 'values',
-                'convert' => function (array $body) {
-                    foreach (($body['values'] ?? []) as $cfg) {
-                        if (($cfg['type'] ?? '') === 'global' && isset($cfg['limit'])) {
-                            return (float)$cfg['limit'] * 100;
-                        }
-                    }
-                    return 0.0;
-                }
+                'source' => 'activeLimit'
             ],
 
             'charge-amperage' => [
@@ -1917,7 +1909,7 @@ class SmartcarVehicle extends IPSModuleStrict
             ],
 
             // ---------- Reifen ----------
-            'tires-pressure' => [
+            'wheel-tires' => [
                 'special' => 'multiple',
                 'variables' => [
                     [
@@ -1925,34 +1917,49 @@ class SmartcarVehicle extends IPSModuleStrict
                         'name' => 'Reifendruck Vorderreifen Links',
                         'type' => VARIABLETYPE_FLOAT,
                         'profile' => 'SMCAR.Pressure',
-                        'source' => 'frontLeft',
-                        'convert' => fn(array $body) => (float)($body['frontLeft'] ?? 0) * 0.01
+                        'source' => 'values',
+                        'convert' => fn(array $body) => (float)(array_values(array_filter($body['values'] ?? [], fn($v) =>
+                            is_array($v) && (int)($v['row'] ?? -1) === 0 && (int)($v['column'] ?? -1) === 0
+                        ))[0]['tirePressure'] ?? 0) * 0.01
                     ],
                     [
                         'ident' => 'TireFrontRight',
                         'name' => 'Reifendruck Vorderreifen Rechts',
                         'type' => VARIABLETYPE_FLOAT,
                         'profile' => 'SMCAR.Pressure',
-                        'source' => 'frontRight',
-                        'convert' => fn(array $body) => (float)($body['frontRight'] ?? 0) * 0.01
+                        'source' => 'values',
+                        'convert' => fn(array $body) => (float)(array_values(array_filter($body['values'] ?? [], fn($v) =>
+                            is_array($v) && (int)($v['row'] ?? -1) === 0 && (int)($v['column'] ?? -1) === 1
+                        ))[0]['tirePressure'] ?? 0) * 0.01
                     ],
                     [
                         'ident' => 'TireBackLeft',
                         'name' => 'Reifendruck Hinterreifen Links',
                         'type' => VARIABLETYPE_FLOAT,
                         'profile' => 'SMCAR.Pressure',
-                        'source' => 'backLeft',
-                        'convert' => fn(array $body) => (float)($body['backLeft'] ?? 0) * 0.01
+                        'source' => 'values',
+                        'convert' => fn(array $body) => (float)(array_values(array_filter($body['values'] ?? [], fn($v) =>
+                            is_array($v) && (int)($v['row'] ?? -1) === 1 && (int)($v['column'] ?? -1) === 0
+                        ))[0]['tirePressure'] ?? 0) * 0.01
                     ],
                     [
                         'ident' => 'TireBackRight',
                         'name' => 'Reifendruck Hinterreifen Rechts',
                         'type' => VARIABLETYPE_FLOAT,
                         'profile' => 'SMCAR.Pressure',
-                        'source' => 'backRight',
-                        'convert' => fn(array $body) => (float)($body['backRight'] ?? 0) * 0.01
+                        'source' => 'values',
+                        'convert' => fn(array $body) => (float)(array_values(array_filter($body['values'] ?? [], fn($v) =>
+                            is_array($v) && (int)($v['row'] ?? -1) === 1 && (int)($v['column'] ?? -1) === 1
+                        ))[0]['tirePressure'] ?? 0) * 0.01
                     ]
                 ]
+            ],
+
+            'wheel-style' => [
+                'ident' => 'WheelStyle',
+                'name' => 'Felgenstil',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => ''
             ],
 
             // ---------- Vehicle Identification ----------
@@ -2028,6 +2035,321 @@ class SmartcarVehicle extends IPSModuleStrict
                 'name' => 'Benutzer-Rolle',
                 'type' => VARIABLETYPE_STRING,
                 'profile' => ''
+            ],
+
+            // ---------- Niedervolt-Batterie ----------
+            'lowvoltagebattery-stateofcharge' => [
+                'ident' => 'LowVoltageBatteryLevel',
+                'name' => '12V-Batterie',
+                'type' => VARIABLETYPE_FLOAT,
+                'profile' => 'SMCAR.Progress'
+            ],
+
+            // ---------- ICE Erweiterungen ----------
+            'internalcombustionengine-amountremaining' => [
+                'ident' => 'FuelAmountRemaining',
+                'name' => 'Kraftstoffmenge',
+                'type' => VARIABLETYPE_FLOAT,
+                'profile' => ''
+            ],
+
+            'lowvoltagebattery-status' => [
+                'ident' => 'LowVoltageBatteryStatus',
+                'name' => '12V-Batterie Status',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => ''
+            ],
+
+            'internalcombustionengine-range' => [
+                'ident' => 'FuelRange',
+                'name' => 'Reichweite Kraftstoff',
+                'type' => VARIABLETYPE_FLOAT,
+                'profile' => 'SMCAR.Odometer',
+                'convert' => $milesToKm
+            ],
+
+            // ---------- Getriebe ----------
+            'transmission-gearstate' => [
+                'ident' => 'GearState',
+                'name' => 'Gang / Fahrstufe',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => ''
+            ],
+
+            'transmission-drivemode' => [
+                    'ident' => 'DriveMode',
+                    'name' => 'Fahrmodus',
+                    'type' => VARIABLETYPE_STRING,
+                    'profile' => ''
+                ],
+
+            // ---------- Überwachung ----------
+            'surveillance-isenabled' => [
+                'ident' => 'SurveillanceEnabled',
+                'name' => 'Überwachung aktiv',
+                'type' => VARIABLETYPE_BOOLEAN,
+                'profile' => '~Switch'
+            ],
+
+            'surveillance-brand' => [
+                'ident' => 'SurveillanceBrand',
+                'name' => 'Überwachung Hersteller',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => ''
+            ],
+
+            // ---------- Diagnostics ----------
+            'diagnostics-dtccount' => [
+                'ident' => 'DTCCount',
+                'name' => 'Anzahl Fehlercodes',
+                'type' => VARIABLETYPE_INTEGER,
+                'profile' => ''
+            ],
+
+            'diagnostics-dtclist' => [
+                'ident' => 'DTCList',
+                'name' => 'Fehlercode-Liste',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'values',
+                'convert' => fn(array $body) => json_encode($body['values'] ?? [], JSON_UNESCAPED_UNICODE)
+            ],
+
+            'diagnostics-abs' => [
+                'ident' => 'DiagnosticsABS',
+                'name' => 'ABS-System',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'status'
+            ],
+
+            'diagnostics-activesafety' => [
+                'ident' => 'DiagnosticsActiveSafety',
+                'name' => 'Aktive Sicherheitssysteme',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'status'
+            ],
+
+            'diagnostics-airbag' => [
+                'ident' => 'DiagnosticsAirbag',
+                'name' => 'Airbag-System',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'status'
+            ],
+
+            'diagnostics-brakefluid' => [
+                'ident' => 'DiagnosticsBrakeFluid',
+                'name' => 'Bremsflüssigkeit',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'status'
+            ],
+
+            'diagnostics-driverassistance' => [
+                'ident' => 'DiagnosticsDriverAssistance',
+                'name' => 'Fahrerassistenz',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'status'
+            ],
+
+            'diagnostics-emissions' => [
+                'ident' => 'DiagnosticsEmissions',
+                'name' => 'Abgassystem',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'status'
+            ],
+
+            'diagnostics-engine' => [
+                'ident' => 'DiagnosticsEngine',
+                'name' => 'Motor',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'status'
+            ],
+
+            'diagnostics-evbatteryconditioning' => [
+                'ident' => 'DiagnosticsEVBatteryConditioning',
+                'name' => 'EV Batteriekonditionierung',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'status'
+            ],
+
+            'diagnostics-evcharging' => [
+                'ident' => 'DiagnosticsEVCharging',
+                'name' => 'EV Ladesystem',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'status'
+            ],
+
+            'diagnostics-evdriveunit' => [
+                'ident' => 'DiagnosticsEVDriveUnit',
+                'name' => 'EV Antriebseinheit',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'status'
+            ],
+
+            'diagnostics-evhvbattery' => [
+                'ident' => 'DiagnosticsEVHVBattery',
+                'name' => 'EV Hochvoltbatterie',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'status'
+            ],
+
+            'diagnostics-lighting' => [
+                'ident' => 'DiagnosticsLighting',
+                'name' => 'Beleuchtungssystem',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'status'
+            ],
+
+            'diagnostics-mil' => [
+                'ident' => 'DiagnosticsMIL',
+                'name' => 'Motorkontrollleuchte',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'status'
+            ],
+
+            'diagnostics-oillife',
+            'internalcombustionengine-oillife' => [
+                'ident' => 'OilLife',
+                'name' => 'Öl-Lebensdauer',
+                'type' => VARIABLETYPE_FLOAT,
+                'profile' => 'SMCAR.Progress'
+            ],
+
+            'diagnostics-oilpressure',
+            'internalcombustionengine-oilpressure' => [
+                'ident' => 'OilPressure',
+                'name' => 'Öldruck',
+                'type' => VARIABLETYPE_FLOAT,
+                'profile' => ''
+            ],
+
+            'diagnostics-oiltemperature',
+            'internalcombustionengine-oiltemperature' => [
+                'ident' => 'OilTemperature',
+                'name' => 'Öltemperatur',
+                'type' => VARIABLETYPE_FLOAT,
+                'profile' => '~Temperature'
+            ],
+
+            'diagnostics-telematics' => [
+                'ident' => 'DiagnosticsTelematics',
+                'name' => 'Telematiksystem',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'status'
+            ],
+
+            'diagnostics-tirepressure' => [
+                'ident' => 'DiagnosticsTirePressure',
+                'name' => 'Reifendrucksystem',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'status'
+            ],
+
+            'diagnostics-tirepressuremonitoring' => [
+                'ident' => 'DiagnosticsTPMS',
+                'name' => 'Reifendrucküberwachung',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'status'
+            ],
+
+            'diagnostics-transmission' => [
+                'ident' => 'DiagnosticsTransmission',
+                'name' => 'Getriebe',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'status'
+            ],
+
+            'diagnostics-washerfluid' => [
+                'ident' => 'DiagnosticsWasherFluid',
+                'name' => 'Waschwasser',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'status'
+            ],
+
+            'diagnostics-waterinfuel',
+            'internalcombustionengine-waterinfuel' => [
+                'ident' => 'WaterInFuel',
+                'name' => 'Wasser im Kraftstoff',
+                'type' => VARIABLETYPE_BOOLEAN,
+                'profile' => '~Switch'
+            ],
+
+            // ---------- HVAC ----------
+            'hvac-cabintargettemperature' => [
+                'ident' => 'CabinTargetTemperature',
+                'name' => 'Zieltemperatur Innenraum',
+                'type' => VARIABLETYPE_FLOAT,
+                'profile' => '~Temperature'
+            ],
+
+            'hvac-iscabinhvacactive' => [
+                'ident' => 'IsCabinHVACActive',
+                'name' => 'Innenraum-Klimatisierung aktiv',
+                'type' => VARIABLETYPE_BOOLEAN,
+                'profile' => '~Switch'
+            ],
+
+            'hvac-isfrontdefrosteractive' => [
+                'ident' => 'IsFrontDefrosterActive',
+                'name' => 'Frontscheiben-Defroster aktiv',
+                'type' => VARIABLETYPE_BOOLEAN,
+                'profile' => '~Switch'
+            ],
+
+            'hvac-isreardefrosteractive' => [
+                'ident' => 'IsRearDefrosterActive',
+                'name' => 'Heckscheibenheizung aktiv',
+                'type' => VARIABLETYPE_BOOLEAN,
+                'profile' => '~Switch'
+            ],
+
+            'hvac-issteeringheateractive' => [
+                'ident' => 'IsSteeringHeaterActive',
+                'name' => 'Lenkradheizung aktiv',
+                'type' => VARIABLETYPE_BOOLEAN,
+                'profile' => '~Switch'
+            ],
+
+            // ---------- Motion ----------
+            'motion-currentspeed' => [
+                'ident' => 'CurrentSpeed',
+                'name' => 'Aktuelle Geschwindigkeit',
+                'type' => VARIABLETYPE_FLOAT,
+                'profile' => ''
+            ],
+
+            // ---------- Service ----------
+            'service-isinservice' => [
+                'ident' => 'IsInService',
+                'name' => 'In Werkstatt / Service',
+                'type' => VARIABLETYPE_BOOLEAN,
+                'profile' => '~Switch'
+            ],
+
+            'service-records' => [
+                'ident' => 'ServiceRecords',
+                'name' => 'Service-Historie',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'values',
+                'convert' => fn(array $body) => json_encode($body['values'] ?? [], JSON_UNESCAPED_UNICODE)
             ],
 
             default => $this->GuessSignalDefinition($code, $body)

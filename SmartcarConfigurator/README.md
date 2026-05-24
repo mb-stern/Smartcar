@@ -1,4 +1,4 @@
-# 🚗 Smartcar Modul für IP-Symcon (Configurator Instanz)
+# 🚗 Smartcar Integration für IP-Symcon (Configurator Instanz)
 
 
 ## 1. Funktionsumfang

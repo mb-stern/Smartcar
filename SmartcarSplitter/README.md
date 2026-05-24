@@ -1,4 +1,4 @@
-# 🚗 Smartcar Modul für IP-Symcon (Splitter Instanz)
+# 🚗 Smartcar Integration für IP-Symcon (Splitter Instanz)
 
 
 ## 1. Funktionsumfang
