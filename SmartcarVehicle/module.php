@@ -15,7 +15,12 @@ class SmartcarVehicle extends IPSModuleStrict
     $this->RegisterPropertyInteger('Year', 0);
     $this->RegisterPropertyString('PowertrainType', '');
     $this->RegisterPropertyBoolean('DisableCompatibilityFiltering', false);
+    // Alte Property bleibt registriert, damit bestehende Installationen nicht brechen.
+    // Für die Anzeige/Auswertung werden ab sofort getrennte Listen pro Modus verwendet,
+    // damit IP-Symcon Checkboxen nicht anhand der Zeilennummer auf andere Signale verschiebt.
     $this->RegisterPropertyString('SelectedCapabilities', '[]');
+    $this->RegisterPropertyString('SelectedCapabilitiesFiltered', '[]');
+    $this->RegisterPropertyString('SelectedCapabilitiesUnfiltered', '[]');
     $this->RegisterAttributeString('CompatibilityCache', '[]');
     $this->RegisterAttributeInteger('CompatibilityCacheAt', 0);
     $this->RegisterAttributeString('CompatibilityCacheMode', '');
@@ -133,7 +138,7 @@ class SmartcarVehicle extends IPSModuleStrict
 
                 [
                 'type' => 'List',
-                'name' => 'SelectedCapabilities',
+                'name' => $this->GetSelectedCapabilitiesPropertyName(),
                 'caption' => $this->ReadPropertyBoolean('DisableCompatibilityFiltering') ? 'Alle Signale / Befehle (Expertenmodus)' : 'Kompatible Signale / Befehle',
                 'rowCount' => 10,
                 'add' => false,
@@ -269,13 +274,37 @@ class SmartcarVehicle extends IPSModuleStrict
         return $this->ReadPropertyBoolean('DisableCompatibilityFiltering') ? 'unfiltered' : 'filtered';
     }
 
+    private function GetSelectedCapabilitiesPropertyName(): string
+    {
+        return $this->ReadPropertyBoolean('DisableCompatibilityFiltering')
+            ? 'SelectedCapabilitiesUnfiltered'
+            : 'SelectedCapabilitiesFiltered';
+    }
+
+    private function ReadCurrentSelectedCapabilitiesRaw(): string
+    {
+        $propertyName = $this->GetSelectedCapabilitiesPropertyName();
+        $raw = $this->ReadPropertyString($propertyName);
+
+        // Einmalige Migration: Falls die neue modusgetrennte Property noch leer ist,
+        // übernehmen wir alte manuelle Haken aus SelectedCapabilities als Ausgangsbasis.
+        if (trim($raw) === '' || trim($raw) === '[]') {
+            $legacy = $this->ReadPropertyString($this->GetSelectedCapabilitiesPropertyName());
+            if (trim($legacy) !== '' && trim($legacy) !== '[]') {
+                return $legacy;
+            }
+        }
+
+        return $raw;
+    }
+
     private function GetSelectedCapabilityKeyMapForCurrentMode(): array
     {
         // Nur wirklich gespeicherte/manuell gesetzte Checkboxen übernehmen.
         // Beim Umschalten Expertenmodus <-> gefilterter Modus bleibt die Schnittmenge erhalten:
         // - bereits gewählte kompatible Signale bleiben im Expertenmodus aktiv
         // - im gefilterten Modus nicht mehr sichtbare Experten-Signale werden nicht übernommen
-        $selected = json_decode($this->ReadPropertyString('SelectedCapabilities'), true);
+        $selected = json_decode($this->ReadCurrentSelectedCapabilitiesRaw(), true);
         if (!is_array($selected)) {
             return [];
         }
@@ -321,7 +350,7 @@ class SmartcarVehicle extends IPSModuleStrict
         // gespeicherte Property von komplett leeren Listenzeilen befreien.
         if (empty($values)) {
             $cleanSaved = [];
-            $saved = json_decode($this->ReadPropertyString('SelectedCapabilities'), true);
+            $saved = json_decode($this->ReadCurrentSelectedCapabilitiesRaw(), true);
             if (is_array($saved)) {
                 foreach ($saved as $entry) {
                     if (!is_array($entry)) {
@@ -337,8 +366,8 @@ class SmartcarVehicle extends IPSModuleStrict
             }
 
             $newJson = json_encode($cleanSaved, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-            if ($newJson !== $this->ReadPropertyString('SelectedCapabilities')) {
-                IPS_SetProperty($this->InstanceID, 'SelectedCapabilities', $newJson);
+            if ($newJson !== $this->ReadPropertyString($this->GetSelectedCapabilitiesPropertyName())) {
+                IPS_SetProperty($this->InstanceID, $this->GetSelectedCapabilitiesPropertyName(), $newJson);
             }
 
             $this->WriteAttributeString('SelectedCapabilitiesMode', $currentMode);
@@ -381,10 +410,10 @@ class SmartcarVehicle extends IPSModuleStrict
         // gesetzt. Alte leere/geisterhafte IP-Symcon-Listenzeilen bleiben so nicht
         // in der Konfiguration hängen.
         $newJson = json_encode($values, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-        $changed = ($newJson !== $this->ReadPropertyString('SelectedCapabilities'));
+        $changed = ($newJson !== $this->ReadPropertyString($this->GetSelectedCapabilitiesPropertyName()));
 
         if ($changed) {
-            IPS_SetProperty($this->InstanceID, 'SelectedCapabilities', $newJson);
+            IPS_SetProperty($this->InstanceID, $this->GetSelectedCapabilitiesPropertyName(), $newJson);
         }
 
         $this->WriteAttributeString('SelectedCapabilitiesMode', $currentMode);
@@ -1292,7 +1321,7 @@ class SmartcarVehicle extends IPSModuleStrict
 
     private function GetSelectedCapabilitiesResolved(): array
     {
-        $saved = json_decode($this->ReadPropertyString('SelectedCapabilities'), true);
+        $saved = json_decode($this->ReadCurrentSelectedCapabilitiesRaw(), true);
         if (!is_array($saved)) {
             $this->SendDebug('Selected/Resolve', 'SelectedCapabilities ist kein Array.', 0);
             return [];
