@@ -289,7 +289,7 @@ class SmartcarVehicle extends IPSModuleStrict
         // Einmalige Migration: Falls die neue modusgetrennte Property noch leer ist,
         // übernehmen wir alte manuelle Haken aus SelectedCapabilities als Ausgangsbasis.
         if (trim($raw) === '' || trim($raw) === '[]') {
-            $legacy = $this->ReadPropertyString($this->GetSelectedCapabilitiesPropertyName());
+            $legacy = $this->ReadPropertyString('SelectedCapabilities');
             if (trim($legacy) !== '' && trim($legacy) !== '[]') {
                 return $legacy;
             }
@@ -320,6 +320,45 @@ class SmartcarVehicle extends IPSModuleStrict
 
             // Alte leere Listenzeilen aus früheren Formularzuständen ignorieren.
             if (!$this->IsValidCapabilityRow($entry)) {
+                continue;
+            }
+
+            $isSelected =
+                ($entry['selected'] ?? false) === true ||
+                ($entry['selected'] ?? false) === 1 ||
+                ($entry['selected'] ?? false) === '1' ||
+                strtolower((string)($entry['selected'] ?? '')) === 'true';
+
+            if ($isSelected) {
+                $selectedByCapabilityKey[$capabilityKey] = true;
+            }
+        }
+
+        return $selectedByCapabilityKey;
+    }
+
+
+
+    private function GetSelectedCapabilityKeyMapFromProperty(string $propertyName): array
+    {
+        $selected = json_decode($this->ReadPropertyString($propertyName), true);
+        if (!is_array($selected)) {
+            return [];
+        }
+
+        $selectedByCapabilityKey = [];
+
+        foreach ($selected as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+
+            if (!$this->IsValidCapabilityRow($entry)) {
+                continue;
+            }
+
+            $capabilityKey = (string)($entry['capabilityKey'] ?? '');
+            if ($capabilityKey === '') {
                 continue;
             }
 
@@ -379,7 +418,29 @@ class SmartcarVehicle extends IPSModuleStrict
         // Dadurch verschwinden beim Ausschalten des Expertenmodus alle inkompatiblen
         // Zeilen komplett aus der Property. Wenn der Expertenmodus später wieder
         // eingeschaltet wird, erscheinen diese Zeilen wieder, aber ohne Haken.
-        $selectedByCapabilityKey = $this->GetSelectedCapabilityKeyMapForCurrentMode();
+        // Wichtig: Checkbox-Zustände werden ausschließlich über capabilityKey übernommen,
+        // niemals über die Zeilenposition. Beim Wechsel in den Expertenmodus werden die
+        // bereits gewählten kompatiblen Signale aus der gefilterten Liste übernommen.
+        // Beim Wechsel zurück in den gefilterten Modus werden alte Experten-Auswahlen
+        // verworfen, damit sie beim nächsten Aktivieren nicht automatisch wieder aktiv sind.
+        if ($currentMode === 'unfiltered' && $modeChanged && $previousMode === 'filtered') {
+            $selectedByCapabilityKey = $this->GetSelectedCapabilityKeyMapFromProperty('SelectedCapabilitiesFiltered');
+        } elseif ($currentMode === 'unfiltered') {
+            $selectedByCapabilityKey = $this->GetSelectedCapabilityKeyMapFromProperty('SelectedCapabilitiesUnfiltered');
+
+            // Falls die Expertenliste noch keine eigene Auswahl hat, z. B. beim ersten
+            // Umschalten, die bisher manuell gewählten kompatiblen Signale übernehmen.
+            if (empty($selectedByCapabilityKey)) {
+                $selectedByCapabilityKey = $this->GetSelectedCapabilityKeyMapFromProperty('SelectedCapabilitiesFiltered');
+            }
+        } else {
+            $selectedByCapabilityKey = $this->GetSelectedCapabilityKeyMapFromProperty('SelectedCapabilitiesFiltered');
+
+            if ($modeChanged && $previousMode === 'unfiltered') {
+                IPS_SetProperty($this->InstanceID, 'SelectedCapabilitiesUnfiltered', '[]');
+            }
+        }
+
         $visibleCapabilityKeys = [];
         foreach ($values as $entry) {
             $capabilityKey = (string)($entry['capabilityKey'] ?? '');
