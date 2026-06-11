@@ -14,9 +14,11 @@ class SmartcarVehicle extends IPSModuleStrict
     $this->RegisterPropertyString('Model', '');
     $this->RegisterPropertyInteger('Year', 0);
     $this->RegisterPropertyString('PowertrainType', '');
+    $this->RegisterPropertyBoolean('DisableCompatibilityFiltering', false);
     $this->RegisterPropertyString('SelectedCapabilities', '[]');
     $this->RegisterAttributeString('CompatibilityCache', '[]');
     $this->RegisterAttributeInteger('CompatibilityCacheAt', 0);
+    $this->RegisterAttributeString('CompatibilityCacheMode', '');
 
     $this->RegisterVariableInteger('LastSignalsAt', 'Letzte Signale', '~UnixTimestamp');
 }
@@ -104,11 +106,20 @@ class SmartcarVehicle extends IPSModuleStrict
                 ['type' => 'Label', 'caption' => 'User ID: ' . $this->ReadPropertyString('UserID')],
                 ['type' => 'Label', 'caption' => 'Fahrzeug: ' . $this->ReadPropertyString('VehicleCaption')],
                 ['type' => 'Label', 'caption' => 'Antrieb: ' . $this->ReadPropertyString('PowertrainType')],
+                [
+                    'type' => 'CheckBox',
+                    'name' => 'DisableCompatibilityFiltering',
+                    'caption' => 'Experten-Option: Kompatibilitätsfilterung deaktivieren'
+                ],
+                [
+                    'type' => 'Label',
+                    'caption' => 'Hinweis: Wenn aktiviert, werden Signale/Befehle aus der ungefilterten Smartcar-Kompatibilitätsliste angezeigt. Nicht unterstützte Signale können bei Abruf/Registrierung vom Fahrzeug oder OEM abgelehnt werden.'
+                ],
 
                 [
                 'type' => 'List',
                 'name' => 'SelectedCapabilities',
-                'caption' => 'Kompatible Signale / Befehle',
+                'caption' => $this->ReadPropertyBoolean('DisableCompatibilityFiltering') ? 'Alle Signale / Befehle (Expertenmodus)' : 'Kompatible Signale / Befehle',
                 'rowCount' => 10,
                 'add' => false,
                 'delete' => false,
@@ -264,18 +275,31 @@ class SmartcarVehicle extends IPSModuleStrict
 
     private function LoadCompatibility(bool $forceReload): array
     {
+        if (!$this->HasParentConnection()) {
+            $this->SendDebug('Compatibility/Error', 'Kein Splitter/Parent verbunden.', 0);
+            return [];
+        }
 
-    if (!$this->HasParentConnection()) {
-        $this->SendDebug('Compatibility/Error', 'Kein Splitter/Parent verbunden.', 0);
-        return [];
-    }
+        $disableFiltering = $this->ReadPropertyBoolean('DisableCompatibilityFiltering');
+        $cacheMode = $disableFiltering ? 'unfiltered' : 'filtered';
+
         $cacheAt = $this->ReadAttributeInteger('CompatibilityCacheAt');
         $cacheRaw = $this->ReadAttributeString('CompatibilityCache');
+        $cachedMode = $this->ReadAttributeString('CompatibilityCacheMode');
 
-        if (!$forceReload && $cacheRaw !== '' && $cacheAt > (time() - 86400)) {
+        if (
+            !$forceReload &&
+            $cacheRaw !== '' &&
+            $cachedMode === $cacheMode &&
+            $cacheAt > (time() - 86400)
+        ) {
             $cached = json_decode($cacheRaw, true);
             if (is_array($cached)) {
-                $this->SendDebug('Compatibility/Cache', 'Cache verwendet. Einträge: ' . count($cached), 0);
+                $this->SendDebug(
+                    'Compatibility/Cache',
+                    'Cache verwendet. Modus=' . $cacheMode . ' Einträge: ' . count($cached),
+                    0
+                );
                 return $cached;
             }
         }
@@ -291,19 +315,24 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $region = 'EUROPE';
 
+        $requestMake = $disableFiltering ? '' : $make;
+        $requestPowertrainType = $disableFiltering ? '' : $powertrainType;
+
         $request = [
             'DataID' => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
             'Command' => 'GetCompatibleVehicles',
-            'Make' => $make,
-            'PowertrainType' => $powertrainType,
+            'Make' => $requestMake,
+            'PowertrainType' => $requestPowertrainType,
             'Region' => $region
         ];
 
         $this->SendDebug('Compatibility/Request', json_encode([
-            'make' => $make,
+            'mode' => $cacheMode,
+            'disableFiltering' => $disableFiltering,
+            'make' => $requestMake,
             'model' => $model,
             'year' => $year,
-            'powertrainType' => $powertrainType,
+            'powertrainType' => $requestPowertrainType,
             'region' => $region
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
@@ -331,45 +360,50 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $this->SendDebug('Compatibility/DataCount', 'Ungefilterte Einträge: ' . count($items), 0);
 
-        $filtered = [];
-        $normalizedVehicleModel = $this->NormalizeText($model);
-
-        foreach ($items as $item) {
-            $attributes = is_array($item['attributes'] ?? null) ? $item['attributes'] : [];
-
-            $itemModel = $this->NormalizeText((string)($attributes['model'] ?? ''));
-            $years = is_array($attributes['years'] ?? null) ? $attributes['years'] : [];
-
-            $startYear = (int)($years['start'] ?? 0);
-            $endYear = (int)($years['end'] ?? 9999);
-
-            $yearMatches = ($year <= 0 || ($year >= $startYear && $year <= $endYear));
-
-            $modelMatches =
-                $normalizedVehicleModel === '' ||
-                $itemModel === '' ||
-                str_contains($normalizedVehicleModel, $itemModel) ||
-                str_contains($itemModel, $normalizedVehicleModel) ||
-                str_contains($normalizedVehicleModel, explode(' ', $itemModel)[0] ?? $itemModel);
-
-            $itemPowertrainType = strtoupper((string)($attributes['powertrainType'] ?? ''));
-            $wantedPowertrainType = strtoupper($powertrainType);
-
-            $powertrainMatches =
-                $wantedPowertrainType === '' ||
-                $itemPowertrainType === '' ||
-                $itemPowertrainType === $wantedPowertrainType;
-
-            if ($yearMatches && $modelMatches && $powertrainMatches) {
-                $filtered[] = $item;
-            }
-        }
-
-        $this->SendDebug('Compatibility/FilteredCount', 'Gefilterte Einträge: ' . count($filtered), 0);
-
-        if (empty($filtered)) {
-            $this->SendDebug('Compatibility/Fallback', 'Keine exakte Modell/Jahr-Übereinstimmung. Verwende ungefilterte Einträge.', 0);
+        if ($disableFiltering) {
             $filtered = $items;
+            $this->SendDebug('Compatibility/FilteredCount', 'Filterung deaktiviert. Verwende alle Einträge: ' . count($filtered), 0);
+        } else {
+            $filtered = [];
+            $normalizedVehicleModel = $this->NormalizeText($model);
+
+            foreach ($items as $item) {
+                $attributes = is_array($item['attributes'] ?? null) ? $item['attributes'] : [];
+
+                $itemModel = $this->NormalizeText((string)($attributes['model'] ?? ''));
+                $years = is_array($attributes['years'] ?? null) ? $attributes['years'] : [];
+
+                $startYear = (int)($years['start'] ?? 0);
+                $endYear = (int)($years['end'] ?? 9999);
+
+                $yearMatches = ($year <= 0 || ($year >= $startYear && $year <= $endYear));
+
+                $modelMatches =
+                    $normalizedVehicleModel === '' ||
+                    $itemModel === '' ||
+                    str_contains($normalizedVehicleModel, $itemModel) ||
+                    str_contains($itemModel, $normalizedVehicleModel) ||
+                    str_contains($normalizedVehicleModel, explode(' ', $itemModel)[0] ?? $itemModel);
+
+                $itemPowertrainType = strtoupper((string)($attributes['powertrainType'] ?? ''));
+                $wantedPowertrainType = strtoupper($powertrainType);
+
+                $powertrainMatches =
+                    $wantedPowertrainType === '' ||
+                    $itemPowertrainType === '' ||
+                    $itemPowertrainType === $wantedPowertrainType;
+
+                if ($yearMatches && $modelMatches && $powertrainMatches) {
+                    $filtered[] = $item;
+                }
+            }
+
+            $this->SendDebug('Compatibility/FilteredCount', 'Gefilterte Einträge: ' . count($filtered), 0);
+
+            if (empty($filtered)) {
+                $this->SendDebug('Compatibility/Fallback', 'Keine exakte Modell/Jahr-Übereinstimmung. Verwende ungefilterte Einträge.', 0);
+                $filtered = $items;
+            }
         }
 
         if (!empty($filtered)) {
@@ -378,9 +412,11 @@ class SmartcarVehicle extends IPSModuleStrict
                 json_encode($filtered, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
             );
             $this->WriteAttributeInteger('CompatibilityCacheAt', time());
+            $this->WriteAttributeString('CompatibilityCacheMode', $cacheMode);
         } else {
             $this->WriteAttributeString('CompatibilityCache', '[]');
             $this->WriteAttributeInteger('CompatibilityCacheAt', 0);
+            $this->WriteAttributeString('CompatibilityCacheMode', '');
             $this->SendDebug('Compatibility/Cache', 'Leeres Ergebnis wird nicht gecacht.', 0);
         }
 
