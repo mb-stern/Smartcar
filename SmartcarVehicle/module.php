@@ -15,12 +15,13 @@ class SmartcarVehicle extends IPSModuleStrict
     $this->RegisterPropertyInteger('Year', 0);
     $this->RegisterPropertyString('PowertrainType', '');
     $this->RegisterPropertyBoolean('DisableCompatibilityFiltering', false);
-    // Alte Property bleibt registriert, damit bestehende Installationen nicht brechen.
-    // Für die Anzeige/Auswertung werden ab sofort getrennte Listen pro Modus verwendet,
-    // damit IP-Symcon Checkboxen nicht anhand der Zeilennummer auf andere Signale verschiebt.
+    // Nur eine sichtbare List-Property verwenden. Die Checkbox-Zuordnung erfolgt
+    // zusätzlich über stabile Capability-Keys im Attribut SelectedCapabilityKeys.
     $this->RegisterPropertyString('SelectedCapabilities', '[]');
+    // Alte Properties bleiben nur zur Migration registriert, werden aber nicht mehr als Listen benutzt.
     $this->RegisterPropertyString('SelectedCapabilitiesFiltered', '[]');
     $this->RegisterPropertyString('SelectedCapabilitiesUnfiltered', '[]');
+    $this->RegisterAttributeString('SelectedCapabilityKeys', '[]');
     $this->RegisterAttributeString('CompatibilityCache', '[]');
     $this->RegisterAttributeInteger('CompatibilityCacheAt', 0);
     $this->RegisterAttributeString('CompatibilityCacheMode', '');
@@ -49,6 +50,11 @@ class SmartcarVehicle extends IPSModuleStrict
             $this->SendDebug('ApplyChanges', 'Kein gültiger Splitter/Parent verbunden. Compatibility wird noch nicht geladen.', 0);
             return;
         }
+
+        // Vor dem Neuaufbau der Liste die aktuell gesetzten Checkboxen sichern.
+        // Das ist wichtig, weil Smartcar neue Zeilen einfügen kann und die Checkboxen
+        // dann nicht anhand der Zeilennummer übernommen werden dürfen.
+        $this->SaveSelectedCapabilityKeysFromListProperty();
 
         $this->NormalizeSelectedCapabilitiesForCurrentMode();
         $this->ApplySelectedCapabilities();
@@ -306,19 +312,59 @@ class SmartcarVehicle extends IPSModuleStrict
 
     private function ReadCurrentSelectedCapabilitiesRaw(): string
     {
-        $propertyName = $this->GetSelectedCapabilitiesPropertyName();
-        $raw = $this->ReadPropertyString($propertyName);
+        return $this->ReadPropertyString('SelectedCapabilities');
+    }
 
-        // Einmalige Migration: Falls die neue modusgetrennte Property noch leer ist,
-        // übernehmen wir alte manuelle Haken aus SelectedCapabilities als Ausgangsbasis.
-        if (trim($raw) === '' || trim($raw) === '[]') {
-            $legacy = $this->ReadPropertyString('SelectedCapabilities');
-            if (trim($legacy) !== '' && trim($legacy) !== '[]') {
-                return $legacy;
+    private function SaveSelectedCapabilityKeysFromListProperty(): void
+    {
+        $selectedByCapabilityKey = $this->GetSelectedCapabilityKeyMapFromProperty('SelectedCapabilities');
+
+        // Migration/Fallback: Falls die aktuelle Liste noch leer ist, einmalig alte
+        // gespeicherte Listen aus früheren Versionen übernehmen. Danach wird nur noch
+        // mit SelectedCapabilities + SelectedCapabilityKeys gearbeitet.
+        if (empty($selectedByCapabilityKey)) {
+            $selectedByCapabilityKey = $this->MergeSelectedCapabilityKeyMaps(
+                $this->GetSelectedCapabilityKeyMapFromProperty('SelectedCapabilitiesFiltered'),
+                $this->GetSelectedCapabilityKeyMapFromProperty('SelectedCapabilitiesUnfiltered')
+            );
+        }
+
+        $keys = array_keys($selectedByCapabilityKey);
+        sort($keys, SORT_STRING);
+
+        $this->WriteAttributeString(
+            'SelectedCapabilityKeys',
+            json_encode($keys, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+        );
+
+        $this->SendDebug(
+            'Selected/SaveKeys',
+            json_encode([
+                'count' => count($keys),
+                'keys'  => $keys
+            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            0
+        );
+    }
+
+    private function GetSelectedCapabilityKeyMapFromAttribute(): array
+    {
+        $raw = $this->ReadAttributeString('SelectedCapabilityKeys');
+        $keys = json_decode($raw, true);
+
+        if (!is_array($keys)) {
+            return [];
+        }
+
+        $map = [];
+        foreach ($keys as $key) {
+            $key = strtolower(trim((string)$key));
+            if ($key !== '') {
+                $map[$key] = true;
             }
         }
 
-        return $raw;
+        return $map;
     }
 
     private function GetSelectedCapabilityKeyMapForCurrentMode(): array
@@ -463,66 +509,19 @@ class SmartcarVehicle extends IPSModuleStrict
         $data = $this->LoadCompatibility(false);
         $values = $this->BuildCapabilitiesListFromCompatibilityItems($data);
 
-        // Falls keine Compatibility-Daten geladen werden konnten, wenigstens die
-        // gespeicherte Property von komplett leeren Listenzeilen befreien.
         if (empty($values)) {
-            $cleanSaved = [];
-            $saved = json_decode($this->ReadCurrentSelectedCapabilitiesRaw(), true);
-            if (is_array($saved)) {
-                foreach ($saved as $entry) {
-                    if (!is_array($entry)) {
-                        continue;
-                    }
-
-                    if (!$this->IsValidCapabilityRow($entry)) {
-                        continue;
-                    }
-
-                    $cleanSaved[] = $entry;
-                }
-            }
-
-            $newJson = json_encode($cleanSaved, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-            if ($newJson !== $this->ReadPropertyString($this->GetSelectedCapabilitiesPropertyName())) {
-                IPS_SetProperty($this->InstanceID, $this->GetSelectedCapabilitiesPropertyName(), $newJson);
-            }
-
             $this->WriteAttributeString('SelectedCapabilitiesMode', $currentMode);
-            return $cleanSaved;
+            return [];
         }
 
-        // Nur Checkboxen aus der aktuell gespeicherten Liste übernehmen, die wirklich
-        // händisch aktiv waren UND in der neuen sichtbaren Liste noch existieren.
-        // Dadurch verschwinden beim Ausschalten des Expertenmodus alle inkompatiblen
-        // Zeilen komplett aus der Property. Wenn der Expertenmodus später wieder
-        // eingeschaltet wird, erscheinen diese Zeilen wieder, aber ohne Haken.
-        // Wichtig: Checkbox-Zustände werden ausschließlich über capabilityKey übernommen,
-        // niemals über die Zeilenposition. Beim Wechsel in den Expertenmodus werden die
-        // bereits gewählten kompatiblen Signale aus der gefilterten Liste übernommen.
-        // Beim Wechsel zurück in den gefilterten Modus werden alte Experten-Auswahlen
-        // verworfen, damit sie beim nächsten Aktivieren nicht automatisch wieder aktiv sind.
-        if ($currentMode === 'unfiltered') {
-            // Expertenmodus:
-            // Die Auswahl kommt bewusst aus der EINEN sichtbaren List-Property
-            // SelectedCapabilities. Beim Umschalten enthält sie noch die vorherige
-            // kompatible Liste mit den gesetzten Haken; diese Haken werden anhand der
-            // stabilen Keys in die neue Expertenliste übernommen. Zusätzliche neue
-            // Expertensignale bleiben deaktiviert.
-            $selectedByCapabilityKey = $this->GetSelectedCapabilityKeyMapFromProperty('SelectedCapabilities');
-        } else {
-            // Normalmodus:
-            // Ebenfalls nur die sichtbare List-Property verwenden. Dadurch werden
-            // Experten-Signale, die im Normalmodus nicht sichtbar sind, beim Normalisieren
-            // automatisch aus der gespeicherten Liste entfernt.
-            $selectedByCapabilityKey = $this->GetSelectedCapabilityKeyMapFromProperty('SelectedCapabilities');
-        }
+        // Die Auswahl kommt nicht aus der Zeilenposition der List-Property, sondern
+        // aus den stabilen Capability-Keys. Dadurch bleiben Checkboxen korrekt, auch
+        // wenn Smartcar neue Zeilen einfügt oder anders sortiert.
+        $selectedByCapabilityKey = $this->GetSelectedCapabilityKeyMapFromAttribute();
 
-        $visibleCapabilityKeys = [];
-        foreach ($values as $entry) {
-            $capabilityKey = (string)($entry['capabilityKey'] ?? '');
-            if ($capabilityKey !== '') {
-                $visibleCapabilityKeys[$capabilityKey] = true;
-            }
+        // Fallback für Altinstallationen oder falls das Attribut noch leer ist.
+        if (empty($selectedByCapabilityKey)) {
+            $selectedByCapabilityKey = $this->GetSelectedCapabilityKeyMapFromProperty('SelectedCapabilities');
         }
 
         $keptSelected = 0;
@@ -545,20 +544,11 @@ class SmartcarVehicle extends IPSModuleStrict
         }
         unset($entry);
 
-        // Die Listen-Property selbst wird exakt auf die sichtbaren, gültigen Zeilen
-        // gesetzt. Alte leere/geisterhafte IP-Symcon-Listenzeilen bleiben so nicht
-        // in der Konfiguration hängen.
+        // Nur diese eine List-Property wird geschrieben. Keine getrennten Listen pro Modus.
         $newJson = json_encode($values, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-        $changed = ($newJson !== $this->ReadPropertyString($this->GetSelectedCapabilitiesPropertyName()));
+        $changed = ($newJson !== $this->ReadPropertyString('SelectedCapabilities'));
 
         if ($changed) {
-            IPS_SetProperty($this->InstanceID, $this->GetSelectedCapabilitiesPropertyName(), $newJson);
-        }
-
-        // Legacy-/Hauptproperty zusätzlich synchron halten. Das ist wichtig für
-        // bestehende Installationen und verhindert, dass Symcon alte Leerzeilen aus
-        // SelectedCapabilities weiter mitschleppt.
-        if ($newJson !== $this->ReadPropertyString('SelectedCapabilities')) {
             IPS_SetProperty($this->InstanceID, 'SelectedCapabilities', $newJson);
         }
 
@@ -1475,9 +1465,14 @@ class SmartcarVehicle extends IPSModuleStrict
 
     private function GetSelectedCapabilitiesResolved(): array
     {
-        $saved = json_decode($this->ReadCurrentSelectedCapabilitiesRaw(), true);
-        if (!is_array($saved)) {
-            $this->SendDebug('Selected/Resolve', 'SelectedCapabilities ist kein Array.', 0);
+        $selectedByCapabilityKey = $this->GetSelectedCapabilityKeyMapFromAttribute();
+
+        if (empty($selectedByCapabilityKey)) {
+            $selectedByCapabilityKey = $this->GetSelectedCapabilityKeyMapFromProperty('SelectedCapabilities');
+        }
+
+        if (empty($selectedByCapabilityKey)) {
+            $this->SendDebug('Selected/Resolve', 'Keine ausgewählten Capability-Keys vorhanden.', 0);
             return [];
         }
 
@@ -1498,47 +1493,20 @@ class SmartcarVehicle extends IPSModuleStrict
         }
 
         $fullList = $this->BuildCapabilitiesListFromCompatibilityItems($cache);
+        $resultByCapabilityKey = [];
 
-        $fullByCapabilityKey = [];
         foreach ($fullList as $entry) {
             foreach ($this->GetCapabilityKeysForRow($entry) as $key) {
-                $fullByCapabilityKey[$key] = $entry;
-            }
-        }
-
-        $result = [];
-
-        foreach ($saved as $savedEntry) {
-            if (!is_array($savedEntry)) {
-                continue;
-            }
-
-            $selected =
-                ($savedEntry['selected'] ?? false) === true ||
-                ($savedEntry['selected'] ?? false) === 1 ||
-                ($savedEntry['selected'] ?? false) === '1' ||
-                strtolower((string)($savedEntry['selected'] ?? '')) === 'true';
-
-            if (!$selected) {
-                continue;
-            }
-
-            $entry = null;
-            foreach ($this->GetCapabilityKeysForRow($savedEntry) as $key) {
-                if (isset($fullByCapabilityKey[$key])) {
-                    $entry = $fullByCapabilityKey[$key];
+                if (isset($selectedByCapabilityKey[$key])) {
+                    $primaryKey = (string)($entry['capabilityKey'] ?? $key);
+                    $entry['selected'] = true;
+                    $resultByCapabilityKey[$primaryKey] = $entry;
                     break;
                 }
             }
-
-            if ($entry === null) {
-                $this->SendDebug('Selected/ResolveMissing', 'Kein FullEntry für gespeicherte Zeile: ' . json_encode($savedEntry, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
-                continue;
-            }
-            $entry['selected'] = true;
-
-            $result[] = $entry;
         }
+
+        $result = array_values($resultByCapabilityKey);
 
         $this->SendDebug('Selected/Resolve', 'Ausgewählte Einträge: ' . count($result), 0);
 
