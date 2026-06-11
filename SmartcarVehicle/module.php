@@ -317,11 +317,64 @@ class SmartcarVehicle extends IPSModuleStrict
 
     private function SaveSelectedCapabilityKeysFromListProperty(): void
     {
-        $selectedByCapabilityKey = $this->GetSelectedCapabilityKeyMapFromProperty('SelectedCapabilities');
+        $selected = json_decode($this->ReadPropertyString('SelectedCapabilities'), true);
 
-        // Migration/Fallback: Falls die aktuelle Liste noch leer ist, einmalig alte
-        // gespeicherte Listen aus früheren Versionen übernehmen. Danach wird nur noch
-        // mit SelectedCapabilities + SelectedCapabilityKeys gearbeitet.
+        if (!is_array($selected)) {
+            $this->SendDebug('Selected/SaveKeys', 'SelectedCapabilities ist kein Array. Bestehende Key-Auswahl bleibt erhalten.', 0);
+            return;
+        }
+
+        $validRows = 0;
+        $selectedByCapabilityKey = [];
+
+        foreach ($selected as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+
+            if (!$this->IsValidCapabilityRow($entry)) {
+                continue;
+            }
+
+            $validRows++;
+
+            $isSelected =
+                ($entry['selected'] ?? false) === true ||
+                ($entry['selected'] ?? false) === 1 ||
+                ($entry['selected'] ?? false) === '1' ||
+                strtolower((string)($entry['selected'] ?? '')) === 'true';
+
+            if (!$isSelected) {
+                continue;
+            }
+
+            // Entscheidend: gespeichert wird genau EIN stabiler Schlüssel pro Zeile.
+            // Keine Zeilennummer, keine komplette Tabellenzeile und keine Alias-Liste.
+            // Primär ist capabilityKey = type|capability; code ist nur Fallback.
+            $key = strtolower(trim((string)($entry['capabilityKey'] ?? '')));
+            if ($key === '') {
+                $key = $this->BuildCapabilityKey(
+                    (string)($entry['type'] ?? ''),
+                    (string)($entry['capability'] ?? ''),
+                    (string)($entry['code'] ?? '')
+                );
+            }
+
+            if ($key !== '') {
+                $selectedByCapabilityKey[$key] = true;
+            }
+        }
+
+        // Wenn IP-Symcon wegen einer geänderten List-Struktur nur leere Geisterzeilen
+        // zurückliefert, darf die bestehende Auswahl NICHT mit [] überschrieben werden.
+        // Genau dadurch verschwanden danach die Variablen bzw. wurden nicht angelegt.
+        if ($validRows === 0) {
+            $this->SendDebug('Selected/SaveKeys', 'Keine gültigen Listenzeilen gefunden. Bestehende Key-Auswahl bleibt erhalten.', 0);
+            return;
+        }
+
+        // Migration/Fallback: Nur wenn noch keine gültige aktuelle Auswahl existiert und
+        // alte Properties tatsächlich ausgewählte gültige Zeilen enthalten.
         if (empty($selectedByCapabilityKey)) {
             $selectedByCapabilityKey = $this->MergeSelectedCapabilityKeyMaps(
                 $this->GetSelectedCapabilityKeyMapFromProperty('SelectedCapabilitiesFiltered'),
@@ -340,8 +393,9 @@ class SmartcarVehicle extends IPSModuleStrict
         $this->SendDebug(
             'Selected/SaveKeys',
             json_encode([
-                'count' => count($keys),
-                'keys'  => $keys
+                'validRows' => $validRows,
+                'count'     => count($keys),
+                'keys'      => $keys
             ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
             0
         );
