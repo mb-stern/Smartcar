@@ -19,6 +19,7 @@ class SmartcarVehicle extends IPSModuleStrict
     $this->RegisterAttributeString('CompatibilityCache', '[]');
     $this->RegisterAttributeInteger('CompatibilityCacheAt', 0);
     $this->RegisterAttributeString('CompatibilityCacheMode', '');
+    $this->RegisterAttributeString('SelectedCapabilitiesMode', '');
 
     $this->RegisterVariableInteger('LastSignalsAt', 'Letzte Signale', '~UnixTimestamp');
 }
@@ -36,6 +37,7 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $this->SetStatus(102);
 
+        $this->NormalizeSelectedCapabilitiesForCurrentMode();
         $this->ApplySelectedCapabilities();
     }
 
@@ -238,9 +240,31 @@ class SmartcarVehicle extends IPSModuleStrict
         $data = $this->LoadCompatibility(false);
         $values = $this->BuildCapabilitiesListFromCompatibilityItems($data);
 
+        $selectedByCapabilityKey = $this->GetSelectedCapabilityKeyMapForCurrentMode();
+
+        foreach ($values as &$entry) {
+            $capabilityKey = (string)($entry['capabilityKey'] ?? '');
+            $entry['selected'] = ($capabilityKey !== '' && isset($selectedByCapabilityKey[$capabilityKey]));
+        }
+        unset($entry);
+
+        return $values;
+    }
+
+    private function GetCurrentCompatibilityMode(): string
+    {
+        return $this->ReadPropertyBoolean('DisableCompatibilityFiltering') ? 'unfiltered' : 'filtered';
+    }
+
+    private function GetSelectedCapabilityKeyMapForCurrentMode(): array
+    {
+        // Nur wirklich gespeicherte/manuell gesetzte Checkboxen übernehmen.
+        // Beim Umschalten Expertenmodus <-> gefilterter Modus bleibt die Schnittmenge erhalten:
+        // - bereits gewählte kompatible Signale bleiben im Expertenmodus aktiv
+        // - im gefilterten Modus nicht mehr sichtbare Experten-Signale werden nicht übernommen
         $selected = json_decode($this->ReadPropertyString('SelectedCapabilities'), true);
         if (!is_array($selected)) {
-            $selected = [];
+            return [];
         }
 
         $selectedByCapabilityKey = [];
@@ -255,22 +279,63 @@ class SmartcarVehicle extends IPSModuleStrict
                 continue;
             }
 
-            $selectedByCapabilityKey[$capabilityKey] =
+            $isSelected =
                 ($entry['selected'] ?? false) === true ||
                 ($entry['selected'] ?? false) === 1 ||
                 ($entry['selected'] ?? false) === '1' ||
                 strtolower((string)($entry['selected'] ?? '')) === 'true';
+
+            if ($isSelected) {
+                $selectedByCapabilityKey[$capabilityKey] = true;
+            }
         }
+
+        return $selectedByCapabilityKey;
+    }
+
+    private function NormalizeSelectedCapabilitiesForCurrentMode(): void
+    {
+        $currentMode = $this->GetCurrentCompatibilityMode();
+        $previousMode = $this->ReadAttributeString('SelectedCapabilitiesMode');
+        $modeChanged = ($previousMode !== '' && $previousMode !== $currentMode);
+
+        $data = $this->LoadCompatibility(false);
+        $values = $this->BuildCapabilitiesListFromCompatibilityItems($data);
+
+        $selectedByCapabilityKey = $this->GetSelectedCapabilityKeyMapForCurrentMode();
+        $keptSelected = 0;
 
         foreach ($values as &$entry) {
             $capabilityKey = (string)($entry['capabilityKey'] ?? '');
-            if ($capabilityKey !== '' && isset($selectedByCapabilityKey[$capabilityKey])) {
-                $entry['selected'] = $selectedByCapabilityKey[$capabilityKey];
+            $isSelected = ($capabilityKey !== '' && isset($selectedByCapabilityKey[$capabilityKey]));
+            $entry['selected'] = $isSelected;
+            if ($isSelected) {
+                $keptSelected++;
             }
         }
         unset($entry);
 
-        return $values;
+        // Wichtig: Die Property wird auf die aktuell sichtbare Liste normalisiert.
+        // Dadurch verschwinden beim Deaktivieren des Expertenmodus inkompatible Zeilen komplett.
+        // Checkboxen werden aber nur dort gesetzt, wo der Capability-Key bereits manuell gespeichert war.
+        $newJson = json_encode($values, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        if ($newJson !== $this->ReadPropertyString('SelectedCapabilities')) {
+            IPS_SetProperty($this->InstanceID, 'SelectedCapabilities', $newJson);
+        }
+
+        $this->WriteAttributeString('SelectedCapabilitiesMode', $currentMode);
+
+        $this->SendDebug(
+            'Selected/Normalize',
+            json_encode([
+                'mode' => $currentMode,
+                'modeChanged' => $modeChanged,
+                'previousMode' => $previousMode,
+                'visibleEntries' => count($values),
+                'keptSelected' => $keptSelected
+            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            0
+        );
     }
 
     private function LoadCompatibility(bool $forceReload): array
@@ -281,7 +346,7 @@ class SmartcarVehicle extends IPSModuleStrict
         }
 
         $disableFiltering = $this->ReadPropertyBoolean('DisableCompatibilityFiltering');
-        $cacheMode = $disableFiltering ? 'unfiltered' : 'filtered';
+        $cacheMode = $this->GetCurrentCompatibilityMode();
 
         $cacheAt = $this->ReadAttributeInteger('CompatibilityCacheAt');
         $cacheRaw = $this->ReadAttributeString('CompatibilityCache');
@@ -916,8 +981,12 @@ class SmartcarVehicle extends IPSModuleStrict
         $managedIdents = [];
         $newSignalCodes = [];
 
-        // Alle möglichen Signal- und Command-Variablen aus der Compatibility-Liste sammeln
+        // Alle möglichen Signal- und Command-Variablen aus der aktuell sichtbaren Compatibility-Liste sammeln
         $cache = json_decode($this->ReadAttributeString('CompatibilityCache'), true);
+        if (!is_array($cache) || $this->ReadAttributeString('CompatibilityCacheMode') !== $this->GetCurrentCompatibilityMode()) {
+            $cache = $this->LoadCompatibility(false);
+        }
+
         if (is_array($cache)) {
             $allCapabilities = $this->BuildCapabilitiesListFromCompatibilityItems($cache);
 
@@ -1139,8 +1208,12 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $cache = json_decode($this->ReadAttributeString('CompatibilityCache'), true);
 
-        if (!is_array($cache) || empty($cache)) {
-            $this->SendDebug('Selected/Resolve', 'Cache leer, lade Compatibility neu.', 0);
+        if (
+            !is_array($cache) ||
+            empty($cache) ||
+            $this->ReadAttributeString('CompatibilityCacheMode') !== $this->GetCurrentCompatibilityMode()
+        ) {
+            $this->SendDebug('Selected/Resolve', 'Cache leer oder falscher Modus, lade Compatibility neu.', 0);
             $cache = $this->LoadCompatibility(false);
         }
 
