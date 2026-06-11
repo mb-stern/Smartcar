@@ -15,15 +15,16 @@ class SmartcarVehicle extends IPSModuleStrict
     $this->RegisterPropertyInteger('Year', 0);
     $this->RegisterPropertyString('PowertrainType', '');
     $this->RegisterPropertyBoolean('DisableCompatibilityFiltering', false);
-    // Legacy-Property bleibt registriert, wird aber nicht mehr als sichtbare Liste genutzt.
+    // Alte Property bleibt registriert, damit bestehende Installationen nicht brechen.
+    // Für die Anzeige/Auswertung werden ab sofort getrennte Listen pro Modus verwendet,
+    // damit IP-Symcon Checkboxen nicht anhand der Zeilennummer auf andere Signale verschiebt.
     $this->RegisterPropertyString('SelectedCapabilities', '[]');
-    // Sichtbare Editor-Liste. Diese wird bei jedem Formularaufbau neu aus der Compatibility-Liste erzeugt.
-    $this->RegisterPropertyString('SelectedCapabilitiesEditor', '[]');
-    // Nur diese Keys sind die echte Auswahl. Dadurch können Checkboxen nicht mehr zeilenbasiert verrutschen.
-    $this->RegisterPropertyString('SelectedCapabilityKeys', '[]');
+    $this->RegisterPropertyString('SelectedCapabilitiesFiltered', '[]');
+    $this->RegisterPropertyString('SelectedCapabilitiesUnfiltered', '[]');
     $this->RegisterAttributeString('CompatibilityCache', '[]');
     $this->RegisterAttributeInteger('CompatibilityCacheAt', 0);
     $this->RegisterAttributeString('CompatibilityCacheMode', '');
+    $this->RegisterAttributeString('SelectedCapabilitiesMode', '');
 
     $this->RegisterVariableInteger('LastSignalsAt', 'Letzte Signale', '~UnixTimestamp');
 }
@@ -41,13 +42,15 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $this->SetStatus(102);
 
+        // Beim Erstellen/Importieren der Instanz kann die Parent-/Splitter-Verbindung
+        // noch fehlen. Dann darf hier kein SendDataToParent() laufen, sonst meldet
+        // IP-Symcon "Kann für die Instanz das Interface nicht finden".
         if (!$this->HasParentConnection()) {
             $this->SendDebug('ApplyChanges', 'Kein gültiger Splitter/Parent verbunden. Compatibility wird noch nicht geladen.', 0);
             return;
         }
 
-        $this->CaptureSelectedCapabilityKeysFromEditor();
-        $this->NormalizeSelectedCapabilitiesEditor();
+        $this->NormalizeSelectedCapabilitiesForCurrentMode();
         $this->ApplySelectedCapabilities();
     }
 
@@ -108,9 +111,12 @@ class SmartcarVehicle extends IPSModuleStrict
         $capabilities = [];
 
         if ($this->HasParentConnection()) {
-            // Editor-Liste immer frisch aus Compatibility + stabilen Auswahl-Keys aufbauen.
-            // Dadurch gibt es keine alten leeren List-Zeilen mehr.
-            $capabilities = $this->NormalizeSelectedCapabilitiesEditor();
+            // Die Liste darf NIE direkt aus der alten Property gerendert werden.
+            // Deshalb erzeugen wir hier eine harte, gültige Sichtliste und geben
+            // exakt diese als values zurück. Leere/geisterhafte Alt-Zeilen aus
+            // SelectedCapabilities werden dabei ignoriert und beim nächsten
+            // Übernehmen dauerhaft aus der Property entfernt.
+            $capabilities = $this->NormalizeSelectedCapabilitiesForCurrentMode();
         }
 
         $form = [
@@ -127,12 +133,12 @@ class SmartcarVehicle extends IPSModuleStrict
                 ],
                 [
                     'type' => 'Label',
-                    'caption' => 'Expertenmodus zeigt die ungefilterte Smartcar-Kompatibilitätsliste. Neue Experten-Signale werden nie automatisch aktiviert.'
+                    'caption' => 'Hinweis: Wenn aktiviert, werden Signale/Befehle aus der ungefilterten Smartcar-Kompatibilitätsliste angezeigt. Nicht unterstützte Signale können bei Abruf/Registrierung vom Fahrzeug oder OEM abgelehnt werden.'
                 ],
 
                 [
                 'type' => 'List',
-                'name' => 'SelectedCapabilitiesEditor',
+                'name' => $this->GetSelectedCapabilitiesPropertyName(),
                 'caption' => $this->ReadPropertyBoolean('DisableCompatibilityFiltering') ? 'Alle Signale / Befehle (Expertenmodus)' : 'Kompatible Signale / Befehle',
                 'rowCount' => 10,
                 'add' => false,
@@ -239,14 +245,16 @@ class SmartcarVehicle extends IPSModuleStrict
     public function ReloadCompatibility(): void
     {
         $this->LoadCompatibility(true);
-        if ($this->HasParentConnection()) {
-            $this->NormalizeSelectedCapabilitiesEditor();
-        }
         $this->ReloadForm();
     }
 
     private function BuildCapabilityKey(string $type, string $capability, string $code): string
     {
+        // Stabiler Schlüssel für die Checkbox-Zuordnung.
+        // Wichtig: Die Smartcar-Kompatibilitätsliste kann je nach gefiltertem/ungefiltertem
+        // Abruf unterschiedliche capability-Werte liefern. Der eigentliche Signal-/Befehlscode
+        // bleibt aber stabil. Deshalb darf die Checkbox nicht an der Zeilennummer und auch nicht
+        // zwingend am capability-Text hängen, sondern primär am Code.
         $type = strtolower(trim($type));
         $code = strtolower(trim($code));
         $capability = strtolower(trim($capability));
@@ -258,204 +266,315 @@ class SmartcarVehicle extends IPSModuleStrict
         return $type . '|' . $capability;
     }
 
-    private function GetCurrentCompatibilityMode(): string
-    {
-        return $this->ReadPropertyBoolean('DisableCompatibilityFiltering') ? 'unfiltered' : 'filtered';
-    }
-
-    private function IsSelectedValue($value): bool
-    {
-        return $value === true || $value === 1 || $value === '1' || strtolower((string)$value) === 'true';
-    }
-
-    private function IsValidCapabilityRow(array $entry): bool
-    {
-        $type = strtolower(trim((string)($entry['type'] ?? '')));
-        $capabilityKey = trim((string)($entry['capabilityKey'] ?? ''));
-        $capability = trim((string)($entry['capability'] ?? ''));
-        $code = trim((string)($entry['code'] ?? ''));
-        $name = trim((string)($entry['name'] ?? ''));
-
-        if ($type !== 'signal' && $type !== 'command') {
-            return false;
-        }
-
-        if ($capabilityKey === '' && $capability === '' && $code === '') {
-            return false;
-        }
-
-        return ($name !== '' || $capability !== '' || $code !== '');
-    }
-
-    private function GetCapabilityKeysForRow(array $entry): array
-    {
-        $keys = [];
-
-        $type = strtolower(trim((string)($entry['type'] ?? '')));
-        $capability = strtolower(trim((string)($entry['capability'] ?? '')));
-        $code = strtolower(trim((string)($entry['code'] ?? '')));
-        $capabilityKey = strtolower(trim((string)($entry['capabilityKey'] ?? '')));
-
-        if ($capabilityKey !== '') {
-            $keys[$capabilityKey] = true;
-        }
-
-        $canonical = $this->BuildCapabilityKey($type, $capability, $code);
-        if ($canonical !== '') {
-            $keys[$canonical] = true;
-        }
-
-        // Rückwärtskompatibilität zur Eingangsversion: type|capability|code.
-        $legacy = strtolower(trim($type) . '|' . trim($capability) . '|' . trim($code));
-        if ($legacy !== '||' && $legacy !== '') {
-            $keys[$legacy] = true;
-        }
-
-        return array_keys($keys);
-    }
-
-    private function ReadSelectedCapabilityKeyMap(): array
-    {
-        $raw = json_decode($this->ReadPropertyString('SelectedCapabilityKeys'), true);
-        $map = [];
-
-        if (is_array($raw)) {
-            foreach ($raw as $key) {
-                $key = strtolower(trim((string)$key));
-                if ($key !== '') {
-                    $map[$key] = true;
-                }
-            }
-        }
-
-        // Einmalige Migration aus der alten List-Property, falls noch keine Keys existieren.
-        if (empty($map)) {
-            foreach (['SelectedCapabilitiesEditor', 'SelectedCapabilities'] as $propertyName) {
-                $rows = json_decode($this->ReadPropertyString($propertyName), true);
-                if (!is_array($rows)) {
-                    continue;
-                }
-
-                foreach ($rows as $row) {
-                    if (!is_array($row) || !$this->IsValidCapabilityRow($row) || !$this->IsSelectedValue($row['selected'] ?? false)) {
-                        continue;
-                    }
-
-                    foreach ($this->GetCapabilityKeysForRow($row) as $key) {
-                        $map[strtolower($key)] = true;
-                    }
-                }
-            }
-        }
-
-        return $map;
-    }
-
-    private function WriteSelectedCapabilityKeyMap(array $map): void
-    {
-        $keys = array_keys(array_filter($map));
-        sort($keys, SORT_STRING);
-
-        $json = json_encode($keys, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-        if ($json !== $this->ReadPropertyString('SelectedCapabilityKeys')) {
-            IPS_SetProperty($this->InstanceID, 'SelectedCapabilityKeys', $json);
-        }
-    }
-
-    private function CaptureSelectedCapabilityKeysFromEditor(): void
-    {
-        $rows = json_decode($this->ReadPropertyString('SelectedCapabilitiesEditor'), true);
-        $existing = $this->ReadSelectedCapabilityKeyMap();
-
-        if (!is_array($rows)) {
-            $this->WriteSelectedCapabilityKeyMap($existing);
-            return;
-        }
-
-        $visibleKeys = [];
-        $selectedVisibleKeys = [];
-
-        foreach ($rows as $row) {
-            if (!is_array($row) || !$this->IsValidCapabilityRow($row)) {
-                continue;
-            }
-
-            $rowKeys = $this->GetCapabilityKeysForRow($row);
-            foreach ($rowKeys as $key) {
-                $visibleKeys[strtolower($key)] = true;
-            }
-
-            if ($this->IsSelectedValue($row['selected'] ?? false)) {
-                foreach ($rowKeys as $key) {
-                    $selectedVisibleKeys[strtolower($key)] = true;
-                }
-            }
-        }
-
-        // Sichtbare Zeilen ersetzen ihre bisherigen Zustände. Nicht sichtbare kompatible Keys bleiben erhalten,
-        // damit beim Wechsel Normal -> Experte die bisherigen Haken übernommen werden.
-        foreach ($visibleKeys as $key => $_) {
-            unset($existing[$key]);
-        }
-
-        foreach ($selectedVisibleKeys as $key => $_) {
-            $existing[$key] = true;
-        }
-
-        // Wenn der Expertenmodus ausgeschaltet ist, dürfen alte Experten-Keys nicht unsichtbar weiterleben.
-        if (!$this->ReadPropertyBoolean('DisableCompatibilityFiltering')) {
-            $data = $this->LoadCompatibility(false);
-            $visibleRows = $this->BuildCapabilitiesListFromCompatibilityItems($data);
-            $allowed = [];
-            foreach ($visibleRows as $row) {
-                foreach ($this->GetCapabilityKeysForRow($row) as $key) {
-                    $allowed[strtolower($key)] = true;
-                }
-            }
-
-            foreach (array_keys($existing) as $key) {
-                if (!isset($allowed[$key])) {
-                    unset($existing[$key]);
-                }
-            }
-        }
-
-        $this->WriteSelectedCapabilityKeyMap($existing);
-    }
-
     private function GetCompatibilityCapabilitiesForForm(): array
     {
         $data = $this->LoadCompatibility(false);
         $values = $this->BuildCapabilitiesListFromCompatibilityItems($data);
-        $selectedByKey = $this->ReadSelectedCapabilityKeyMap();
+
+        $selectedByCapabilityKey = $this->GetSelectedCapabilityKeyMapForCurrentMode();
 
         foreach ($values as &$entry) {
-            $entry['selected'] = false;
-            foreach ($this->GetCapabilityKeysForRow($entry) as $key) {
-                if (isset($selectedByKey[strtolower($key)])) {
-                    $entry['selected'] = true;
-                    break;
-                }
-            }
+            $capabilityKey = (string)($entry['capabilityKey'] ?? '');
+            $entry['selected'] = ($capabilityKey !== '' && isset($selectedByCapabilityKey[$capabilityKey]));
         }
         unset($entry);
 
         return $values;
     }
 
-    private function NormalizeSelectedCapabilitiesEditor(): array
+    private function GetCurrentCompatibilityMode(): string
     {
-        $values = $this->GetCompatibilityCapabilitiesForForm();
-        $json = json_encode($values, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        return $this->ReadPropertyBoolean('DisableCompatibilityFiltering') ? 'unfiltered' : 'filtered';
+    }
 
-        // Die alte sichtbare Liste wird absichtlich geleert, damit alte Leerzeilen nicht mehr angezeigt werden.
-        if ($this->ReadPropertyString('SelectedCapabilities') !== '[]') {
-            IPS_SetProperty($this->InstanceID, 'SelectedCapabilities', '[]');
+    private function GetSelectedCapabilitiesPropertyName(): string
+    {
+        return $this->ReadPropertyBoolean('DisableCompatibilityFiltering')
+            ? 'SelectedCapabilitiesUnfiltered'
+            : 'SelectedCapabilitiesFiltered';
+    }
+
+    private function ReadCurrentSelectedCapabilitiesRaw(): string
+    {
+        $propertyName = $this->GetSelectedCapabilitiesPropertyName();
+        $raw = $this->ReadPropertyString($propertyName);
+
+        // Einmalige Migration: Falls die neue modusgetrennte Property noch leer ist,
+        // übernehmen wir alte manuelle Haken aus SelectedCapabilities als Ausgangsbasis.
+        if (trim($raw) === '' || trim($raw) === '[]') {
+            $legacy = $this->ReadPropertyString('SelectedCapabilities');
+            if (trim($legacy) !== '' && trim($legacy) !== '[]') {
+                return $legacy;
+            }
         }
 
-        if ($json !== $this->ReadPropertyString('SelectedCapabilitiesEditor')) {
-            IPS_SetProperty($this->InstanceID, 'SelectedCapabilitiesEditor', $json);
+        return $raw;
+    }
+
+    private function GetSelectedCapabilityKeyMapForCurrentMode(): array
+    {
+        // Nur wirklich gespeicherte/manuell gesetzte Checkboxen übernehmen.
+        // Beim Umschalten Expertenmodus <-> gefilterter Modus bleibt die Schnittmenge erhalten:
+        // - bereits gewählte kompatible Signale bleiben im Expertenmodus aktiv
+        // - im gefilterten Modus nicht mehr sichtbare Experten-Signale werden nicht übernommen
+        $selected = json_decode($this->ReadCurrentSelectedCapabilitiesRaw(), true);
+        if (!is_array($selected)) {
+            return [];
         }
+
+        $selectedByCapabilityKey = [];
+
+        foreach ($selected as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+
+            // Alte leere Listenzeilen aus früheren Formularzuständen ignorieren.
+            if (!$this->IsValidCapabilityRow($entry)) {
+                continue;
+            }
+
+            $isSelected =
+                ($entry['selected'] ?? false) === true ||
+                ($entry['selected'] ?? false) === 1 ||
+                ($entry['selected'] ?? false) === '1' ||
+                strtolower((string)($entry['selected'] ?? '')) === 'true';
+
+            if ($isSelected) {
+                foreach ($this->GetCapabilityKeysForRow($entry) as $key) {
+                    $selectedByCapabilityKey[$key] = true;
+                }
+            }
+        }
+
+        return $selectedByCapabilityKey;
+    }
+
+
+
+    private function GetCapabilityKeysForRow(array $entry): array
+    {
+        $type = (string)($entry['type'] ?? '');
+        $capability = (string)($entry['capability'] ?? '');
+        $code = (string)($entry['code'] ?? '');
+
+        $keys = [];
+
+        $capabilityKey = trim((string)($entry['capabilityKey'] ?? ''));
+        if ($capabilityKey !== '') {
+            $keys[$capabilityKey] = true;
+        }
+
+        $canonicalKey = $this->BuildCapabilityKey($type, $capability, $code);
+        if ($canonicalKey !== '') {
+            $keys[$canonicalKey] = true;
+        }
+
+        // Rückwärtskompatibilität zu älteren Versionen, die type|capability|code benutzt haben.
+        $legacyKey = strtolower(trim($type) . '|' . trim($capability) . '|' . trim($code));
+        if ($legacyKey !== '||' && $legacyKey !== '') {
+            $keys[$legacyKey] = true;
+        }
+
+        // Zusätzliche stabile Alias-Keys: Je nach Smartcar-Antwort kann im gefilterten
+        // und ungefilterten Abruf capability/code unterschiedlich gefüllt sein. Damit
+        // die Checkbox beim Umschalten nicht verloren geht, matchen wir auch rein nach
+        // Typ+Code bzw. Typ+Capability.
+        $typeLower = strtolower(trim($type));
+        $codeLower = strtolower(trim($code));
+        $capabilityLower = strtolower(trim($capability));
+
+        if ($typeLower !== '' && $codeLower !== '') {
+            $keys[$typeLower . '|' . $codeLower] = true;
+        }
+
+        if ($typeLower !== '' && $capabilityLower !== '') {
+            $keys[$typeLower . '|' . $capabilityLower] = true;
+        }
+
+        return array_keys($keys);
+    }
+
+    private function GetSelectedCapabilityKeyMapFromProperty(string $propertyName): array
+    {
+        $selected = json_decode($this->ReadPropertyString($propertyName), true);
+        if (!is_array($selected)) {
+            return [];
+        }
+
+        $selectedByCapabilityKey = [];
+
+        foreach ($selected as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+
+            if (!$this->IsValidCapabilityRow($entry)) {
+                continue;
+            }
+
+            $isSelected =
+                ($entry['selected'] ?? false) === true ||
+                ($entry['selected'] ?? false) === 1 ||
+                ($entry['selected'] ?? false) === '1' ||
+                strtolower((string)($entry['selected'] ?? '')) === 'true';
+
+            if (!$isSelected) {
+                continue;
+            }
+
+            foreach ($this->GetCapabilityKeysForRow($entry) as $key) {
+                $selectedByCapabilityKey[$key] = true;
+            }
+        }
+
+        return $selectedByCapabilityKey;
+    }
+
+    private function MergeSelectedCapabilityKeyMaps(array ...$maps): array
+    {
+        $merged = [];
+
+        foreach ($maps as $map) {
+            foreach ($map as $key => $selected) {
+                if ($selected) {
+                    $merged[(string)$key] = true;
+                }
+            }
+        }
+
+        return $merged;
+    }
+
+    private function NormalizeSelectedCapabilitiesForCurrentMode(): array
+    {
+        $currentMode = $this->GetCurrentCompatibilityMode();
+        $previousMode = $this->ReadAttributeString('SelectedCapabilitiesMode');
+        $modeChanged = ($previousMode !== '' && $previousMode !== $currentMode);
+
+        $data = $this->LoadCompatibility(false);
+        $values = $this->BuildCapabilitiesListFromCompatibilityItems($data);
+
+        // Falls keine Compatibility-Daten geladen werden konnten, wenigstens die
+        // gespeicherte Property von komplett leeren Listenzeilen befreien.
+        if (empty($values)) {
+            $cleanSaved = [];
+            $saved = json_decode($this->ReadCurrentSelectedCapabilitiesRaw(), true);
+            if (is_array($saved)) {
+                foreach ($saved as $entry) {
+                    if (!is_array($entry)) {
+                        continue;
+                    }
+
+                    if (!$this->IsValidCapabilityRow($entry)) {
+                        continue;
+                    }
+
+                    $cleanSaved[] = $entry;
+                }
+            }
+
+            $newJson = json_encode($cleanSaved, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            if ($newJson !== $this->ReadPropertyString($this->GetSelectedCapabilitiesPropertyName())) {
+                IPS_SetProperty($this->InstanceID, $this->GetSelectedCapabilitiesPropertyName(), $newJson);
+            }
+
+            $this->WriteAttributeString('SelectedCapabilitiesMode', $currentMode);
+            return $cleanSaved;
+        }
+
+        if ($currentMode === 'unfiltered') {
+
+            // Beim Wechsel in den Expertenmodus nur die aktuelle
+            // gefilterte Auswahl übernehmen.
+            if ($modeChanged && $previousMode === 'filtered') {
+
+                $selectedByCapabilityKey =
+                    $this->GetSelectedCapabilityKeyMapFromProperty('SelectedCapabilitiesFiltered');
+
+            } else {
+
+                // Innerhalb des Expertenmodus die eigene Auswahl behalten
+                $selectedByCapabilityKey =
+                    $this->GetSelectedCapabilityKeyMapFromProperty('SelectedCapabilitiesUnfiltered');
+
+                // Fallback für Altinstallationen
+                if (count($selectedByCapabilityKey) === 0) {
+                    $selectedByCapabilityKey =
+                        $this->GetSelectedCapabilityKeyMapFromProperty('SelectedCapabilitiesFiltered');
+                }
+            }
+
+        } else {
+
+            // Beim Zurückschalten nur die gefilterte Auswahl verwenden
+            $selectedByCapabilityKey =
+                $this->GetSelectedCapabilityKeyMapFromProperty('SelectedCapabilitiesFiltered');
+
+            if ($modeChanged && $previousMode === 'unfiltered') {
+                IPS_SetProperty($this->InstanceID, 'SelectedCapabilitiesUnfiltered', '[]');
+            }
+        }
+
+        $visibleCapabilityKeys = [];
+        foreach ($values as $entry) {
+            $capabilityKey = (string)($entry['capabilityKey'] ?? '');
+            if ($capabilityKey !== '') {
+                $visibleCapabilityKeys[$capabilityKey] = true;
+            }
+        }
+
+        $keptSelected = 0;
+
+        foreach ($values as &$entry) {
+            $isSelected = false;
+
+            foreach ($this->GetCapabilityKeysForRow($entry) as $key) {
+                if (isset($selectedByCapabilityKey[$key])) {
+                    $isSelected = true;
+                    break;
+                }
+            }
+
+            $entry['selected'] = $isSelected;
+
+            if ($isSelected) {
+                $keptSelected++;
+            }
+        }
+        unset($entry);
+
+        // Die Listen-Property selbst wird exakt auf die sichtbaren, gültigen Zeilen
+        // gesetzt. Alte leere/geisterhafte IP-Symcon-Listenzeilen bleiben so nicht
+        // in der Konfiguration hängen.
+        $newJson = json_encode($values, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        $changed = ($newJson !== $this->ReadPropertyString($this->GetSelectedCapabilitiesPropertyName()));
+
+        if ($changed) {
+            IPS_SetProperty($this->InstanceID, $this->GetSelectedCapabilitiesPropertyName(), $newJson);
+        }
+
+        // Legacy-/Hauptproperty zusätzlich synchron halten. Das ist wichtig für
+        // bestehende Installationen und verhindert, dass Symcon alte Leerzeilen aus
+        // SelectedCapabilities weiter mitschleppt.
+        if ($newJson !== $this->ReadPropertyString('SelectedCapabilities')) {
+            IPS_SetProperty($this->InstanceID, 'SelectedCapabilities', $newJson);
+        }
+
+        $this->WriteAttributeString('SelectedCapabilitiesMode', $currentMode);
+
+        $this->SendDebug(
+            'Selected/Normalize',
+            json_encode([
+                'mode' => $currentMode,
+                'modeChanged' => $modeChanged,
+                'previousMode' => $previousMode,
+                'visibleEntries' => count($values),
+                'keptSelected' => $keptSelected,
+                'propertyChanged' => $changed
+            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            0
+        );
 
         return $values;
     }
@@ -467,16 +586,26 @@ class SmartcarVehicle extends IPSModuleStrict
             return [];
         }
 
-        $mode = $this->GetCurrentCompatibilityMode();
         $disableFiltering = $this->ReadPropertyBoolean('DisableCompatibilityFiltering');
+        $cacheMode = $this->GetCurrentCompatibilityMode();
+
         $cacheAt = $this->ReadAttributeInteger('CompatibilityCacheAt');
         $cacheRaw = $this->ReadAttributeString('CompatibilityCache');
-        $cacheMode = $this->ReadAttributeString('CompatibilityCacheMode');
+        $cachedMode = $this->ReadAttributeString('CompatibilityCacheMode');
 
-        if (!$forceReload && $cacheRaw !== '' && $cacheMode === $mode && $cacheAt > (time() - 86400)) {
+        if (
+            !$forceReload &&
+            $cacheRaw !== '' &&
+            $cachedMode === $cacheMode &&
+            $cacheAt > (time() - 86400)
+        ) {
             $cached = json_decode($cacheRaw, true);
             if (is_array($cached)) {
-                $this->SendDebug('Compatibility/Cache', 'Cache verwendet. Modus=' . $mode . ' Einträge: ' . count($cached), 0);
+                $this->SendDebug(
+                    'Compatibility/Cache',
+                    'Cache verwendet. Modus=' . $cacheMode . ' Einträge: ' . count($cached),
+                    0
+                );
                 return $cached;
             }
         }
@@ -491,6 +620,7 @@ class SmartcarVehicle extends IPSModuleStrict
         }
 
         $region = 'EUROPE';
+
         $requestMake = $disableFiltering ? '' : $make;
         $requestPowertrainType = $disableFiltering ? '' : $powertrainType;
 
@@ -503,7 +633,7 @@ class SmartcarVehicle extends IPSModuleStrict
         ];
 
         $this->SendDebug('Compatibility/Request', json_encode([
-            'mode' => $mode,
+            'mode' => $cacheMode,
             'disableFiltering' => $disableFiltering,
             'make' => $requestMake,
             'model' => $model,
@@ -538,7 +668,7 @@ class SmartcarVehicle extends IPSModuleStrict
 
         if ($disableFiltering) {
             $filtered = $items;
-            $this->SendDebug('Compatibility/FilteredCount', 'Expertenmodus aktiv. Verwende alle Einträge: ' . count($filtered), 0);
+            $this->SendDebug('Compatibility/FilteredCount', 'Filterung deaktiviert. Verwende alle Einträge: ' . count($filtered), 0);
         } else {
             $filtered = [];
             $normalizedVehicleModel = $this->NormalizeText($model);
@@ -588,7 +718,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 json_encode($filtered, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
             );
             $this->WriteAttributeInteger('CompatibilityCacheAt', time());
-            $this->WriteAttributeString('CompatibilityCacheMode', $mode);
+            $this->WriteAttributeString('CompatibilityCacheMode', $cacheMode);
         } else {
             $this->WriteAttributeString('CompatibilityCache', '[]');
             $this->WriteAttributeInteger('CompatibilityCacheAt', 0);
@@ -1092,8 +1222,12 @@ class SmartcarVehicle extends IPSModuleStrict
         $managedIdents = [];
         $newSignalCodes = [];
 
-        // Alle möglichen Signal- und Command-Variablen aus der Compatibility-Liste sammeln
+        // Alle möglichen Signal- und Command-Variablen aus der aktuell sichtbaren Compatibility-Liste sammeln
         $cache = json_decode($this->ReadAttributeString('CompatibilityCache'), true);
+        if (!is_array($cache) || $this->ReadAttributeString('CompatibilityCacheMode') !== $this->GetCurrentCompatibilityMode()) {
+            $cache = $this->LoadCompatibility(false);
+        }
+
         if (is_array($cache)) {
             $allCapabilities = $this->BuildCapabilitiesListFromCompatibilityItems($cache);
 
@@ -1134,47 +1268,6 @@ class SmartcarVehicle extends IPSModuleStrict
                     }
 
                     continue;
-                }
-            }
-        }
-
-        // Zusätzlich alle aktuell im Editor sichtbaren Modul-Variablen als verwaltet markieren.
-        // Dadurch werden Variablen von Experten-Signalen beim Ausschalten des Expertenmodus sauber entfernt,
-        // auch wenn sie in der gefilterten Compatibility-Liste nicht mehr vorkommen.
-        $editorRows = json_decode($this->ReadPropertyString('SelectedCapabilitiesEditor'), true);
-        if (is_array($editorRows)) {
-            foreach ($editorRows as $entry) {
-                if (!is_array($entry) || !$this->IsValidCapabilityRow($entry)) {
-                    continue;
-                }
-
-                $type = strtolower((string)($entry['type'] ?? ''));
-                if ($type === 'signal') {
-                    $signalCode = (string)($entry['capability'] ?? '');
-                    if ($signalCode === '') {
-                        $signalCode = (string)($entry['code'] ?? '');
-                    }
-                    if ($signalCode === '') {
-                        continue;
-                    }
-
-                    $definition = $this->GetSignalDefinition($signalCode, []);
-                    foreach ($this->GetVariablesFromDefinition($definition, []) as $variable) {
-                        $ident = (string)($variable['ident'] ?? '');
-                        if ($ident !== '') {
-                            $managedIdents[$ident] = true;
-                        }
-                    }
-                    continue;
-                }
-
-                if ($type === 'command') {
-                    $commandKey = $this->GetCommandKeyFromCapability($entry);
-                    $definition = $this->GetCommandDefinition($commandKey);
-                    $ident = (string)($definition['ident'] ?? '');
-                    if ($ident !== '') {
-                        $managedIdents[$ident] = true;
-                    }
                 }
             }
         }
@@ -1273,6 +1366,21 @@ class SmartcarVehicle extends IPSModuleStrict
         }
     }
 
+    private function IsValidCapabilityRow(array $entry): bool
+    {
+        $type = strtolower(trim((string)($entry['type'] ?? '')));
+        $name = trim((string)($entry['name'] ?? ''));
+        $capability = trim((string)($entry['capability'] ?? ''));
+        $code = trim((string)($entry['code'] ?? ''));
+        $capabilityKey = trim((string)($entry['capabilityKey'] ?? ''));
+
+        if ($capabilityKey === '' || ($type !== 'signal' && $type !== 'command')) {
+            return false;
+        }
+
+        return ($name !== '' || $capability !== '' || $code !== '');
+    }
+
     private function BuildCapabilitiesListFromCompatibilityItems(array $data): array
     {
         $temp = [];
@@ -1293,28 +1401,25 @@ class SmartcarVehicle extends IPSModuleStrict
                 $capKey     = (string)($capability['capability'] ?? '');
                 $permission = (string)($capability['permission'] ?? '');
 
+                if ($permission === '' && strtolower($type) === 'command') {
+                    $permission = $this->GetCommandPermission($code);
+                }
+
                 $typeLower = strtolower(trim($type));
                 if ($typeLower !== 'signal' && $typeLower !== 'command') {
                     continue;
-                }
-
-                if ($permission === '' && $typeLower === 'command') {
-                    $permission = $this->GetCommandPermission($code);
                 }
 
                 if ($code === '' && $capKey === '') {
                     continue;
                 }
 
-                $uniqueKey = $this->BuildCapabilityKey($type, $capKey, $code);
-                if ($uniqueKey === '') {
-                    continue;
-                }
+                $uniqueKey = strtolower($type . '|' . $group . '|' . $code . '|' . $capKey);
 
                 if (!isset($temp[$uniqueKey])) {
                     $displayName = $name !== '' ? $name : ($capKey !== '' ? $capKey : $code);
 
-                    $typeOrder = match ($typeLower) {
+                    $typeOrder = match (strtolower($type)) {
                         'signal'  => '0',
                         'command' => '1',
                         default   => '9'
@@ -1326,16 +1431,16 @@ class SmartcarVehicle extends IPSModuleStrict
                         . '|' . strtoupper($code);
 
                     $temp[$uniqueKey] = [
-                        'sortKey'       => $sortKey,
-                        'capabilityKey' => $uniqueKey,
-                        'selected'      => false,
-                        'capability'    => $capKey,
-                        'type'          => $typeLower,
-                        'name'          => $displayName,
-                        'group'         => $group,
-                        'code'          => $code,
-                        'permission'    => $permission
-                    ];
+                    'sortKey'       => $sortKey,
+                    'capabilityKey' => $this->BuildCapabilityKey($type, $capKey, $code),
+                    'selected'      => false,
+                    'capability'    => $capKey,
+                    'type'          => $type,
+                    'name'          => $displayName,
+                    'group'         => $group,
+                    'code'          => $code,
+                    'permission'    => $permission
+                ];
                     continue;
                 }
 
@@ -1361,15 +1466,19 @@ class SmartcarVehicle extends IPSModuleStrict
 
     private function GetSelectedCapabilitiesResolved(): array
     {
-        $selectedByKey = $this->ReadSelectedCapabilityKeyMap();
-        if (empty($selectedByKey)) {
-            $this->SendDebug('Selected/Resolve', 'Keine ausgewählten Keys vorhanden.', 0);
+        $saved = json_decode($this->ReadCurrentSelectedCapabilitiesRaw(), true);
+        if (!is_array($saved)) {
+            $this->SendDebug('Selected/Resolve', 'SelectedCapabilities ist kein Array.', 0);
             return [];
         }
 
         $cache = json_decode($this->ReadAttributeString('CompatibilityCache'), true);
 
-        if (!is_array($cache) || empty($cache) || $this->ReadAttributeString('CompatibilityCacheMode') !== $this->GetCurrentCompatibilityMode()) {
+        if (
+            !is_array($cache) ||
+            empty($cache) ||
+            $this->ReadAttributeString('CompatibilityCacheMode') !== $this->GetCurrentCompatibilityMode()
+        ) {
             $this->SendDebug('Selected/Resolve', 'Cache leer oder falscher Modus, lade Compatibility neu.', 0);
             $cache = $this->LoadCompatibility(false);
         }
@@ -1380,32 +1489,46 @@ class SmartcarVehicle extends IPSModuleStrict
         }
 
         $fullList = $this->BuildCapabilitiesListFromCompatibilityItems($cache);
-        $result = [];
-        $used = [];
 
+        $fullByCapabilityKey = [];
         foreach ($fullList as $entry) {
-            $matched = false;
             foreach ($this->GetCapabilityKeysForRow($entry) as $key) {
-                if (isset($selectedByKey[strtolower($key)])) {
-                    $matched = true;
+                $fullByCapabilityKey[$key] = $entry;
+            }
+        }
+
+        $result = [];
+
+        foreach ($saved as $savedEntry) {
+            if (!is_array($savedEntry)) {
+                continue;
+            }
+
+            $selected =
+                ($savedEntry['selected'] ?? false) === true ||
+                ($savedEntry['selected'] ?? false) === 1 ||
+                ($savedEntry['selected'] ?? false) === '1' ||
+                strtolower((string)($savedEntry['selected'] ?? '')) === 'true';
+
+            if (!$selected) {
+                continue;
+            }
+
+            $entry = null;
+            foreach ($this->GetCapabilityKeysForRow($savedEntry) as $key) {
+                if (isset($fullByCapabilityKey[$key])) {
+                    $entry = $fullByCapabilityKey[$key];
                     break;
                 }
             }
 
-            if (!$matched) {
+            if ($entry === null) {
+                $this->SendDebug('Selected/ResolveMissing', 'Kein FullEntry für gespeicherte Zeile: ' . json_encode($savedEntry, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
                 continue;
             }
-
-            $capabilityKey = (string)($entry['capabilityKey'] ?? '');
-            if ($capabilityKey !== '' && isset($used[$capabilityKey])) {
-                continue;
-            }
-
             $entry['selected'] = true;
+
             $result[] = $entry;
-            if ($capabilityKey !== '') {
-                $used[$capabilityKey] = true;
-            }
         }
 
         $this->SendDebug('Selected/Resolve', 'Ausgewählte Einträge: ' . count($result), 0);
@@ -1425,7 +1548,11 @@ class SmartcarVehicle extends IPSModuleStrict
             return false;
         }
 
-        return is_array(@IPS_GetInstance($parentId));
+        // Wichtig: ConnectionID alleine reicht beim Erstellen/Kopieren nicht aus.
+        // Die Schnittstellen-Instanz muss bereits existieren, bevor SendDataToParent()
+        // aufgerufen wird.
+        $parent = @IPS_GetInstance($parentId);
+        return is_array($parent);
     }
 
     private function FormatSmartcarTimestamp($value): ?string
