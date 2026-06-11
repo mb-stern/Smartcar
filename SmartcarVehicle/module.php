@@ -251,19 +251,28 @@ class SmartcarVehicle extends IPSModuleStrict
     private function BuildCapabilityKey(string $type, string $capability, string $code): string
     {
         // Stabiler Schlüssel für die Checkbox-Zuordnung.
-        // Wichtig: Die Smartcar-Kompatibilitätsliste kann je nach gefiltertem/ungefiltertem
-        // Abruf unterschiedliche capability-Werte liefern. Der eigentliche Signal-/Befehlscode
-        // bleibt aber stabil. Deshalb darf die Checkbox nicht an der Zeilennummer und auch nicht
-        // zwingend am capability-Text hängen, sondern primär am Code.
+        // WICHTIG: Die Auswahl darf nie an der Zeilenposition hängen.
+        // Smartcar liefert in der Capability-Liste einen fachlichen Capability-Namen.
+        // Dieser ist für die Checkbox-Zuordnung stabiler als die Tabellenposition und
+        // wird deshalb primär verwendet. Der Code ist nur noch Fallback für Einträge,
+        // bei denen Smartcar keinen capability-Wert liefert.
         $type = strtolower(trim($type));
-        $code = strtolower(trim($code));
         $capability = strtolower(trim($capability));
+        $code = strtolower(trim($code));
+
+        if ($type === '') {
+            return '';
+        }
+
+        if ($capability !== '') {
+            return $type . '|' . $capability;
+        }
 
         if ($code !== '') {
             return $type . '|' . $code;
         }
 
-        return $type . '|' . $capability;
+        return '';
     }
 
     private function GetCompatibilityCapabilitiesForForm(): array
@@ -355,13 +364,16 @@ class SmartcarVehicle extends IPSModuleStrict
 
     private function GetCapabilityKeysForRow(array $entry): array
     {
-        $type = (string)($entry['type'] ?? '');
-        $capability = (string)($entry['capability'] ?? '');
-        $code = (string)($entry['code'] ?? '');
+        $type = strtolower(trim((string)($entry['type'] ?? '')));
+        $capability = strtolower(trim((string)($entry['capability'] ?? '')));
+        $code = strtolower(trim((string)($entry['code'] ?? '')));
 
         $keys = [];
 
-        $capabilityKey = trim((string)($entry['capabilityKey'] ?? ''));
+        // Der in BuildCapabilitiesListFromCompatibilityItems erzeugte Schlüssel ist
+        // die Hauptreferenz für die Checkbox. Dadurch bleiben Haken korrekt, auch wenn
+        // Smartcar neue Zeilen einfügt oder die Sortierung ändert.
+        $capabilityKey = strtolower(trim((string)($entry['capabilityKey'] ?? '')));
         if ($capabilityKey !== '') {
             $keys[$capabilityKey] = true;
         }
@@ -371,26 +383,21 @@ class SmartcarVehicle extends IPSModuleStrict
             $keys[$canonicalKey] = true;
         }
 
+        // Primärer Alias: Typ + Capability-Name. Genau dieser Wert soll die Auswahl
+        // stabil halten. Der Code wird nur als Fallback/Migration verwendet.
+        if ($type !== '' && $capability !== '') {
+            $keys[$type . '|' . $capability] = true;
+        }
+
+        // Fallback für Einträge ohne capability-Wert und für ältere gespeicherte Daten.
+        if ($type !== '' && $code !== '') {
+            $keys[$type . '|' . $code] = true;
+        }
+
         // Rückwärtskompatibilität zu älteren Versionen, die type|capability|code benutzt haben.
-        $legacyKey = strtolower(trim($type) . '|' . trim($capability) . '|' . trim($code));
+        $legacyKey = strtolower($type . '|' . $capability . '|' . $code);
         if ($legacyKey !== '||' && $legacyKey !== '') {
             $keys[$legacyKey] = true;
-        }
-
-        // Zusätzliche stabile Alias-Keys: Je nach Smartcar-Antwort kann im gefilterten
-        // und ungefilterten Abruf capability/code unterschiedlich gefüllt sein. Damit
-        // die Checkbox beim Umschalten nicht verloren geht, matchen wir auch rein nach
-        // Typ+Code bzw. Typ+Capability.
-        $typeLower = strtolower(trim($type));
-        $codeLower = strtolower(trim($code));
-        $capabilityLower = strtolower(trim($capability));
-
-        if ($typeLower !== '' && $codeLower !== '') {
-            $keys[$typeLower . '|' . $codeLower] = true;
-        }
-
-        if ($typeLower !== '' && $capabilityLower !== '') {
-            $keys[$typeLower . '|' . $capabilityLower] = true;
         }
 
         return array_keys($keys);
@@ -1412,7 +1419,11 @@ class SmartcarVehicle extends IPSModuleStrict
                     continue;
                 }
 
-                $uniqueKey = strtolower($type . '|' . $group . '|' . $code . '|' . $capKey);
+                $stableKey = $this->BuildCapabilityKey($type, $capKey, $code);
+
+                $uniqueKey = $stableKey !== ''
+                    ? $stableKey
+                    : strtolower($type . '|' . $group . '|' . $code . '|' . $capKey);
 
                 if (!isset($temp[$uniqueKey])) {
                     $displayName = $name !== '' ? $name : ($capKey !== '' ? $capKey : $code);
