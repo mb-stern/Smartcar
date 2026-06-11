@@ -18,7 +18,7 @@ class SmartcarVehicle extends IPSModuleStrict
     $this->RegisterAttributeString('CompatibilityCache', '[]');
     $this->RegisterAttributeInteger('CompatibilityCacheAt', 0);
 
-    //$this->RegisterVariableInteger('LastSignalsAt', 'Letzte Signale', '~UnixTimestamp');
+    $this->RegisterVariableInteger('LastSignalsAt', 'Letzte Signale', '~UnixTimestamp');
 }
 
     public function ApplyChanges(): void
