@@ -110,6 +110,12 @@ class SmartcarVehicle extends IPSModuleStrict
         $capabilities = [];
 
         if ($this->HasParentConnection()) {
+            // Wichtig: IP-Symcon zeigt bei List-Properties sonst teilweise noch
+            // alte gespeicherte Zeilen an. Deshalb wird die Property VOR dem
+            // Formularaufbau immer auf die aktuell gültigen, sichtbaren Zeilen
+            // normalisiert. Leere/geisterhafte Zeilen verschwinden dadurch auch
+            // ohne separaten Button.
+            $this->NormalizeSelectedCapabilitiesForCurrentMode();
             $capabilities = $this->GetCompatibilityCapabilitiesForForm();
         }
 
@@ -319,6 +325,41 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $data = $this->LoadCompatibility(false);
         $values = $this->BuildCapabilitiesListFromCompatibilityItems($data);
+
+        // Falls keine Compatibility-Daten geladen werden konnten, wenigstens die
+        // gespeicherte Property von komplett leeren Listenzeilen befreien.
+        if (empty($values)) {
+            $cleanSaved = [];
+            $saved = json_decode($this->ReadPropertyString('SelectedCapabilities'), true);
+            if (is_array($saved)) {
+                foreach ($saved as $entry) {
+                    if (!is_array($entry)) {
+                        continue;
+                    }
+
+                    $capabilityKey = trim((string)($entry['capabilityKey'] ?? ''));
+                    $type = trim((string)($entry['type'] ?? ''));
+                    $name = trim((string)($entry['name'] ?? ''));
+                    $capability = trim((string)($entry['capability'] ?? ''));
+                    $code = trim((string)($entry['code'] ?? ''));
+
+                    if ($capabilityKey === '' || $type === '' || $name === '' || ($capability === '' && $code === '')) {
+                        continue;
+                    }
+
+                    $cleanSaved[] = $entry;
+                }
+            }
+
+            $newJson = json_encode($cleanSaved, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            $changed = ($newJson !== $this->ReadPropertyString('SelectedCapabilities'));
+            if ($changed) {
+                IPS_SetProperty($this->InstanceID, 'SelectedCapabilities', $newJson);
+            }
+
+            $this->WriteAttributeString('SelectedCapabilitiesMode', $currentMode);
+            return $changed;
+        }
 
         // Nur Checkboxen aus der aktuell gespeicherten Liste übernehmen, die wirklich
         // händisch aktiv waren UND in der neuen sichtbaren Liste noch existieren.
