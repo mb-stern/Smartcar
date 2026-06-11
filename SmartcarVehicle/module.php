@@ -45,7 +45,7 @@ class SmartcarVehicle extends IPSModuleStrict
             return;
         }
 
-        $normalized = $this->NormalizeSelectedCapabilitiesForCurrentMode();
+        $this->NormalizeSelectedCapabilitiesForCurrentMode();
         $this->ApplySelectedCapabilities();
 
         if ($normalized) {
@@ -110,13 +110,12 @@ class SmartcarVehicle extends IPSModuleStrict
         $capabilities = [];
 
         if ($this->HasParentConnection()) {
-            // Wichtig: IP-Symcon zeigt bei List-Properties sonst teilweise noch
-            // alte gespeicherte Zeilen an. Deshalb wird die Property VOR dem
-            // Formularaufbau immer auf die aktuell gültigen, sichtbaren Zeilen
-            // normalisiert. Leere/geisterhafte Zeilen verschwinden dadurch auch
-            // ohne separaten Button.
-            $this->NormalizeSelectedCapabilitiesForCurrentMode();
-            $capabilities = $this->GetCompatibilityCapabilitiesForForm();
+            // Die Liste darf NIE direkt aus der alten Property gerendert werden.
+            // Deshalb erzeugen wir hier eine harte, gültige Sichtliste und geben
+            // exakt diese als values zurück. Leere/geisterhafte Alt-Zeilen aus
+            // SelectedCapabilities werden dabei ignoriert und beim nächsten
+            // Übernehmen dauerhaft aus der Property entfernt.
+            $capabilities = $this->NormalizeSelectedCapabilitiesForCurrentMode();
         }
 
         $form = [
@@ -293,13 +292,9 @@ class SmartcarVehicle extends IPSModuleStrict
             }
 
             $capabilityKey = (string)($entry['capabilityKey'] ?? '');
-            $type = trim((string)($entry['type'] ?? ''));
-            $name = trim((string)($entry['name'] ?? ''));
-            $capability = trim((string)($entry['capability'] ?? ''));
-            $code = trim((string)($entry['code'] ?? ''));
 
             // Alte leere Listenzeilen aus früheren Formularzuständen ignorieren.
-            if ($capabilityKey === '' || $type === '' || $name === '' || ($capability === '' && $code === '')) {
+            if (!$this->IsValidCapabilityRow($entry)) {
                 continue;
             }
 
@@ -317,7 +312,7 @@ class SmartcarVehicle extends IPSModuleStrict
         return $selectedByCapabilityKey;
     }
 
-    private function NormalizeSelectedCapabilitiesForCurrentMode(): bool
+    private function NormalizeSelectedCapabilitiesForCurrentMode(): array
     {
         $currentMode = $this->GetCurrentCompatibilityMode();
         $previousMode = $this->ReadAttributeString('SelectedCapabilitiesMode');
@@ -337,13 +332,7 @@ class SmartcarVehicle extends IPSModuleStrict
                         continue;
                     }
 
-                    $capabilityKey = trim((string)($entry['capabilityKey'] ?? ''));
-                    $type = trim((string)($entry['type'] ?? ''));
-                    $name = trim((string)($entry['name'] ?? ''));
-                    $capability = trim((string)($entry['capability'] ?? ''));
-                    $code = trim((string)($entry['code'] ?? ''));
-
-                    if ($capabilityKey === '' || $type === '' || $name === '' || ($capability === '' && $code === '')) {
+                    if (!$this->IsValidCapabilityRow($entry)) {
                         continue;
                     }
 
@@ -352,13 +341,12 @@ class SmartcarVehicle extends IPSModuleStrict
             }
 
             $newJson = json_encode($cleanSaved, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-            $changed = ($newJson !== $this->ReadPropertyString('SelectedCapabilities'));
-            if ($changed) {
+            if ($newJson !== $this->ReadPropertyString('SelectedCapabilities')) {
                 IPS_SetProperty($this->InstanceID, 'SelectedCapabilities', $newJson);
             }
 
             $this->WriteAttributeString('SelectedCapabilitiesMode', $currentMode);
-            return $changed;
+            return $cleanSaved;
         }
 
         // Nur Checkboxen aus der aktuell gespeicherten Liste übernehmen, die wirklich
@@ -1208,6 +1196,21 @@ class SmartcarVehicle extends IPSModuleStrict
         }
     }
 
+    private function IsValidCapabilityRow(array $entry): bool
+    {
+        $type = strtolower(trim((string)($entry['type'] ?? '')));
+        $name = trim((string)($entry['name'] ?? ''));
+        $capability = trim((string)($entry['capability'] ?? ''));
+        $code = trim((string)($entry['code'] ?? ''));
+        $capabilityKey = trim((string)($entry['capabilityKey'] ?? ''));
+
+        if ($capabilityKey === '' || ($type !== 'signal' && $type !== 'command')) {
+            return false;
+        }
+
+        return ($name !== '' || $capability !== '' || $code !== '');
+    }
+
     private function BuildCapabilitiesListFromCompatibilityItems(array $data): array
     {
         $temp = [];
@@ -1232,6 +1235,11 @@ class SmartcarVehicle extends IPSModuleStrict
                     $permission = $this->GetCommandPermission($code);
                 }
 
+                $typeLower = strtolower(trim($type));
+                if ($typeLower !== 'signal' && $typeLower !== 'command') {
+                    continue;
+                }
+
                 if ($code === '' && $capKey === '') {
                     continue;
                 }
@@ -1239,7 +1247,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 $uniqueKey = strtolower($type . '|' . $group . '|' . $code . '|' . $capKey);
 
                 if (!isset($temp[$uniqueKey])) {
-                    $displayName = $name !== '' ? $name : $capKey;
+                    $displayName = $name !== '' ? $name : ($capKey !== '' ? $capKey : $code);
 
                     $typeOrder = match (strtolower($type)) {
                         'signal'  => '0',
@@ -1272,7 +1280,12 @@ class SmartcarVehicle extends IPSModuleStrict
             }
         }
 
-        $values = array_values($temp);
+        $values = [];
+        foreach (array_values($temp) as $entry) {
+            if ($this->IsValidCapabilityRow($entry)) {
+                $values[] = $entry;
+            }
+        }
 
         usort($values, function ($a, $b) {
             return strcasecmp((string)$a['sortKey'], (string)$b['sortKey']);
