@@ -250,7 +250,20 @@ class SmartcarVehicle extends IPSModuleStrict
 
     private function BuildCapabilityKey(string $type, string $capability, string $code): string
     {
-        return strtolower(trim($type) . '|' . trim($capability) . '|' . trim($code));
+        // Stabiler Schlüssel für die Checkbox-Zuordnung.
+        // Wichtig: Die Smartcar-Kompatibilitätsliste kann je nach gefiltertem/ungefiltertem
+        // Abruf unterschiedliche capability-Werte liefern. Der eigentliche Signal-/Befehlscode
+        // bleibt aber stabil. Deshalb darf die Checkbox nicht an der Zeilennummer und auch nicht
+        // zwingend am capability-Text hängen, sondern primär am Code.
+        $type = strtolower(trim($type));
+        $code = strtolower(trim($code));
+        $capability = strtolower(trim($capability));
+
+        if ($code !== '') {
+            return $type . '|' . $code;
+        }
+
+        return $type . '|' . $capability;
     }
 
     private function GetCompatibilityCapabilitiesForForm(): array
@@ -316,8 +329,6 @@ class SmartcarVehicle extends IPSModuleStrict
                 continue;
             }
 
-            $capabilityKey = (string)($entry['capabilityKey'] ?? '');
-
             // Alte leere Listenzeilen aus früheren Formularzuständen ignorieren.
             if (!$this->IsValidCapabilityRow($entry)) {
                 continue;
@@ -330,7 +341,9 @@ class SmartcarVehicle extends IPSModuleStrict
                 strtolower((string)($entry['selected'] ?? '')) === 'true';
 
             if ($isSelected) {
-                $selectedByCapabilityKey[$capabilityKey] = true;
+                foreach ($this->GetCapabilityKeysForRow($entry) as $key) {
+                    $selectedByCapabilityKey[$key] = true;
+                }
             }
         }
 
@@ -338,6 +351,33 @@ class SmartcarVehicle extends IPSModuleStrict
     }
 
 
+
+    private function GetCapabilityKeysForRow(array $entry): array
+    {
+        $type = (string)($entry['type'] ?? '');
+        $capability = (string)($entry['capability'] ?? '');
+        $code = (string)($entry['code'] ?? '');
+
+        $keys = [];
+
+        $capabilityKey = trim((string)($entry['capabilityKey'] ?? ''));
+        if ($capabilityKey !== '') {
+            $keys[$capabilityKey] = true;
+        }
+
+        $canonicalKey = $this->BuildCapabilityKey($type, $capability, $code);
+        if ($canonicalKey !== '') {
+            $keys[$canonicalKey] = true;
+        }
+
+        // Rückwärtskompatibilität zu älteren Versionen, die type|capability|code benutzt haben.
+        $legacyKey = strtolower(trim($type) . '|' . trim($capability) . '|' . trim($code));
+        if ($legacyKey !== '||' && $legacyKey !== '') {
+            $keys[$legacyKey] = true;
+        }
+
+        return array_keys($keys);
+    }
 
     private function GetSelectedCapabilityKeyMapFromProperty(string $propertyName): array
     {
@@ -357,19 +397,18 @@ class SmartcarVehicle extends IPSModuleStrict
                 continue;
             }
 
-            $capabilityKey = (string)($entry['capabilityKey'] ?? '');
-            if ($capabilityKey === '') {
-                continue;
-            }
-
             $isSelected =
                 ($entry['selected'] ?? false) === true ||
                 ($entry['selected'] ?? false) === 1 ||
                 ($entry['selected'] ?? false) === '1' ||
                 strtolower((string)($entry['selected'] ?? '')) === 'true';
 
-            if ($isSelected) {
-                $selectedByCapabilityKey[$capabilityKey] = true;
+            if (!$isSelected) {
+                continue;
+            }
+
+            foreach ($this->GetCapabilityKeysForRow($entry) as $key) {
+                $selectedByCapabilityKey[$key] = true;
             }
         }
 
@@ -452,12 +491,14 @@ class SmartcarVehicle extends IPSModuleStrict
         $keptSelected = 0;
 
         foreach ($values as &$entry) {
-            $capabilityKey = (string)($entry['capabilityKey'] ?? '');
-            $isSelected = (
-                $capabilityKey !== '' &&
-                isset($visibleCapabilityKeys[$capabilityKey]) &&
-                isset($selectedByCapabilityKey[$capabilityKey])
-            );
+            $isSelected = false;
+
+            foreach ($this->GetCapabilityKeysForRow($entry) as $key) {
+                if (isset($selectedByCapabilityKey[$key])) {
+                    $isSelected = true;
+                    break;
+                }
+            }
 
             $entry['selected'] = $isSelected;
 
@@ -1408,9 +1449,8 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $fullByCapabilityKey = [];
         foreach ($fullList as $entry) {
-            $capabilityKey = (string)($entry['capabilityKey'] ?? '');
-            if ($capabilityKey !== '') {
-                $fullByCapabilityKey[$capabilityKey] = $entry;
+            foreach ($this->GetCapabilityKeysForRow($entry) as $key) {
+                $fullByCapabilityKey[$key] = $entry;
             }
         }
 
@@ -1431,17 +1471,18 @@ class SmartcarVehicle extends IPSModuleStrict
                 continue;
             }
 
-            $capabilityKey = (string)($savedEntry['capabilityKey'] ?? '');
-            if ($capabilityKey === '') {
-                continue;
+            $entry = null;
+            foreach ($this->GetCapabilityKeysForRow($savedEntry) as $key) {
+                if (isset($fullByCapabilityKey[$key])) {
+                    $entry = $fullByCapabilityKey[$key];
+                    break;
+                }
             }
 
-            if (!isset($fullByCapabilityKey[$capabilityKey])) {
-                $this->SendDebug('Selected/ResolveMissing', 'Kein FullEntry für capabilityKey=' . $capabilityKey, 0);
+            if ($entry === null) {
+                $this->SendDebug('Selected/ResolveMissing', 'Kein FullEntry für gespeicherte Zeile: ' . json_encode($savedEntry, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
                 continue;
             }
-
-            $entry = $fullByCapabilityKey[$capabilityKey];
             $entry['selected'] = true;
 
             $result[] = $entry;
