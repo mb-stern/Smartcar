@@ -376,6 +376,22 @@ class SmartcarVehicle extends IPSModuleStrict
             $keys[$legacyKey] = true;
         }
 
+        // Zusätzliche stabile Alias-Keys: Je nach Smartcar-Antwort kann im gefilterten
+        // und ungefilterten Abruf capability/code unterschiedlich gefüllt sein. Damit
+        // die Checkbox beim Umschalten nicht verloren geht, matchen wir auch rein nach
+        // Typ+Code bzw. Typ+Capability.
+        $typeLower = strtolower(trim($type));
+        $codeLower = strtolower(trim($code));
+        $capabilityLower = strtolower(trim($capability));
+
+        if ($typeLower !== '' && $codeLower !== '') {
+            $keys[$typeLower . '|' . $codeLower] = true;
+        }
+
+        if ($typeLower !== '' && $capabilityLower !== '') {
+            $keys[$typeLower . '|' . $capabilityLower] = true;
+        }
+
         return array_keys($keys);
     }
 
@@ -413,6 +429,21 @@ class SmartcarVehicle extends IPSModuleStrict
         }
 
         return $selectedByCapabilityKey;
+    }
+
+    private function MergeSelectedCapabilityKeyMaps(array ...$maps): array
+    {
+        $merged = [];
+
+        foreach ($maps as $map) {
+            foreach ($map as $key => $selected) {
+                if ($selected) {
+                    $merged[(string)$key] = true;
+                }
+            }
+        }
+
+        return $merged;
     }
 
     private function NormalizeSelectedCapabilitiesForCurrentMode(): array
@@ -462,18 +493,26 @@ class SmartcarVehicle extends IPSModuleStrict
         // bereits gewählten kompatiblen Signale aus der gefilterten Liste übernommen.
         // Beim Wechsel zurück in den gefilterten Modus werden alte Experten-Auswahlen
         // verworfen, damit sie beim nächsten Aktivieren nicht automatisch wieder aktiv sind.
-        if ($currentMode === 'unfiltered' && $modeChanged && $previousMode === 'filtered') {
-            $selectedByCapabilityKey = $this->GetSelectedCapabilityKeyMapFromProperty('SelectedCapabilitiesFiltered');
-        } elseif ($currentMode === 'unfiltered') {
-            $selectedByCapabilityKey = $this->GetSelectedCapabilityKeyMapFromProperty('SelectedCapabilitiesUnfiltered');
-
-            // Falls die Expertenliste noch keine eigene Auswahl hat, z. B. beim ersten
-            // Umschalten, die bisher manuell gewählten kompatiblen Signale übernehmen.
-            if (empty($selectedByCapabilityKey)) {
-                $selectedByCapabilityKey = $this->GetSelectedCapabilityKeyMapFromProperty('SelectedCapabilitiesFiltered');
-            }
+        if ($currentMode === 'unfiltered') {
+            // Expertenmodus: Die bereits händisch gewählten kompatiblen Signale müssen
+            // immer übernommen werden – unabhängig davon, ob sie in der neuen oder alten
+            // Property gespeichert sind. Deshalb bilden wir eine Union aus allen bekannten
+            // Quellen. Neue zusätzliche Experten-Zeilen bleiben trotzdem inaktiv, weil nur
+            // Keys übernommen werden, die vorher wirklich selected=true hatten.
+            $selectedByCapabilityKey = $this->MergeSelectedCapabilityKeyMaps(
+                $this->GetSelectedCapabilityKeyMapFromProperty('SelectedCapabilitiesFiltered'),
+                $this->GetSelectedCapabilityKeyMapFromProperty('SelectedCapabilities'),
+                $this->GetSelectedCapabilityKeyMapFromProperty('SelectedCapabilitiesUnfiltered')
+            );
         } else {
-            $selectedByCapabilityKey = $this->GetSelectedCapabilityKeyMapFromProperty('SelectedCapabilitiesFiltered');
+            // Normalmodus: Nur kompatible/normal gespeicherte Auswahl bleibt erhalten.
+            // Experten-Auswahlen werden nicht übernommen und die Experten-Property wird
+            // bewusst geleert, damit sie beim nächsten Expertenmodus nicht automatisch
+            // wieder aktiv sind.
+            $selectedByCapabilityKey = $this->MergeSelectedCapabilityKeyMaps(
+                $this->GetSelectedCapabilityKeyMapFromProperty('SelectedCapabilitiesFiltered'),
+                $this->GetSelectedCapabilityKeyMapFromProperty('SelectedCapabilities')
+            );
 
             if ($modeChanged && $previousMode === 'unfiltered') {
                 IPS_SetProperty($this->InstanceID, 'SelectedCapabilitiesUnfiltered', '[]');
@@ -516,6 +555,13 @@ class SmartcarVehicle extends IPSModuleStrict
 
         if ($changed) {
             IPS_SetProperty($this->InstanceID, $this->GetSelectedCapabilitiesPropertyName(), $newJson);
+        }
+
+        // Legacy-/Hauptproperty zusätzlich synchron halten. Das ist wichtig für
+        // bestehende Installationen und verhindert, dass Symcon alte Leerzeilen aus
+        // SelectedCapabilities weiter mitschleppt.
+        if ($newJson !== $this->ReadPropertyString('SelectedCapabilities')) {
+            IPS_SetProperty($this->InstanceID, 'SelectedCapabilities', $newJson);
         }
 
         $this->WriteAttributeString('SelectedCapabilitiesMode', $currentMode);
