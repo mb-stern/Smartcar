@@ -37,8 +37,20 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $this->SetStatus(102);
 
-        $this->NormalizeSelectedCapabilitiesForCurrentMode();
+        // Beim Erstellen/Importieren der Instanz kann die Parent-/Splitter-Verbindung
+        // noch fehlen. Dann darf hier kein SendDataToParent() laufen, sonst meldet
+        // IP-Symcon "Kann für die Instanz das Interface nicht finden".
+        if (!$this->HasParentConnection()) {
+            $this->SendDebug('ApplyChanges', 'Kein gültiger Splitter/Parent verbunden. Compatibility wird noch nicht geladen.', 0);
+            return;
+        }
+
+        $normalized = $this->NormalizeSelectedCapabilitiesForCurrentMode();
         $this->ApplySelectedCapabilities();
+
+        if ($normalized) {
+            $this->ReloadForm();
+        }
     }
 
     public function RequestAction($Ident, $Value): void
@@ -275,7 +287,13 @@ class SmartcarVehicle extends IPSModuleStrict
             }
 
             $capabilityKey = (string)($entry['capabilityKey'] ?? '');
-            if ($capabilityKey === '') {
+            $type = trim((string)($entry['type'] ?? ''));
+            $name = trim((string)($entry['name'] ?? ''));
+            $capability = trim((string)($entry['capability'] ?? ''));
+            $code = trim((string)($entry['code'] ?? ''));
+
+            // Alte leere Listenzeilen aus früheren Formularzuständen ignorieren.
+            if ($capabilityKey === '' || $type === '' || $name === '' || ($capability === '' && $code === '')) {
                 continue;
             }
 
@@ -293,7 +311,7 @@ class SmartcarVehicle extends IPSModuleStrict
         return $selectedByCapabilityKey;
     }
 
-    private function NormalizeSelectedCapabilitiesForCurrentMode(): void
+    private function NormalizeSelectedCapabilitiesForCurrentMode(): bool
     {
         $currentMode = $this->GetCurrentCompatibilityMode();
         $previousMode = $this->ReadAttributeString('SelectedCapabilitiesMode');
@@ -302,24 +320,45 @@ class SmartcarVehicle extends IPSModuleStrict
         $data = $this->LoadCompatibility(false);
         $values = $this->BuildCapabilitiesListFromCompatibilityItems($data);
 
+        // Nur Checkboxen aus der aktuell gespeicherten Liste übernehmen, die wirklich
+        // händisch aktiv waren UND in der neuen sichtbaren Liste noch existieren.
+        // Dadurch verschwinden beim Ausschalten des Expertenmodus alle inkompatiblen
+        // Zeilen komplett aus der Property. Wenn der Expertenmodus später wieder
+        // eingeschaltet wird, erscheinen diese Zeilen wieder, aber ohne Haken.
         $selectedByCapabilityKey = $this->GetSelectedCapabilityKeyMapForCurrentMode();
+        $visibleCapabilityKeys = [];
+        foreach ($values as $entry) {
+            $capabilityKey = (string)($entry['capabilityKey'] ?? '');
+            if ($capabilityKey !== '') {
+                $visibleCapabilityKeys[$capabilityKey] = true;
+            }
+        }
+
         $keptSelected = 0;
 
         foreach ($values as &$entry) {
             $capabilityKey = (string)($entry['capabilityKey'] ?? '');
-            $isSelected = ($capabilityKey !== '' && isset($selectedByCapabilityKey[$capabilityKey]));
+            $isSelected = (
+                $capabilityKey !== '' &&
+                isset($visibleCapabilityKeys[$capabilityKey]) &&
+                isset($selectedByCapabilityKey[$capabilityKey])
+            );
+
             $entry['selected'] = $isSelected;
+
             if ($isSelected) {
                 $keptSelected++;
             }
         }
         unset($entry);
 
-        // Wichtig: Die Property wird auf die aktuell sichtbare Liste normalisiert.
-        // Dadurch verschwinden beim Deaktivieren des Expertenmodus inkompatible Zeilen komplett.
-        // Checkboxen werden aber nur dort gesetzt, wo der Capability-Key bereits manuell gespeichert war.
+        // Die Listen-Property selbst wird exakt auf die sichtbaren, gültigen Zeilen
+        // gesetzt. Alte leere/geisterhafte IP-Symcon-Listenzeilen bleiben so nicht
+        // in der Konfiguration hängen.
         $newJson = json_encode($values, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-        if ($newJson !== $this->ReadPropertyString('SelectedCapabilities')) {
+        $changed = ($newJson !== $this->ReadPropertyString('SelectedCapabilities'));
+
+        if ($changed) {
             IPS_SetProperty($this->InstanceID, 'SelectedCapabilities', $newJson);
         }
 
@@ -332,10 +371,13 @@ class SmartcarVehicle extends IPSModuleStrict
                 'modeChanged' => $modeChanged,
                 'previousMode' => $previousMode,
                 'visibleEntries' => count($values),
-                'keptSelected' => $keptSelected
+                'keptSelected' => $keptSelected,
+                'propertyChanged' => $changed
             ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
             0
         );
+
+        return $changed;
     }
 
     private function LoadCompatibility(bool $forceReload): array
@@ -1277,7 +1319,16 @@ class SmartcarVehicle extends IPSModuleStrict
             return false;
         }
 
-        return ((int)($instance['ConnectionID'] ?? 0)) > 0;
+        $parentId = (int)($instance['ConnectionID'] ?? 0);
+        if ($parentId <= 0) {
+            return false;
+        }
+
+        // Wichtig: ConnectionID alleine reicht beim Erstellen/Kopieren nicht aus.
+        // Die Schnittstellen-Instanz muss bereits existieren, bevor SendDataToParent()
+        // aufgerufen wird.
+        $parent = @IPS_GetInstance($parentId);
+        return is_array($parent);
     }
 
     private function FormatSmartcarTimestamp($value): ?string
