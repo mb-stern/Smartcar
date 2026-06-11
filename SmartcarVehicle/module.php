@@ -47,10 +47,6 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $this->NormalizeSelectedCapabilitiesForCurrentMode();
         $this->ApplySelectedCapabilities();
-
-        if ($normalized) {
-            $this->ReloadForm();
-        }
     }
 
     public function RequestAction($Ident, $Value): void
