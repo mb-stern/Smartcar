@@ -406,7 +406,7 @@ class SmartcarVehicle extends IPSModuleStrict
             0
         );
 
-        return $changed;
+        return $values;
     }
 
     private function LoadCompatibility(bool $forceReload): array
