@@ -138,7 +138,7 @@ class SmartcarVehicle extends IPSModuleStrict
 
                 [
                 'type' => 'List',
-                'name' => $this->GetSelectedCapabilitiesPropertyName(),
+                'name' => 'SelectedCapabilities',
                 'caption' => $this->ReadPropertyBoolean('DisableCompatibilityFiltering') ? 'Alle Signale / Befehle (Expertenmodus)' : 'Kompatible Signale / Befehle',
                 'rowCount' => 10,
                 'add' => false,
@@ -289,9 +289,10 @@ class SmartcarVehicle extends IPSModuleStrict
 
     private function GetSelectedCapabilitiesPropertyName(): string
     {
-        return $this->ReadPropertyBoolean('DisableCompatibilityFiltering')
-            ? 'SelectedCapabilitiesUnfiltered'
-            : 'SelectedCapabilitiesFiltered';
+        // Die List-Property muss in beiden Modi identisch bleiben.
+        // Wenn IP-Symcon beim Umschalten des Expertenmodus den Property-Namen wechselt,
+        // wird die bisher sichtbare Auswahl nicht zuverlässig in die neue Liste übernommen.
+        return 'SelectedCapabilities';
     }
 
     private function ReadCurrentSelectedCapabilitiesRaw(): string
@@ -483,37 +484,30 @@ class SmartcarVehicle extends IPSModuleStrict
             return $cleanSaved;
         }
 
+        // Nur Checkboxen aus der aktuell gespeicherten Liste übernehmen, die wirklich
+        // händisch aktiv waren UND in der neuen sichtbaren Liste noch existieren.
+        // Dadurch verschwinden beim Ausschalten des Expertenmodus alle inkompatiblen
+        // Zeilen komplett aus der Property. Wenn der Expertenmodus später wieder
+        // eingeschaltet wird, erscheinen diese Zeilen wieder, aber ohne Haken.
+        // Wichtig: Checkbox-Zustände werden ausschließlich über capabilityKey übernommen,
+        // niemals über die Zeilenposition. Beim Wechsel in den Expertenmodus werden die
+        // bereits gewählten kompatiblen Signale aus der gefilterten Liste übernommen.
+        // Beim Wechsel zurück in den gefilterten Modus werden alte Experten-Auswahlen
+        // verworfen, damit sie beim nächsten Aktivieren nicht automatisch wieder aktiv sind.
         if ($currentMode === 'unfiltered') {
-
-            // Beim Wechsel in den Expertenmodus nur die aktuelle
-            // gefilterte Auswahl übernehmen.
-            if ($modeChanged && $previousMode === 'filtered') {
-
-                $selectedByCapabilityKey =
-                    $this->GetSelectedCapabilityKeyMapFromProperty('SelectedCapabilitiesFiltered');
-
-            } else {
-
-                // Innerhalb des Expertenmodus die eigene Auswahl behalten
-                $selectedByCapabilityKey =
-                    $this->GetSelectedCapabilityKeyMapFromProperty('SelectedCapabilitiesUnfiltered');
-
-                // Fallback für Altinstallationen
-                if (count($selectedByCapabilityKey) === 0) {
-                    $selectedByCapabilityKey =
-                        $this->GetSelectedCapabilityKeyMapFromProperty('SelectedCapabilitiesFiltered');
-                }
-            }
-
+            // Expertenmodus:
+            // Die Auswahl kommt bewusst aus der EINEN sichtbaren List-Property
+            // SelectedCapabilities. Beim Umschalten enthält sie noch die vorherige
+            // kompatible Liste mit den gesetzten Haken; diese Haken werden anhand der
+            // stabilen Keys in die neue Expertenliste übernommen. Zusätzliche neue
+            // Expertensignale bleiben deaktiviert.
+            $selectedByCapabilityKey = $this->GetSelectedCapabilityKeyMapFromProperty('SelectedCapabilities');
         } else {
-
-            // Beim Zurückschalten nur die gefilterte Auswahl verwenden
-            $selectedByCapabilityKey =
-                $this->GetSelectedCapabilityKeyMapFromProperty('SelectedCapabilitiesFiltered');
-
-            if ($modeChanged && $previousMode === 'unfiltered') {
-                IPS_SetProperty($this->InstanceID, 'SelectedCapabilitiesUnfiltered', '[]');
-            }
+            // Normalmodus:
+            // Ebenfalls nur die sichtbare List-Property verwenden. Dadurch werden
+            // Experten-Signale, die im Normalmodus nicht sichtbar sind, beim Normalisieren
+            // automatisch aus der gespeicherten Liste entfernt.
+            $selectedByCapabilityKey = $this->GetSelectedCapabilityKeyMapFromProperty('SelectedCapabilities');
         }
 
         $visibleCapabilityKeys = [];
@@ -980,10 +974,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 continue;
             }
 
-            $signalCode = (string)($entry['capability'] ?? '');
-            if ($signalCode === '') {
-                $signalCode = (string)($entry['code'] ?? '');
-            }
+            $signalCode = $this->GetSignalCodeFromCapability($entry);
 
             if ($signalCode !== '') {
                 $map[$signalCode] = $entry;
@@ -1059,6 +1050,19 @@ class SmartcarVehicle extends IPSModuleStrict
     private function BuildSignalIdent(string $code): string
     {
         return 'Sig_' . preg_replace('/[^A-Za-z0-9_]/', '_', $code);
+    }
+
+    private function GetSignalCodeFromCapability(array $entry): string
+    {
+        // Für Smartcar V3 ist der Signal-Code entscheidend. In der Compatibility-Liste
+        // kann capability/permission anders benannt sein; Variablen und GetSignals
+        // müssen aber gegen den eigentlichen code laufen.
+        $code = trim((string)($entry['code'] ?? ''));
+        if ($code !== '') {
+            return $code;
+        }
+
+        return trim((string)($entry['capability'] ?? ''));
     }
 
     public function GenerateConnectURL(): string
@@ -1235,10 +1239,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 $type = strtolower((string)($entry['type'] ?? ''));
 
                 if ($type === 'signal') {
-                    $signalCode = (string)($entry['capability'] ?? '');
-                    if ($signalCode === '') {
-                        $signalCode = (string)($entry['code'] ?? '');
-                    }
+                    $signalCode = $this->GetSignalCodeFromCapability($entry);
 
                     if ($signalCode === '') {
                         continue;
@@ -1277,10 +1278,7 @@ class SmartcarVehicle extends IPSModuleStrict
             $type = strtolower((string)($entry['type'] ?? ''));
 
             if ($type === 'signal') {
-                $signalCode = (string)($entry['capability'] ?? '');
-                if ($signalCode === '') {
-                    $signalCode = (string)($entry['code'] ?? '');
-                }
+                $signalCode = $this->GetSignalCodeFromCapability($entry);
 
                 if ($signalCode === '') {
                     continue;
