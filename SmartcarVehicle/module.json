@@ -1,0 +1,16 @@
+{
+    "id": "{1E1B7C9A-2D4F-4E8A-9C3B-7F6D5A4E2B10}",
+    "name": "Smartcar Vehicle",
+    "type": 3,
+    "vendor": "Smartcar",
+    "aliases": ["Smartcar Fahrzeug"],
+    "parentRequirements": [
+        "{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}"
+    ],
+    "childRequirements": [],
+    "implemented": [
+        "{BACEC0C5-6EED-0A1C-52D2-A99D2D41F04C}"
+    ],
+    "prefix": "SMCARV",
+    "url": "https://github.com/mb-stern/Smartcar/tree/beta/SmartcarVehicle"
+}
