@@ -41,3 +41,15 @@ Du findest alle Funktionen für das Smartcar-Symcon-Repository in den entspreche
 | **1.0** | 15.12.2024 | - Initiale Version. |
 
 ---
+
+## Lizenz
+
+MIT License
+
+---
+
+## Unterstützung
+
+Falls dir das Modul gefällt und du die Weiterentwicklung unterstützen möchtest:
+
+**PayPal:** https://paypal.me/mbstern
