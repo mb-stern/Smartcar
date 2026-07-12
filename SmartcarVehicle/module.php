@@ -2,6 +2,8 @@
 
 class SmartcarVehicle extends IPSModuleStrict
 {
+    // Build marker: OEM timestamp / real value change logic v2 (2026-07-12)
+    private const MODULE_BUILD = '2026-07-12-oem-valuechange-v2';
     public function Create(): void
 {
     parent::Create();
@@ -109,6 +111,10 @@ class SmartcarVehicle extends IPSModuleStrict
                     'type' => 'CheckBox',
                     'name' => 'UseOEMUpdatedAt',
                     'caption' => 'OEM-Aktualisierungszeit für „Letzte Signale“ verwenden'
+                ],
+                [
+                    'type' => 'Label',
+                    'caption' => 'Aus: Webhook-Empfangszeit bei echter Wertänderung · Ein: OEM-Zeitpunkt bei echter Wertänderung'
                 ],
 
                 [
@@ -467,6 +473,9 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $applied = 0;
         $skipped = 0;
+        $hasChangedSignals = false;
+        $latestChangedOEMTimestamp = 0;
+        $changedSignalCodes = [];
 
         foreach ($signals as $signal) {
             if (!is_array($signal)) {
@@ -525,16 +534,21 @@ class SmartcarVehicle extends IPSModuleStrict
 
             $changed = $this->ApplySignalFromV3($signalCode, $body, $status, $selectedMap[$signalCode]);
             if ($changed) {
-                $timestamp = time();
-                if ($this->ReadPropertyBoolean('UseOEMUpdatedAt')) {
-                    $oemTimestamp = $this->ParseSmartcarTimestamp($meta['oemUpdatedAt'] ?? null);
-                    if ($oemTimestamp > 0) {
-                        $timestamp = $oemTimestamp;
-                    }
+                $hasChangedSignals = true;
+                $changedSignalCodes[] = $signalCode;
+
+                $oemTimestamp = $this->ParseSmartcarTimestamp($meta['oemUpdatedAt'] ?? null);
+                if ($oemTimestamp > $latestChangedOEMTimestamp) {
+                    $latestChangedOEMTimestamp = $oemTimestamp;
                 }
-                $this->SetValue('LastSignalsAt', $timestamp);
             }
             $applied++;
+        }
+
+        if ($hasChangedSignals) {
+            $this->UpdateLastSignalsAt($latestChangedOEMTimestamp, 'FetchSignals', $changedSignalCodes);
+        } else {
+            $this->SendDebug('FetchSignals/LastSignalsAt', 'Keine echte Wertänderung – Zeitstempel bleibt unverändert.', 0);
         }
 
         $this->SendDebug(
@@ -603,9 +617,32 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $selectedMap = $this->GetSelectedSignalMap();
 
+        // Smartcar liefert im Webhook meist den kompletten Signalsatz. Für den
+        // globalen Aktualisierungszeitpunkt berücksichtigen wir deshalb primär
+        // nur die Signale, die unter triggers als SIGNAL_UPDATED gemeldet sind.
+        // Fehlen Trigger vollständig, dient der komplette Signalsatz als Fallback.
+        $triggerSignalCodes = [];
+        foreach ($triggers as $trigger) {
+            if (!is_array($trigger)) {
+                continue;
+            }
+
+            $triggerType = strtoupper((string)($trigger['type'] ?? ''));
+            $triggerCode = (string)(
+                $trigger['signal']['code']
+                ?? $trigger['data']['signal']['code']
+                ?? ''
+            );
+
+            if ($triggerCode !== '' && ($triggerType === '' || $triggerType === 'SIGNAL_UPDATED')) {
+                $triggerSignalCodes[$triggerCode] = true;
+            }
+        }
+
         $oemDates = [];
         $hasChangedSignals = false;
         $latestChangedOEMTimestamp = 0;
+        $changedSignalCodes = [];
 
         foreach ($signals as $signal) {
             if (!is_array($signal)) {
@@ -639,28 +676,36 @@ class SmartcarVehicle extends IPSModuleStrict
             ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
             $changed = $this->ApplySignalFromV3($signalCode, $body, $status, $selectedMap[$signalCode]);
-            if ($changed) {
+
+            // Wenn Trigger vorhanden sind, darf nur ein tatsächlich ausgelöstes
+            // Signal den globalen Zeitstempel verändern. Dadurch führen Werte aus
+            // dem mitgelieferten Gesamtsnapshot nicht zu einer falschen Aktualisierung.
+            $countsForTimestamp = empty($triggerSignalCodes) || isset($triggerSignalCodes[$signalCode]);
+
+            if ($changed && $countsForTimestamp) {
                 $hasChangedSignals = true;
+                $changedSignalCodes[] = $signalCode;
 
                 $oemTimestamp = $this->ParseSmartcarTimestamp($meta['oemUpdatedAt'] ?? null);
                 if ($oemTimestamp > $latestChangedOEMTimestamp) {
                     $latestChangedOEMTimestamp = $oemTimestamp;
                 }
+            } elseif ($changed) {
+                $this->SendDebug(
+                    'WebhookVehicle/ChangedIgnored/' . $signalCode,
+                    'Wert geändert, aber Signal war nicht Auslöser dieses Webhooks.',
+                    0
+                );
             }
         }
 
         if ($hasChangedSignals) {
-            $timestamp = time();
-            if ($this->ReadPropertyBoolean('UseOEMUpdatedAt') && $latestChangedOEMTimestamp > 0) {
-                $timestamp = $latestChangedOEMTimestamp;
-            }
-
-            $this->SetValue('LastSignalsAt', $timestamp);
-            $this->SendDebug('WebhookVehicle/LastSignalsAt', json_encode([
-                'source' => ($this->ReadPropertyBoolean('UseOEMUpdatedAt') && $latestChangedOEMTimestamp > 0) ? 'oemUpdatedAt' : 'webhook',
-                'timestamp' => $timestamp,
-                'formatted' => date('d.m.Y H:i:s', $timestamp)
-            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+            $this->UpdateLastSignalsAt(
+                $latestChangedOEMTimestamp,
+                'WebhookVehicle',
+                $changedSignalCodes,
+                ['triggerSignals' => array_keys($triggerSignalCodes)]
+            );
         } else {
             $this->SendDebug('WebhookVehicle/LastSignalsAt', 'Keine echte Wertänderung – Zeitstempel bleibt unverändert.', 0);
         }
@@ -771,6 +816,7 @@ class SmartcarVehicle extends IPSModuleStrict
     {
         $id = @$this->GetIDForIdent($ident);
         if (!$id) {
+            $this->SendDebug('SignalChanged/' . $ident, 'Variable ist neu und wird als Änderung gewertet.', 0);
             return true;
         }
 
@@ -785,10 +831,62 @@ class SmartcarVehicle extends IPSModuleStrict
         };
 
         if ($type === VARIABLETYPE_FLOAT) {
-            return abs((float)$currentValue - (float)$newValue) > 0.000001;
+            $changed = abs((float)$currentValue - (float)$newValue) > 0.000001;
+        } else {
+            $changed = $currentValue !== $newValue;
         }
 
-        return $currentValue !== $newValue;
+        if ($changed) {
+            $this->SendDebug('SignalChanged/' . $ident, json_encode([
+                'old' => $currentValue,
+                'new' => $newValue,
+                'type' => $type
+            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+        }
+
+        return $changed;
+    }
+
+
+    private function UpdateLastSignalsAt(
+        int $latestOEMTimestamp,
+        string $debugPrefix,
+        array $changedSignalCodes,
+        array $additionalDebug = []
+    ): void {
+        $useOEM = $this->ReadPropertyBoolean('UseOEMUpdatedAt');
+        $timestamp = ($useOEM && $latestOEMTimestamp > 0)
+            ? $latestOEMTimestamp
+            : time();
+
+        $variableId = @$this->GetIDForIdent('LastSignalsAt');
+        $currentTimestamp = $variableId ? (int)GetValue($variableId) : 0;
+
+        // Verhindert auch ein unnötiges erneutes Schreiben desselben Zeitstempels.
+        if ($currentTimestamp === $timestamp) {
+            $this->SendDebug(
+                $debugPrefix . '/LastSignalsAt',
+                'Berechneter Zeitstempel ist bereits gesetzt – keine Änderung.',
+                0
+            );
+            return;
+        }
+
+        $this->SetValue('LastSignalsAt', $timestamp);
+
+        $debug = array_merge([
+            'build' => self::MODULE_BUILD,
+            'source' => ($useOEM && $latestOEMTimestamp > 0) ? 'oemUpdatedAt' : 'webhook',
+            'timestamp' => $timestamp,
+            'formatted' => date('d.m.Y H:i:s', $timestamp),
+            'changedSignals' => array_values($changedSignalCodes)
+        ], $additionalDebug);
+
+        $this->SendDebug(
+            $debugPrefix . '/LastSignalsAt',
+            json_encode($debug, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            0
+        );
     }
 
     private function BuildSignalIdent(string $code): string
@@ -924,14 +1022,10 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $changed = $this->ApplySignalFromV3($signalCode, $body, $status, $definitionMeta);
         if ($changed) {
-            $timestamp = time();
-            if ($this->ReadPropertyBoolean('UseOEMUpdatedAt')) {
-                $oemTimestamp = $this->ParseSmartcarTimestamp($meta['oemUpdatedAt'] ?? null);
-                if ($oemTimestamp > 0) {
-                    $timestamp = $oemTimestamp;
-                }
-            }
-            $this->SetValue('LastSignalsAt', $timestamp);
+            $oemTimestamp = $this->ParseSmartcarTimestamp($meta['oemUpdatedAt'] ?? null);
+            $this->UpdateLastSignalsAt($oemTimestamp, 'FetchSingleSignal', [$signalCode]);
+        } else {
+            $this->SendDebug('FetchSingleSignal/LastSignalsAt', 'Keine echte Wertänderung – Zeitstempel bleibt unverändert.', 0);
         }
     }
 
