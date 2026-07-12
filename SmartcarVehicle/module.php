@@ -15,6 +15,7 @@ class SmartcarVehicle extends IPSModuleStrict
     $this->RegisterPropertyInteger('Year', 0);
     $this->RegisterPropertyString('PowertrainType', '');
     $this->RegisterPropertyString('SelectedCapabilities', '[]');
+    $this->RegisterPropertyBoolean('UseOEMUpdatedAt', false);
     $this->RegisterAttributeString('CompatibilityCache', '[]');
     $this->RegisterAttributeInteger('CompatibilityCacheAt', 0);
 
@@ -104,6 +105,11 @@ class SmartcarVehicle extends IPSModuleStrict
                 ['type' => 'Label', 'caption' => 'User ID: ' . $this->ReadPropertyString('UserID')],
                 ['type' => 'Label', 'caption' => 'Fahrzeug: ' . $this->ReadPropertyString('VehicleCaption')],
                 ['type' => 'Label', 'caption' => 'Antrieb: ' . $this->ReadPropertyString('PowertrainType')],
+                [
+                    'type' => 'CheckBox',
+                    'name' => 'UseOEMUpdatedAt',
+                    'caption' => 'OEM-Aktualisierungszeit für „Letzte Signale“ verwenden'
+                ],
 
                 [
                 'type' => 'List',
@@ -517,7 +523,17 @@ class SmartcarVehicle extends IPSModuleStrict
                 0
             );
 
-            $this->ApplySignalFromV3($signalCode, $body, $status, $selectedMap[$signalCode]);
+            $changed = $this->ApplySignalFromV3($signalCode, $body, $status, $selectedMap[$signalCode]);
+            if ($changed) {
+                $timestamp = time();
+                if ($this->ReadPropertyBoolean('UseOEMUpdatedAt')) {
+                    $oemTimestamp = $this->ParseSmartcarTimestamp($meta['oemUpdatedAt'] ?? null);
+                    if ($oemTimestamp > 0) {
+                        $timestamp = $oemTimestamp;
+                    }
+                }
+                $this->SetValue('LastSignalsAt', $timestamp);
+            }
             $applied++;
         }
 
@@ -588,6 +604,8 @@ class SmartcarVehicle extends IPSModuleStrict
         $selectedMap = $this->GetSelectedSignalMap();
 
         $oemDates = [];
+        $hasChangedSignals = false;
+        $latestChangedOEMTimestamp = 0;
 
         foreach ($signals as $signal) {
             if (!is_array($signal)) {
@@ -620,7 +638,31 @@ class SmartcarVehicle extends IPSModuleStrict
                 'status' => $status
             ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
-            $this->ApplySignalFromV3($signalCode, $body, $status, $selectedMap[$signalCode]);
+            $changed = $this->ApplySignalFromV3($signalCode, $body, $status, $selectedMap[$signalCode]);
+            if ($changed) {
+                $hasChangedSignals = true;
+
+                $oemTimestamp = $this->ParseSmartcarTimestamp($meta['oemUpdatedAt'] ?? null);
+                if ($oemTimestamp > $latestChangedOEMTimestamp) {
+                    $latestChangedOEMTimestamp = $oemTimestamp;
+                }
+            }
+        }
+
+        if ($hasChangedSignals) {
+            $timestamp = time();
+            if ($this->ReadPropertyBoolean('UseOEMUpdatedAt') && $latestChangedOEMTimestamp > 0) {
+                $timestamp = $latestChangedOEMTimestamp;
+            }
+
+            $this->SetValue('LastSignalsAt', $timestamp);
+            $this->SendDebug('WebhookVehicle/LastSignalsAt', json_encode([
+                'source' => ($this->ReadPropertyBoolean('UseOEMUpdatedAt') && $latestChangedOEMTimestamp > 0) ? 'oemUpdatedAt' : 'webhook',
+                'timestamp' => $timestamp,
+                'formatted' => date('d.m.Y H:i:s', $timestamp)
+            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+        } else {
+            $this->SendDebug('WebhookVehicle/LastSignalsAt', 'Keine echte Wertänderung – Zeitstempel bleibt unverändert.', 0);
         }
 
         if (!empty($oemDates)) {
@@ -651,7 +693,7 @@ class SmartcarVehicle extends IPSModuleStrict
         return $map;
     }
 
-    private function ApplySignalFromV3(string $code, array $body, ?array $status, array $meta): void
+    private function ApplySignalFromV3(string $code, array $body, ?array $status, array $meta): bool
     {
         if ($status !== null && isset($status['value'])) {
             $statusValue = strtoupper((string)$status['value']);
@@ -662,14 +704,13 @@ class SmartcarVehicle extends IPSModuleStrict
                     json_encode($status, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
                     0
                 );
-                return;
+                return false;
             }
         }
 
-        $this->SetValue('LastSignalsAt', time());
-
         $definition = $this->GetSignalDefinition($code, $body);
         $variables = $this->GetVariablesFromDefinition($definition, $body);
+        $changed = false;
 
         foreach ($variables as $variable) {
             $ident = (string)($variable['ident'] ?? '');
@@ -689,11 +730,16 @@ class SmartcarVehicle extends IPSModuleStrict
                 $value = $variable['convert']($body);
             }
 
+            $type = (int)$variable['type'];
+            if ($this->IsVariableValueChanged($ident, $value, $type)) {
+                $changed = true;
+            }
+
             $this->RegisterOrUpdateTypedVariable(
                 $ident,
                 (string)($variable['name'] ?? $ident),
                 $value,
-                (int)$variable['type'],
+                $type,
                 (string)($variable['profile'] ?? '')
             );
         }
@@ -701,17 +747,48 @@ class SmartcarVehicle extends IPSModuleStrict
         if (empty($variables) && !empty($body)) {
             $ident = (string)($definition['ident'] ?? '');
             if ($ident === '') {
-                return;
+                return $changed;
+            }
+
+            $value = json_encode($body, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            if ($this->IsVariableValueChanged($ident, $value, VARIABLETYPE_STRING)) {
+                $changed = true;
             }
 
             $this->RegisterOrUpdateTypedVariable(
                 $ident,
                 (string)($definition['name'] ?? $code),
-                json_encode($body, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                $value,
                 VARIABLETYPE_STRING,
                 ''
             );
         }
+
+        return $changed;
+    }
+
+    private function IsVariableValueChanged(string $ident, mixed $value, int $type): bool
+    {
+        $id = @$this->GetIDForIdent($ident);
+        if (!$id) {
+            return true;
+        }
+
+        $currentValue = GetValue($id);
+        $newValue = match ($type) {
+            VARIABLETYPE_BOOLEAN => (bool)$value,
+            VARIABLETYPE_INTEGER => (int)round((float)$value),
+            VARIABLETYPE_FLOAT => (float)$value,
+            default => is_array($value)
+                ? json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+                : (string)$value
+        };
+
+        if ($type === VARIABLETYPE_FLOAT) {
+            return abs((float)$currentValue - (float)$newValue) > 0.000001;
+        }
+
+        return $currentValue !== $newValue;
     }
 
     private function BuildSignalIdent(string $code): string
@@ -843,8 +920,19 @@ class SmartcarVehicle extends IPSModuleStrict
         $status = is_array($attributes['status'] ?? null) ? $attributes['status'] : null;
 
         $definitionMeta = $this->GetSignalDefinition($signalCode, $body);
+        $meta = is_array($signal['meta'] ?? null) ? $signal['meta'] : [];
 
-        $this->ApplySignalFromV3($signalCode, $body, $status, $definitionMeta);
+        $changed = $this->ApplySignalFromV3($signalCode, $body, $status, $definitionMeta);
+        if ($changed) {
+            $timestamp = time();
+            if ($this->ReadPropertyBoolean('UseOEMUpdatedAt')) {
+                $oemTimestamp = $this->ParseSmartcarTimestamp($meta['oemUpdatedAt'] ?? null);
+                if ($oemTimestamp > 0) {
+                    $timestamp = $oemTimestamp;
+                }
+            }
+            $this->SetValue('LastSignalsAt', $timestamp);
+        }
     }
 
     private function GetVariablesFromDefinition(array $definition, array $body): array
@@ -1169,6 +1257,28 @@ class SmartcarVehicle extends IPSModuleStrict
         }
 
         return ((int)($instance['ConnectionID'] ?? 0)) > 0;
+    }
+
+    private function ParseSmartcarTimestamp($value): int
+    {
+        if ($value === null || $value === '') {
+            return 0;
+        }
+
+        try {
+            if (is_numeric($value)) {
+                $timestamp = (int)$value;
+                if ($timestamp > 20000000000) {
+                    $timestamp = (int)floor($timestamp / 1000);
+                }
+                return $timestamp;
+            }
+
+            return (new DateTime((string)$value))->getTimestamp();
+        } catch (Throwable $e) {
+            $this->SendDebug('Timestamp/ParseError', (string)$value . ': ' . $e->getMessage(), 0);
+            return 0;
+        }
     }
 
     private function FormatSmartcarTimestamp($value): ?string
