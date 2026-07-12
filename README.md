@@ -18,7 +18,7 @@ Du findest alle Funktionen für das Smartcar-Symcon-Repository in den entspreche
 
 | Version | Datum | Änderungen |
 |----------|--------|------------|
-| **4.3** | 12.07.2026 | - Variabeln aktualisieren sich nur noch, wenn sich der Datenstand ändert.<br>- Der OEM Aktualierungszeitpunkt kann über zusätzliche Variablen eingeblendet werden.<br>- Die Variabeln bekommen beim Erstellen zugeornete Positionen im Objektbaum, um die Übersichtlichkeit zu verbessern. |
+| **4.3** | 12.07.2026 | - Variablen aktualisieren sich nur noch, wenn sich der Datenstand ändert.<br>- Der OEM Aktualisierungszeitpunkt kann über zusätzliche Variablen eingeblendet werden.<br>- Die Variablen bekommen beim Erstellen zugeornete Positionen im Objektbaum, um die Übersichtlichkeit zu verbessern. |
 | **4.2** | 24.05.2026 | - Signalverarbeitung erweitert und bestehende aktualisiert. |
 | **4.1** | 06.05.2026 | - Control Permissions wurden bisher noch nicht gesetzt. Alle aktuell möglichen Steuerbefehle sollten nun funktionieren. |
 | **4.0** | 02.05.2026 | - Komplett neue Version, welche auf der API V3 basiert und nur noch auf Signale ausgelegt ist.<br>- Diese Version ist nicht mit älteren Versionen vor 4.0 kompatibel.<br>- Beim Update verbleiben bestehende Fahrzeuginstanzen funktionslos im Objektbaum und es können allenfalls noch Daten aus aufgezeichneten Variablen übernommen werden. |
