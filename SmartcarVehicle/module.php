@@ -2,8 +2,6 @@
 
 class SmartcarVehicle extends IPSModuleStrict
 {
-    // Build marker: OEM timestamp / real value change logic v2 (2026-07-12)
-    private const MODULE_BUILD = '2026-07-12-oem-valuechange-v2';
     public function Create(): void
 {
     parent::Create();
@@ -17,7 +15,8 @@ class SmartcarVehicle extends IPSModuleStrict
     $this->RegisterPropertyInteger('Year', 0);
     $this->RegisterPropertyString('PowertrainType', '');
     $this->RegisterPropertyString('SelectedCapabilities', '[]');
-    $this->RegisterPropertyBoolean('UseOEMUpdatedAt', false);
+    $this->RegisterPropertyBoolean('ShowOEMUpdatedAtVariables', false);
+    $this->RegisterAttributeString('LastOEMSignalTimes', '{}');
     $this->RegisterAttributeString('CompatibilityCache', '[]');
     $this->RegisterAttributeInteger('CompatibilityCacheAt', 0);
 
@@ -109,12 +108,8 @@ class SmartcarVehicle extends IPSModuleStrict
                 ['type' => 'Label', 'caption' => 'Antrieb: ' . $this->ReadPropertyString('PowertrainType')],
                 [
                     'type' => 'CheckBox',
-                    'name' => 'UseOEMUpdatedAt',
-                    'caption' => 'OEM-Aktualisierungszeit für „Letzte Signale“ verwenden'
-                ],
-                [
-                    'type' => 'Label',
-                    'caption' => 'Aus: Webhook-Empfangszeit bei echter Wertänderung · Ein: OEM-Zeitpunkt bei echter Wertänderung'
+                    'name' => 'ShowOEMUpdatedAtVariables',
+                    'caption' => 'OEM-Aktualisierungszeit je Signal als zusätzliche Variable anzeigen'
                 ],
 
                 [
@@ -473,9 +468,6 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $applied = 0;
         $skipped = 0;
-        $hasChangedSignals = false;
-        $latestChangedOEMTimestamp = 0;
-        $changedSignalCodes = [];
 
         foreach ($signals as $signal) {
             if (!is_array($signal)) {
@@ -510,7 +502,9 @@ class SmartcarVehicle extends IPSModuleStrict
 
             $body = is_array($attributes['body'] ?? null) ? $attributes['body'] : [];
             $status = is_array($attributes['status'] ?? null) ? $attributes['status'] : null;
-            $meta = is_array($signal['meta'] ?? null) ? $signal['meta'] : [];
+            $meta = is_array($signal['meta'] ?? null)
+                ? $signal['meta']
+                : (is_array($attributes['meta'] ?? null) ? $attributes['meta'] : []);
 
             $this->SendDebug(
                 'FetchSignals/RAW/' . $signalCode,
@@ -532,23 +526,8 @@ class SmartcarVehicle extends IPSModuleStrict
                 0
             );
 
-            $changed = $this->ApplySignalFromV3($signalCode, $body, $status, $selectedMap[$signalCode]);
-            if ($changed) {
-                $hasChangedSignals = true;
-                $changedSignalCodes[] = $signalCode;
-
-                $oemTimestamp = $this->ParseSmartcarTimestamp($meta['oemUpdatedAt'] ?? null);
-                if ($oemTimestamp > $latestChangedOEMTimestamp) {
-                    $latestChangedOEMTimestamp = $oemTimestamp;
-                }
-            }
+            $this->ApplySignalFromV3($signalCode, $body, $status, $selectedMap[$signalCode], $meta);
             $applied++;
-        }
-
-        if ($hasChangedSignals) {
-            $this->UpdateLastSignalsAt($latestChangedOEMTimestamp, 'FetchSignals', $changedSignalCodes);
-        } else {
-            $this->SendDebug('FetchSignals/LastSignalsAt', 'Keine echte Wertänderung – Zeitstempel bleibt unverändert.', 0);
         }
 
         $this->SendDebug(
@@ -617,32 +596,7 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $selectedMap = $this->GetSelectedSignalMap();
 
-        // Smartcar liefert im Webhook meist den kompletten Signalsatz. Für den
-        // globalen Aktualisierungszeitpunkt berücksichtigen wir deshalb primär
-        // nur die Signale, die unter triggers als SIGNAL_UPDATED gemeldet sind.
-        // Fehlen Trigger vollständig, dient der komplette Signalsatz als Fallback.
-        $triggerSignalCodes = [];
-        foreach ($triggers as $trigger) {
-            if (!is_array($trigger)) {
-                continue;
-            }
-
-            $triggerType = strtoupper((string)($trigger['type'] ?? ''));
-            $triggerCode = (string)(
-                $trigger['signal']['code']
-                ?? $trigger['data']['signal']['code']
-                ?? ''
-            );
-
-            if ($triggerCode !== '' && ($triggerType === '' || $triggerType === 'SIGNAL_UPDATED')) {
-                $triggerSignalCodes[$triggerCode] = true;
-            }
-        }
-
         $oemDates = [];
-        $hasChangedSignals = false;
-        $latestChangedOEMTimestamp = 0;
-        $changedSignalCodes = [];
 
         foreach ($signals as $signal) {
             if (!is_array($signal)) {
@@ -675,39 +629,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 'status' => $status
             ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
-            $changed = $this->ApplySignalFromV3($signalCode, $body, $status, $selectedMap[$signalCode]);
-
-            // Wenn Trigger vorhanden sind, darf nur ein tatsächlich ausgelöstes
-            // Signal den globalen Zeitstempel verändern. Dadurch führen Werte aus
-            // dem mitgelieferten Gesamtsnapshot nicht zu einer falschen Aktualisierung.
-            $countsForTimestamp = empty($triggerSignalCodes) || isset($triggerSignalCodes[$signalCode]);
-
-            if ($changed && $countsForTimestamp) {
-                $hasChangedSignals = true;
-                $changedSignalCodes[] = $signalCode;
-
-                $oemTimestamp = $this->ParseSmartcarTimestamp($meta['oemUpdatedAt'] ?? null);
-                if ($oemTimestamp > $latestChangedOEMTimestamp) {
-                    $latestChangedOEMTimestamp = $oemTimestamp;
-                }
-            } elseif ($changed) {
-                $this->SendDebug(
-                    'WebhookVehicle/ChangedIgnored/' . $signalCode,
-                    'Wert geändert, aber Signal war nicht Auslöser dieses Webhooks.',
-                    0
-                );
-            }
-        }
-
-        if ($hasChangedSignals) {
-            $this->UpdateLastSignalsAt(
-                $latestChangedOEMTimestamp,
-                'WebhookVehicle',
-                $changedSignalCodes,
-                ['triggerSignals' => array_keys($triggerSignalCodes)]
-            );
-        } else {
-            $this->SendDebug('WebhookVehicle/LastSignalsAt', 'Keine echte Wertänderung – Zeitstempel bleibt unverändert.', 0);
+            $this->ApplySignalFromV3($signalCode, $body, $status, $selectedMap[$signalCode], $meta);
         }
 
         if (!empty($oemDates)) {
@@ -738,7 +660,7 @@ class SmartcarVehicle extends IPSModuleStrict
         return $map;
     }
 
-    private function ApplySignalFromV3(string $code, array $body, ?array $status, array $meta): bool
+    private function ApplySignalFromV3(string $code, array $body, ?array $status, array $definitionMeta, array $signalMeta = []): bool
     {
         if ($status !== null && isset($status['value'])) {
             $statusValue = strtoupper((string)$status['value']);
@@ -753,9 +675,9 @@ class SmartcarVehicle extends IPSModuleStrict
             }
         }
 
+        $changed = false;
         $definition = $this->GetSignalDefinition($code, $body);
         $variables = $this->GetVariablesFromDefinition($definition, $body);
-        $changed = false;
 
         foreach ($variables as $variable) {
             $ident = (string)($variable['ident'] ?? '');
@@ -775,8 +697,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 $value = $variable['convert']($body);
             }
 
-            $type = (int)$variable['type'];
-            if ($this->IsVariableValueChanged($ident, $value, $type)) {
+            if ($this->TypedVariableValueDiffers($ident, $value, (int)$variable['type'])) {
                 $changed = true;
             }
 
@@ -784,109 +705,99 @@ class SmartcarVehicle extends IPSModuleStrict
                 $ident,
                 (string)($variable['name'] ?? $ident),
                 $value,
-                $type,
+                (int)$variable['type'],
                 (string)($variable['profile'] ?? '')
             );
         }
 
         if (empty($variables) && !empty($body)) {
             $ident = (string)($definition['ident'] ?? '');
-            if ($ident === '') {
-                return $changed;
-            }
+            if ($ident !== '') {
+                $value = json_encode($body, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
-            $value = json_encode($body, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-            if ($this->IsVariableValueChanged($ident, $value, VARIABLETYPE_STRING)) {
-                $changed = true;
-            }
+                if ($this->TypedVariableValueDiffers($ident, $value, VARIABLETYPE_STRING)) {
+                    $changed = true;
+                }
 
-            $this->RegisterOrUpdateTypedVariable(
-                $ident,
-                (string)($definition['name'] ?? $code),
-                $value,
-                VARIABLETYPE_STRING,
-                ''
-            );
+                $this->RegisterOrUpdateTypedVariable(
+                    $ident,
+                    (string)($definition['name'] ?? $code),
+                    $value,
+                    VARIABLETYPE_STRING,
+                    ''
+                );
+            }
         }
 
-        return $changed;
-    }
+        $oemTimestamp = $this->ParseSmartcarTimestamp($signalMeta['oemUpdatedAt'] ?? null);
 
-    private function IsVariableValueChanged(string $ident, mixed $value, int $type): bool
-    {
-        $id = @$this->GetIDForIdent($ident);
-        if (!$id) {
-            $this->SendDebug('SignalChanged/' . $ident, 'Variable ist neu und wird als Änderung gewertet.', 0);
-            return true;
-        }
+        if ($oemTimestamp > 0) {
+            $stored = json_decode($this->ReadAttributeString('LastOEMSignalTimes'), true);
+            if (!is_array($stored)) {
+                $stored = [];
+            }
 
-        $currentValue = GetValue($id);
-        $newValue = match ($type) {
-            VARIABLETYPE_BOOLEAN => (bool)$value,
-            VARIABLETYPE_INTEGER => (int)round((float)$value),
-            VARIABLETYPE_FLOAT => (float)$value,
-            default => is_array($value)
-                ? json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
-                : (string)$value
-        };
+            $oldTimestamp = (int)($stored[$code] ?? 0);
 
-        if ($type === VARIABLETYPE_FLOAT) {
-            $changed = abs((float)$currentValue - (float)$newValue) > 0.000001;
-        } else {
-            $changed = $currentValue !== $newValue;
+            if ($oldTimestamp !== $oemTimestamp) {
+                $stored[$code] = $oemTimestamp;
+                $this->WriteAttributeString(
+                    'LastOEMSignalTimes',
+                    json_encode($stored, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+                );
+            }
+
+            if ($this->ReadPropertyBoolean('ShowOEMUpdatedAtVariables')) {
+                $oemIdent = $this->BuildOEMTimestampIdent($code);
+                $oemName = (string)($definitionMeta['name'] ?? $definition['name'] ?? $code) . ' – OEM-Datenstand';
+
+                $this->RegisterOrUpdateTypedVariable(
+                    $oemIdent,
+                    $oemName,
+                    $oemTimestamp,
+                    VARIABLETYPE_INTEGER,
+                    '~UnixTimestamp'
+                );
+            }
         }
 
         if ($changed) {
-            $this->SendDebug('SignalChanged/' . $ident, json_encode([
-                'old' => $currentValue,
-                'new' => $newValue,
-                'type' => $type
-            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+            $now = time();
+
+            if ((int)$this->GetValue('LastSignalsAt') !== $now) {
+                $this->SetValue('LastSignalsAt', $now);
+            }
         }
 
         return $changed;
     }
 
+    private function BuildOEMTimestampIdent(string $code): string
+    {
+        return $this->BuildSignalIdent($code) . '_OEMUpdatedAt';
+    }
 
-    private function UpdateLastSignalsAt(
-        int $latestOEMTimestamp,
-        string $debugPrefix,
-        array $changedSignalCodes,
-        array $additionalDebug = []
-    ): void {
-        $useOEM = $this->ReadPropertyBoolean('UseOEMUpdatedAt');
-        $timestamp = ($useOEM && $latestOEMTimestamp > 0)
-            ? $latestOEMTimestamp
-            : time();
-
-        $variableId = @$this->GetIDForIdent('LastSignalsAt');
-        $currentTimestamp = $variableId ? (int)GetValue($variableId) : 0;
-
-        // Verhindert auch ein unnötiges erneutes Schreiben desselben Zeitstempels.
-        if ($currentTimestamp === $timestamp) {
-            $this->SendDebug(
-                $debugPrefix . '/LastSignalsAt',
-                'Berechneter Zeitstempel ist bereits gesetzt – keine Änderung.',
-                0
-            );
-            return;
+    private function ParseSmartcarTimestamp($value): int
+    {
+        if ($value === null || $value === '') {
+            return 0;
         }
 
-        $this->SetValue('LastSignalsAt', $timestamp);
+        try {
+            if (is_numeric($value)) {
+                $timestamp = (int)$value;
 
-        $debug = array_merge([
-            'build' => self::MODULE_BUILD,
-            'source' => ($useOEM && $latestOEMTimestamp > 0) ? 'oemUpdatedAt' : 'webhook',
-            'timestamp' => $timestamp,
-            'formatted' => date('d.m.Y H:i:s', $timestamp),
-            'changedSignals' => array_values($changedSignalCodes)
-        ], $additionalDebug);
+                if ($timestamp > 20000000000) {
+                    $timestamp = (int)floor($timestamp / 1000);
+                }
 
-        $this->SendDebug(
-            $debugPrefix . '/LastSignalsAt',
-            json_encode($debug, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
-            0
-        );
+                return $timestamp;
+            }
+
+            return (new DateTime((string)$value))->getTimestamp();
+        } catch (Throwable $e) {
+            return 0;
+        }
     }
 
     private function BuildSignalIdent(string $code): string
@@ -1016,17 +927,13 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $body = is_array($attributes['body'] ?? null) ? $attributes['body'] : [];
         $status = is_array($attributes['status'] ?? null) ? $attributes['status'] : null;
+        $signalMeta = is_array($signal['meta'] ?? null)
+            ? $signal['meta']
+            : (is_array($attributes['meta'] ?? null) ? $attributes['meta'] : []);
 
         $definitionMeta = $this->GetSignalDefinition($signalCode, $body);
-        $meta = is_array($signal['meta'] ?? null) ? $signal['meta'] : [];
 
-        $changed = $this->ApplySignalFromV3($signalCode, $body, $status, $definitionMeta);
-        if ($changed) {
-            $oemTimestamp = $this->ParseSmartcarTimestamp($meta['oemUpdatedAt'] ?? null);
-            $this->UpdateLastSignalsAt($oemTimestamp, 'FetchSingleSignal', [$signalCode]);
-        } else {
-            $this->SendDebug('FetchSingleSignal/LastSignalsAt', 'Keine echte Wertänderung – Zeitstempel bleibt unverändert.', 0);
-        }
+        $this->ApplySignalFromV3($signalCode, $body, $status, $definitionMeta, $signalMeta);
     }
 
     private function GetVariablesFromDefinition(array $definition, array $body): array
@@ -1089,6 +996,8 @@ class SmartcarVehicle extends IPSModuleStrict
                         }
                     }
 
+                    $managedIdents[$this->BuildOEMTimestampIdent($signalCode)] = true;
+
                     continue;
                 }
 
@@ -1130,6 +1039,27 @@ class SmartcarVehicle extends IPSModuleStrict
                         $wantedIdents[$ident] = true;
                         $managedIdents[$ident] = true;
                     }
+                }
+
+                $oemIdent = $this->BuildOEMTimestampIdent($signalCode);
+                $managedIdents[$oemIdent] = true;
+
+                if ($this->ReadPropertyBoolean('ShowOEMUpdatedAtVariables')) {
+                    $wantedIdents[$oemIdent] = true;
+
+                    $storedOEMTimes = json_decode($this->ReadAttributeString('LastOEMSignalTimes'), true);
+                    if (!is_array($storedOEMTimes)) {
+                        $storedOEMTimes = [];
+                    }
+
+                    $this->RegisterOrUpdateTypedVariable(
+                        $oemIdent,
+                        (string)($entry['name'] ?? $signalCode) . ' – OEM-Datenstand',
+                        (int)($storedOEMTimes[$signalCode] ?? 0),
+                        VARIABLETYPE_INTEGER,
+                        '~UnixTimestamp',
+                        true
+                    );
                 }
 
                 $name = (string)($entry['name'] ?? $signalCode);
@@ -1351,28 +1281,6 @@ class SmartcarVehicle extends IPSModuleStrict
         }
 
         return ((int)($instance['ConnectionID'] ?? 0)) > 0;
-    }
-
-    private function ParseSmartcarTimestamp($value): int
-    {
-        if ($value === null || $value === '') {
-            return 0;
-        }
-
-        try {
-            if (is_numeric($value)) {
-                $timestamp = (int)$value;
-                if ($timestamp > 20000000000) {
-                    $timestamp = (int)floor($timestamp / 1000);
-                }
-                return $timestamp;
-            }
-
-            return (new DateTime((string)$value))->getTimestamp();
-        } catch (Throwable $e) {
-            $this->SendDebug('Timestamp/ParseError', (string)$value . ': ' . $e->getMessage(), 0);
-            return 0;
-        }
     }
 
     private function FormatSmartcarTimestamp($value): ?string
@@ -1667,22 +1575,40 @@ class SmartcarVehicle extends IPSModuleStrict
             return false;
         }
 
-        switch ($type) {
-            case VARIABLETYPE_BOOLEAN:
-                $this->SetValue($ident, (bool)$value);
-                break;
-            case VARIABLETYPE_INTEGER:
-                $this->SetValue($ident, (int)round((float)$value));
-                break;
-            case VARIABLETYPE_FLOAT:
-                $this->SetValue($ident, (float)$value);
-                break;
-            default:
-                $this->SetValue($ident, is_array($value) ? json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : (string)$value);
-                break;
+        if ($this->TypedVariableValueDiffers($ident, $value, $type)) {
+            $this->SetValue($ident, $this->NormalizeTypedValue($value, $type));
         }
 
         return $created;
+    }
+
+    private function TypedVariableValueDiffers(string $ident, mixed $value, int $type): bool
+    {
+        $id = @$this->GetIDForIdent($ident);
+        if (!$id) {
+            return true;
+        }
+
+        $currentValue = GetValue($id);
+        $newValue = $this->NormalizeTypedValue($value, $type);
+
+        if ($type === VARIABLETYPE_FLOAT) {
+            return abs((float)$currentValue - (float)$newValue) > 0.000001;
+        }
+
+        return $currentValue !== $newValue;
+    }
+
+    private function NormalizeTypedValue(mixed $value, int $type): mixed
+    {
+        return match ($type) {
+            VARIABLETYPE_BOOLEAN => (bool)$value,
+            VARIABLETYPE_INTEGER => (int)round((float)$value),
+            VARIABLETYPE_FLOAT   => (float)$value,
+            default              => is_array($value)
+                ? json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+                : (string)$value
+        };
     }
 
     private function GetSignalDefinition(string $code, array $body = []): array
