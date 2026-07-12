@@ -29,6 +29,11 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $this->CreateProfile();
 
+        $lastSignalsId = @$this->GetIDForIdent('LastSignalsAt');
+        if ($lastSignalsId) {
+            IPS_SetPosition($lastSignalsId, 10);
+        }
+
         if ($this->ReadPropertyString('VehicleID') === '') {
             $this->SetStatus(201);
             return;
@@ -679,7 +684,9 @@ class SmartcarVehicle extends IPSModuleStrict
         $definition = $this->GetSignalDefinition($code, $body);
         $variables = $this->GetVariablesFromDefinition($definition, $body);
 
-        foreach ($variables as $variable) {
+        $signalBasePosition = $this->GetSignalBasePosition($code);
+
+        foreach ($variables as $variableIndex => $variable) {
             $ident = (string)($variable['ident'] ?? '');
             if ($ident === '') {
                 continue;
@@ -706,7 +713,9 @@ class SmartcarVehicle extends IPSModuleStrict
                 (string)($variable['name'] ?? $ident),
                 $value,
                 (int)$variable['type'],
-                (string)($variable['profile'] ?? '')
+                (string)($variable['profile'] ?? ''),
+                false,
+                $signalBasePosition + (int)$variableIndex
             );
         }
 
@@ -724,7 +733,9 @@ class SmartcarVehicle extends IPSModuleStrict
                     (string)($definition['name'] ?? $code),
                     $value,
                     VARIABLETYPE_STRING,
-                    ''
+                    '',
+                    false,
+                    $signalBasePosition
                 );
             }
         }
@@ -756,7 +767,9 @@ class SmartcarVehicle extends IPSModuleStrict
                     $oemName,
                     $oemTimestamp,
                     VARIABLETYPE_INTEGER,
-                    '~UnixTimestamp'
+                    '~UnixTimestamp',
+                    false,
+                    $signalBasePosition + max(1, count($variables))
                 );
             }
         }
@@ -770,6 +783,58 @@ class SmartcarVehicle extends IPSModuleStrict
         }
 
         return $changed;
+    }
+
+
+    private function BuildSelectedSignalPositionMap(array $selected): array
+    {
+        $signals = [];
+
+        foreach ($selected as $entry) {
+            if (strtolower((string)($entry['type'] ?? '')) !== 'signal') {
+                continue;
+            }
+
+            $signalCode = (string)($entry['capability'] ?? '');
+            if ($signalCode === '') {
+                $signalCode = (string)($entry['code'] ?? '');
+            }
+
+            if ($signalCode === '') {
+                continue;
+            }
+
+            $signals[] = [
+                'code'  => $signalCode,
+                'group' => (string)($entry['group'] ?? ''),
+                'name'  => (string)($entry['name'] ?? $signalCode)
+            ];
+        }
+
+        usort($signals, static function (array $a, array $b): int {
+            $groupCompare = strcasecmp($a['group'], $b['group']);
+            if ($groupCompare !== 0) {
+                return $groupCompare;
+            }
+
+            return strcasecmp($a['name'], $b['name']);
+        });
+
+        $positions = [];
+        $position = 100;
+
+        foreach ($signals as $signal) {
+            $positions[$signal['code']] = $position;
+            $position += 10;
+        }
+
+        return $positions;
+    }
+
+    private function GetSignalBasePosition(string $signalCode): int
+    {
+        $positions = $this->BuildSelectedSignalPositionMap($this->GetSelectedCapabilitiesResolved());
+        return $positions[$signalCode] ?? 8000;
     }
 
     private function BuildOEMTimestampIdent(string $code): string
@@ -865,19 +930,20 @@ class SmartcarVehicle extends IPSModuleStrict
         return array_keys($permissions);
     }
 
-    private function CreateSignalVariable(string $signalCode, string $name): bool
+    private function CreateSignalVariable(string $signalCode, string $name, int $basePosition): bool
     {
         $definition = $this->GetSignalDefinition($signalCode, []);
         $createdAny = false;
 
-        foreach ($this->GetVariablesFromDefinition($definition, []) as $variable) {
+        foreach ($this->GetVariablesFromDefinition($definition, []) as $variableIndex => $variable) {
             $created = $this->RegisterOrUpdateTypedVariable(
                 $variable['ident'],
                 $variable['name'],
                 $this->GetDefaultValueForType($variable['type']),
                 $variable['type'],
                 $variable['profile'],
-                true
+                true,
+                $basePosition + (int)$variableIndex
             );
 
             if ($created) {
@@ -968,6 +1034,8 @@ class SmartcarVehicle extends IPSModuleStrict
         $wantedIdents = [];
         $managedIdents = [];
         $newSignalCodes = [];
+        $signalPositions = $this->BuildSelectedSignalPositionMap($selected);
+        $commandPosition = 9000;
 
         // Alle möglichen Signal- und Command-Variablen aus der Compatibility-Liste sammeln
         $cache = json_decode($this->ReadAttributeString('CompatibilityCache'), true);
@@ -1058,12 +1126,17 @@ class SmartcarVehicle extends IPSModuleStrict
                         (int)($storedOEMTimes[$signalCode] ?? 0),
                         VARIABLETYPE_INTEGER,
                         '~UnixTimestamp',
-                        true
+                        true,
+                        ($signalPositions[$signalCode] ?? 1000) + max(1, count($this->GetVariablesFromDefinition($definition, [])))
                     );
                 }
 
                 $name = (string)($entry['name'] ?? $signalCode);
-                $created = $this->CreateSignalVariable($signalCode, $name);
+                $created = $this->CreateSignalVariable(
+                    $signalCode,
+                    $name,
+                    $signalPositions[$signalCode] ?? 1000
+                );
 
                 if ($created) {
                     $newSignalCodes[$signalCode] = true;
@@ -1099,8 +1172,10 @@ class SmartcarVehicle extends IPSModuleStrict
                     $this->GetDefaultValueForType((int)($definition['type'] ?? VARIABLETYPE_STRING)),
                     (int)($definition['type'] ?? VARIABLETYPE_STRING),
                     (string)($definition['profile'] ?? ''),
-                    true
+                    true,
+                    $commandPosition
                 );
+                $commandPosition += 10;
 
                 $this->EnableAction($ident);
 
@@ -1538,7 +1613,7 @@ class SmartcarVehicle extends IPSModuleStrict
         }
     }
 
-    private function RegisterOrUpdateTypedVariable(string $ident, string $name, mixed $value, int $type, string $profile, bool $onlySetValueOnCreate = false): bool
+    private function RegisterOrUpdateTypedVariable(string $ident, string $name, mixed $value, int $type, string $profile, bool $onlySetValueOnCreate = false, ?int $position = null): bool
     {
         $id = @$this->GetIDForIdent($ident);
         $created = false;
@@ -1569,6 +1644,11 @@ class SmartcarVehicle extends IPSModuleStrict
                     $this->RegisterVariableString($ident, $name, $profile, 0);
                     break;
             }
+        }
+
+        $id = @$this->GetIDForIdent($ident);
+        if ($id && $position !== null) {
+            IPS_SetPosition($id, $position);
         }
 
         if ($onlySetValueOnCreate && !$created) {
