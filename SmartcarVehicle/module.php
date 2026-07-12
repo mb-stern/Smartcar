@@ -20,7 +20,15 @@ class SmartcarVehicle extends IPSModuleStrict
     $this->RegisterAttributeString('CompatibilityCache', '[]');
     $this->RegisterAttributeInteger('CompatibilityCacheAt', 0);
 
+    $lastSignalsExists = (bool)@$this->GetIDForIdent('LastSignalsAt');
     $this->RegisterVariableInteger('LastSignalsAt', 'Letzte Signale', '~UnixTimestamp');
+
+    if (!$lastSignalsExists) {
+        $lastSignalsId = @$this->GetIDForIdent('LastSignalsAt');
+        if ($lastSignalsId) {
+            IPS_SetPosition($lastSignalsId, 10);
+        }
+    }
 }
 
     public function ApplyChanges(): void
@@ -28,11 +36,6 @@ class SmartcarVehicle extends IPSModuleStrict
         parent::ApplyChanges();
 
         $this->CreateProfile();
-
-        $lastSignalsId = @$this->GetIDForIdent('LastSignalsAt');
-        if ($lastSignalsId) {
-            IPS_SetPosition($lastSignalsId, 10);
-        }
 
         if ($this->ReadPropertyString('VehicleID') === '') {
             $this->SetStatus(201);
@@ -1647,7 +1650,7 @@ class SmartcarVehicle extends IPSModuleStrict
         }
 
         $id = @$this->GetIDForIdent($ident);
-        if ($id && $position !== null) {
+        if ($created && $id && $position !== null) {
             IPS_SetPosition($id, $position);
         }
 
