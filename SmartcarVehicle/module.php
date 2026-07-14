@@ -15,10 +15,20 @@ class SmartcarVehicle extends IPSModuleStrict
     $this->RegisterPropertyInteger('Year', 0);
     $this->RegisterPropertyString('PowertrainType', '');
     $this->RegisterPropertyString('SelectedCapabilities', '[]');
+    $this->RegisterPropertyBoolean('ShowOEMUpdatedAtVariables', false);
+    $this->RegisterAttributeString('LastOEMSignalTimes', '{}');
     $this->RegisterAttributeString('CompatibilityCache', '[]');
     $this->RegisterAttributeInteger('CompatibilityCacheAt', 0);
 
+    $lastSignalsExists = (bool)@$this->GetIDForIdent('LastSignalsAt');
     $this->RegisterVariableInteger('LastSignalsAt', 'Letzte Signale', '~UnixTimestamp');
+
+    if (!$lastSignalsExists) {
+        $lastSignalsId = @$this->GetIDForIdent('LastSignalsAt');
+        if ($lastSignalsId) {
+            IPS_SetPosition($lastSignalsId, 10);
+        }
+    }
 }
 
     public function ApplyChanges(): void
@@ -104,6 +114,11 @@ class SmartcarVehicle extends IPSModuleStrict
                 ['type' => 'Label', 'caption' => 'User ID: ' . $this->ReadPropertyString('UserID')],
                 ['type' => 'Label', 'caption' => 'Fahrzeug: ' . $this->ReadPropertyString('VehicleCaption')],
                 ['type' => 'Label', 'caption' => 'Antrieb: ' . $this->ReadPropertyString('PowertrainType')],
+                [
+                    'type' => 'CheckBox',
+                    'name' => 'ShowOEMUpdatedAtVariables',
+                    'caption' => 'OEM-Aktualisierungszeit je Signal als zusätzliche Variable anzeigen'
+                ],
 
                 [
                 'type' => 'List',
@@ -495,7 +510,9 @@ class SmartcarVehicle extends IPSModuleStrict
 
             $body = is_array($attributes['body'] ?? null) ? $attributes['body'] : [];
             $status = is_array($attributes['status'] ?? null) ? $attributes['status'] : null;
-            $meta = is_array($signal['meta'] ?? null) ? $signal['meta'] : [];
+            $meta = is_array($signal['meta'] ?? null)
+                ? $signal['meta']
+                : (is_array($attributes['meta'] ?? null) ? $attributes['meta'] : []);
 
             $this->SendDebug(
                 'FetchSignals/RAW/' . $signalCode,
@@ -517,7 +534,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 0
             );
 
-            $this->ApplySignalFromV3($signalCode, $body, $status, $selectedMap[$signalCode]);
+            $this->ApplySignalFromV3($signalCode, $body, $status, $selectedMap[$signalCode], $meta);
             $applied++;
         }
 
@@ -620,7 +637,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 'status' => $status
             ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
-            $this->ApplySignalFromV3($signalCode, $body, $status, $selectedMap[$signalCode]);
+            $this->ApplySignalFromV3($signalCode, $body, $status, $selectedMap[$signalCode], $meta);
         }
 
         if (!empty($oemDates)) {
@@ -651,7 +668,7 @@ class SmartcarVehicle extends IPSModuleStrict
         return $map;
     }
 
-    private function ApplySignalFromV3(string $code, array $body, ?array $status, array $meta): void
+    private function ApplySignalFromV3(string $code, array $body, ?array $status, array $definitionMeta, array $signalMeta = []): bool
     {
         if ($status !== null && isset($status['value'])) {
             $statusValue = strtoupper((string)$status['value']);
@@ -662,16 +679,17 @@ class SmartcarVehicle extends IPSModuleStrict
                     json_encode($status, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
                     0
                 );
-                return;
+                return false;
             }
         }
 
-        $this->SetValue('LastSignalsAt', time());
-
+        $changed = false;
         $definition = $this->GetSignalDefinition($code, $body);
         $variables = $this->GetVariablesFromDefinition($definition, $body);
 
-        foreach ($variables as $variable) {
+        $signalBasePosition = $this->GetSignalBasePosition($code);
+
+        foreach ($variables as $variableIndex => $variable) {
             $ident = (string)($variable['ident'] ?? '');
             if ($ident === '') {
                 continue;
@@ -689,28 +707,164 @@ class SmartcarVehicle extends IPSModuleStrict
                 $value = $variable['convert']($body);
             }
 
+            if ($this->TypedVariableValueDiffers($ident, $value, (int)$variable['type'])) {
+                $changed = true;
+            }
+
             $this->RegisterOrUpdateTypedVariable(
                 $ident,
                 (string)($variable['name'] ?? $ident),
                 $value,
                 (int)$variable['type'],
-                (string)($variable['profile'] ?? '')
+                (string)($variable['profile'] ?? ''),
+                false,
+                $signalBasePosition + (int)$variableIndex
             );
         }
 
         if (empty($variables) && !empty($body)) {
             $ident = (string)($definition['ident'] ?? '');
-            if ($ident === '') {
-                return;
+            if ($ident !== '') {
+                $value = json_encode($body, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+                if ($this->TypedVariableValueDiffers($ident, $value, VARIABLETYPE_STRING)) {
+                    $changed = true;
+                }
+
+                $this->RegisterOrUpdateTypedVariable(
+                    $ident,
+                    (string)($definition['name'] ?? $code),
+                    $value,
+                    VARIABLETYPE_STRING,
+                    '',
+                    false,
+                    $signalBasePosition
+                );
+            }
+        }
+
+        $oemTimestamp = $this->ParseSmartcarTimestamp($signalMeta['oemUpdatedAt'] ?? null);
+
+        if ($oemTimestamp > 0) {
+            $stored = json_decode($this->ReadAttributeString('LastOEMSignalTimes'), true);
+            if (!is_array($stored)) {
+                $stored = [];
             }
 
-            $this->RegisterOrUpdateTypedVariable(
-                $ident,
-                (string)($definition['name'] ?? $code),
-                json_encode($body, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
-                VARIABLETYPE_STRING,
-                ''
-            );
+            $oldTimestamp = (int)($stored[$code] ?? 0);
+
+            if ($oldTimestamp !== $oemTimestamp) {
+                $stored[$code] = $oemTimestamp;
+                $this->WriteAttributeString(
+                    'LastOEMSignalTimes',
+                    json_encode($stored, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+                );
+            }
+
+            if ($this->ReadPropertyBoolean('ShowOEMUpdatedAtVariables')) {
+                $oemIdent = $this->BuildOEMTimestampIdent($code);
+                $oemName = (string)($definitionMeta['name'] ?? $definition['name'] ?? $code) . ' – OEM-Datenstand';
+
+                $this->RegisterOrUpdateTypedVariable(
+                    $oemIdent,
+                    $oemName,
+                    $oemTimestamp,
+                    VARIABLETYPE_INTEGER,
+                    '~UnixTimestamp',
+                    false,
+                    $signalBasePosition + max(1, count($variables))
+                );
+            }
+        }
+
+        if ($changed) {
+            $now = time();
+
+            if ((int)$this->GetValue('LastSignalsAt') !== $now) {
+                $this->SetValue('LastSignalsAt', $now);
+            }
+        }
+
+        return $changed;
+    }
+
+
+    private function BuildSelectedSignalPositionMap(array $selected): array
+    {
+        $signals = [];
+
+        foreach ($selected as $entry) {
+            if (strtolower((string)($entry['type'] ?? '')) !== 'signal') {
+                continue;
+            }
+
+            $signalCode = (string)($entry['capability'] ?? '');
+            if ($signalCode === '') {
+                $signalCode = (string)($entry['code'] ?? '');
+            }
+
+            if ($signalCode === '') {
+                continue;
+            }
+
+            $signals[] = [
+                'code'  => $signalCode,
+                'group' => (string)($entry['group'] ?? ''),
+                'name'  => (string)($entry['name'] ?? $signalCode)
+            ];
+        }
+
+        usort($signals, static function (array $a, array $b): int {
+            $groupCompare = strcasecmp($a['group'], $b['group']);
+            if ($groupCompare !== 0) {
+                return $groupCompare;
+            }
+
+            return strcasecmp($a['name'], $b['name']);
+        });
+
+        $positions = [];
+        $position = 100;
+
+        foreach ($signals as $signal) {
+            $positions[$signal['code']] = $position;
+            $position += 10;
+        }
+
+        return $positions;
+    }
+
+    private function GetSignalBasePosition(string $signalCode): int
+    {
+        $positions = $this->BuildSelectedSignalPositionMap($this->GetSelectedCapabilitiesResolved());
+        return $positions[$signalCode] ?? 8000;
+    }
+
+    private function BuildOEMTimestampIdent(string $code): string
+    {
+        return $this->BuildSignalIdent($code) . '_OEMUpdatedAt';
+    }
+
+    private function ParseSmartcarTimestamp($value): int
+    {
+        if ($value === null || $value === '') {
+            return 0;
+        }
+
+        try {
+            if (is_numeric($value)) {
+                $timestamp = (int)$value;
+
+                if ($timestamp > 20000000000) {
+                    $timestamp = (int)floor($timestamp / 1000);
+                }
+
+                return $timestamp;
+            }
+
+            return (new DateTime((string)$value))->getTimestamp();
+        } catch (Throwable $e) {
+            return 0;
         }
     }
 
@@ -779,19 +933,20 @@ class SmartcarVehicle extends IPSModuleStrict
         return array_keys($permissions);
     }
 
-    private function CreateSignalVariable(string $signalCode, string $name): bool
+    private function CreateSignalVariable(string $signalCode, string $name, int $basePosition): bool
     {
         $definition = $this->GetSignalDefinition($signalCode, []);
         $createdAny = false;
 
-        foreach ($this->GetVariablesFromDefinition($definition, []) as $variable) {
+        foreach ($this->GetVariablesFromDefinition($definition, []) as $variableIndex => $variable) {
             $created = $this->RegisterOrUpdateTypedVariable(
                 $variable['ident'],
                 $variable['name'],
                 $this->GetDefaultValueForType($variable['type']),
                 $variable['type'],
                 $variable['profile'],
-                true
+                true,
+                $basePosition + (int)$variableIndex
             );
 
             if ($created) {
@@ -841,10 +996,13 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $body = is_array($attributes['body'] ?? null) ? $attributes['body'] : [];
         $status = is_array($attributes['status'] ?? null) ? $attributes['status'] : null;
+        $signalMeta = is_array($signal['meta'] ?? null)
+            ? $signal['meta']
+            : (is_array($attributes['meta'] ?? null) ? $attributes['meta'] : []);
 
         $definitionMeta = $this->GetSignalDefinition($signalCode, $body);
 
-        $this->ApplySignalFromV3($signalCode, $body, $status, $definitionMeta);
+        $this->ApplySignalFromV3($signalCode, $body, $status, $definitionMeta, $signalMeta);
     }
 
     private function GetVariablesFromDefinition(array $definition, array $body): array
@@ -879,6 +1037,8 @@ class SmartcarVehicle extends IPSModuleStrict
         $wantedIdents = [];
         $managedIdents = [];
         $newSignalCodes = [];
+        $signalPositions = $this->BuildSelectedSignalPositionMap($selected);
+        $commandPosition = 9000;
 
         // Alle möglichen Signal- und Command-Variablen aus der Compatibility-Liste sammeln
         $cache = json_decode($this->ReadAttributeString('CompatibilityCache'), true);
@@ -906,6 +1066,8 @@ class SmartcarVehicle extends IPSModuleStrict
                             $managedIdents[$ident] = true;
                         }
                     }
+
+                    $managedIdents[$this->BuildOEMTimestampIdent($signalCode)] = true;
 
                     continue;
                 }
@@ -950,8 +1112,34 @@ class SmartcarVehicle extends IPSModuleStrict
                     }
                 }
 
+                $oemIdent = $this->BuildOEMTimestampIdent($signalCode);
+                $managedIdents[$oemIdent] = true;
+
+                if ($this->ReadPropertyBoolean('ShowOEMUpdatedAtVariables')) {
+                    $wantedIdents[$oemIdent] = true;
+
+                    $storedOEMTimes = json_decode($this->ReadAttributeString('LastOEMSignalTimes'), true);
+                    if (!is_array($storedOEMTimes)) {
+                        $storedOEMTimes = [];
+                    }
+
+                    $this->RegisterOrUpdateTypedVariable(
+                        $oemIdent,
+                        (string)($entry['name'] ?? $signalCode) . ' – OEM-Datenstand',
+                        (int)($storedOEMTimes[$signalCode] ?? 0),
+                        VARIABLETYPE_INTEGER,
+                        '~UnixTimestamp',
+                        true,
+                        ($signalPositions[$signalCode] ?? 1000) + max(1, count($this->GetVariablesFromDefinition($definition, [])))
+                    );
+                }
+
                 $name = (string)($entry['name'] ?? $signalCode);
-                $created = $this->CreateSignalVariable($signalCode, $name);
+                $created = $this->CreateSignalVariable(
+                    $signalCode,
+                    $name,
+                    $signalPositions[$signalCode] ?? 1000
+                );
 
                 if ($created) {
                     $newSignalCodes[$signalCode] = true;
@@ -987,8 +1175,10 @@ class SmartcarVehicle extends IPSModuleStrict
                     $this->GetDefaultValueForType((int)($definition['type'] ?? VARIABLETYPE_STRING)),
                     (int)($definition['type'] ?? VARIABLETYPE_STRING),
                     (string)($definition['profile'] ?? ''),
-                    true
+                    true,
+                    $commandPosition
                 );
+                $commandPosition += 10;
 
                 $this->EnableAction($ident);
 
@@ -1426,7 +1616,7 @@ class SmartcarVehicle extends IPSModuleStrict
         }
     }
 
-    private function RegisterOrUpdateTypedVariable(string $ident, string $name, mixed $value, int $type, string $profile, bool $onlySetValueOnCreate = false): bool
+    private function RegisterOrUpdateTypedVariable(string $ident, string $name, mixed $value, int $type, string $profile, bool $onlySetValueOnCreate = false, ?int $position = null): bool
     {
         $id = @$this->GetIDForIdent($ident);
         $created = false;
@@ -1459,26 +1649,49 @@ class SmartcarVehicle extends IPSModuleStrict
             }
         }
 
+        $id = @$this->GetIDForIdent($ident);
+        if ($created && $id && $position !== null) {
+            IPS_SetPosition($id, $position);
+        }
+
         if ($onlySetValueOnCreate && !$created) {
             return false;
         }
 
-        switch ($type) {
-            case VARIABLETYPE_BOOLEAN:
-                $this->SetValue($ident, (bool)$value);
-                break;
-            case VARIABLETYPE_INTEGER:
-                $this->SetValue($ident, (int)round((float)$value));
-                break;
-            case VARIABLETYPE_FLOAT:
-                $this->SetValue($ident, (float)$value);
-                break;
-            default:
-                $this->SetValue($ident, is_array($value) ? json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : (string)$value);
-                break;
+        if ($this->TypedVariableValueDiffers($ident, $value, $type)) {
+            $this->SetValue($ident, $this->NormalizeTypedValue($value, $type));
         }
 
         return $created;
+    }
+
+    private function TypedVariableValueDiffers(string $ident, mixed $value, int $type): bool
+    {
+        $id = @$this->GetIDForIdent($ident);
+        if (!$id) {
+            return true;
+        }
+
+        $currentValue = GetValue($id);
+        $newValue = $this->NormalizeTypedValue($value, $type);
+
+        if ($type === VARIABLETYPE_FLOAT) {
+            return abs((float)$currentValue - (float)$newValue) > 0.000001;
+        }
+
+        return $currentValue !== $newValue;
+    }
+
+    private function NormalizeTypedValue(mixed $value, int $type): mixed
+    {
+        return match ($type) {
+            VARIABLETYPE_BOOLEAN => (bool)$value,
+            VARIABLETYPE_INTEGER => (int)round((float)$value),
+            VARIABLETYPE_FLOAT   => (float)$value,
+            default              => is_array($value)
+                ? json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+                : (string)$value
+        };
     }
 
     private function GetSignalDefinition(string $code, array $body = []): array
