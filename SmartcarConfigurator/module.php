@@ -83,22 +83,29 @@ class SmartcarConfigurator extends IPSModuleStrict
                 'powertrainType' => $powertrainType,
 
                 /*
-                 * Das Configurator-Element erstellt die Vehicle-Instanz,
-                 * setzt ihre initiale Konfiguration und verbindet sie
-                 * bevorzugt mit dem physischen Parent des Konfigurators.
+                 * Das Configurator-Element erstellt eine explizite
+                 * physikalische Kette Vehicle -> Smartcar Splitter.
+                 * Ein bereits vorhandener passender Splitter wird bevorzugt
+                 * wiederverwendet.
                  */
                 'create' => [
-                    'moduleID' => self::VEHICLE_MODULE_ID,
-                    'name' => $caption,
-                    'configuration' => [
-                        'VehicleID' => $vehicleId,
-                        'ConnectionID' => $connectionId,
-                        'UserID' => $userId,
-                        'VehicleCaption' => $caption,
-                        'Make' => $make,
-                        'Model' => $model,
-                        'Year' => $year,
-                        'PowertrainType' => $powertrainType
+                    [
+                        'moduleID' => self::VEHICLE_MODULE_ID,
+                        'name' => $caption,
+                        'configuration' => [
+                            'VehicleID' => $vehicleId,
+                            'ConnectionID' => $connectionId,
+                            'UserID' => $userId,
+                            'VehicleCaption' => $caption,
+                            'Make' => $make,
+                            'Model' => $model,
+                            'Year' => $year,
+                            'PowertrainType' => $powertrainType
+                        ]
+                    ],
+                    [
+                        'moduleID' => self::SPLITTER_MODULE_ID,
+                        'configuration' => []
                     ]
                 ]
             ];

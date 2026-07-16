@@ -819,32 +819,60 @@ class SmartcarSplitter extends IPSModuleStrict
     private function UpdateVehiclesFromConnections(array $connections): void
     {
         foreach ($connections as $connection) {
-            $vehicleId = (string)($connection['vehicleId'] ?? '');
+            if (!is_array($connection)) {
+                continue;
+            }
+
+            $vehicleId = trim((string)($connection['vehicleId'] ?? ''));
             if ($vehicleId === '') {
                 continue;
             }
 
+            /*
+             * Vehicle-Instanzen werden ausschließlich durch den
+             * Smartcar-Konfigurator erstellt. Der Splitter aktualisiert nur
+             * bereits vorhandene Instanzen und erzeugt keine konkurrierenden,
+             * unvollständig verbundenen Vehicle-Instanzen mehr.
+             */
             $instanceId = $this->FindVehicleInstanceByVehicleId($vehicleId);
 
             if ($instanceId === 0) {
-                $instanceId = IPS_CreateInstance('{1E1B7C9A-2D4F-4E8A-9C3B-7F6D5A4E2B10}');
-
                 $this->SendDebug(
-                    'Connect/CreateVehicle',
-                    'Neue Vehicle-Instanz erstellt: ' . $instanceId . ' für VehicleID=' . $vehicleId,
+                    'Connect/UpdateVehicle',
+                    'Keine Vehicle-Instanz für VehicleID=' . $vehicleId .
+                    ' vorhanden. Erstellung erfolgt über den Smartcar-Konfigurator.',
                     0
                 );
+                continue;
             }
 
+            $instance = @IPS_GetInstance($instanceId);
+            if (is_array($instance) && (int)($instance['ConnectionID'] ?? 0) !== $this->InstanceID) {
+                @IPS_ConnectInstance($instanceId, $this->InstanceID);
+            }
+
+            $caption = trim((string)($connection['caption'] ?? ''));
+            if ($caption === '') {
+                $caption = $vehicleId;
+            }
+
+            IPS_SetProperty($instanceId, 'VehicleID', $vehicleId);
             IPS_SetProperty($instanceId, 'ConnectionID', (string)($connection['connectionId'] ?? ''));
             IPS_SetProperty($instanceId, 'UserID', (string)($connection['userId'] ?? ''));
-            IPS_SetProperty($instanceId, 'VehicleCaption', (string)($connection['caption'] ?? $vehicleId));
+            IPS_SetProperty($instanceId, 'VehicleCaption', $caption);
             IPS_SetProperty($instanceId, 'Make', (string)($connection['make'] ?? ''));
             IPS_SetProperty($instanceId, 'Model', (string)($connection['model'] ?? ''));
             IPS_SetProperty($instanceId, 'Year', (int)($connection['year'] ?? 0));
             IPS_SetProperty($instanceId, 'PowertrainType', (string)($connection['powertrainType'] ?? ''));
 
+            IPS_SetName($instanceId, $caption);
             IPS_ApplyChanges($instanceId);
+
+            $this->SendDebug(
+                'Connect/UpdateVehicle',
+                'Vehicle-Instanz ' . $instanceId . ' aktualisiert und mit Splitter verbunden.',
+                0
+            );
         }
     }
 
