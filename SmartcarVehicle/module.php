@@ -118,17 +118,17 @@ class SmartcarVehicle extends IPSModuleStrict
 
             $form = [
                 'elements' => [
-                    [
+                     [
                         'type' => 'Label',
-                        'caption' => $reason
+                        'caption' => 'Dieses Smartcar Fahrzeug wurde ohne Smartcar-Konfigurator angelegt.'
                     ],
                     [
                         'type' => 'Label',
-                        'caption' => 'Bitte zuerst eine Smartcar-Konfigurator-Instanz anlegen, dort das Fahrzeug verbinden und die Fahrzeug-Instanz durch den Konfigurator erstellen lassen.'
+                        'caption' => 'Bitte zuerst eine Smartcar-Konfigurator-Instanz erstellen. Der benötigte Splitter wird dabei automatisch angelegt und verbunden.'
                     ],
                     [
                         'type' => 'Label',
-                        'caption' => 'Eine manuell angelegte Smartcar Vehicle-Instanz kann ohne Vehicle ID nicht verwendet werden.'
+                        'caption' => 'Diese direkt angelegte Fahrzeug-Instanz kann anschliessend gelöscht werden.'
                     ]
                 ],
                 'actions' => []
