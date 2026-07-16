@@ -246,17 +246,6 @@ class SmartcarConfigurator extends IPSModuleStrict
         return 0;
     }
 
-    private function HasActiveParent(): bool
-    {
-        $instance = @IPS_GetInstance($this->InstanceID);
-        if (!is_array($instance)) {
-            return false;
-        }
-
-        $connectionId = (int)($instance['ConnectionID'] ?? 0);
-        return $connectionId > 0 && IPS_InstanceExists($connectionId);
-    }
-
     private function GetConfiguratorLocation(): array
     {
         $location = [];
