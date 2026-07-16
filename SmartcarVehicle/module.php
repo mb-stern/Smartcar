@@ -194,7 +194,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 ],
                 [
                     'type' => 'Button',
-                    'caption' => 'Gewählte Signale bei Smartcar registrieren',
+                    'caption' => 'Fahrzeug mit geänderten Berechtigungen neu autorisieren',
                     'onClick' => 'echo SMCARV_GenerateConnectURL($id);'
                 ],
                 [
@@ -891,10 +891,15 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $state = 'vehicle_' . $this->ReadPropertyString('VehicleID') . '_' . bin2hex(random_bytes(8));
 
+        $vehicleId = trim($this->ReadPropertyString('VehicleID'));
+        if ($vehicleId === '') {
+            return 'Fehler: Vehicle ID fehlt. Das Fahrzeug muss zuerst über den Smartcar-Konfigurator verbunden werden.';
+        }
+
         $request = [
             'DataID'      => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
-            'Command'     => 'BuildConnectURL',
-            'Mode'        => 'live',
+            'Command'     => 'BuildReauthURL',
+            'VehicleID'   => $vehicleId,
             'State'       => $state,
             'Permissions' => $permissions
         ];
