@@ -37,7 +37,7 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $this->CreateProfile();
 
-        if ($this->ReadPropertyString('VehicleID') === '') {
+        if (!$this->IsConfiguredByConfigurator()) {
             $this->SetStatus(201);
             return;
         }
@@ -101,34 +101,22 @@ class SmartcarVehicle extends IPSModuleStrict
 
     public function GetConfigurationForm(): string
     {
-        $hasParent = $this->HasParentConnection();
-        $vehicleId = trim($this->ReadPropertyString('VehicleID'));
-
-        /*
-         * Eine SmartcarVehicle-Instanz soll normalerweise durch den
-         * Smartcar-Konfigurator erzeugt werden. Beim manuellen Anlegen kann
-         * Symcon bereits einen leeren kompatiblen Splitter verbinden.
-         * Deshalb darf die Kompatibilitätsabfrage nicht allein anhand der
-         * ConnectionID gestartet werden.
-         */
-        if (!$hasParent || $vehicleId === '') {
-            $reason = !$hasParent
-                ? 'Die Fahrzeug-Instanz ist mit keinem Smartcar Splitter verbunden.'
-                : 'Der Instanz ist noch kein Smartcar-Fahrzeug zugeordnet.';
+        if (!$this->IsConfiguredByConfigurator()) {
+            $missing = $this->GetMissingConfigurationFields();
 
             $form = [
                 'elements' => [
-                     [
+                    [
                         'type' => 'Label',
-                        'caption' => 'Dieses Smartcar Fahrzeug wurde ohne Smartcar-Konfigurator angelegt.'
+                        'caption' => 'Diese Smartcar Vehicle-Instanz wurde nicht vollständig über den Smartcar-Konfigurator erstellt.'
                     ],
                     [
                         'type' => 'Label',
-                        'caption' => 'Bitte zuerst eine Smartcar-Konfigurator-Instanz erstellen. Der benötigte Splitter wird dabei automatisch angelegt und verbunden.'
+                        'caption' => 'Bitte löschen Sie diese Instanz und erstellen Sie das Fahrzeug über den Smartcar-Konfigurator.'
                     ],
                     [
                         'type' => 'Label',
-                        'caption' => 'Diese direkt angelegte Fahrzeug-Instanz kann anschliessend gelöscht werden.'
+                        'caption' => 'Fehlende Konfigurationswerte: ' . implode(', ', $missing)
                     ]
                 ],
                 'actions' => []
@@ -137,11 +125,15 @@ class SmartcarVehicle extends IPSModuleStrict
             return json_encode($form, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         }
 
-        $capabilities = $this->GetCompatibilityCapabilitiesForForm();
+        $capabilities = [];
+
+        if ($this->HasParentConnection()) {
+            $capabilities = $this->GetCompatibilityCapabilitiesForForm();
+        }
 
         $form = [
             'elements' => [
-                ['type' => 'Label', 'caption' => 'Vehicle ID: ' . $vehicleId],
+                ['type' => 'Label', 'caption' => 'Vehicle ID: ' . $this->ReadPropertyString('VehicleID')],
                 ['type' => 'Label', 'caption' => 'Connection ID: ' . $this->ReadPropertyString('ConnectionID')],
                 ['type' => 'Label', 'caption' => 'User ID: ' . $this->ReadPropertyString('UserID')],
                 ['type' => 'Label', 'caption' => 'Fahrzeug: ' . $this->ReadPropertyString('VehicleCaption')],
@@ -151,71 +143,72 @@ class SmartcarVehicle extends IPSModuleStrict
                     'name' => 'ShowOEMUpdatedAtVariables',
                     'caption' => 'OEM-Aktualisierungszeit je Signal als zusätzliche Variable anzeigen'
                 ],
+
                 [
-                    'type' => 'List',
-                    'name' => 'SelectedCapabilities',
-                    'caption' => 'Kompatible Signale / Befehle',
-                    'rowCount' => 10,
-                    'add' => false,
-                    'delete' => false,
-                    'sort' => [
-                        'column' => 'sortKey',
-                        'direction' => 'ascending'
+                'type' => 'List',
+                'name' => 'SelectedCapabilities',
+                'caption' => 'Kompatible Signale / Befehle',
+                'rowCount' => 10,
+                'add' => false,
+                'delete' => false,
+                'sort' => [
+                    'column' => 'sortKey',
+                    'direction' => 'ascending'
+                ],
+                'columns' => [
+                    [
+                        'caption' => '',
+                        'name' => 'sortKey',
+                        'width' => '0px',
+                        'visible' => false,
+                        'edit' => ['type' => 'ValidationTextBox']
                     ],
-                    'columns' => [
-                        [
-                            'caption' => '',
-                            'name' => 'sortKey',
-                            'width' => '0px',
-                            'visible' => false,
-                            'edit' => ['type' => 'ValidationTextBox']
-                        ],
-                        [
-                            'caption' => '',
-                            'name' => 'capabilityKey',
-                            'width' => '0px',
-                            'visible' => false,
-                            'edit' => ['type' => 'ValidationTextBox']
-                        ],
-                        [
-                            'caption' => 'Aktiv',
-                            'name' => 'selected',
-                            'width' => '80px',
-                            'edit' => ['type' => 'CheckBox']
-                        ],
-                        [
-                            'caption' => 'Typ',
-                            'name' => 'type',
-                            'width' => '90px'
-                        ],
-                        [
-                            'caption' => 'Gruppe',
-                            'name' => 'group',
-                            'width' => '160px'
-                        ],
-                        [
-                            'caption' => 'Name',
-                            'name' => 'name',
-                            'width' => 'auto'
-                        ],
-                        [
-                            'caption' => 'Capability',
-                            'name' => 'capability',
-                            'width' => '220px'
-                        ],
-                        [
-                            'caption' => 'Code',
-                            'name' => 'code',
-                            'width' => '220px'
-                        ],
-                        [
-                            'caption' => 'Permission',
-                            'name' => 'permission',
-                            'width' => '180px'
-                        ]
+                    [
+                        'caption' => '',
+                        'name' => 'capabilityKey',
+                        'width' => '0px',
+                        'visible' => false,
+                        'edit' => ['type' => 'ValidationTextBox']
                     ],
-                    'values' => $capabilities
-                ]
+                    [
+                        'caption' => 'Aktiv',
+                        'name' => 'selected',
+                        'width' => '80px',
+                        'edit' => ['type' => 'CheckBox']
+                    ],
+                    [
+                        'caption' => 'Typ',
+                        'name' => 'type',
+                        'width' => '90px',
+                    ],
+                    [
+                        'caption' => 'Gruppe',
+                        'name' => 'group',
+                        'width' => '160px',
+                    ],
+                    [
+                        'caption' => 'Name',
+                        'name' => 'name',
+                        'width' => 'auto',
+                    ],
+                    [
+                        'caption' => 'Capability',
+                        'name' => 'capability',
+                        'width' => '220px',
+                    ],
+                    [
+                        'caption' => 'Code',
+                        'name' => 'code',
+                        'width' => '220px',
+                    ],
+                    [
+                        'caption' => 'Permission',
+                        'name' => 'permission',
+                        'width' => '180px',
+                    ]
+                ],
+                'values' => $capabilities
+            ]
             ],
             'actions' => [
                 [
@@ -234,12 +227,22 @@ class SmartcarVehicle extends IPSModuleStrict
                     'onClick' => 'SMCARV_FetchSelectedSignals($id, []);'
                 ],
                 [
-                    'type' => 'Label',
+                    'type'    => 'Label',
                     'caption' => ''
                 ],
                 [
-                    'type' => 'Label',
-                    'caption' => 'Sag danke und unterstütze den Modulentwickler: paypal.me/mbstern'
+                    'type'  => 'RowLayout',
+                    'items' => [
+                        [
+                                'type'   => 'Image',
+                                'onClick'=> "echo 'https://paypal.me/mbstern';",
+                                'image'=> "data:image/jpeg;base64,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"
+                        ],
+                        [
+                            'type'    => 'Label',
+                            'caption' => "Sag danke und unterstütze den Modulentwickler: paypal.me/mbstern"
+                         ]
+                    ]
                 ]
             ]
         ];
@@ -1370,6 +1373,43 @@ class SmartcarVehicle extends IPSModuleStrict
         $this->SendDebug('Selected/Resolve', 'Ausgewählte Einträge: ' . count($result), 0);
 
         return $result;
+    }
+
+    private function IsConfiguredByConfigurator(): bool
+    {
+        return
+            trim($this->ReadPropertyString('VehicleID')) !== '' &&
+            trim($this->ReadPropertyString('ConnectionID')) !== '' &&
+            trim($this->ReadPropertyString('UserID')) !== '' &&
+            trim($this->ReadPropertyString('VehicleCaption')) !== '' &&
+            $this->HasParentConnection();
+    }
+
+    private function GetMissingConfigurationFields(): array
+    {
+        $missing = [];
+
+        if (trim($this->ReadPropertyString('VehicleID')) === '') {
+            $missing[] = 'Vehicle ID';
+        }
+
+        if (trim($this->ReadPropertyString('ConnectionID')) === '') {
+            $missing[] = 'Connection ID';
+        }
+
+        if (trim($this->ReadPropertyString('UserID')) === '') {
+            $missing[] = 'User ID';
+        }
+
+        if (trim($this->ReadPropertyString('VehicleCaption')) === '') {
+            $missing[] = 'Fahrzeugbezeichnung';
+        }
+
+        if (!$this->HasParentConnection()) {
+            $missing[] = 'Smartcar Splitter';
+        }
+
+        return $missing;
     }
 
     private function HasParentConnection(): bool

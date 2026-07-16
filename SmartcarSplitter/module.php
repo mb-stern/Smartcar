@@ -46,33 +46,6 @@ class SmartcarSplitter extends IPSModuleStrict
 
     public function GetConfigurationForm(): string
     {
-        /*
-         * Der Splitter soll normalerweise nicht direkt angelegt werden.
-         * Er wird automatisch als Parent erstellt, wenn zuerst der
-         * Smartcar-Konfigurator angelegt wird.
-         */
-        if (!$this->HasConnectedConfigurator()) {
-            $form = [
-                'elements' => [
-                    [
-                        'type' => 'Label',
-                        'caption' => 'Dieser Smartcar Splitter wurde ohne Smartcar-Konfigurator angelegt.'
-                    ],
-                    [
-                        'type' => 'Label',
-                        'caption' => 'Bitte zuerst eine Smartcar-Konfigurator-Instanz erstellen. Der benötigte Splitter wird dabei automatisch angelegt und verbunden.'
-                    ],
-                    [
-                        'type' => 'Label',
-                        'caption' => 'Diese direkt angelegte Splitter-Instanz kann anschliessend gelöscht werden.'
-                    ]
-                ],
-                'actions' => []
-            ];
-
-            return json_encode($form, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-        }
-
         $redirectURI = $this->ReadAttributeString('RedirectURI');
 
         $form = [
@@ -112,46 +85,6 @@ class SmartcarSplitter extends IPSModuleStrict
         ];
 
         return json_encode($form, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-    }
-
-    private function HasConnectedConfigurator(): bool
-    {
-        $instanceIds = @IPS_GetInstanceList();
-        if (!is_array($instanceIds)) {
-            return false;
-        }
-
-        foreach ($instanceIds as $instanceId) {
-            $instance = @IPS_GetInstance($instanceId);
-            if (!is_array($instance)) {
-                continue;
-            }
-
-            if ((int)($instance['ConnectionID'] ?? 0) !== $this->InstanceID) {
-                continue;
-            }
-
-            $moduleId = (string)($instance['ModuleInfo']['ModuleID'] ?? '');
-            if ($moduleId === '') {
-                continue;
-            }
-
-            $module = @IPS_GetModule($moduleId);
-            if (!is_array($module)) {
-                continue;
-            }
-
-            $moduleName = strtolower((string)($module['ModuleName'] ?? ''));
-
-            if (
-                str_contains($moduleName, 'smartcar') &&
-                str_contains($moduleName, 'configurator')
-            ) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     public function RequestApplicationAccessToken(): bool
