@@ -194,7 +194,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 ],
                 [
                     'type' => 'Button',
-                    'caption' => 'Ausgewählte Signale registrieren / Berechtigungen aktualisieren',
+                    'caption' => 'Gewählte Signale bei Smartcar registrieren',
                     'onClick' => 'echo SMCARV_GenerateConnectURL($id);'
                 ],
                 [
@@ -891,15 +891,9 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $state = 'vehicle_' . $this->ReadPropertyString('VehicleID') . '_' . bin2hex(random_bytes(8));
 
-        $vehicleId = trim($this->ReadPropertyString('VehicleID'));
-        if ($vehicleId === '') {
-            return 'Fehler: Vehicle ID fehlt. Das Fahrzeug muss zuerst über den Smartcar-Konfigurator verbunden werden.';
-        }
-
         $request = [
             'DataID'      => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
-            'Command'     => 'BuildAuthorizationURL',
-            'VehicleID'   => $vehicleId,
+            'Command'     => 'BuildConnectURL',
             'Mode'        => 'live',
             'State'       => $state,
             'Permissions' => $permissions
@@ -912,23 +906,11 @@ class SmartcarVehicle extends IPSModuleStrict
         $this->SendDebug('Connect/SplitterResponse', (string)$result, 0);
 
         $decoded = json_decode((string)$result, true);
-        if (!is_array($decoded)) {
-            return 'Fehler: Ungültige Antwort vom Smartcar-Splitter: ' . (string)$result;
+        if (!is_array($decoded) || empty($decoded['success'])) {
+            return 'Fehler beim Erzeugen der Connect URL: ' . (string)$result;
         }
 
-        if (empty($decoded['success'])) {
-            $error = trim((string)($decoded['error'] ?? ''));
-            return $error !== ''
-                ? $error
-                : 'Fehler beim Erzeugen der Smartcar-Autorisierungs-URL: ' . (string)$result;
-        }
-
-        $url = trim((string)($decoded['url'] ?? ''));
-        if (!str_starts_with($url, 'https://')) {
-            return 'Fehler: Der Smartcar-Splitter hat keine gültige URL geliefert.';
-        }
-
-        return $url;
+        return (string)($decoded['url'] ?? '');
     }
 
     private function GetSelectedPermissions(): array

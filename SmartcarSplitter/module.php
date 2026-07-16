@@ -169,39 +169,6 @@ class SmartcarSplitter extends IPSModuleStrict
                     )
                 ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
-            case 'BuildAuthorizationURL':
-                $vehicleId = trim((string)($data['VehicleID'] ?? ''));
-                $state = (string)($data['State'] ?? '');
-                $permissions = is_array($data['Permissions'] ?? null) ? $data['Permissions'] : [];
-                $mode = (string)($data['Mode'] ?? 'live');
-
-                $url = $vehicleId !== ''
-                    ? $this->BuildReauthURL($vehicleId, $state, $permissions)
-                    : $this->BuildConnectURL($mode, $state, $permissions);
-
-                $success = str_starts_with($url, 'https://');
-
-                return json_encode([
-                    'success' => $success,
-                    'url'     => $success ? $url : '',
-                    'error'   => $success ? '' : $url,
-                    'flow'    => $vehicleId !== '' ? 'reauthenticate' : 'authorize'
-                ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-
-            case 'BuildReauthURL':
-                $url = $this->BuildReauthURL(
-                    (string)($data['VehicleID'] ?? ''),
-                    (string)($data['State'] ?? ''),
-                    is_array($data['Permissions'] ?? null) ? $data['Permissions'] : []
-                );
-                $success = str_starts_with($url, 'https://');
-
-                return json_encode([
-                    'success' => $success,
-                    'url'     => $success ? $url : '',
-                    'error'   => $success ? '' : $url
-                ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-
             case 'GetVehicle':
                 return json_encode($this->ApiGetVehicle(
                     (string)$data['VehicleID'],
@@ -746,56 +713,6 @@ class SmartcarSplitter extends IPSModuleStrict
         $url = 'https://connect.smartcar.com/oauth/authorize?' . http_build_query($query);
 
         $this->SendDebug('ConnectURL/Build', $url, 0);
-
-        return $url;
-    }
-
-    public function BuildReauthURL(string $vehicleId, string $state, array $permissions): string
-    {
-        $clientID = trim($this->ReadPropertyString('ApplicationID'));
-
-        $hookAddress = 'smartcar_' . $this->InstanceID;
-        $hookPath = '/hook/' . $hookAddress;
-
-        $redirectURI = $this->ReadAttributeString('RedirectURI');
-        if ($redirectURI === '') {
-            $redirectURI = $this->BuildSymconConnectURL($hookPath);
-        }
-
-        if ($clientID === '') {
-            return 'Fehler: Application ID fehlt.';
-        }
-
-        if ($redirectURI === '') {
-            return 'Fehler: Redirect-/Webhook-URI fehlt.';
-        }
-
-        $vehicleId = trim($vehicleId);
-        if ($vehicleId === '') {
-            return 'Fehler: Vehicle ID fehlt.';
-        }
-
-        $permissions = array_values(array_unique(array_filter(array_map('strval', $permissions))));
-        if (empty($permissions)) {
-            return 'Fehler: Keine Permissions aus den aktivierten Signalen gefunden.';
-        }
-
-        if ($state === '') {
-            $state = 'vehicle_' . $vehicleId . '_' . bin2hex(random_bytes(8));
-        }
-
-        $query = [
-            'response_type' => 'vehicle_id',
-            'client_id'     => $clientID,
-            'redirect_uri'  => $redirectURI,
-            'vehicle_id'    => $vehicleId,
-            'scope'         => implode(' ', $permissions),
-            'state'         => $state
-        ];
-
-        $url = 'https://connect.smartcar.com/oauth/reauthenticate?' . http_build_query($query);
-
-        $this->SendDebug('ReauthURL/Build', $url, 0);
 
         return $url;
     }
