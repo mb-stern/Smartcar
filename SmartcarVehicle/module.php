@@ -37,7 +37,7 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $this->CreateProfile();
 
-        if (!$this->IsConfiguredByConfigurator()) {
+        if ($this->ReadPropertyString('VehicleID') === '') {
             $this->SetStatus(201);
             return;
         }
@@ -101,30 +101,6 @@ class SmartcarVehicle extends IPSModuleStrict
 
     public function GetConfigurationForm(): string
     {
-        if (!$this->IsConfiguredByConfigurator()) {
-            $missing = $this->GetMissingConfigurationFields();
-
-            $form = [
-                'elements' => [
-                    [
-                        'type' => 'Label',
-                        'caption' => 'Diese Smartcar Vehicle-Instanz wurde nicht vollständig über den Smartcar-Konfigurator erstellt.'
-                    ],
-                    [
-                        'type' => 'Label',
-                        'caption' => 'Bitte löschen Sie diese Instanz und erstellen Sie das Fahrzeug über den Smartcar-Konfigurator.'
-                    ],
-                    [
-                        'type' => 'Label',
-                        'caption' => 'Fehlende Konfigurationswerte: ' . implode(', ', $missing)
-                    ]
-                ],
-                'actions' => []
-            ];
-
-            return json_encode($form, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-        }
-
         $capabilities = [];
 
         if ($this->HasParentConnection()) {
@@ -1373,43 +1349,6 @@ class SmartcarVehicle extends IPSModuleStrict
         $this->SendDebug('Selected/Resolve', 'Ausgewählte Einträge: ' . count($result), 0);
 
         return $result;
-    }
-
-    private function IsConfiguredByConfigurator(): bool
-    {
-        return
-            trim($this->ReadPropertyString('VehicleID')) !== '' &&
-            trim($this->ReadPropertyString('ConnectionID')) !== '' &&
-            trim($this->ReadPropertyString('UserID')) !== '' &&
-            trim($this->ReadPropertyString('VehicleCaption')) !== '' &&
-            $this->HasParentConnection();
-    }
-
-    private function GetMissingConfigurationFields(): array
-    {
-        $missing = [];
-
-        if (trim($this->ReadPropertyString('VehicleID')) === '') {
-            $missing[] = 'Vehicle ID';
-        }
-
-        if (trim($this->ReadPropertyString('ConnectionID')) === '') {
-            $missing[] = 'Connection ID';
-        }
-
-        if (trim($this->ReadPropertyString('UserID')) === '') {
-            $missing[] = 'User ID';
-        }
-
-        if (trim($this->ReadPropertyString('VehicleCaption')) === '') {
-            $missing[] = 'Fahrzeugbezeichnung';
-        }
-
-        if (!$this->HasParentConnection()) {
-            $missing[] = 'Smartcar Splitter';
-        }
-
-        return $missing;
     }
 
     private function HasParentConnection(): bool
