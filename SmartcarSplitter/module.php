@@ -673,46 +673,60 @@ class SmartcarSplitter extends IPSModuleStrict
 
     public function BuildConnectURL(string $mode, string $state, array $permissions): string
     {
-        $clientID = trim($this->ReadPropertyString('ApplicationID'));
+        $applicationID = trim($this->ReadPropertyString('ApplicationID'));
 
         $hookAddress = 'smartcar_' . $this->InstanceID;
         $hookPath = '/hook/' . $hookAddress;
 
-        $redirectURI = $this->ReadAttributeString('RedirectURI');
+        $redirectURI = trim($this->ReadAttributeString('RedirectURI'));
         if ($redirectURI === '') {
             $redirectURI = $this->BuildSymconConnectURL($hookPath);
         }
 
-        if ($clientID === '') {
-            return 'Fehler: Client ID fehlt.';
+        if ($applicationID === '') {
+            return 'Fehler: Application ID fehlt.';
         }
 
         if ($redirectURI === '') {
             return 'Fehler: Redirect-/Webhook-URI fehlt.';
         }
 
-        $permissions = array_values(array_unique(array_filter(array_map('strval', $permissions))));
-
-        if (empty($permissions)) {
-            return 'Fehler: Keine Permissions aus den aktivierten Signalen gefunden.';
+        $mode = strtolower(trim($mode));
+        if ($mode !== 'simulated') {
+            $mode = 'live';
         }
 
         if ($state === '') {
             $state = bin2hex(random_bytes(12));
         }
 
+        // Stabile Kennung des Smartcar-Benutzers innerhalb dieser Installation.
+        $externalID = 'ips_' . $this->InstanceID;
+
         $query = [
-            'response_type' => 'code',
-            'client_id'     => $clientID,
-            'redirect_uri'  => $redirectURI,
-            'scope'         => implode(' ', $permissions),
-            'state'         => $state,
-            'mode'          => $mode !== '' ? $mode : 'live'
+            'application_id' => $applicationID,
+            'external_id'    => $externalID,
+            'response_type'  => 'none',
+            'redirect_uri'   => $redirectURI,
+            'state'          => $state,
+            'mode'           => $mode
         ];
 
-        $url = 'https://connect.smartcar.com/oauth/authorize?' . http_build_query($query);
+        // Permissions werden vorzugsweise im Smartcar Dashboard unter
+        // Configuration > Vehicle Access gepflegt. Deshalb werden sie hier
+        // nicht mehr als scope-Parameter übergeben.
 
-        $this->SendDebug('ConnectURL/Build', $url, 0);
+        $url = 'https://connect.smartcar.com/oauth/authorize?'
+            . http_build_query($query, '', '&', PHP_QUERY_RFC3986);
+
+        $this->SendDebug('ConnectURL/Build', json_encode([
+            'application_id' => $applicationID,
+            'external_id'    => $externalID,
+            'response_type'  => 'none',
+            'redirect_uri'   => $redirectURI,
+            'state'          => $state,
+            'mode'           => $mode
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
         return $url;
     }
@@ -756,44 +770,52 @@ class SmartcarSplitter extends IPSModuleStrict
         $errorDescription = (string)($_GET['error_description'] ?? '');
 
         if ($error !== '') {
-            $this->SendDebug('Connect/RedirectError', $error . ' ' . $errorDescription, 0);
+            $this->SendDebug('Connect/RedirectError', json_encode([
+                'error'             => $error,
+                'error_description' => $errorDescription,
+                'query'             => $_GET
+            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
             http_response_code(200);
             header('Content-Type: text/html; charset=utf-8');
             echo '<!doctype html><html><head><meta charset="utf-8"><title>Smartcar Connect</title></head><body>';
             echo '<h2>Smartcar Connect fehlgeschlagen</h2>';
-            echo '<p>' . htmlspecialchars($error . ' ' . $errorDescription) . '</p>';
+            echo '<p>' . htmlspecialchars(trim($error . ' ' . $errorDescription), ENT_QUOTES, 'UTF-8') . '</p>';
             echo '<p>Dieses Fenster kann geschlossen werden.</p>';
             echo '</body></html>';
             return;
         }
 
-        $code = (string)($_GET['code'] ?? '');
-        $userId = (string)($_GET['user_id'] ?? ($_GET['userId'] ?? ''));
         $state = (string)($_GET['state'] ?? '');
+        $vehicleId = (string)($_GET['vehicle_id'] ?? ($_GET['vehicleId'] ?? ''));
+        $userId = (string)($_GET['user_id'] ?? ($_GET['userId'] ?? ''));
+        $externalId = (string)($_GET['external_id'] ?? ($_GET['externalId'] ?? ''));
 
         $this->SendDebug('Connect/Redirect', json_encode([
-            'code'    => $code !== '' ? '<present>' : '',
-            'user_id' => $userId,
-            'state'   => $state
+            'vehicle_id'  => $vehicleId,
+            'user_id'     => $userId,
+            'external_id' => $externalId,
+            'state'       => $state,
+            'query'       => $_GET
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
-
-        $vehicleId = $this->ExtractVehicleIdFromState($state);
 
         if ($vehicleId !== '' && $userId !== '') {
             $this->UpdateVehicleUserId($vehicleId, $userId);
         }
 
+        // Beim Application-Authentication-Flow wird kein Authorization Code
+        // mehr ausgetauscht. Die neue Verbindung wird über den Connections-
+        // Endpunkt mit dem Application Access Token geladen.
         $connections = $this->LoadConnections();
         $this->UpdateVehiclesFromConnections($connections);
 
         http_response_code(200);
         header('Content-Type: text/html; charset=utf-8');
         echo '<!doctype html><html><head><meta charset="utf-8"><title>Smartcar Connect</title>';
-        echo '<style>body{font-family:Arial,sans-serif;margin:40px;color:#222} .ok{color:#16803c}</style>';
+        echo '<style>body{font-family:Arial,sans-serif;margin:40px;color:#222}.ok{color:#16803c}</style>';
         echo '</head><body>';
         echo '<h2 class="ok">Smartcar erfolgreich verbunden</h2>';
-        echo '<p>Die Verbindung zum OEM wurde bestätigt.</p>';
+        echo '<p>Die Verbindung zum OEM wurde gespeichert.</p>';
         echo '<p>Du kannst dieses Fenster jetzt schließen und zu IP-Symcon zurückkehren.</p>';
         echo '</body></html>';
     }
