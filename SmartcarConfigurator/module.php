@@ -83,29 +83,23 @@ class SmartcarConfigurator extends IPSModuleStrict
                 'powertrainType' => $powertrainType,
 
                 /*
-                 * Das Configurator-Element erstellt eine explizite
-                 * physikalische Kette Vehicle -> Smartcar Splitter.
-                 * Ein bereits vorhandener passender Splitter wird bevorzugt
-                 * wiederverwendet.
+                 * Das Configurator-Element erstellt die Vehicle-Instanz.
+                 * Da create ein einzelnes Objekt ist, verbindet die
+                 * IP-Symcon-Konsole sie bevorzugt mit dem physischen Parent
+                 * dieses Konfigurators, also dem vorhandenen Smartcar Splitter.
                  */
                 'create' => [
-                    [
-                        'moduleID' => self::VEHICLE_MODULE_ID,
-                        'name' => $caption,
-                        'configuration' => [
-                            'VehicleID' => $vehicleId,
-                            'ConnectionID' => $connectionId,
-                            'UserID' => $userId,
-                            'VehicleCaption' => $caption,
-                            'Make' => $make,
-                            'Model' => $model,
-                            'Year' => $year,
-                            'PowertrainType' => $powertrainType
-                        ]
-                    ],
-                    [
-                        'moduleID' => self::SPLITTER_MODULE_ID,
-                        'configuration' => []
+                    'moduleID' => self::VEHICLE_MODULE_ID,
+                    'name' => $caption,
+                    'configuration' => [
+                        'VehicleID' => $vehicleId,
+                        'ConnectionID' => $connectionId,
+                        'UserID' => $userId,
+                        'VehicleCaption' => $caption,
+                        'Make' => $make,
+                        'Model' => $model,
+                        'Year' => $year,
+                        'PowertrainType' => $powertrainType
                     ]
                 ]
             ];
