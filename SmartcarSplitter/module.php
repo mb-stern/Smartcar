@@ -673,7 +673,9 @@ class SmartcarSplitter extends IPSModuleStrict
 
     public function BuildConnectURL(string $mode, string $state, array $permissions): string
     {
-        $applicationID = trim($this->ReadPropertyString('ApplicationID'));
+        // In der bestehenden Konfiguration enthält ApplicationID die
+        // Smartcar Client ID aus dem Credentials-Tab.
+        $clientID = trim($this->ReadPropertyString('ApplicationID'));
 
         $hookAddress = 'smartcar_' . $this->InstanceID;
         $hookPath = '/hook/' . $hookAddress;
@@ -683,8 +685,8 @@ class SmartcarSplitter extends IPSModuleStrict
             $redirectURI = $this->BuildSymconConnectURL($hookPath);
         }
 
-        if ($applicationID === '') {
-            return 'Fehler: Application ID fehlt.';
+        if ($clientID === '') {
+            return 'Fehler: Smartcar Client ID/Application ID fehlt.';
         }
 
         if ($redirectURI === '') {
@@ -700,32 +702,70 @@ class SmartcarSplitter extends IPSModuleStrict
             $state = bin2hex(random_bytes(12));
         }
 
-        // Stabile Kennung des Smartcar-Benutzers innerhalb dieser Installation.
-        $externalID = 'ips_' . $this->InstanceID;
+        $permissions = array_values(array_unique(array_filter(array_map(
+            static fn($value): string => trim((string)$value),
+            $permissions
+        ))));
 
+        if (empty($permissions)) {
+            return 'Fehler: Keine Permissions ausgewählt.';
+        }
+
+        // Ein Aufruf aus einer bestehenden Fahrzeug-Instanz verwendet einen
+        // State im Format vehicle_<UUID>_<Zufall>. In diesem Fall müssen die
+        // geänderten Berechtigungen über den Reauth-Endpunkt genehmigt werden.
+        $vehicleID = '';
+        if (preg_match(
+            '/^vehicle_([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})_/',
+            $state,
+            $matches
+        )) {
+            $vehicleID = (string)$matches[1];
+        }
+
+        if ($vehicleID !== '') {
+            $query = [
+                'response_type' => 'vehicle_id',
+                'client_id'     => $clientID,
+                'vehicle_id'    => $vehicleID,
+                'scope'         => implode(' ', $permissions),
+                'redirect_uri'  => $redirectURI,
+                'state'         => $state
+            ];
+
+            $url = 'https://connect.smartcar.com/oauth/reauthenticate?'
+                . http_build_query($query, '', '&', PHP_QUERY_RFC3986);
+
+            $this->SendDebug('ConnectURL/Reauth', json_encode([
+                'client_id'    => $clientID,
+                'vehicle_id'   => $vehicleID,
+                'scope'        => $permissions,
+                'redirect_uri' => $redirectURI,
+                'state'        => $state
+            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+
+            return $url;
+        }
+
+        // Erstmaliges Verbinden eines neuen Fahrzeugs.
         $query = [
-            'application_id' => $applicationID,
-            'external_id'    => $externalID,
-            'response_type'  => 'none',
-            'redirect_uri'   => $redirectURI,
-            'state'          => $state,
-            'mode'           => $mode
+            'response_type' => 'code',
+            'client_id'     => $clientID,
+            'scope'         => implode(' ', $permissions),
+            'redirect_uri'  => $redirectURI,
+            'state'         => $state,
+            'mode'          => $mode
         ];
-
-        // Permissions werden vorzugsweise im Smartcar Dashboard unter
-        // Configuration > Vehicle Access gepflegt. Deshalb werden sie hier
-        // nicht mehr als scope-Parameter übergeben.
 
         $url = 'https://connect.smartcar.com/oauth/authorize?'
             . http_build_query($query, '', '&', PHP_QUERY_RFC3986);
 
-        $this->SendDebug('ConnectURL/Build', json_encode([
-            'application_id' => $applicationID,
-            'external_id'    => $externalID,
-            'response_type'  => 'none',
-            'redirect_uri'   => $redirectURI,
-            'state'          => $state,
-            'mode'           => $mode
+        $this->SendDebug('ConnectURL/Authorize', json_encode([
+            'client_id'     => $clientID,
+            'scope'         => $permissions,
+            'redirect_uri'  => $redirectURI,
+            'state'         => $state,
+            'mode'          => $mode
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
         return $url;
