@@ -169,14 +169,37 @@ class SmartcarSplitter extends IPSModuleStrict
                     )
                 ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
-            case 'BuildReauthURL':
+            case 'BuildAuthorizationURL':
+                $vehicleId = trim((string)($data['VehicleID'] ?? ''));
+                $state = (string)($data['State'] ?? '');
+                $permissions = is_array($data['Permissions'] ?? null) ? $data['Permissions'] : [];
+                $mode = (string)($data['Mode'] ?? 'live');
+
+                $url = $vehicleId !== ''
+                    ? $this->BuildReauthURL($vehicleId, $state, $permissions)
+                    : $this->BuildConnectURL($mode, $state, $permissions);
+
+                $success = str_starts_with($url, 'https://');
+
                 return json_encode([
-                    'success' => true,
-                    'url' => $this->BuildReauthURL(
-                        (string)($data['VehicleID'] ?? ''),
-                        (string)($data['State'] ?? ''),
-                        is_array($data['Permissions'] ?? null) ? $data['Permissions'] : []
-                    )
+                    'success' => $success,
+                    'url'     => $success ? $url : '',
+                    'error'   => $success ? '' : $url,
+                    'flow'    => $vehicleId !== '' ? 'reauthenticate' : 'authorize'
+                ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+            case 'BuildReauthURL':
+                $url = $this->BuildReauthURL(
+                    (string)($data['VehicleID'] ?? ''),
+                    (string)($data['State'] ?? ''),
+                    is_array($data['Permissions'] ?? null) ? $data['Permissions'] : []
+                );
+                $success = str_starts_with($url, 'https://');
+
+                return json_encode([
+                    'success' => $success,
+                    'url'     => $success ? $url : '',
+                    'error'   => $success ? '' : $url
                 ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
             case 'GetVehicle':
