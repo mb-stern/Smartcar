@@ -2,9 +2,6 @@
 
 class SmartcarConfigurator extends IPSModuleStrict
 {
-    private const SPLITTER_MODULE_ID = '{9F7A4B2C-3D1E-4A6F-8B20-6C5D4E3F2A10}';
-    private const VEHICLE_MODULE_ID  = '{1E1B7C9A-2D4F-4E8A-9C3B-7F6D5A4E2B10}';
-    private const DATA_ID            = '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}';
 
     public function Create(): void
     {
@@ -15,7 +12,7 @@ class SmartcarConfigurator extends IPSModuleStrict
     {
         parent::ApplyChanges();
 
-        $this->SetStatus($this->HasParentConnection() ? 102 : 201);
+        $this->SetStatus(102);
     }
 
     public function GetCompatibleParents(): string
@@ -23,91 +20,42 @@ class SmartcarConfigurator extends IPSModuleStrict
         return json_encode([
             'type' => 'connect',
             'moduleIDs' => [
-                self::SPLITTER_MODULE_ID
+                '{9F7A4B2C-3D1E-4A6F-8B20-6C5D4E3F2A10}'
             ]
         ]);
     }
 
     public function GetConfigurationForm(): string
     {
-        if (!$this->HasParentConnection()) {
-            return json_encode([
-                'elements' => [
-                    [
-                        'type' => 'Label',
-                        'caption' => 'Der Smartcar-Konfigurator ist mit keinem Smartcar Splitter verbunden.'
-                    ]
-                ],
-                'actions' => []
-            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-        }
-
         $connections = $this->LoadConnectionsFromSplitter();
         $values = [];
 
         foreach ($connections as $connection) {
-            if (!is_array($connection)) {
-                continue;
-            }
-
-            $vehicleId = trim((string)($connection['vehicleId'] ?? ''));
+            $vehicleId = (string)($connection['vehicleId'] ?? '');
             if ($vehicleId === '') {
                 continue;
             }
 
-            $connectionId = (string)($connection['connectionId'] ?? '');
-            $userId = (string)($connection['userId'] ?? '');
-            $caption = trim((string)($connection['caption'] ?? ''));
-
-            if ($caption === '') {
-                $caption = $vehicleId;
-            }
-
-            $make = (string)($connection['make'] ?? '');
-            $model = (string)($connection['model'] ?? '');
-            $year = (int)($connection['year'] ?? 0);
-            $mode = (string)($connection['mode'] ?? '');
-            $powertrainType = (string)($connection['powertrainType'] ?? '');
-
             $instanceId = $this->FindVehicleInstanceByVehicleId($vehicleId);
 
             $values[] = [
-                'instanceID' => $instanceId,
-                'name' => $caption,
-                'address' => $vehicleId,
-
-                // Zusätzliche Werte für eigene Spalten
-                'vehicleId' => $vehicleId,
-                'connectionId' => $connectionId,
-                'mode' => $mode,
-                'powertrainType' => $powertrainType,
-
-                /*
-                 * Das Configurator-Element erstellt die Vehicle-Instanz.
-                 * Da create ein einzelnes Objekt ist, verbindet die
-                 * IP-Symcon-Konsole sie bevorzugt mit dem physischen Parent
-                 * dieses Konfigurators, also dem vorhandenen Smartcar Splitter.
-                 */
-                'create' => [
-                    'moduleID' => self::VEHICLE_MODULE_ID,
-                    'name' => $caption,
-                    'configuration' => [
-                        'VehicleID' => $vehicleId,
-                        'ConnectionID' => $connectionId,
-                        'UserID' => $userId,
-                        'VehicleCaption' => $caption,
-                        'Make' => $make,
-                        'Model' => $model,
-                        'Year' => $year,
-                        'PowertrainType' => $powertrainType
-                    ]
-                ]
+                'instanceID'     => $instanceId,
+                'connectionId'   => (string)($connection['connectionId'] ?? ''),
+                'vehicleId'      => $vehicleId,
+                'userId'         => (string)($connection['userId'] ?? ''),
+                'caption'        => (string)($connection['caption'] ?? $vehicleId),
+                'make'           => (string)($connection['make'] ?? ''),
+                'model'          => (string)($connection['model'] ?? ''),
+                'year'           => (string)($connection['year'] ?? ''),
+                'mode'           => (string)($connection['mode'] ?? ''),
+                'powertrainType' => (string)($connection['powertrainType'] ?? ''),
+                'status'         => $instanceId > 0 ? 'vorhanden' : 'nicht erstellt'
             ];
         }
 
         $form = [
             'actions' => [
-                [
+               [
                     'type' => 'Button',
                     'caption' => 'Neues Live-Fahrzeug verbinden',
                     'onClick' => 'echo SMCARCFG_GenerateConnectURL($id, "live");'
@@ -118,19 +66,35 @@ class SmartcarConfigurator extends IPSModuleStrict
                     'onClick' => 'SMCARCFG_ReloadConfiguratorForm($id);'
                 ],
                 [
-                    'type' => 'Configurator',
+                    'type' => 'Button',
+                    'caption' => 'Alle fehlenden Fahrzeug-Instanzen erstellen',
+                    'onClick' => 'SMCARCFG_CreateMissingVehicleInstances($id);'
+                ],
+                [
+                    'type' => 'List',
                     'name' => 'Vehicles',
                     'caption' => 'Smartcar Fahrzeuge',
                     'rowCount' => 10,
-                    'delete' => true,
+                    'add' => false,
+                    'delete' => false,
                     'sort' => [
-                        'column' => 'name',
+                        'column' => 'caption',
                         'direction' => 'ascending'
                     ],
                     'columns' => [
                         [
+                            'caption' => 'Instanz',
+                            'name' => 'instanceID',
+                            'width' => '90px'
+                        ],
+                        [
+                            'caption' => 'Status',
+                            'name' => 'status',
+                            'width' => '110px'
+                        ],
+                        [
                             'caption' => 'Fahrzeug',
-                            'name' => 'name',
+                            'name' => 'caption',
                             'width' => 'auto'
                         ],
                         [
@@ -163,40 +127,98 @@ class SmartcarConfigurator extends IPSModuleStrict
         return json_encode($form, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     }
 
-    private function LoadConnectionsFromSplitter(): array
+    public function CreateMissingVehicleInstances(): void
     {
-        if (!$this->HasParentConnection()) {
-            return [];
+        $connections = $this->LoadConnectionsFromSplitter();
+
+        foreach ($connections as $connection) {
+            $vehicleId = (string)($connection['vehicleId'] ?? '');
+            if ($vehicleId === '') {
+                continue;
+            }
+
+            $instanceId = $this->FindVehicleInstanceByVehicleId($vehicleId);
+
+            if ($instanceId > 0) {
+                $splitterId = $this->GetSplitterInstanceID();
+                if ($splitterId > 0) {
+                    @IPS_ConnectInstance($instanceId, $splitterId);
+                }
+
+                $this->UpdateVehicleInstance($instanceId, $connection);
+                continue;
+            }
+
+            $instanceId = IPS_CreateInstance('{1E1B7C9A-2D4F-4E8A-9C3B-7F6D5A4E2B10}');
+
+            $targetParentId = IPS_GetParent($this->InstanceID);
+            $currentParentId = IPS_GetParent($instanceId);
+
+            if ($targetParentId > 0 && $currentParentId !== $targetParentId) {
+                @IPS_SetParent($instanceId, $targetParentId);
+            }
+
+            $splitterId = $this->GetSplitterInstanceID();
+            if ($splitterId > 0) {
+                @IPS_ConnectInstance($instanceId, $splitterId);
+            }
+
+            $this->UpdateVehicleInstance($instanceId, $connection);
         }
 
+        $this->ReloadForm();
+    }
+
+    private function LoadConnectionsFromSplitter(): array
+    {
         $result = $this->SendDataToParent(json_encode([
-            'DataID' => self::DATA_ID,
+            'DataID' => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
             'Command' => 'LoadConnections'
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
 
         $decoded = json_decode((string)$result, true);
 
         if (!is_array($decoded)) {
-            $this->SendDebug(
-                'Connections',
-                'Ungültige Antwort vom Splitter: ' . (string)$result,
-                0
-            );
+            $this->SendDebug('Connections', 'Ungültige Antwort vom Splitter: ' . (string)$result, 0);
             return [];
         }
 
         return $decoded;
     }
 
+    private function UpdateVehicleInstance(int $instanceId, array $connection): void
+    {
+        $vehicleId = (string)($connection['vehicleId'] ?? '');
+
+        $caption = (string)($connection['caption'] ?? '');
+        if ($caption === '') {
+            $caption = $vehicleId;
+        }
+
+        IPS_SetName($instanceId, $caption);
+
+        IPS_SetProperty($instanceId, 'VehicleID', $vehicleId);
+        IPS_SetProperty($instanceId, 'ConnectionID', (string)($connection['connectionId'] ?? ''));
+        IPS_SetProperty($instanceId, 'UserID', (string)($connection['userId'] ?? ''));
+        IPS_SetProperty($instanceId, 'VehicleCaption', $caption);
+        IPS_SetProperty($instanceId, 'Make', (string)($connection['make'] ?? ''));
+        IPS_SetProperty($instanceId, 'Model', (string)($connection['model'] ?? ''));
+        IPS_SetProperty($instanceId, 'Year', (int)($connection['year'] ?? 0));
+        IPS_SetProperty($instanceId, 'PowertrainType', (string)($connection['powertrainType'] ?? ''));
+
+        IPS_ApplyChanges($instanceId);
+    }
+
     private function FindVehicleInstanceByVehicleId(string $vehicleId): int
     {
-        $instanceIds = @IPS_GetInstanceListByModuleID(self::VEHICLE_MODULE_ID);
+        $instanceIds = @IPS_GetInstanceListByModuleID('{1E1B7C9A-2D4F-4E8A-9C3B-7F6D5A4E2B10}');
         if (!is_array($instanceIds)) {
             return 0;
         }
 
         foreach ($instanceIds as $instanceId) {
-            if ((string)@IPS_GetProperty($instanceId, 'VehicleID') === $vehicleId) {
+            $currentVehicleId = @IPS_GetProperty($instanceId, 'VehicleID');
+            if ((string)$currentVehicleId === $vehicleId) {
                 return (int)$instanceId;
             }
         }
@@ -204,22 +226,18 @@ class SmartcarConfigurator extends IPSModuleStrict
         return 0;
     }
 
-    private function HasParentConnection(): bool
+    private function GetSplitterInstanceID(): int
     {
         $instance = @IPS_GetInstance($this->InstanceID);
         if (!is_array($instance)) {
-            return false;
+            return 0;
         }
 
-        return ((int)($instance['ConnectionID'] ?? 0)) > 0;
+        return (int)($instance['ConnectionID'] ?? 0);
     }
 
     public function GenerateConnectURL(string $mode): string
     {
-        if (!$this->HasParentConnection()) {
-            return 'Fehler: Der Smartcar-Konfigurator ist mit keinem Splitter verbunden.';
-        }
-
         $mode = strtolower(trim($mode));
         if ($mode !== 'simulated') {
             $mode = 'live';
@@ -239,10 +257,10 @@ class SmartcarConfigurator extends IPSModuleStrict
         $state = 'configurator_' . $mode . '_' . bin2hex(random_bytes(8));
 
         $result = $this->SendDataToParent(json_encode([
-            'DataID' => self::DATA_ID,
-            'Command' => 'BuildConnectURL',
-            'Mode' => $mode,
-            'State' => $state,
+            'DataID'      => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
+            'Command'     => 'BuildConnectURL',
+            'Mode'        => $mode,
+            'State'       => $state,
             'Permissions' => $permissions
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
 
