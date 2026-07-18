@@ -877,13 +877,10 @@ class SmartcarVehicle extends IPSModuleStrict
     {
         $this->SendDebug('Connect/Start', 'GenerateConnectURL gestartet.', 0);
 
-        $permissions = $this->GetSelectedPermissions();
-
-        // Basis-Permission für den Connect-Flow immer mit anfordern.
-        // So stehen die grundlegenden Fahrzeuginformationen unabhängig von
-        // den ausgewählten Signalen/Befehlen zur Verfügung.
-        $permissions[] = 'read_vehicle_info';
-        $permissions = array_values(array_unique(array_filter($permissions)));
+        // Eine gemeinsame finale Permission-Liste für den Connect-Flow bauen.
+        // read_vehicle_info und alle über Checkboxen ausgewählten Permissions
+        // werden danach identisch behandelt und gemeinsam an den Splitter gesendet.
+        $permissions = $this->GetConnectPermissions();
 
         $this->SendDebug(
             'Connect/Result',
@@ -933,6 +930,37 @@ class SmartcarVehicle extends IPSModuleStrict
         }
 
         return array_keys($permissions);
+    }
+
+    private function GetConnectPermissions(): array
+    {
+        // Alle Permissions landen zuerst in derselben Liste.
+        // Damit gibt es im eigentlichen Smartcar-Connect-Request keinen
+        // Unterschied mehr zwischen Basis- und Checkbox-Permissions.
+        $permissions = [
+            'read_vehicle_info'
+        ];
+
+        foreach ($this->GetSelectedPermissions() as $permission) {
+            $permission = trim((string)$permission);
+
+            if ($permission !== '') {
+                $permissions[] = $permission;
+            }
+        }
+
+        $permissions = array_map('strtolower', $permissions);
+        $permissions = array_values(array_unique(array_filter($permissions)));
+
+        sort($permissions);
+
+        $this->SendDebug(
+            'Connect/FinalPermissions',
+            json_encode($permissions, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            0
+        );
+
+        return $permissions;
     }
 
     private function CreateSignalVariable(string $signalCode, string $name, int $basePosition): bool
