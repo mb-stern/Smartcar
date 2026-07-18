@@ -19,8 +19,6 @@ class SmartcarVehicle extends IPSModuleStrict
     $this->RegisterAttributeString('LastOEMSignalTimes', '{}');
     $this->RegisterAttributeString('CompatibilityCache', '[]');
     $this->RegisterAttributeInteger('CompatibilityCacheAt', 0);
-    $this->RegisterAttributeString('LastGrantedPermissions', '[]');
-    $this->RegisterAttributeString('LastAuthorizationCheck', '{}');
 
     $lastSignalsExists = (bool)@$this->GetIDForIdent('LastSignalsAt');
     $this->RegisterVariableInteger('LastSignalsAt', 'Letzte Signale', '~UnixTimestamp');
@@ -196,13 +194,8 @@ class SmartcarVehicle extends IPSModuleStrict
                 ],
                 [
                     'type' => 'Button',
-                    'caption' => 'Gewählte Signale bei Smartcar registrieren',
+                    'caption' => 'Smartcar Connect mit Vehicle Access öffnen',
                     'onClick' => 'echo SMCARV_GenerateConnectURL($id);'
-                ],
-                [
-                    'type' => 'Button',
-                    'caption' => 'Autorisierung / Permissions prüfen',
-                    'onClick' => 'echo SMCARV_CheckAuthorization($id);'
                 ],
                 [
                     'type' => 'Button',
@@ -422,87 +415,6 @@ class SmartcarVehicle extends IPSModuleStrict
         $text = str_replace(['_', '-'], ' ', $text);
         $text = preg_replace('/\s+/', ' ', $text);
         return $text;
-    }
-
-    public function CheckAuthorization(): string
-    {
-        if (!$this->HasParentConnection()) {
-            return 'Fehler: Kein Smartcar Splitter verbunden.';
-        }
-
-        $vehicleId = trim($this->ReadPropertyString('VehicleID'));
-        if ($vehicleId === '') {
-            return 'Fehler: VehicleID fehlt.';
-        }
-
-        $result = $this->SendDataToParent(json_encode([
-            'DataID'    => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
-            'Command'   => 'GetConnectionPermissions',
-            'VehicleID' => $vehicleId
-        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
-
-        $this->SendDebug('AuthorizationCheck/RAW', (string)$result, 0);
-
-        $decoded = json_decode((string)$result, true);
-        if (!is_array($decoded) || empty($decoded['success'])) {
-            $message = 'Autorisierungsprüfung fehlgeschlagen: ' . (string)$result;
-            $this->WriteAttributeString(
-                'LastAuthorizationCheck',
-                json_encode([
-                    'success' => false,
-                    'checkedAt' => time(),
-                    'raw' => (string)$result
-                ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
-            );
-            return $message;
-        }
-
-        $granted = is_array($decoded['permissions'] ?? null)
-            ? array_values(array_unique(array_map('strval', $decoded['permissions'])))
-            : [];
-
-        $requested = array_values(array_unique(array_merge(
-            ['read_vin', 'read_vehicle_info'],
-            $this->GetSelectedPermissions()
-        )));
-
-        sort($granted);
-        sort($requested);
-
-        $missing = array_values(array_diff($requested, $granted));
-
-        $this->WriteAttributeString(
-            'LastGrantedPermissions',
-            json_encode($granted, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
-        );
-
-        $this->WriteAttributeString(
-            'LastAuthorizationCheck',
-            json_encode([
-                'success' => true,
-                'checkedAt' => time(),
-                'requested' => $requested,
-                'granted' => $granted,
-                'missing' => $missing,
-                'connectionId' => (string)($decoded['connectionId'] ?? '')
-            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
-        );
-
-        $this->SendDebug('AuthorizationCheck/Result', json_encode([
-            'requested' => $requested,
-            'granted' => $granted,
-            'missing' => $missing
-        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
-
-        if (empty($missing)) {
-            return 'OK: Alle angeforderten Permissions sind auf der Connection vorhanden: '
-                . implode(', ', $granted);
-        }
-
-        return 'Fehlende Permissions auf der Connection: '
-            . implode(', ', $missing)
-            . ' | Vorhanden: '
-            . implode(', ', $granted);
     }
 
     public function FetchSelectedSignals(array $onlySignalCodes = []): void
@@ -963,51 +875,47 @@ class SmartcarVehicle extends IPSModuleStrict
 
     public function GenerateConnectURL(): string
     {
-        $this->SendDebug('Connect/Start', 'GenerateConnectURL gestartet.', 0);
+        $this->SendDebug('Connect/Start', 'Dashboard-basierter Vehicle-Access-Connect gestartet.', 0);
 
-        $permissions = $this->GetSelectedPermissions();
-
-        $this->SendDebug(
-            'Connect/Result',
-            'Permissions count=' . count($permissions) . ' values=' . json_encode($permissions, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
-            0
-        );
-
-        if (empty($permissions)) {
-            return 'Fehler: Keine aktivierten Signale/Befehle mit Permission ausgewählt. Bitte Debug prüfen: Connect/SelectedCapabilitiesRaw, Connect/Entry und Connect/Summary.';
+        if (!$this->HasParentConnection()) {
+            return 'Fehler: Kein Smartcar Splitter verbunden.';
         }
 
         $vehicleId = trim($this->ReadPropertyString('VehicleID'));
-        if ($vehicleId === '') {
-            return 'Fehler: Vehicle ID fehlt. Eine Permission-Erweiterung ist nur für ein bestehendes Fahrzeug möglich.';
-        }
+        $state = 'vehicle_' . ($vehicleId !== '' ? $vehicleId : 'unknown') . '_' . bin2hex(random_bytes(8));
 
-        // Der scope-Parameter überschreibt die Dashboard-Permissions.
-        // Basis-Permissions deshalb immer beibehalten.
-        $permissions = array_values(array_unique(array_merge(
-            ['read_vin', 'read_vehicle_info'],
-            $permissions
-        )));
-
-        $state = 'vehicle_' . $vehicleId . '_' . bin2hex(random_bytes(8));
-
+        /*
+         * Keine Permissions an Smartcar senden.
+         * Die OAuth-/Connect-Permissions kommen ausschließlich aus
+         * Smartcar Dashboard -> Configuration -> Vehicle Access.
+         *
+         * Die in dieser Instanz ausgewählten Capabilities bestimmen nur,
+         * welche Signale IP-Symcon später lokal verarbeitet/anlegt.
+         */
         $request = [
             'DataID'        => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
             'Command'       => 'BuildConnectURL',
             'Mode'          => 'live',
             'State'         => $state,
-            'Permissions'   => $permissions,
+            'Permissions'   => [],
             'VehicleID'     => $vehicleId,
             'Reauthenticate'=> false
         ];
 
-        $this->SendDebug('Connect/RequestToSplitter', json_encode($request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+        $this->SendDebug(
+            'Connect/RequestToSplitter',
+            json_encode($request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            0
+        );
 
-        $result = $this->SendDataToParent(json_encode($request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        $result = $this->SendDataToParent(
+            json_encode($request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+        );
 
         $this->SendDebug('Connect/SplitterResponse', (string)$result, 0);
 
         $decoded = json_decode((string)$result, true);
+
         if (!is_array($decoded) || empty($decoded['success'])) {
             return 'Fehler beim Erzeugen der Connect URL: ' . (string)$result;
         }

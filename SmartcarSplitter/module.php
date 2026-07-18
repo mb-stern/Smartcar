@@ -159,14 +159,6 @@ class SmartcarSplitter extends IPSModuleStrict
             case 'LoadConnections':
                 return json_encode($this->LoadConnections(), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
-            case 'GetConnectionPermissions':
-                return json_encode(
-                    $this->GetConnectionPermissions(
-                        (string)($data['VehicleID'] ?? '')
-                    ),
-                    JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
-                );
-
             case 'BuildConnectURL':
                 return json_encode([
                     'success' => true,
@@ -290,65 +282,6 @@ class SmartcarSplitter extends IPSModuleStrict
         }
 
         return $connections;
-    }
-
-
-    public function GetConnectionPermissions(string $vehicleId): array
-    {
-        $vehicleId = trim($vehicleId);
-
-        if ($vehicleId === '') {
-            return [
-                'success' => false,
-                'error' => 'VehicleID fehlt.'
-            ];
-        }
-
-        $connections = $this->LoadConnections();
-
-        foreach ($connections as $connection) {
-            if (!is_array($connection)) {
-                continue;
-            }
-
-            if ((string)($connection['vehicleId'] ?? '') !== $vehicleId) {
-                continue;
-            }
-
-            $permissions = $connection['permissions'] ?? [];
-            if (!is_array($permissions)) {
-                $permissions = [];
-            }
-
-            $result = [
-                'success'      => true,
-                'vehicleId'    => $vehicleId,
-                'connectionId' => (string)($connection['connectionId'] ?? ''),
-                'permissions'  => array_values($permissions)
-            ];
-
-            $this->SendDebug(
-                'ConnectionPermissions',
-                json_encode($result, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
-                0
-            );
-
-            return $result;
-        }
-
-        $result = [
-            'success' => false,
-            'vehicleId' => $vehicleId,
-            'error' => 'Keine Connection für VehicleID gefunden.'
-        ];
-
-        $this->SendDebug(
-            'ConnectionPermissions',
-            json_encode($result, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
-            0
-        );
-
-        return $result;
     }
 
     public function ApiGetVehicle(string $vehicleId, string $userId = ''): array
@@ -559,16 +492,6 @@ class SmartcarSplitter extends IPSModuleStrict
         $uri    = $_SERVER['REQUEST_URI'] ?? '';
         $qs     = $_SERVER['QUERY_STRING'] ?? '';
 
-        $this->SendDebug('Hook/Incoming', json_encode([
-            'method'      => $method,
-            'uri'         => $uri,
-            'queryString' => $qs,
-            'get'         => $_GET,
-            'post'        => $_POST,
-            'remoteAddr'  => $_SERVER['REMOTE_ADDR'] ?? '',
-            'userAgent'   => $_SERVER['HTTP_USER_AGENT'] ?? ''
-        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
-
         $this->SendDebug('Webhook/Request', 'method=' . $method . ' uri=' . $uri . ' qs=' . $qs, 0);
 
         // Smartcar Connect Redirect
@@ -771,7 +694,7 @@ class SmartcarSplitter extends IPSModuleStrict
         return null;
     }
 
-    public function BuildConnectURL(string $mode, string $state, array $permissions, string $vehicleId = '', bool $reauthenticate = false): string
+    public function BuildConnectURL(string $mode, string $state, array $permissions = [], string $vehicleId = '', bool $reauthenticate = false): string
     {
         $applicationId = trim($this->ReadPropertyString('ApplicationID'));
 
@@ -791,15 +714,6 @@ class SmartcarSplitter extends IPSModuleStrict
             return 'Fehler: Redirect-/Webhook-URI fehlt.';
         }
 
-        $permissions = array_values(array_unique(array_filter(array_map(
-            static fn($permission): string => trim((string)$permission),
-            $permissions
-        ))));
-
-        if (empty($permissions)) {
-            return 'Fehler: Keine Permissions aus den aktivierten Signalen gefunden.';
-        }
-
         if ($state === '') {
             $state = bin2hex(random_bytes(12));
         }
@@ -809,22 +723,27 @@ class SmartcarSplitter extends IPSModuleStrict
             $mode = 'live';
         }
 
-        // Smartcar API V3 / Application Access Token Flow:
-        // - application_id statt client_id
-        // - response_type=none, daher kein Auth-Code-Exchange
-        // - scope überschreibt für diesen Connect-Vorgang Vehicle Access
-        // - approval_prompt=force zeigt den Consent-Screen erneut
+        /*
+         * Dashboard-basierter Vehicle-Access-Flow:
+         *
+         * KEIN scope in der Connect-URL.
+         *
+         * Smartcar verwendet dadurch ausschließlich die unter
+         * Dashboard -> Configuration -> Vehicle Access
+         * konfigurierten Signale und leitet daraus die Permissions ab.
+         *
+         * Die vom Child eventuell übergebene Permissions-Liste wird
+         * absichtlich ignoriert und nur für Debug-Zwecke protokolliert.
+         */
         $query = [
             'application_id'  => $applicationId,
             'redirect_uri'    => $redirectURI,
             'response_type'   => 'none',
-            'scope'           => implode(' ', $permissions),
             'state'           => $state,
             'mode'            => $mode,
             'approval_prompt' => 'force'
         ];
 
-        // Stabile Zuordnung dieser Connect-Sitzung zur bestehenden Vehicle-Instanz.
         if ($vehicleId !== '') {
             $query['external_id'] = 'vehicle_' . str_replace('-', '_', $vehicleId);
         }
@@ -837,14 +756,15 @@ class SmartcarSplitter extends IPSModuleStrict
         );
 
         $this->SendDebug('ConnectURL/Build', json_encode([
-            'flow'           => $vehicleId !== '' ? 'v3_existing_vehicle_consent' : 'v3_initial_connect',
-            'applicationId'  => $applicationId,
-            'vehicleId'      => $vehicleId,
-            'responseType'   => 'none',
-            'permissions'    => $permissions,
-            'effectiveScope' => $query['scope'],
-            'externalId'     => $query['external_id'] ?? '',
-            'url'            => $url
+            'flow'                  => $vehicleId !== '' ? 'dashboard_vehicle_access_existing' : 'dashboard_vehicle_access_initial',
+            'applicationId'         => $applicationId,
+            'vehicleId'             => $vehicleId,
+            'responseType'          => 'none',
+            'dashboardVehicleAccess'=> true,
+            'scopeSent'             => false,
+            'ignoredPermissions'    => array_values($permissions),
+            'externalId'            => $query['external_id'] ?? '',
+            'url'                   => $url
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
         return $url;
@@ -885,12 +805,6 @@ class SmartcarSplitter extends IPSModuleStrict
 
     private function HandleConnectRedirect(): void
     {
-        $this->SendDebug('Connect/Redirect/Incoming', json_encode([
-            'get'         => $_GET,
-            'requestUri'  => $_SERVER['REQUEST_URI'] ?? '',
-            'queryString' => $_SERVER['QUERY_STRING'] ?? ''
-        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
-
         $error = (string)($_GET['error'] ?? '');
         $errorDescription = (string)($_GET['error_description'] ?? '');
 
@@ -932,10 +846,6 @@ class SmartcarSplitter extends IPSModuleStrict
         // synchronisieren, damit die Vehicle-Instanz zuverlässig entsteht.
         $this->SyncVehiclesFromConnectionsWithRetry();
 
-        // Nach dem V3-Connect die tatsächlich von Smartcar gespeicherten
-        // Connection-Permissions protokollieren.
-        $this->DebugGrantedPermissionsForVehicle($vehicleId);
-
         if ($vehicleId !== '') {
             $instanceId = $this->FindVehicleInstanceByVehicleId($vehicleId);
             if ($instanceId > 0 && function_exists('SMCARV_ApplySelectedCapabilities')) {
@@ -953,45 +863,6 @@ class SmartcarSplitter extends IPSModuleStrict
         echo '<p>Die Verbindung zum OEM wurde bestätigt.</p>';
         echo '<p>Du kannst dieses Fenster jetzt schließen und zu IP-Symcon zurückkehren.</p>';
         echo '</body></html>';
-    }
-
-
-    private function DebugGrantedPermissionsForVehicle(string $vehicleId): void
-    {
-        if ($vehicleId === '') {
-            $this->SendDebug('Connect/GrantedPermissions', 'Keine VehicleID aus Redirect/state verfügbar.', 0);
-            return;
-        }
-
-        $connections = $this->LoadConnections();
-
-        foreach ($connections as $connection) {
-            if (!is_array($connection)) {
-                continue;
-            }
-
-            if ((string)($connection['vehicleId'] ?? '') !== $vehicleId) {
-                continue;
-            }
-
-            $this->SendDebug(
-                'Connect/GrantedPermissions',
-                json_encode([
-                    'vehicleId'    => $vehicleId,
-                    'connectionId' => (string)($connection['connectionId'] ?? ''),
-                    'permissions'  => $connection['permissions'] ?? []
-                ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
-                0
-            );
-
-            return;
-        }
-
-        $this->SendDebug(
-            'Connect/GrantedPermissions',
-            'VehicleID ' . $vehicleId . ' wurde nach Connect nicht in /v3/connections gefunden.',
-            0
-        );
     }
 
     private function SyncVehiclesFromConnectionsWithRetry(int $maxAttempts = 5): void
