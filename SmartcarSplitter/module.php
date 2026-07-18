@@ -165,7 +165,9 @@ class SmartcarSplitter extends IPSModuleStrict
                     'url' => $this->BuildConnectURL(
                         (string)($data['Mode'] ?? 'live'),
                         (string)($data['State'] ?? ''),
-                        is_array($data['Permissions'] ?? null) ? $data['Permissions'] : []
+                        is_array($data['Permissions'] ?? null) ? $data['Permissions'] : [],
+                        (string)($data['VehicleID'] ?? ''),
+                        (bool)($data['Reauthenticate'] ?? false)
                     )
                 ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
@@ -671,9 +673,9 @@ class SmartcarSplitter extends IPSModuleStrict
         return null;
     }
 
-    public function BuildConnectURL(string $mode, string $state, array $permissions): string
+    public function BuildConnectURL(string $mode, string $state, array $permissions, string $vehicleId = '', bool $reauthenticate = false): string
     {
-        $clientID = trim($this->ReadPropertyString('ApplicationID'));
+        $applicationId = trim($this->ReadPropertyString('ApplicationID'));
 
         $hookAddress = 'smartcar_' . $this->InstanceID;
         $hookPath = '/hook/' . $hookAddress;
@@ -683,8 +685,8 @@ class SmartcarSplitter extends IPSModuleStrict
             $redirectURI = $this->BuildSymconConnectURL($hookPath);
         }
 
-        if ($clientID === '') {
-            return 'Fehler: Client ID fehlt.';
+        if ($applicationId === '') {
+            return 'Fehler: Application ID fehlt.';
         }
 
         if ($redirectURI === '') {
@@ -697,40 +699,59 @@ class SmartcarSplitter extends IPSModuleStrict
         ))));
 
         if (empty($permissions)) {
-            return 'Fehler: Keine Permissions aus den aktivierten Signalen gefunden.';
+            return 'Fehler: Keine Permissions vorhanden.';
         }
 
         if ($state === '') {
             $state = bin2hex(random_bytes(12));
         }
 
-        // Initial-Connect: normaler Authorization-Code-Flow.
-        // Re-Authentifizierung einer bestehenden Vehicle-Instanz: Smartcar
-        // erwartet die bereits bekannte Vehicle-ID als response_type.
-        $vehicleId = $this->ExtractVehicleIdFromState($state);
-        $isReauthentication = $vehicleId !== '';
+        $mode = strtolower(trim($mode));
+        if ($mode !== 'simulated') {
+            $mode = 'live';
+        }
+
+        if ($reauthenticate) {
+            $vehicleId = trim($vehicleId);
+            if ($vehicleId === '') {
+                return 'Fehler: Vehicle ID für Re-Authentication fehlt.';
+            }
+
+            $query = [
+                'response_type' => 'vehicle_id',
+                'application_id' => $applicationId,
+                'vehicle_id'     => $vehicleId,
+                'redirect_uri'   => $redirectURI,
+                'scope'          => implode(' ', $permissions),
+                'state'          => $state
+            ];
+
+            $url = 'https://connect.smartcar.com/oauth/reauthenticate?' . http_build_query($query);
+
+            $this->SendDebug('ConnectURL/Build', json_encode([
+                'reauthentication' => true,
+                'vehicleId'        => $vehicleId,
+                'permissions'      => $permissions,
+                'url'              => $url
+            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+
+            return $url;
+        }
 
         $query = [
-            'response_type' => $isReauthentication ? $vehicleId : 'code',
-            'client_id'     => $clientID,
+            'response_type' => 'code',
+            'client_id'     => $applicationId,
             'redirect_uri'  => $redirectURI,
             'scope'         => implode(' ', $permissions),
             'state'         => $state,
-            'mode'          => $mode !== '' ? $mode : 'live'
+            'mode'          => $mode
         ];
-
-        // Bei einer bewussten Neuregistrierung aus der Vehicle-Instanz soll
-        // die Freigabemaske erneut angezeigt werden, damit geänderte Scopes
-        // tatsächlich bestätigt werden können.
-        if ($isReauthentication) {
-            $query['approval_prompt'] = 'force';
-        }
 
         $url = 'https://connect.smartcar.com/oauth/authorize?' . http_build_query($query);
 
         $this->SendDebug('ConnectURL/Build', json_encode([
-            'reauthentication' => $isReauthentication,
-            'vehicleId'        => $vehicleId,
+            'reauthentication' => false,
+            'vehicleId'        => '',
             'permissions'      => $permissions,
             'url'              => $url
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
@@ -792,14 +813,18 @@ class SmartcarSplitter extends IPSModuleStrict
         $code = (string)($_GET['code'] ?? '');
         $userId = (string)($_GET['user_id'] ?? ($_GET['userId'] ?? ''));
         $state = (string)($_GET['state'] ?? '');
+        $redirectVehicleId = (string)($_GET['vehicle_id'] ?? ($_GET['vehicleId'] ?? ''));
 
         $this->SendDebug('Connect/Redirect', json_encode([
-            'code'    => $code !== '' ? '<present>' : '',
-            'user_id' => $userId,
-            'state'   => $state
+            'code'       => $code !== '' ? '<present>' : '',
+            'vehicle_id' => $redirectVehicleId,
+            'user_id'    => $userId,
+            'state'      => $state
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
-        $vehicleId = $this->ExtractVehicleIdFromState($state);
+        $vehicleId = $redirectVehicleId !== ''
+            ? $redirectVehicleId
+            : $this->ExtractVehicleIdFromState($state);
 
         if ($vehicleId !== '' && $userId !== '') {
             $this->UpdateVehicleUserId($vehicleId, $userId);
@@ -807,6 +832,14 @@ class SmartcarSplitter extends IPSModuleStrict
 
         $connections = $this->LoadConnections();
         $this->UpdateVehiclesFromConnections($connections);
+
+        if ($vehicleId !== '') {
+            $instanceId = $this->FindVehicleInstanceByVehicleId($vehicleId);
+            if ($instanceId > 0 && function_exists('SMCARV_ApplySelectedCapabilities')) {
+                SMCARV_ApplySelectedCapabilities($instanceId);
+                $this->SendDebug('Connect/Reauthenticate', 'Aktuelle Capabilities angewendet für Instanz ' . $instanceId, 0);
+            }
+        }
 
         http_response_code(200);
         header('Content-Type: text/html; charset=utf-8');
