@@ -784,9 +784,6 @@ class SmartcarSplitter extends IPSModuleStrict
             $this->UpdateVehicleUserId($vehicleId, $userId);
         }
 
-        $connections = $this->LoadConnections();
-        $this->UpdateVehiclesFromConnections($connections);
-
         http_response_code(200);
         header('Content-Type: text/html; charset=utf-8');
         echo '<!doctype html><html><head><meta charset="utf-8"><title>Smartcar Connect</title>';
@@ -814,38 +811,6 @@ class SmartcarSplitter extends IPSModuleStrict
         }
 
         $this->SendDebug('Connect/UpdateUserID', 'UserID gespeichert in Instanz ' . $instanceId, 0);
-    }
-
-    private function UpdateVehiclesFromConnections(array $connections): void
-    {
-        foreach ($connections as $connection) {
-            $vehicleId = (string)($connection['vehicleId'] ?? '');
-            if ($vehicleId === '') {
-                continue;
-            }
-
-            $instanceId = $this->FindVehicleInstanceByVehicleId($vehicleId);
-
-            if ($instanceId === 0) {
-                $instanceId = IPS_CreateInstance('{1E1B7C9A-2D4F-4E8A-9C3B-7F6D5A4E2B10}');
-
-                $this->SendDebug(
-                    'Connect/CreateVehicle',
-                    'Neue Vehicle-Instanz erstellt: ' . $instanceId . ' für VehicleID=' . $vehicleId,
-                    0
-                );
-            }
-
-            IPS_SetProperty($instanceId, 'ConnectionID', (string)($connection['connectionId'] ?? ''));
-            IPS_SetProperty($instanceId, 'UserID', (string)($connection['userId'] ?? ''));
-            IPS_SetProperty($instanceId, 'VehicleCaption', (string)($connection['caption'] ?? $vehicleId));
-            IPS_SetProperty($instanceId, 'Make', (string)($connection['make'] ?? ''));
-            IPS_SetProperty($instanceId, 'Model', (string)($connection['model'] ?? ''));
-            IPS_SetProperty($instanceId, 'Year', (int)($connection['year'] ?? 0));
-            IPS_SetProperty($instanceId, 'PowertrainType', (string)($connection['powertrainType'] ?? ''));
-
-            IPS_ApplyChanges($instanceId);
-        }
     }
 
     private function FindVehicleInstanceByVehicleId(string $vehicleId): int
