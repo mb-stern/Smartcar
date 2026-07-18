@@ -879,6 +879,24 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $permissions = $this->GetSelectedPermissions();
 
+        // Bereits gewährte Permissions der bestehenden Connection beibehalten.
+        // Smartcar überschreibt bei explizitem scope die Permission-Auswahl
+        // dieses Authorization-Vorgangs, deshalb senden wir die Gesamtmenge.
+        foreach ($this->GetCurrentConnectionPermissions() as $existingPermission) {
+            if (!in_array($existingPermission, $permissions, true)) {
+                $permissions[] = $existingPermission;
+            }
+        }
+
+        if (!in_array('read_vehicle_info', $permissions, true)) {
+            $permissions[] = 'read_vehicle_info';
+        }
+
+        $permissions = array_values(array_unique(array_filter(array_map(
+            static fn($permission): string => trim((string)$permission),
+            $permissions
+        ))));
+
         $this->SendDebug(
             'Connect/Result',
             'Permissions count=' . count($permissions) . ' values=' . json_encode($permissions, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
@@ -891,12 +909,20 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $state = 'vehicle_' . $this->ReadPropertyString('VehicleID') . '_' . bin2hex(random_bytes(8));
 
+        $vehicleId = $this->ReadPropertyString('VehicleID');
+
+        if ($vehicleId === '') {
+            return 'Fehler: VehicleID fehlt.';
+        }
+
         $request = [
-            'DataID'      => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
-            'Command'     => 'BuildConnectURL',
-            'Mode'        => 'live',
-            'State'       => $state,
-            'Permissions' => $permissions
+            'DataID'         => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
+            'Command'        => 'BuildConnectURL',
+            'Mode'           => 'live',
+            'State'          => $state,
+            'Permissions'    => $permissions,
+            'VehicleID'      => $vehicleId,
+            'Reauthenticate' => true
         ];
 
         $this->SendDebug('Connect/RequestToSplitter', json_encode($request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
@@ -911,6 +937,50 @@ class SmartcarVehicle extends IPSModuleStrict
         }
 
         return (string)($decoded['url'] ?? '');
+    }
+
+    private function GetCurrentConnectionPermissions(): array
+    {
+        if (!$this->HasParentConnection()) {
+            return [];
+        }
+
+        $vehicleId = $this->ReadPropertyString('VehicleID');
+        if ($vehicleId === '') {
+            return [];
+        }
+
+        $result = $this->SendDataToParent(json_encode([
+            'DataID'  => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
+            'Command' => 'LoadConnections'
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+
+        $connections = json_decode((string)$result, true);
+        if (!is_array($connections)) {
+            return [];
+        }
+
+        foreach ($connections as $connection) {
+            if (!is_array($connection)) {
+                continue;
+            }
+
+            if ((string)($connection['vehicleId'] ?? '') !== $vehicleId) {
+                continue;
+            }
+
+            $permissions = $connection['permissions'] ?? [];
+            if (!is_array($permissions)) {
+                return [];
+            }
+
+            return array_values(array_unique(array_filter(array_map(
+                static fn($permission): string => trim((string)$permission),
+                $permissions
+            ))));
+        }
+
+        return [];
     }
 
     private function GetSelectedPermissions(): array
