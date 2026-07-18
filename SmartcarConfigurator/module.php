@@ -243,23 +243,25 @@ class SmartcarConfigurator extends IPSModuleStrict
             $mode = 'live';
         }
 
-        // Beim ersten Verbinden nur die minimale Basis-Permission anfordern.
-        // Alle eigentlichen Signal-/Command-Permissions werden später aus der
-        // Vehicle-Instanz über denselben normalen Connect-Flow registriert.
         $permissions = [
-            'read_vehicle_info'
+            'read_vin',
+            'read_vehicle_info',
+            'read_odometer',
+            'read_location',
+            'read_battery',
+            'read_charge',
+            'read_tires',
+            'read_security'
         ];
 
         $state = 'configurator_' . $mode . '_' . bin2hex(random_bytes(8));
 
         $result = $this->SendDataToParent(json_encode([
-            'DataID'         => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
-            'Command'        => 'BuildConnectURL',
-            'Mode'           => $mode,
-            'State'          => $state,
-            'Permissions'    => $permissions,
-            'VehicleID'      => '',
-            'Reauthenticate' => false
+            'DataID'      => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
+            'Command'     => 'BuildConnectURL',
+            'Mode'        => $mode,
+            'State'       => $state,
+            'Permissions' => $permissions
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
 
         $decoded = json_decode((string)$result, true);
