@@ -879,15 +879,17 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $permissions = $this->GetSelectedPermissions();
 
+        // Basis-Permission für den Connect-Flow immer mit anfordern.
+        // So stehen die grundlegenden Fahrzeuginformationen unabhängig von
+        // den ausgewählten Signalen/Befehlen zur Verfügung.
+        $permissions[] = 'read_vehicle_info';
+        $permissions = array_values(array_unique(array_filter($permissions)));
+
         $this->SendDebug(
             'Connect/Result',
             'Permissions count=' . count($permissions) . ' values=' . json_encode($permissions, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
             0
         );
-
-        if (empty($permissions)) {
-            return 'Fehler: Keine aktivierten Signale/Befehle mit Permission ausgewählt. Bitte Debug prüfen: Connect/SelectedCapabilitiesRaw, Connect/Entry und Connect/Summary.';
-        }
 
         $state = 'vehicle_' . $this->ReadPropertyString('VehicleID') . '_' . bin2hex(random_bytes(8));
 
