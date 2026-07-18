@@ -878,7 +878,7 @@ class SmartcarVehicle extends IPSModuleStrict
         $this->SendDebug('Connect/Start', 'GenerateConnectURL gestartet.', 0);
 
         // Eine gemeinsame finale Permission-Liste für den Connect-Flow bauen.
-        // read_vin, read_vehicle_info, read_battery und alle über Checkboxen ausgewählten Permissions
+        // read_vin, read_vehicle_info und alle über Checkboxen ausgewählten Permissions
         // werden danach identisch behandelt und gemeinsam an den Splitter gesendet.
         $permissions = $this->GetConnectPermissions();
 
@@ -939,8 +939,7 @@ class SmartcarVehicle extends IPSModuleStrict
         // Unterschied mehr zwischen Basis- und Checkbox-Permissions.
         $permissions = [
             'read_vin',
-            'read_vehicle_info',
-            'read_battery'
+            'read_vehicle_info'
         ];
 
         foreach ($this->GetSelectedPermissions() as $permission) {
