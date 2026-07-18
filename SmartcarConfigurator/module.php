@@ -62,11 +62,6 @@ class SmartcarConfigurator extends IPSModuleStrict
                 ],
                 [
                     'type' => 'Button',
-                    'caption' => 'Neues simuliertes Fahrzeug verbinden',
-                    'onClick' => 'echo SMCARCFG_GenerateConnectURL($id, "simulated");'
-                ],
-                [
-                    'type' => 'Button',
                     'caption' => 'Liste aktualisieren',
                     'onClick' => 'SMCARCFG_ReloadConfiguratorForm($id);'
                 ],
@@ -244,35 +239,38 @@ class SmartcarConfigurator extends IPSModuleStrict
     public function GenerateConnectURL(string $mode): string
     {
         $mode = strtolower(trim($mode));
-        if (!in_array($mode, ['live', 'simulated'], true)) {
+        if ($mode !== 'simulated') {
             $mode = 'live';
         }
 
-        $state = 'configurator_' . $mode . '_' . bin2hex(random_bytes(16));
+        $permissions = [
+            'read_vin',
+            'read_vehicle_info',
+            'read_odometer',
+            'read_location',
+            'read_battery',
+            'read_charge',
+            'read_tires',
+            'read_security'
+        ];
+
+        $state = 'configurator_' . $mode . '_' . bin2hex(random_bytes(8));
 
         $result = $this->SendDataToParent(json_encode([
-            'DataID'  => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
-            'Command' => 'BuildConnectURL',
-            'Mode'    => $mode,
-            'State'   => $state
+            'DataID'      => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
+            'Command'     => 'BuildConnectURL',
+            'Mode'        => $mode,
+            'State'       => $state,
+            'Permissions' => $permissions
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
 
         $decoded = json_decode((string)$result, true);
 
-        if (!is_array($decoded)) {
-            return 'Ungültige Antwort vom Smartcar Splitter: ' . (string)$result;
+        if (!is_array($decoded) || empty($decoded['success'])) {
+            return 'Fehler beim Erzeugen der Connect URL: ' . (string)$result;
         }
 
-        if (empty($decoded['success'])) {
-            return 'Fehler beim Erzeugen der Connect URL: ' . (string)($decoded['error'] ?? $result);
-        }
-
-        $url = trim((string)($decoded['url'] ?? ''));
-        if ($url === '') {
-            return 'Der Smartcar Splitter hat keine Connect URL geliefert.';
-        }
-
-        return $url;
+        return (string)($decoded['url'] ?? '');
     }
 
     public function ReloadConfiguratorForm(): void
