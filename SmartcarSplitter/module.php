@@ -696,7 +696,9 @@ class SmartcarSplitter extends IPSModuleStrict
 
     public function BuildConnectURL(string $mode, string $state, array $permissions, string $vehicleId = '', bool $reauthenticate = false): string
     {
-        $applicationId = trim($this->ReadPropertyString('ApplicationID'));
+        // Wie in der alten Version:
+        // Die Smartcar ApplicationID wird als client_id an Connect übergeben.
+        $clientID = trim($this->ReadPropertyString('ApplicationID'));
 
         $hookAddress = 'smartcar_' . $this->InstanceID;
         $hookPath = '/hook/' . $hookAddress;
@@ -706,7 +708,7 @@ class SmartcarSplitter extends IPSModuleStrict
             $redirectURI = $this->BuildSymconConnectURL($hookPath);
         }
 
-        if ($applicationId === '') {
+        if ($clientID === '') {
             return 'Fehler: Application ID für Smartcar Connect fehlt.';
         }
 
@@ -720,7 +722,7 @@ class SmartcarSplitter extends IPSModuleStrict
         ))));
 
         if (empty($permissions)) {
-            return 'Fehler: Keine Permissions vorhanden.';
+            return 'Fehler: Keine Permissions aus den aktivierten Signalen gefunden.';
         }
 
         if ($state === '') {
@@ -732,81 +734,44 @@ class SmartcarSplitter extends IPSModuleStrict
             $mode = 'live';
         }
 
-        if ($reauthenticate && $vehicleId !== '') {
-            // Nur für echte OEM-/Account-Reauthentication.
-            // Dieser Flow zeigt keine allgemeine neue Smartcar-Permission-Auswahl an.
-            $query = [
-                'response_type' => 'vehicle_id',
-                'application_id'=> $applicationId,
-                'vehicle_id'    => $vehicleId,
-                'redirect_uri'  => $redirectURI,
-                'state'         => $state
-            ];
+        /*
+         * Bewusst exakt der alte Connect-Flow:
+         *
+         *   /oauth/authorize
+         *   response_type=code
+         *   client_id=<ApplicationID>
+         *   scope=<dynamisch ausgewählte Permissions>
+         *
+         * VehicleID und Reauthenticate werden hier absichtlich nicht für die
+         * URL verwendet. Die VehicleID bleibt nur im state erhalten, damit der
+         * Redirect weiterhin der bestehenden IP-Symcon-Fahrzeuginstanz
+         * zugeordnet werden kann.
+         */
+        $query = [
+            'response_type' => 'code',
+            'client_id'     => $clientID,
+            'redirect_uri'  => $redirectURI,
+            'scope'         => implode(' ', $permissions),
+            'state'         => $state,
+            'mode'          => $mode
+        ];
 
-            $url = 'https://connect.smartcar.com/oauth/reauthenticate?' . http_build_query(
-                $query,
-                '',
-                '&',
-                PHP_QUERY_RFC3986
-            );
-
-            $flow = 'reauthenticate_existing_vehicle';
-        } else {
-            /*
-             * Normaler Smartcar Connect Consent Flow.
-             *
-             * Bei Application Access Tokens verwenden wir response_type=none.
-             * Der explizite scope überschreibt die Dashboard-Permissions.
-             * approval_prompt=force sorgt dafür, dass die Berechtigungsseite
-             * erneut angezeigt wird, auch wenn bereits Berechtigungen erteilt wurden.
-             *
-             * Für eine bestehende Vehicle-Instanz wird danach die Connection-Liste
-             * erneut synchronisiert. Die Instanz bleibt über ihre VehicleID erhalten.
-             */
-            $query = [
-                'application_id'  => $applicationId,
-                'redirect_uri'    => $redirectURI,
-                'response_type'   => 'none',
-                'scope'           => implode(' ', array_map(
-                    static function (string $permission): string {
-                        // Basis-Permissions normal lassen.
-                        if (in_array($permission, ['read_vin', 'read_vehicle_info'], true)) {
-                            return $permission;
-                        }
-
-                        // Zusätzlich in der Vehicle-Instanz ausgewählte Permissions
-                        // zwingend anfordern, z. B. required:read_battery.
-                        return str_starts_with($permission, 'required:')
-                            ? $permission
-                            : 'required:' . $permission;
-                    },
-                    $permissions
-                )),
-                'state'           => $state,
-                'mode'            => $mode,
-                'approval_prompt' => 'force'
-            ];
-
-            $url = 'https://connect.smartcar.com/oauth/authorize?' . http_build_query(
-                $query,
-                '',
-                '&',
-                PHP_QUERY_RFC3986
-            );
-
-            $flow = $vehicleId !== ''
-                ? 'existing_vehicle_permission_consent'
-                : 'initial_connect';
-        }
+        $url = 'https://connect.smartcar.com/oauth/authorize?' . http_build_query(
+            $query,
+            '',
+            '&',
+            PHP_QUERY_RFC3986
+        );
 
         $this->SendDebug('ConnectURL/Build', json_encode([
-            'flow'          => $flow,
-            'applicationId' => $applicationId,
-            'vehicleId'     => $vehicleId,
-            'responseType'  => $query['response_type'],
-            'permissions'   => $permissions,
-            'effectiveScope'=> $query['scope'],
-            'url'           => $url
+            'flow'           => 'legacy_authorization_code',
+            'clientIdSource' => 'ApplicationID',
+            'clientId'       => $clientID,
+            'vehicleId'      => $vehicleId,
+            'responseType'   => 'code',
+            'permissions'    => $permissions,
+            'effectiveScope' => $query['scope'],
+            'url'            => $url
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
         return $url;
