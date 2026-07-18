@@ -691,31 +691,49 @@ class SmartcarSplitter extends IPSModuleStrict
             return 'Fehler: Redirect-/Webhook-URI fehlt.';
         }
 
-        $permissions = array_values(array_unique(array_filter(array_map('strval', $permissions))));
+        $permissions = array_values(array_unique(array_filter(array_map(
+            static fn($permission): string => trim((string)$permission),
+            $permissions
+        ))));
+
+        if (empty($permissions)) {
+            return 'Fehler: Keine Permissions aus den aktivierten Signalen gefunden.';
+        }
 
         if ($state === '') {
             $state = bin2hex(random_bytes(12));
         }
 
+        // Initial-Connect: normaler Authorization-Code-Flow.
+        // Re-Authentifizierung einer bestehenden Vehicle-Instanz: Smartcar
+        // erwartet die bereits bekannte Vehicle-ID als response_type.
+        $vehicleId = $this->ExtractVehicleIdFromState($state);
+        $isReauthentication = $vehicleId !== '';
+
         $query = [
-            'response_type' => 'code',
+            'response_type' => $isReauthentication ? $vehicleId : 'code',
             'client_id'     => $clientID,
             'redirect_uri'  => $redirectURI,
+            'scope'         => implode(' ', $permissions),
             'state'         => $state,
             'mode'          => $mode !== '' ? $mode : 'live'
         ];
 
-        // Nur dann einen Scope-Parameter setzen, wenn der aufrufende Client
-        // tatsächlich Permissions vorgibt. Der Configurator kann dadurch
-        // einen Initial-Connect ohne explizite Scopes starten; die Vehicle-
-        // Instanz übergibt später weiterhin gezielt ihre ausgewählten Scopes.
-        if (!empty($permissions)) {
-            $query['scope'] = implode(' ', $permissions);
+        // Bei einer bewussten Neuregistrierung aus der Vehicle-Instanz soll
+        // die Freigabemaske erneut angezeigt werden, damit geänderte Scopes
+        // tatsächlich bestätigt werden können.
+        if ($isReauthentication) {
+            $query['approval_prompt'] = 'force';
         }
 
         $url = 'https://connect.smartcar.com/oauth/authorize?' . http_build_query($query);
 
-        $this->SendDebug('ConnectURL/Build', $url, 0);
+        $this->SendDebug('ConnectURL/Build', json_encode([
+            'reauthentication' => $isReauthentication,
+            'vehicleId'        => $vehicleId,
+            'permissions'      => $permissions,
+            'url'              => $url
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
         return $url;
     }
