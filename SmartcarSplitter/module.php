@@ -717,16 +717,22 @@ class SmartcarSplitter extends IPSModuleStrict
                 return 'Fehler: Vehicle ID für Re-Authentication fehlt.';
             }
 
+            // Permission-Update für ein bereits verbundenes Fahrzeug:
+            // Smartcar Connect verwendet weiterhin /oauth/authorize.
+            // Als response_type wird die bestehende Smartcar Vehicle-ID gesetzt.
+            // Nur dieser Flow unterstützt scope und aktualisiert damit die
+            // Berechtigungen der bestehenden Connection.
             $query = [
-                'response_type' => 'vehicle_id',
-                'application_id' => $applicationId,
-                'vehicle_id'     => $vehicleId,
-                'redirect_uri'   => $redirectURI,
-                'scope'          => implode(' ', $permissions),
-                'state'          => $state
+                'response_type'   => $vehicleId,
+                'client_id'       => $applicationId,
+                'redirect_uri'    => $redirectURI,
+                'scope'           => implode(' ', $permissions),
+                'state'           => $state,
+                'approval_prompt' => 'force',
+                'mode'            => $mode
             ];
 
-            $url = 'https://connect.smartcar.com/oauth/reauthenticate?' . http_build_query($query);
+            $url = 'https://connect.smartcar.com/oauth/authorize?' . http_build_query($query);
 
             $this->SendDebug('ConnectURL/Build', json_encode([
                 'reauthentication' => true,
