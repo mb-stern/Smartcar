@@ -492,6 +492,16 @@ class SmartcarSplitter extends IPSModuleStrict
         $uri    = $_SERVER['REQUEST_URI'] ?? '';
         $qs     = $_SERVER['QUERY_STRING'] ?? '';
 
+        $this->SendDebug('Hook/Incoming', json_encode([
+            'method'      => $method,
+            'uri'         => $uri,
+            'queryString' => $qs,
+            'get'         => $_GET,
+            'post'        => $_POST,
+            'remoteAddr'  => $_SERVER['REMOTE_ADDR'] ?? '',
+            'userAgent'   => $_SERVER['HTTP_USER_AGENT'] ?? ''
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+
         $this->SendDebug('Webhook/Request', 'method=' . $method . ' uri=' . $uri . ' qs=' . $qs, 0);
 
         // Smartcar Connect Redirect
@@ -808,6 +818,12 @@ class SmartcarSplitter extends IPSModuleStrict
 
     private function HandleConnectRedirect(): void
     {
+        $this->SendDebug('Connect/Redirect/Incoming', json_encode([
+            'get'         => $_GET,
+            'requestUri'  => $_SERVER['REQUEST_URI'] ?? '',
+            'queryString' => $_SERVER['QUERY_STRING'] ?? ''
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+
         $error = (string)($_GET['error'] ?? '');
         $errorDescription = (string)($_GET['error_description'] ?? '');
 
