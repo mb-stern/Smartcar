@@ -696,10 +696,7 @@ class SmartcarSplitter extends IPSModuleStrict
 
     public function BuildConnectURL(string $mode, string $state, array $permissions, string $vehicleId = '', bool $reauthenticate = false): string
     {
-        // Für Smartcar Connect die Connect-/Application-ID verwenden.
-        // ClientID/ClientSecret bleiben ausschließlich für den
-        // Application-Access-Token gegen iam.smartcar.com zuständig.
-        $clientId = trim($this->ReadPropertyString('ApplicationID'));
+        $applicationId = trim($this->ReadPropertyString('ApplicationID'));
 
         $hookAddress = 'smartcar_' . $this->InstanceID;
         $hookPath = '/hook/' . $hookAddress;
@@ -709,7 +706,7 @@ class SmartcarSplitter extends IPSModuleStrict
             $redirectURI = $this->BuildSymconConnectURL($hookPath);
         }
 
-        if ($clientId === '') {
+        if ($applicationId === '') {
             return 'Fehler: Application ID für Smartcar Connect fehlt.';
         }
 
@@ -722,10 +719,6 @@ class SmartcarSplitter extends IPSModuleStrict
             $permissions
         ))));
 
-        if (empty($permissions)) {
-            return 'Fehler: Keine Permissions vorhanden.';
-        }
-
         if ($state === '') {
             $state = bin2hex(random_bytes(12));
         }
@@ -735,14 +728,51 @@ class SmartcarSplitter extends IPSModuleStrict
             $mode = 'live';
         }
 
-        // Bewährter normaler Smartcar Connect Flow.
-        // Sowohl Erstverbindung als auch erneute Autorisierung werden
-        // über /oauth/authorize mit response_type=code gestartet.
-        // Die VehicleID wird nur über "state" mitgeführt und ist kein
-        // OAuth response_type.
+        $vehicleId = trim($vehicleId);
+        $isReauthentication = $reauthenticate && $vehicleId !== '';
+
+        if ($isReauthentication) {
+            // Smartcar Reauthentication Flow:
+            // eigener Endpoint, feste response_type=vehicle_id und
+            // Vehicle-ID als separater Parameter.
+            $query = [
+                'response_type' => 'vehicle_id',
+                'application_id' => $applicationId,
+                'vehicle_id'     => $vehicleId,
+                'redirect_uri'   => $redirectURI,
+                'external_id'    => 'ips_' . $this->InstanceID,
+                'state'          => $state,
+                'mode'           => $mode
+            ];
+
+            $url = 'https://connect.smartcar.com/oauth/reauthenticate?' . http_build_query(
+                $query,
+                '',
+                '&',
+                PHP_QUERY_RFC3986
+            );
+
+            $this->SendDebug('ConnectURL/Build', json_encode([
+                'flow'         => 'vehicle_reauthentication',
+                'vehicleId'    => $vehicleId,
+                'responseType' => 'vehicle_id',
+                'applicationId'=> $applicationId,
+                'permissions'  => $permissions,
+                'url'          => $url
+            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+
+            return $url;
+        }
+
+        if (empty($permissions)) {
+            return 'Fehler: Keine Permissions vorhanden.';
+        }
+
+        // Bewährter Erstconnect bleibt unverändert:
+        // normaler authorize-Endpunkt mit response_type=code.
         $query = [
             'response_type' => 'code',
-            'client_id'     => $clientId,
+            'client_id'     => $applicationId,
             'redirect_uri'  => $redirectURI,
             'scope'         => implode(' ', $permissions),
             'state'         => $state,
@@ -757,12 +787,12 @@ class SmartcarSplitter extends IPSModuleStrict
         );
 
         $this->SendDebug('ConnectURL/Build', json_encode([
-            'flow'          => $vehicleId !== '' ? 'vehicle_permission_connect' : 'initial_connect',
-            'vehicleId'     => $vehicleId,
-            'responseType'  => 'code',
-            'clientId'      => $clientId,
-            'permissions'   => $permissions,
-            'url'           => $url
+            'flow'         => 'initial_connect',
+            'vehicleId'    => '',
+            'responseType' => 'code',
+            'connectId'    => $applicationId,
+            'permissions'  => $permissions,
+            'url'          => $url
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
         return $url;
