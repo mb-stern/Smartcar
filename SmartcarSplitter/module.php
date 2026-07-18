@@ -732,64 +732,42 @@ class SmartcarSplitter extends IPSModuleStrict
             $mode = 'live';
         }
 
-        if ($reauthenticate && $vehicleId !== '') {
-            // Nur für echte OEM-/Account-Reauthentication.
-            // Dieser Flow zeigt keine allgemeine neue Smartcar-Permission-Auswahl an.
-            $query = [
-                'response_type' => 'vehicle_id',
-                'application_id'=> $applicationId,
-                'vehicle_id'    => $vehicleId,
-                'redirect_uri'  => $redirectURI,
-                'state'         => $state
-            ];
+        /*
+         * Normaler Smartcar Connect Flow.
+         *
+         * Neue Verbindung:
+         *   response_type=none
+         *
+         * Bestehendes Fahrzeug erneut durch den Consent-Flow schicken:
+         *   response_type=<bestehende VehicleID>
+         *
+         * scope enthält den vollständigen gewünschten Permission-Satz.
+         * approval_prompt=force erzwingt die erneute Anzeige des Consent-Screens.
+         */
+        $responseType = $vehicleId !== '' ? $vehicleId : 'none';
 
-            $url = 'https://connect.smartcar.com/oauth/reauthenticate?' . http_build_query(
-                $query,
-                '',
-                '&',
-                PHP_QUERY_RFC3986
-            );
+        $query = [
+            'application_id'  => $applicationId,
+            'redirect_uri'    => $redirectURI,
+            'response_type'   => $responseType,
+            'scope'           => implode(' ', $permissions),
+            'state'           => $state,
+            'mode'            => $mode,
+            'approval_prompt' => 'force'
+        ];
 
-            $flow = 'reauthenticate_existing_vehicle';
-        } else {
-            /*
-             * Normaler Smartcar Connect Consent Flow.
-             *
-             * Bei Application Access Tokens verwenden wir response_type=none.
-             * Der explizite scope überschreibt die Dashboard-Permissions.
-             * approval_prompt=force sorgt dafür, dass die Berechtigungsseite
-             * erneut angezeigt wird, auch wenn bereits Berechtigungen erteilt wurden.
-             *
-             * Für eine bestehende Vehicle-Instanz wird danach die Connection-Liste
-             * erneut synchronisiert. Die Instanz bleibt über ihre VehicleID erhalten.
-             */
-            $query = [
-                'application_id'  => $applicationId,
-                'redirect_uri'    => $redirectURI,
-                'response_type'   => 'none',
-                'scope'           => implode(' ', $permissions),
-                'state'           => $state,
-                'mode'            => $mode,
-                'approval_prompt' => 'force'
-            ];
-
-            $url = 'https://connect.smartcar.com/oauth/authorize?' . http_build_query(
-                $query,
-                '',
-                '&',
-                PHP_QUERY_RFC3986
-            );
-
-            $flow = $vehicleId !== ''
-                ? 'existing_vehicle_permission_consent'
-                : 'initial_connect';
-        }
+        $url = 'https://connect.smartcar.com/oauth/authorize?' . http_build_query(
+            $query,
+            '',
+            '&',
+            PHP_QUERY_RFC3986
+        );
 
         $this->SendDebug('ConnectURL/Build', json_encode([
-            'flow'          => $flow,
+            'flow'          => $vehicleId !== '' ? 'existing_vehicle_permission_consent' : 'initial_connect',
             'applicationId' => $applicationId,
             'vehicleId'     => $vehicleId,
-            'responseType'  => $query['response_type'],
+            'responseType'  => $responseType,
             'permissions'   => $permissions,
             'url'           => $url
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
