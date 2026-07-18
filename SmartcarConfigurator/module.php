@@ -215,13 +215,21 @@ class SmartcarConfigurator extends IPSModuleStrict
         if ($mode !== 'simulated') {
             $mode = 'live';
         }
+
+        $permissions = [
+            'read_vin',
+            'read_vehicle_info'
+        ];
+
         $state = 'configurator_' . $mode . '_' . bin2hex(random_bytes(8));
 
         $result = $this->SendDataToParent(json_encode([
             'DataID' => self::DATA_ID,
             'Command' => 'BuildConnectURL',
             'Mode' => $mode,
-            'State' => $state,        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+            'State' => $state,
+            'Permissions' => $permissions
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
 
         $decoded = json_decode((string)$result, true);
 

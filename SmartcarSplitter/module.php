@@ -694,8 +694,11 @@ class SmartcarSplitter extends IPSModuleStrict
         return null;
     }
 
-    public function BuildConnectURL(string $mode, string $state, array $permissions = [], string $vehicleId = '', bool $reauthenticate = false): string
+    public function BuildConnectURL(string $mode, string $state, array $permissions, string $vehicleId = '', bool $reauthenticate = false): string
     {
+        // Für Smartcar Connect die Connect-/Application-ID verwenden.
+        // ClientID/ClientSecret bleiben ausschließlich für den
+        // Application-Access-Token gegen iam.smartcar.com zuständig.
         $applicationId = trim($this->ReadPropertyString('ApplicationID'));
 
         $hookAddress = 'smartcar_' . $this->InstanceID;
@@ -714,6 +717,15 @@ class SmartcarSplitter extends IPSModuleStrict
             return 'Fehler: Redirect-/Webhook-URI fehlt.';
         }
 
+        $permissions = array_values(array_unique(array_filter(array_map(
+            static fn($permission): string => trim((string)$permission),
+            $permissions
+        ))));
+
+        if (empty($permissions)) {
+            return 'Fehler: Keine Permissions vorhanden.';
+        }
+
         if ($state === '') {
             $state = bin2hex(random_bytes(12));
         }
@@ -723,30 +735,63 @@ class SmartcarSplitter extends IPSModuleStrict
             $mode = 'live';
         }
 
-        /*
-         * Dashboard-basierter Vehicle-Access-Flow:
-         *
-         * KEIN scope in der Connect-URL.
-         *
-         * Smartcar verwendet dadurch ausschließlich die unter
-         * Dashboard -> Configuration -> Vehicle Access
-         * konfigurierten Signale und leitet daraus die Permissions ab.
-         *
-         * Die vom Child eventuell übergebene Permissions-Liste wird
-         * absichtlich ignoriert und nur für Debug-Zwecke protokolliert.
-         */
-        $query = [
-            'application_id'  => $applicationId,
-            'redirect_uri'    => $redirectURI,
-            'response_type'   => 'none',
-            'state'           => $state,
-            'mode'            => $mode,
-            'approval_prompt' => 'force'
-        ];
+        if ($reauthenticate) {
+            if ($vehicleId === '') {
+                return 'Fehler: Für die erneute Autorisierung fehlt die Vehicle ID.';
+            }
 
-        if ($vehicleId !== '') {
-            $query['external_id'] = 'vehicle_' . str_replace('-', '_', $vehicleId);
+            // Bei einer Permission-Erweiterung werden die ausgewählten
+            // Permissions bewusst als required angefordert. Bereits vorhandene
+            // required:-Präfixe werden dabei nicht doppelt gesetzt.
+            $requiredPermissions = array_map(
+                static function (string $permission): string {
+                    return str_starts_with($permission, 'required:')
+                        ? $permission
+                        : 'required:' . $permission;
+                },
+                $permissions
+            );
+
+            // Re-Authentication eines bereits verbundenen Fahrzeugs.
+            // response_type=vehicle_id sorgt dafür, dass nach erfolgreicher
+            // erneuter Zustimmung wieder die bestehende Vehicle ID zurückkommt.
+            $query = [
+                'response_type'   => 'vehicle_id',
+                'client_id'       => $applicationId,
+                'redirect_uri'    => $redirectURI,
+                'vehicle_id'      => $vehicleId,
+                'scope'           => implode(' ', $requiredPermissions),
+                'state'           => $state,
+                'approval_prompt' => 'force'
+            ];
+
+            $url = 'https://connect.smartcar.com/oauth/reauthenticate?' . http_build_query(
+                $query,
+                '',
+                '&',
+                PHP_QUERY_RFC3986
+            );
+
+            $this->SendDebug('ConnectURL/Build', json_encode([
+                'flow'          => 'vehicle_permission_reauthentication',
+                'vehicleId'     => $vehicleId,
+                'responseType'  => 'vehicle_id',
+                'permissions'   => $requiredPermissions,
+                'url'           => $url
+            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+
+            return $url;
         }
+
+        // Normale Erstverbindung eines neuen Fahrzeugs.
+        $query = [
+            'response_type' => 'code',
+            'client_id'     => $applicationId,
+            'redirect_uri'  => $redirectURI,
+            'scope'         => implode(' ', $permissions),
+            'state'         => $state,
+            'mode'          => $mode
+        ];
 
         $url = 'https://connect.smartcar.com/oauth/authorize?' . http_build_query(
             $query,
@@ -756,15 +801,11 @@ class SmartcarSplitter extends IPSModuleStrict
         );
 
         $this->SendDebug('ConnectURL/Build', json_encode([
-            'flow'                  => $vehicleId !== '' ? 'dashboard_vehicle_access_existing' : 'dashboard_vehicle_access_initial',
-            'applicationId'         => $applicationId,
-            'vehicleId'             => $vehicleId,
-            'responseType'          => 'none',
-            'dashboardVehicleAccess'=> true,
-            'scopeSent'             => false,
-            'ignoredPermissions'    => array_values($permissions),
-            'externalId'            => $query['external_id'] ?? '',
-            'url'                   => $url
+            'flow'          => 'initial_connect',
+            'vehicleId'     => '',
+            'responseType'  => 'code',
+            'permissions'   => $permissions,
+            'url'           => $url
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
         return $url;

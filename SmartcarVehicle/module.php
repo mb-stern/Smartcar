@@ -194,7 +194,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 ],
                 [
                     'type' => 'Button',
-                    'caption' => 'Smartcar Connect mit Vehicle Access öffnen',
+                    'caption' => 'Gewählte Signale bei Smartcar registrieren',
                     'onClick' => 'echo SMCARV_GenerateConnectURL($id);'
                 ],
                 [
@@ -875,47 +875,39 @@ class SmartcarVehicle extends IPSModuleStrict
 
     public function GenerateConnectURL(): string
     {
-        $this->SendDebug('Connect/Start', 'Dashboard-basierter Vehicle-Access-Connect gestartet.', 0);
+        $this->SendDebug('Connect/Start', 'GenerateConnectURL gestartet.', 0);
 
-        if (!$this->HasParentConnection()) {
-            return 'Fehler: Kein Smartcar Splitter verbunden.';
+        $permissions = $this->GetSelectedPermissions();
+
+        $this->SendDebug(
+            'Connect/Result',
+            'Permissions count=' . count($permissions) . ' values=' . json_encode($permissions, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            0
+        );
+
+        if (empty($permissions)) {
+            return 'Fehler: Keine aktivierten Signale/Befehle mit Permission ausgewählt. Bitte Debug prüfen: Connect/SelectedCapabilitiesRaw, Connect/Entry und Connect/Summary.';
         }
 
-        $vehicleId = trim($this->ReadPropertyString('VehicleID'));
-        $state = 'vehicle_' . ($vehicleId !== '' ? $vehicleId : 'unknown') . '_' . bin2hex(random_bytes(8));
+        $state = 'vehicle_' . $this->ReadPropertyString('VehicleID') . '_' . bin2hex(random_bytes(8));
 
-        /*
-         * Keine Permissions an Smartcar senden.
-         * Die OAuth-/Connect-Permissions kommen ausschließlich aus
-         * Smartcar Dashboard -> Configuration -> Vehicle Access.
-         *
-         * Die in dieser Instanz ausgewählten Capabilities bestimmen nur,
-         * welche Signale IP-Symcon später lokal verarbeitet/anlegt.
-         */
         $request = [
             'DataID'        => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
             'Command'       => 'BuildConnectURL',
             'Mode'          => 'live',
             'State'         => $state,
-            'Permissions'   => [],
-            'VehicleID'     => $vehicleId,
-            'Reauthenticate'=> false
+            'Permissions'   => $permissions,
+            'VehicleID'     => $this->ReadPropertyString('VehicleID'),
+            'Reauthenticate'=> true
         ];
 
-        $this->SendDebug(
-            'Connect/RequestToSplitter',
-            json_encode($request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
-            0
-        );
+        $this->SendDebug('Connect/RequestToSplitter', json_encode($request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
-        $result = $this->SendDataToParent(
-            json_encode($request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
-        );
+        $result = $this->SendDataToParent(json_encode($request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
 
         $this->SendDebug('Connect/SplitterResponse', (string)$result, 0);
 
         $decoded = json_decode((string)$result, true);
-
         if (!is_array($decoded) || empty($decoded['success'])) {
             return 'Fehler beim Erzeugen der Connect URL: ' . (string)$result;
         }
