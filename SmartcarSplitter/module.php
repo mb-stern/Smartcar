@@ -742,11 +742,18 @@ class SmartcarSplitter extends IPSModuleStrict
         }
 
         $vehicleId = trim($vehicleId);
-        $isReauthentication = $reauthenticate && $vehicleId !== '';
+        $isPermissionReconnect = $reauthenticate && $vehicleId !== '';
 
+        // Application Access Token Flow:
+        // Sowohl Erstverbindung als auch erneute Berechtigungsfreigabe
+        // verwenden response_type=none.
+        //
+        // Beim Permission-Reconnect sorgt approval_prompt=force dafür,
+        // dass der Grant-Screen erneut angezeigt wird. Die vollständige
+        // kumulierte Scope-Liste wird explizit übergeben.
         $query = [
             'application_id' => $applicationId,
-            'response_type'  => $isReauthentication ? $vehicleId : 'none',
+            'response_type'  => 'none',
             'redirect_uri'   => $redirectURI,
             'scope'          => implode(' ', $requiredPermissions),
             'state'          => $state,
@@ -754,7 +761,7 @@ class SmartcarSplitter extends IPSModuleStrict
             'external_id'    => 'ips_' . $this->InstanceID
         ];
 
-        if ($isReauthentication) {
+        if ($isPermissionReconnect) {
             $query['approval_prompt'] = 'force';
         }
 
@@ -766,9 +773,9 @@ class SmartcarSplitter extends IPSModuleStrict
         );
 
         $this->SendDebug('ConnectURL/Build', json_encode([
-            'flow'                => $isReauthentication ? 'vehicle_reauthentication' : 'initial_connect',
+            'flow'                => $isPermissionReconnect ? 'vehicle_permission_reconnect' : 'initial_connect',
             'vehicleId'           => $vehicleId,
-            'responseType'        => $query['response_type'],
+            'responseType'        => 'none',
             'applicationId'       => $applicationId,
             'permissions'         => $permissions,
             'requiredPermissions' => $requiredPermissions,
