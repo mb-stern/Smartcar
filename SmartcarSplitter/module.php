@@ -47,31 +47,14 @@ class SmartcarSplitter extends IPSModuleStrict
     public function GetConfigurationForm(): string
     {
         $redirectURI = $this->ReadAttributeString('RedirectURI');
-        $hookAddress = 'smartcar_' . $this->InstanceID;
-        $hookPath = '/hook/' . $hookAddress;
-        $manualRedirectURI = trim($this->ReadPropertyString('ManualRedirectURI'));
 
         $form = [
             'elements' => [
                 [
                     'type' => 'Label',
-                    'caption' => 'Lokaler Smartcar Hook-Pfad: ' . $hookPath
-                ],
-                [
-                    'type' => 'Label',
                     'caption' => $redirectURI !== ''
-                        ? 'Aktuelle Redirect-/Webhook-URL: ' . $redirectURI
-                        : 'Aktuelle Redirect-/Webhook-URL: (leer – Symcon Connect nicht gefunden)'
-                ],
-                [
-                    'type' => 'Label',
-                    'caption' => $manualRedirectURI !== ''
-                        ? 'URL-Quelle: Manuelle Redirect-/Webhook-URI'
-                        : 'URL-Quelle: Automatisch über Symcon Connect'
-                ],
-                [
-                    'type' => 'Label',
-                    'caption' => 'Cloudflare Tunnel: Die öffentliche URL muss auf diesen Hook zeigen, z. B. https://deine-domain.tld' . $hookPath
+                        ? 'Redirect-/Webhook-URI: ' . $redirectURI
+                        : 'Redirect-/Webhook-URI: (leer – Symcon Connect nicht gefunden)'
                 ],
                 [
                     'type' => 'ValidationTextBox',
@@ -182,9 +165,7 @@ class SmartcarSplitter extends IPSModuleStrict
                     'url' => $this->BuildConnectURL(
                         (string)($data['Mode'] ?? 'live'),
                         (string)($data['State'] ?? ''),
-                        is_array($data['Permissions'] ?? null) ? $data['Permissions'] : [],
-                        (string)($data['VehicleID'] ?? ''),
-                        (bool)($data['Reauthenticate'] ?? false)
+                        is_array($data['Permissions'] ?? null) ? $data['Permissions'] : []
                     )
                 ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
@@ -571,27 +552,6 @@ class SmartcarSplitter extends IPSModuleStrict
 
         switch ($eventType) {
             case 'VEHICLE_STATE':
-                $triggers = is_array($payload['triggers'] ?? null)
-                    ? $payload['triggers']
-                    : (is_array($payload['data']['triggers'] ?? null) ? $payload['data']['triggers'] : []);
-
-                $isFirstDelivery = false;
-                foreach ($triggers as $trigger) {
-                    if (is_array($trigger) && strtoupper((string)($trigger['type'] ?? '')) === 'FIRST_DELIVERY') {
-                        $isFirstDelivery = true;
-                        break;
-                    }
-                }
-
-                if ($isFirstDelivery) {
-                    $this->SendDebug(
-                        'Webhook/FIRST_DELIVERY',
-                        'Synchronisiere Connections für automatische Vehicle-Instanz.',
-                        0
-                    );
-                    $this->SyncVehiclesFromConnectionsWithRetry(3);
-                }
-
                 if ($vehicleId !== '') {
                     $this->DispatchVehicleStateToVehicle($vehicleId, $payload);
                 } else {
@@ -711,12 +671,9 @@ class SmartcarSplitter extends IPSModuleStrict
         return null;
     }
 
-    public function BuildConnectURL(string $mode, string $state, array $permissions, string $vehicleId = '', bool $reauthenticate = false): string
+    public function BuildConnectURL(string $mode, string $state, array $permissions): string
     {
-        // Für Smartcar Connect die Connect-/Application-ID verwenden.
-        // ClientID/ClientSecret bleiben ausschließlich für den
-        // Application-Access-Token gegen iam.smartcar.com zuständig.
-        $clientId = trim($this->ReadPropertyString('ApplicationID'));
+        $clientID = trim($this->ReadPropertyString('ApplicationID'));
 
         $hookAddress = 'smartcar_' . $this->InstanceID;
         $hookPath = '/hook/' . $hookAddress;
@@ -726,61 +683,36 @@ class SmartcarSplitter extends IPSModuleStrict
             $redirectURI = $this->BuildSymconConnectURL($hookPath);
         }
 
-        if ($clientId === '') {
-            return 'Fehler: Application ID für Smartcar Connect fehlt.';
+        if ($clientID === '') {
+            return 'Fehler: Client ID fehlt.';
         }
 
         if ($redirectURI === '') {
             return 'Fehler: Redirect-/Webhook-URI fehlt.';
         }
 
-        $permissions = array_values(array_unique(array_filter(array_map(
-            static fn($permission): string => trim((string)$permission),
-            $permissions
-        ))));
+        $permissions = array_values(array_unique(array_filter(array_map('strval', $permissions))));
 
         if (empty($permissions)) {
-            return 'Fehler: Keine Permissions vorhanden.';
+            return 'Fehler: Keine Permissions aus den aktivierten Signalen gefunden.';
         }
 
         if ($state === '') {
             $state = bin2hex(random_bytes(12));
         }
 
-        $mode = strtolower(trim($mode));
-        if ($mode !== 'simulated') {
-            $mode = 'live';
-        }
-
-        // Bewährter normaler Smartcar Connect Flow.
-        // Sowohl Erstverbindung als auch erneute Autorisierung werden
-        // über /oauth/authorize mit response_type=code gestartet.
-        // Die VehicleID wird nur über "state" mitgeführt und ist kein
-        // OAuth response_type.
         $query = [
             'response_type' => 'code',
-            'client_id'     => $clientId,
+            'client_id'     => $clientID,
             'redirect_uri'  => $redirectURI,
             'scope'         => implode(' ', $permissions),
             'state'         => $state,
-            'mode'          => $mode
+            'mode'          => $mode !== '' ? $mode : 'live'
         ];
 
-        $url = 'https://connect.smartcar.com/oauth/authorize?' . http_build_query(
-            $query,
-            '',
-            '&',
-            PHP_QUERY_RFC3986
-        );
+        $url = 'https://connect.smartcar.com/oauth/authorize?' . http_build_query($query);
 
-        $this->SendDebug('ConnectURL/Build', json_encode([
-            'flow'          => $vehicleId !== '' ? 'vehicle_permission_connect' : 'initial_connect',
-            'vehicleId'     => $vehicleId,
-            'responseType'  => 'code',
-            'clientId'      => $clientId,
-            'permissions'   => $permissions,
-            'url'           => $url
-        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+        $this->SendDebug('ConnectURL/Build', $url, 0);
 
         return $url;
     }
@@ -839,35 +771,21 @@ class SmartcarSplitter extends IPSModuleStrict
         $code = (string)($_GET['code'] ?? '');
         $userId = (string)($_GET['user_id'] ?? ($_GET['userId'] ?? ''));
         $state = (string)($_GET['state'] ?? '');
-        $redirectVehicleId = (string)($_GET['vehicle_id'] ?? ($_GET['vehicleId'] ?? ''));
 
         $this->SendDebug('Connect/Redirect', json_encode([
-            'code'       => $code !== '' ? '<present>' : '',
-            'vehicle_id' => $redirectVehicleId,
-            'user_id'    => $userId,
-            'state'      => $state
+            'code'    => $code !== '' ? '<present>' : '',
+            'user_id' => $userId,
+            'state'   => $state
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
-        $vehicleId = $redirectVehicleId !== ''
-            ? $redirectVehicleId
-            : $this->ExtractVehicleIdFromState($state);
+        $vehicleId = $this->ExtractVehicleIdFromState($state);
 
         if ($vehicleId !== '' && $userId !== '') {
             $this->UpdateVehicleUserId($vehicleId, $userId);
         }
 
-        // Die neue Smartcar-Connection ist nach dem Redirect nicht immer
-        // sofort über /v3/connections sichtbar. Deshalb mit kurzen Retries
-        // synchronisieren, damit die Vehicle-Instanz zuverlässig entsteht.
-        $this->SyncVehiclesFromConnectionsWithRetry();
-
-        if ($vehicleId !== '') {
-            $instanceId = $this->FindVehicleInstanceByVehicleId($vehicleId);
-            if ($instanceId > 0 && function_exists('SMCARV_ApplySelectedCapabilities')) {
-                SMCARV_ApplySelectedCapabilities($instanceId);
-                $this->SendDebug('Connect/Reauthenticate', 'Aktuelle Capabilities angewendet für Instanz ' . $instanceId, 0);
-            }
-        }
+        $connections = $this->LoadConnections();
+        $this->UpdateVehiclesFromConnections($connections);
 
         http_response_code(200);
         header('Content-Type: text/html; charset=utf-8');
@@ -878,36 +796,6 @@ class SmartcarSplitter extends IPSModuleStrict
         echo '<p>Die Verbindung zum OEM wurde bestätigt.</p>';
         echo '<p>Du kannst dieses Fenster jetzt schließen und zu IP-Symcon zurückkehren.</p>';
         echo '</body></html>';
-    }
-
-    private function SyncVehiclesFromConnectionsWithRetry(int $maxAttempts = 5): void
-    {
-        $maxAttempts = max(1, $maxAttempts);
-
-        for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
-            $connections = $this->LoadConnections();
-
-            $this->SendDebug(
-                'Connect/SyncVehicles',
-                'Versuch ' . $attempt . '/' . $maxAttempts . ', Connections=' . count($connections),
-                0
-            );
-
-            if (!empty($connections)) {
-                $this->UpdateVehiclesFromConnections($connections);
-                return;
-            }
-
-            if ($attempt < $maxAttempts) {
-                usleep(500000);
-            }
-        }
-
-        $this->SendDebug(
-            'Connect/SyncVehicles',
-            'Nach ' . $maxAttempts . ' Versuchen keine Connection gefunden.',
-            0
-        );
     }
 
     private function UpdateVehicleUserId(string $vehicleId, string $userId): void
@@ -937,52 +825,35 @@ class SmartcarSplitter extends IPSModuleStrict
             }
 
             $instanceId = $this->FindVehicleInstanceByVehicleId($vehicleId);
-            $isNew = false;
 
             if ($instanceId === 0) {
                 $instanceId = IPS_CreateInstance('{1E1B7C9A-2D4F-4E8A-9C3B-7F6D5A4E2B10}');
-                $isNew = true;
+
+                // Neu erzeugte Vehicle-Instanz direkt mit diesem Splitter verbinden.
+                @IPS_ConnectInstance($instanceId, $this->InstanceID);
 
                 $this->SendDebug(
                     'Connect/CreateVehicle',
-                    'Neue Vehicle-Instanz erstellt: ' . $instanceId . ' für VehicleID=' . $vehicleId,
+                    'Neue Vehicle-Instanz erstellt und mit Splitter verbunden: ' . $instanceId . ' für VehicleID=' . $vehicleId,
                     0
                 );
             }
 
-            $caption = trim((string)($connection['caption'] ?? ''));
-            if ($caption === '') {
-                $caption = $vehicleId;
-            }
-
-            // Die VehicleID muss vor ApplyChanges gesetzt werden. Andernfalls
-            // wechselt die Vehicle-Instanz in den Fehlerstatus und kann beim
-            // nächsten Synchronisieren nicht mehr über die VehicleID gefunden
-            // werden, wodurch Dubletten entstehen können.
+            // WICHTIG: VehicleID muss immer gesetzt werden.
+            // Ohne diese Property kann FindVehicleInstanceByVehicleId() die Instanz
+            // beim nächsten Synchronisieren nicht wiederfinden und erzeugt Duplikate.
             IPS_SetProperty($instanceId, 'VehicleID', $vehicleId);
             IPS_SetProperty($instanceId, 'ConnectionID', (string)($connection['connectionId'] ?? ''));
             IPS_SetProperty($instanceId, 'UserID', (string)($connection['userId'] ?? ''));
-            IPS_SetProperty($instanceId, 'VehicleCaption', $caption);
+            IPS_SetProperty($instanceId, 'VehicleCaption', (string)($connection['caption'] ?? $vehicleId));
             IPS_SetProperty($instanceId, 'Make', (string)($connection['make'] ?? ''));
             IPS_SetProperty($instanceId, 'Model', (string)($connection['model'] ?? ''));
             IPS_SetProperty($instanceId, 'Year', (int)($connection['year'] ?? 0));
             IPS_SetProperty($instanceId, 'PowertrainType', (string)($connection['powertrainType'] ?? ''));
 
-            IPS_SetName($instanceId, $caption);
-
-            // Die automatisch angelegte Vehicle-Instanz direkt mit diesem
-            // Splitter verbinden. Ohne Parent-Verbindung können spätere API-
-            // Aufrufe der Vehicle-Instanz nicht funktionieren.
-            @IPS_ConnectInstance($instanceId, $this->InstanceID);
-
-            // Neue Instanzen neben dem Splitter einsortieren. Das entspricht
-            // in der üblichen Modulstruktur der gemeinsamen Kategorie von
-            // Splitter, Configurator und Vehicles.
-            if ($isNew) {
-                $targetParentId = IPS_GetParent($this->InstanceID);
-                if ($targetParentId > 0 && IPS_GetParent($instanceId) !== $targetParentId) {
-                    @IPS_SetParent($instanceId, $targetParentId);
-                }
+            $caption = trim((string)($connection['caption'] ?? ''));
+            if ($caption !== '') {
+                @IPS_SetName($instanceId, $caption);
             }
 
             IPS_ApplyChanges($instanceId);

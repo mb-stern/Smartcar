@@ -300,12 +300,9 @@ class SmartcarVehicle extends IPSModuleStrict
         $year = $this->ReadPropertyInteger('Year');
         $powertrainType = strtoupper(trim($this->ReadPropertyString('PowertrainType')));
 
-        
-        /*
         if ($powertrainType === 'ICE') {
             $powertrainType = '';
         }
-            */
 
         $region = 'EUROPE';
 
@@ -880,16 +877,17 @@ class SmartcarVehicle extends IPSModuleStrict
     {
         $this->SendDebug('Connect/Start', 'GenerateConnectURL gestartet.', 0);
 
-        // Eine gemeinsame finale Permission-Liste für den Connect-Flow bauen.
-        // read_vin, read_vehicle_info und alle über Checkboxen ausgewählten Permissions
-        // werden danach identisch behandelt und gemeinsam an den Splitter gesendet.
-        $permissions = $this->GetConnectPermissions();
+        $permissions = $this->GetSelectedPermissions();
 
         $this->SendDebug(
             'Connect/Result',
             'Permissions count=' . count($permissions) . ' values=' . json_encode($permissions, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
             0
         );
+
+        if (empty($permissions)) {
+            return 'Fehler: Keine aktivierten Signale/Befehle mit Permission ausgewählt. Bitte Debug prüfen: Connect/SelectedCapabilitiesRaw, Connect/Entry und Connect/Summary.';
+        }
 
         $state = 'vehicle_' . $this->ReadPropertyString('VehicleID') . '_' . bin2hex(random_bytes(8));
 
@@ -933,38 +931,6 @@ class SmartcarVehicle extends IPSModuleStrict
         }
 
         return array_keys($permissions);
-    }
-
-    private function GetConnectPermissions(): array
-    {
-        // Alle Permissions landen zuerst in derselben Liste.
-        // Damit gibt es im eigentlichen Smartcar-Connect-Request keinen
-        // Unterschied mehr zwischen Basis- und Checkbox-Permissions.
-        $permissions = [
-            'read_vin',
-            'read_vehicle_info'
-        ];
-
-        foreach ($this->GetSelectedPermissions() as $permission) {
-            $permission = trim((string)$permission);
-
-            if ($permission !== '') {
-                $permissions[] = $permission;
-            }
-        }
-
-        $permissions = array_map('strtolower', $permissions);
-        $permissions = array_values(array_unique(array_filter($permissions)));
-
-        sort($permissions);
-
-        $this->SendDebug(
-            'Connect/FinalPermissions',
-            json_encode($permissions, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
-            0
-        );
-
-        return $permissions;
     }
 
     private function CreateSignalVariable(string $signalCode, string $name, int $basePosition): bool
