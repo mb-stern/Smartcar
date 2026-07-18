@@ -718,20 +718,16 @@ class SmartcarSplitter extends IPSModuleStrict
             }
 
             // Permission-Update für ein bereits verbundenes Fahrzeug.
-            // Wir verwenden bewusst erneut den normalen, funktionierenden
-            // Authorization-Code-Connect-Flow. Die aktuell in der Vehicle-
-            // Instanz ausgewählten Permissions werden dabei explizit als
-            // scope übergeben. Nach dem Redirect wird LoadConnections()
-            // ausgeführt; über die VehicleID wird die vorhandene IPS-Instanz
-            // aktualisiert und keine neue/defekte Instanz erzeugt.
+            // Exakt derselbe normale Authorization-Code-Flow wie beim
+            // Erstconnect, jedoch mit den aktuell ausgewählten Permissions.
+            // Kein spezieller Re-Auth-Endpunkt und kein approval_prompt.
             $query = [
-                'response_type'   => 'code',
-                'client_id'       => $applicationId,
-                'redirect_uri'    => $redirectURI,
-                'scope'           => implode(' ', $permissions),
-                'state'           => $state,
-                'approval_prompt' => 'force',
-                'mode'            => $mode
+                'response_type' => 'code',
+                'client_id'     => $applicationId,
+                'redirect_uri'  => $redirectURI,
+                'scope'         => implode(' ', $permissions),
+                'state'         => $state,
+                'mode'          => $mode
             ];
 
             $url = 'https://connect.smartcar.com/oauth/authorize?' . http_build_query($query);
