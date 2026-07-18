@@ -724,7 +724,7 @@ class SmartcarSplitter extends IPSModuleStrict
 
             $query = [
                 'response_type' => 'vehicle_id',
-                'client_id'     => $clientId,
+                'application_id'=> $clientId,
                 'redirect_uri'  => $redirectURI,
                 'vehicle_id'    => $vehicleId,
                 'scope'         => implode(' ', $permissions),
@@ -744,7 +744,7 @@ class SmartcarSplitter extends IPSModuleStrict
         } else {
             $query = [
                 'response_type' => 'code',
-                'client_id'     => $clientId,
+                'application_id'=> $clientId,
                 'redirect_uri'  => $redirectURI,
                 'scope'         => implode(' ', $permissions),
                 'state'         => $state,
@@ -766,7 +766,7 @@ class SmartcarSplitter extends IPSModuleStrict
             'flow'           => $flow,
             'vehicleId'      => $vehicleId,
             'responseType'   => $responseType,
-            'clientId'       => $clientId,
+            'applicationId'  => $clientId,
             'permissions'    => $permissions,
             'reauthenticate' => $reauthenticate,
             'url'            => $url
