@@ -47,14 +47,31 @@ class SmartcarSplitter extends IPSModuleStrict
     public function GetConfigurationForm(): string
     {
         $redirectURI = $this->ReadAttributeString('RedirectURI');
+        $hookAddress = 'smartcar_' . $this->InstanceID;
+        $hookPath = '/hook/' . $hookAddress;
+        $manualRedirectURI = trim($this->ReadPropertyString('ManualRedirectURI'));
 
         $form = [
             'elements' => [
                 [
                     'type' => 'Label',
+                    'caption' => 'Lokaler Smartcar Hook-Pfad: ' . $hookPath
+                ],
+                [
+                    'type' => 'Label',
                     'caption' => $redirectURI !== ''
-                        ? 'Redirect-/Webhook-URI: ' . $redirectURI
-                        : 'Redirect-/Webhook-URI: (leer – Symcon Connect nicht gefunden)'
+                        ? 'Aktuelle Redirect-/Webhook-URL: ' . $redirectURI
+                        : 'Aktuelle Redirect-/Webhook-URL: (leer – Symcon Connect nicht gefunden)'
+                ],
+                [
+                    'type' => 'Label',
+                    'caption' => $manualRedirectURI !== ''
+                        ? 'URL-Quelle: Manuelle Redirect-/Webhook-URI'
+                        : 'URL-Quelle: Automatisch über Symcon Connect'
+                ],
+                [
+                    'type' => 'Label',
+                    'caption' => 'Cloudflare Tunnel: Die öffentliche URL muss auf diesen Hook zeigen, z. B. https://deine-domain.tld' . $hookPath
                 ],
                 [
                     'type' => 'ValidationTextBox',
