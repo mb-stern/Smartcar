@@ -75,18 +75,10 @@ class SmartcarConfigurator extends IPSModuleStrict
                 'instanceID' => $instanceId,
                 'name' => $caption,
                 'address' => $vehicleId,
-
-                // Zusätzliche Werte für eigene Spalten
                 'vehicleId' => $vehicleId,
                 'connectionId' => $connectionId,
                 'mode' => $mode,
                 'powertrainType' => $powertrainType,
-
-                /*
-                 * Das Configurator-Element erstellt die Vehicle-Instanz,
-                 * setzt ihre initiale Konfiguration und verbindet sie
-                 * bevorzugt mit dem physischen Parent des Konfigurators.
-                 */
                 'create' => [
                     'moduleID' => self::VEHICLE_MODULE_ID,
                     'name' => $caption,
@@ -226,13 +218,7 @@ class SmartcarConfigurator extends IPSModuleStrict
 
         $permissions = [
             'read_vin',
-            'read_vehicle_info',
-            'read_odometer',
-            'read_location',
-            'read_battery',
-            'read_charge',
-            'read_tires',
-            'read_security'
+            'read_vehicle_info'
         ];
 
         $state = 'configurator_' . $mode . '_' . bin2hex(random_bytes(8));
