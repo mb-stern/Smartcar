@@ -719,28 +719,31 @@ class SmartcarSplitter extends IPSModuleStrict
 
         if ($reauthenticate) {
             if ($vehicleId === '') {
-                return 'Fehler: VehicleID für Re-Authentication fehlt.';
+                return 'Fehler: VehicleID für erneuten Connect fehlt.';
             }
 
+            // Test: Berechtigungserweiterung über denselben Connect-Flow
+            // wie bei einer erstmaligen Fahrzeugverbindung.
+            // Die Scopes kommen weiterhin vollständig aus der Vehicle-Instanz.
             $query = [
-                'response_type' => 'vehicle_id',
-                'application_id'=> $clientId,
-                'redirect_uri'  => $redirectURI,
-                'vehicle_id'    => $vehicleId,
-                'scope'         => implode(' ', $permissions),
-                'state'         => $state,
-                'mode'          => $mode
+                'response_type'  => 'code',
+                'application_id' => $clientId,
+                'redirect_uri'   => $redirectURI,
+                'scope'          => implode(' ', $permissions),
+                'state'          => $state,
+                'approval_prompt'=> 'force',
+                'mode'           => $mode
             ];
 
-            $url = 'https://connect.smartcar.com/oauth/reauthenticate?' . http_build_query(
+            $url = 'https://connect.smartcar.com/oauth/authorize?' . http_build_query(
                 $query,
                 '',
                 '&',
                 PHP_QUERY_RFC3986
             );
 
-            $flow = 'reauthenticate';
-            $responseType = 'vehicle_id';
+            $flow = 'vehicle_reconnect_authorize';
+            $responseType = 'code';
         } else {
             $query = [
                 'response_type' => 'code',
