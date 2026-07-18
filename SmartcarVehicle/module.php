@@ -910,7 +910,7 @@ class SmartcarVehicle extends IPSModuleStrict
             'State'         => $state,
             'Permissions'   => $permissions,
             'VehicleID'     => $vehicleId,
-            'Reauthenticate'=> true
+            'Reauthenticate'=> false
         ];
 
         $this->SendDebug('Connect/RequestToSplitter', json_encode($request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);

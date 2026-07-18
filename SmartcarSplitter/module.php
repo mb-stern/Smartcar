@@ -733,20 +733,13 @@ class SmartcarSplitter extends IPSModuleStrict
         }
 
         if ($reauthenticate && $vehicleId !== '') {
-            /*
-             * Bestehendes Fahrzeug:
-             * Smartcar Re-Authentication Flow.
-             *
-             * WICHTIG:
-             * response_type ist der feste Wert "vehicle_id".
-             * Die konkrete Fahrzeug-ID kommt separat in "vehicle_id".
-             */
+            // Nur für echte OEM-/Account-Reauthentication.
+            // Dieser Flow zeigt keine allgemeine neue Smartcar-Permission-Auswahl an.
             $query = [
                 'response_type' => 'vehicle_id',
                 'application_id'=> $applicationId,
                 'vehicle_id'    => $vehicleId,
                 'redirect_uri'  => $redirectURI,
-                'scope'         => implode(' ', $permissions),
                 'state'         => $state
             ];
 
@@ -760,16 +753,24 @@ class SmartcarSplitter extends IPSModuleStrict
             $flow = 'reauthenticate_existing_vehicle';
         } else {
             /*
-             * Erstverbindung:
-             * normaler Smartcar Connect Authorization-Code-Flow.
+             * Normaler Smartcar Connect Consent Flow.
+             *
+             * Bei Application Access Tokens verwenden wir response_type=none.
+             * Der explizite scope überschreibt die Dashboard-Permissions.
+             * approval_prompt=force sorgt dafür, dass die Berechtigungsseite
+             * erneut angezeigt wird, auch wenn bereits Berechtigungen erteilt wurden.
+             *
+             * Für eine bestehende Vehicle-Instanz wird danach die Connection-Liste
+             * erneut synchronisiert. Die Instanz bleibt über ihre VehicleID erhalten.
              */
             $query = [
-                'application_id' => $applicationId,
-                'redirect_uri'   => $redirectURI,
-                'response_type'  => 'code',
-                'scope'          => implode(' ', $permissions),
-                'state'          => $state,
-                'mode'           => $mode
+                'application_id'  => $applicationId,
+                'redirect_uri'    => $redirectURI,
+                'response_type'   => 'none',
+                'scope'           => implode(' ', $permissions),
+                'state'           => $state,
+                'mode'            => $mode,
+                'approval_prompt' => 'force'
             ];
 
             $url = 'https://connect.smartcar.com/oauth/authorize?' . http_build_query(
@@ -779,16 +780,18 @@ class SmartcarSplitter extends IPSModuleStrict
                 PHP_QUERY_RFC3986
             );
 
-            $flow = 'initial_connect';
+            $flow = $vehicleId !== ''
+                ? 'existing_vehicle_permission_consent'
+                : 'initial_connect';
         }
 
         $this->SendDebug('ConnectURL/Build', json_encode([
             'flow'          => $flow,
             'applicationId' => $applicationId,
-            'vehicleId'    => $vehicleId,
-            'responseType' => $query['response_type'],
-            'permissions'  => $permissions,
-            'url'          => $url
+            'vehicleId'     => $vehicleId,
+            'responseType'  => $query['response_type'],
+            'permissions'   => $permissions,
+            'url'           => $url
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
         return $url;
