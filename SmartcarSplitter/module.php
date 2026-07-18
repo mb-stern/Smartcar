@@ -722,26 +722,25 @@ class SmartcarSplitter extends IPSModuleStrict
                 return 'Fehler: VehicleID für Re-Authentication fehlt.';
             }
 
-            // Re-Authentication über den normalen Authorize-Endpunkt.
-            // Die VehicleID wird direkt als response_type übergeben.
             $query = [
-                'response_type' => $vehicleId,
+                'response_type' => 'vehicle_id',
                 'client_id'     => $clientId,
                 'redirect_uri'  => $redirectURI,
+                'vehicle_id'    => $vehicleId,
                 'scope'         => implode(' ', $permissions),
                 'state'         => $state,
                 'mode'          => $mode
             ];
 
-            $url = 'https://connect.smartcar.com/oauth/authorize?' . http_build_query(
+            $url = 'https://connect.smartcar.com/oauth/reauthenticate?' . http_build_query(
                 $query,
                 '',
                 '&',
                 PHP_QUERY_RFC3986
             );
 
-            $flow = 'reauthenticate_via_authorize';
-            $responseType = $vehicleId;
+            $flow = 'reauthenticate';
+            $responseType = 'vehicle_id';
         } else {
             $query = [
                 'response_type' => 'code',
@@ -811,6 +810,12 @@ class SmartcarSplitter extends IPSModuleStrict
 
     private function HandleConnectRedirect(): void
     {
+        $this->SendDebug(
+            'Connect/RedirectRAW',
+            json_encode($_GET, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            0
+        );
+
         $error = (string)($_GET['error'] ?? '');
         $errorDescription = (string)($_GET['error_description'] ?? '');
 
@@ -828,13 +833,15 @@ class SmartcarSplitter extends IPSModuleStrict
         }
 
         $code = (string)($_GET['code'] ?? '');
+        $returnedVehicleId = (string)($_GET['vehicle_id'] ?? ($_GET['vehicleId'] ?? ''));
         $userId = (string)($_GET['user_id'] ?? ($_GET['userId'] ?? ''));
         $state = (string)($_GET['state'] ?? '');
 
         $this->SendDebug('Connect/Redirect', json_encode([
-            'code'    => $code !== '' ? '<present>' : '',
-            'user_id' => $userId,
-            'state'   => $state
+            'code'       => $code !== '' ? '<present>' : '',
+            'vehicle_id' => $returnedVehicleId,
+            'user_id'    => $userId,
+            'state'      => $state
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
         $vehicleId = $this->ExtractVehicleIdFromState($state);
