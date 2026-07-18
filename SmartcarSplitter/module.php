@@ -696,7 +696,10 @@ class SmartcarSplitter extends IPSModuleStrict
 
     public function BuildConnectURL(string $mode, string $state, array $permissions, string $vehicleId = '', bool $reauthenticate = false): string
     {
-        $clientId = trim($this->ReadPropertyString('ClientID'));
+        // Für Smartcar Connect die Connect-/Application-ID verwenden.
+        // ClientID/ClientSecret bleiben ausschließlich für den
+        // Application-Access-Token gegen iam.smartcar.com zuständig.
+        $clientId = trim($this->ReadPropertyString('ApplicationID'));
 
         $hookAddress = 'smartcar_' . $this->InstanceID;
         $hookPath = '/hook/' . $hookAddress;
@@ -707,7 +710,7 @@ class SmartcarSplitter extends IPSModuleStrict
         }
 
         if ($clientId === '') {
-            return 'Fehler: Client ID fehlt.';
+            return 'Fehler: Application ID für Smartcar Connect fehlt.';
         }
 
         if ($redirectURI === '') {
