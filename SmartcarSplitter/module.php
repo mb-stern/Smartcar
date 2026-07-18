@@ -739,10 +739,10 @@ class SmartcarSplitter extends IPSModuleStrict
             $permissions
         ))));
 
-        if (empty($permissions)) {
-            return 'Fehler: Keine Permissions vorhanden.';
-        }
-
+        // Bei leerer Permission-Liste wird bewusst kein "scope"-Parameter
+        // an Smartcar Connect übergeben. In diesem Fall verwendet Smartcar
+        // die im Dashboard konfigurierte und veröffentlichte Vehicle-Access-
+        // Konfiguration der Application.
         if ($state === '') {
             $state = bin2hex(random_bytes(12));
         }
@@ -761,10 +761,16 @@ class SmartcarSplitter extends IPSModuleStrict
             'response_type' => 'code',
             'client_id'     => $clientId,
             'redirect_uri'  => $redirectURI,
-            'scope'         => implode(' ', $permissions),
             'state'         => $state,
             'mode'          => $mode
         ];
+
+        // Nur wenn explizit Permissions übergeben wurden, wird ein Scope
+        // gesetzt. Standardmäßig bleibt scope weg und Smartcar verwendet
+        // die Vehicle-Access-Konfiguration aus dem Dashboard.
+        if (!empty($permissions)) {
+            $query['scope'] = implode(' ', $permissions);
+        }
 
         $url = 'https://connect.smartcar.com/oauth/authorize?' . http_build_query(
             $query,
@@ -779,6 +785,7 @@ class SmartcarSplitter extends IPSModuleStrict
             'responseType'  => 'code',
             'clientId'      => $clientId,
             'permissions'   => $permissions,
+            'permissionSource' => empty($permissions) ? 'vehicle_access_dashboard' : 'explicit_scope',
             'url'           => $url
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 

@@ -194,7 +194,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 ],
                 [
                     'type' => 'Button',
-                    'caption' => 'Gewählte Signale bei Smartcar registrieren',
+                    'caption' => 'Smartcar Fahrzeugzugriff aktualisieren',
                     'onClick' => 'echo SMCARV_GenerateConnectURL($id);'
                 ],
                 [
@@ -875,16 +875,18 @@ class SmartcarVehicle extends IPSModuleStrict
 
     public function GenerateConnectURL(): string
     {
-        $this->SendDebug('Connect/Start', 'GenerateConnectURL gestartet.', 0);
+        $this->SendDebug('Connect/Start', 'GenerateConnectURL über Smartcar Vehicle Access gestartet.', 0);
 
-        // Eine gemeinsame finale Permission-Liste für den Connect-Flow bauen.
-        // read_vehicle_info und alle über Checkboxen ausgewählten Permissions
-        // werden danach identisch behandelt und gemeinsam an den Splitter gesendet.
-        $permissions = $this->GetConnectPermissions();
+        // Keine Permissions aus den lokalen Checkboxen als OAuth-Scope senden.
+        // Die Checkboxen steuern ausschließlich, welche kompatiblen Signale
+        // und Befehle in IP-Symcon angelegt bzw. verarbeitet werden.
+        // Welche Zugriffe Smartcar autorisiert, wird zentral über die im
+        // Smartcar-Dashboard veröffentlichte Vehicle-Access-Konfiguration bestimmt.
+        $permissions = [];
 
         $this->SendDebug(
-            'Connect/Result',
-            'Permissions count=' . count($permissions) . ' values=' . json_encode($permissions, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            'Connect/PermissionSource',
+            'Vehicle Access Dashboard (kein expliziter scope)',
             0
         );
 
