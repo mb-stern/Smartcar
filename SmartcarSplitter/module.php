@@ -160,14 +160,14 @@ class SmartcarSplitter extends IPSModuleStrict
                 return json_encode($this->LoadConnections(), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
             case 'BuildConnectURL':
-                return json_encode([
-                    'success' => true,
-                    'url' => $this->BuildConnectURL(
+                return json_encode(
+                    $this->BuildConnectURL(
                         (string)($data['Mode'] ?? 'live'),
                         (string)($data['State'] ?? ''),
                         is_array($data['Permissions'] ?? null) ? $data['Permissions'] : []
-                    )
-                ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+                    ),
+                    JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+                );
 
             case 'GetVehicle':
                 return json_encode($this->ApiGetVehicle(
@@ -671,50 +671,73 @@ class SmartcarSplitter extends IPSModuleStrict
         return null;
     }
 
-    public function BuildConnectURL(string $mode, string $state, array $permissions): string
+    public function BuildConnectURL(string $mode, string $state, array $permissions = []): array
     {
-        $clientID = trim($this->ReadPropertyString('ApplicationID'));
+        $applicationID = trim($this->ReadPropertyString('ApplicationID'));
 
-        $hookAddress = 'smartcar_' . $this->InstanceID;
-        $hookPath = '/hook/' . $hookAddress;
+        if ($applicationID === '') {
+            return ['success' => false, 'error' => 'Application ID fehlt.'];
+        }
 
-        $redirectURI = $this->ReadAttributeString('RedirectURI');
+        $hookPath = '/hook/smartcar_' . $this->InstanceID;
+        $redirectURI = trim($this->ReadAttributeString('RedirectURI'));
         if ($redirectURI === '') {
             $redirectURI = $this->BuildSymconConnectURL($hookPath);
         }
 
-        if ($clientID === '') {
-            return 'Fehler: Client ID fehlt.';
-        }
-
         if ($redirectURI === '') {
-            return 'Fehler: Redirect-/Webhook-URI fehlt.';
+            return ['success' => false, 'error' => 'Keine IP-Symcon-Connect-Redirect-URI verfügbar.'];
         }
 
-        $permissions = array_values(array_unique(array_filter(array_map('strval', $permissions))));
-
-        if (empty($permissions)) {
-            return 'Fehler: Keine Permissions aus den aktivierten Signalen gefunden.';
+        $mode = strtolower(trim($mode));
+        if (!in_array($mode, ['live', 'simulated'], true)) {
+            $mode = 'live';
         }
 
         if ($state === '') {
-            $state = bin2hex(random_bytes(12));
+            $state = 'configurator_' . $mode . '_' . bin2hex(random_bytes(16));
         }
 
         $query = [
-            'response_type' => 'code',
-            'client_id'     => $clientID,
-            'redirect_uri'  => $redirectURI,
-            'scope'         => implode(' ', $permissions),
-            'state'         => $state,
-            'mode'          => $mode !== '' ? $mode : 'live'
+            'application_id' => $applicationID,
+            'external_id'    => 'ips_' . $this->InstanceID,
+            'response_type'  => 'none',
+            'redirect_uri'   => $redirectURI,
+            'state'          => $state,
+            'mode'           => $mode
         ];
 
-        $url = 'https://connect.smartcar.com/oauth/authorize?' . http_build_query($query);
+        // Der Konfigurator nutzt die im Smartcar-Dashboard unter Vehicle Access
+        // veröffentlichten Berechtigungen. Fahrzeug-Instanzen dürfen später
+        // weiterhin eine gezielte Scope-Liste übergeben.
+        $permissions = array_values(array_unique(array_filter(array_map(
+            static fn($permission): string => trim((string)$permission),
+            $permissions
+        ))));
 
-        $this->SendDebug('ConnectURL/Build', $url, 0);
+        if (!empty($permissions)) {
+            $query['scope'] = implode(' ', $permissions);
+        }
 
-        return $url;
+        $url = 'https://connect.smartcar.com/oauth/authorize?' . http_build_query(
+            $query,
+            '',
+            '&',
+            PHP_QUERY_RFC3986
+        );
+
+        $this->SendDebug('ConnectURL/Build', json_encode([
+            'url'            => $url,
+            'application_id' => $applicationID,
+            'external_id'    => $query['external_id'],
+            'response_type'  => 'none',
+            'redirect_uri'   => $redirectURI,
+            'state'          => $state,
+            'mode'           => $mode,
+            'scope'          => $query['scope'] ?? '<Dashboard Vehicle Access>'
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+
+        return ['success' => true, 'url' => $url];
     }
 
     private function BuildSymconConnectURL(string $hookPath): string
@@ -768,14 +791,14 @@ class SmartcarSplitter extends IPSModuleStrict
             return;
         }
 
-        $code = (string)($_GET['code'] ?? '');
         $userId = (string)($_GET['user_id'] ?? ($_GET['userId'] ?? ''));
         $state = (string)($_GET['state'] ?? '');
 
         $this->SendDebug('Connect/Redirect', json_encode([
-            'code'    => $code !== '' ? '<present>' : '',
-            'user_id' => $userId,
-            'state'   => $state
+            'response_type' => 'none',
+            'user_id'       => $userId,
+            'state'         => $state,
+            'query'         => $_GET
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
         $vehicleId = $this->ExtractVehicleIdFromState($state);
