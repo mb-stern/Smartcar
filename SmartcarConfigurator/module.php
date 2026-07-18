@@ -253,11 +253,13 @@ class SmartcarConfigurator extends IPSModuleStrict
         $state = 'configurator_' . $mode . '_' . bin2hex(random_bytes(8));
 
         $result = $this->SendDataToParent(json_encode([
-            'DataID'      => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
-            'Command'     => 'BuildConnectURL',
-            'Mode'        => $mode,
-            'State'       => $state,
-            'Permissions' => $permissions
+            'DataID'         => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
+            'Command'        => 'BuildConnectURL',
+            'Mode'           => $mode,
+            'State'          => $state,
+            'Permissions'    => $permissions,
+            'VehicleID'      => '',
+            'Reauthenticate' => false
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
 
         $decoded = json_decode((string)$result, true);

@@ -711,27 +711,54 @@ class SmartcarSplitter extends IPSModuleStrict
             $mode = 'live';
         }
 
-        // Sowohl Erstverbindung als auch spätere Permission-Aktualisierung
-        // verwenden bewusst denselben bewährten Smartcar-Connect-Flow.
-        // Die VehicleID wird bei einer Permission-Aktualisierung ausschließlich
-        // über den State mitgeführt und nach dem Redirect zur vorhandenen
-        // IP-Symcon-Fahrzeuginstanz aufgelöst.
+        // Smartcar v3 / Application Access Token Flow:
+        //
+        // 1. Initiale Fahrzeugverbindung:
+        //    response_type=none
+        //    application_id=<ApplicationID>
+        //
+        // 2. Bereits verbundenes Fahrzeug erneut autorisieren:
+        //    response_type=<VehicleID>
+        //    application_id=<ApplicationID>
+        //
+        // Der scope-Parameter überschreibt für genau diesen Connect-Vorgang
+        // die im Dashboard unter Vehicle Access hinterlegten Permissions.
+        $isVehicleAuthorization = $vehicleId !== '';
+
+        $requiredPermissions = array_map(
+            static function (string $permission): string {
+                return str_starts_with($permission, 'required:')
+                    ? $permission
+                    : 'required:' . $permission;
+            },
+            $permissions
+        );
+
         $query = [
-            'response_type' => 'code',
-            'client_id'     => $applicationId,
-            'redirect_uri'  => $redirectURI,
-            'scope'         => implode(' ', $permissions),
-            'state'         => $state,
-            'mode'          => $mode
+            'application_id' => $applicationId,
+            'response_type'  => $isVehicleAuthorization ? $vehicleId : 'none',
+            'redirect_uri'   => $redirectURI,
+            'external_id'    => 'ips_' . $this->InstanceID,
+            'scope'          => implode(' ', $requiredPermissions),
+            'state'          => $state,
+            'mode'           => $mode
         ];
 
-        $url = 'https://connect.smartcar.com/oauth/authorize?' . http_build_query($query);
+        $url = 'https://connect.smartcar.com/oauth/authorize?' . http_build_query(
+            $query,
+            '',
+            '&',
+            PHP_QUERY_RFC3986
+        );
 
         $this->SendDebug('ConnectURL/Build', json_encode([
-            'permissionUpdate' => strncmp($state, 'vehicle_', 8) === 0,
-            'vehicleId'        => trim($vehicleId),
-            'permissions'      => $permissions,
-            'url'              => $url
+            'flow'                => $isVehicleAuthorization ? 'vehicle_reauthorization' : 'initial_connect',
+            'vehicleId'           => $vehicleId,
+            'responseType'        => $query['response_type'],
+            'applicationId'       => $applicationId,
+            'permissions'         => $permissions,
+            'requiredPermissions' => $requiredPermissions,
+            'url'                 => $url
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
         return $url;
