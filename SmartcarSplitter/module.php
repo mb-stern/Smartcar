@@ -719,6 +719,19 @@ class SmartcarSplitter extends IPSModuleStrict
             $permissions
         ))));
 
+        if (empty($permissions)) {
+            return 'Fehler: Keine Permissions vorhanden.';
+        }
+
+        $requiredPermissions = array_map(
+            static function (string $permission): string {
+                return str_starts_with($permission, 'required:')
+                    ? $permission
+                    : 'required:' . $permission;
+            },
+            $permissions
+        );
+
         if ($state === '') {
             $state = bin2hex(random_bytes(12));
         }
@@ -731,53 +744,19 @@ class SmartcarSplitter extends IPSModuleStrict
         $vehicleId = trim($vehicleId);
         $isReauthentication = $reauthenticate && $vehicleId !== '';
 
-        if ($isReauthentication) {
-            // Smartcar Reauthentication Flow:
-            // eigener Endpoint, feste response_type=vehicle_id und
-            // Vehicle-ID als separater Parameter.
-            $query = [
-                'response_type' => 'vehicle_id',
-                'application_id' => $applicationId,
-                'vehicle_id'     => $vehicleId,
-                'redirect_uri'   => $redirectURI,
-                'external_id'    => 'ips_' . $this->InstanceID,
-                'state'          => $state,
-                'mode'           => $mode
-            ];
-
-            $url = 'https://connect.smartcar.com/oauth/reauthenticate?' . http_build_query(
-                $query,
-                '',
-                '&',
-                PHP_QUERY_RFC3986
-            );
-
-            $this->SendDebug('ConnectURL/Build', json_encode([
-                'flow'         => 'vehicle_reauthentication',
-                'vehicleId'    => $vehicleId,
-                'responseType' => 'vehicle_id',
-                'applicationId'=> $applicationId,
-                'permissions'  => $permissions,
-                'url'          => $url
-            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
-
-            return $url;
-        }
-
-        if (empty($permissions)) {
-            return 'Fehler: Keine Permissions vorhanden.';
-        }
-
-        // Bewährter Erstconnect bleibt unverändert:
-        // normaler authorize-Endpunkt mit response_type=code.
         $query = [
-            'response_type' => 'code',
-            'client_id'     => $applicationId,
-            'redirect_uri'  => $redirectURI,
-            'scope'         => implode(' ', $permissions),
-            'state'         => $state,
-            'mode'          => $mode
+            'application_id' => $applicationId,
+            'response_type'  => $isReauthentication ? $vehicleId : 'none',
+            'redirect_uri'   => $redirectURI,
+            'scope'          => implode(' ', $requiredPermissions),
+            'state'          => $state,
+            'mode'           => $mode,
+            'external_id'    => 'ips_' . $this->InstanceID
         ];
+
+        if ($isReauthentication) {
+            $query['approval_prompt'] = 'force';
+        }
 
         $url = 'https://connect.smartcar.com/oauth/authorize?' . http_build_query(
             $query,
@@ -787,12 +766,14 @@ class SmartcarSplitter extends IPSModuleStrict
         );
 
         $this->SendDebug('ConnectURL/Build', json_encode([
-            'flow'         => 'initial_connect',
-            'vehicleId'    => '',
-            'responseType' => 'code',
-            'connectId'    => $applicationId,
-            'permissions'  => $permissions,
-            'url'          => $url
+            'flow'                => $isReauthentication ? 'vehicle_reauthentication' : 'initial_connect',
+            'vehicleId'           => $vehicleId,
+            'responseType'        => $query['response_type'],
+            'applicationId'       => $applicationId,
+            'permissions'         => $permissions,
+            'requiredPermissions' => $requiredPermissions,
+            'approvalPrompt'      => $query['approval_prompt'] ?? 'auto',
+            'url'                 => $url
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
         return $url;
