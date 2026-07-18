@@ -879,17 +879,6 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $permissions = $this->GetSelectedPermissions();
 
-        foreach ($this->GetCurrentConnectionPermissions() as $existingPermission) {
-            if (!in_array($existingPermission, $permissions, true)) {
-                $permissions[] = $existingPermission;
-            }
-        }
-
-        $permissions = array_values(array_unique(array_filter(array_map(
-            static fn($permission): string => trim((string)$permission),
-            $permissions
-        ))));
-
         $this->SendDebug(
             'Connect/Result',
             'Permissions count=' . count($permissions) . ' values=' . json_encode($permissions, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
@@ -900,22 +889,28 @@ class SmartcarVehicle extends IPSModuleStrict
             return 'Fehler: Keine aktivierten Signale/Befehle mit Permission ausgewählt. Bitte Debug prüfen: Connect/SelectedCapabilitiesRaw, Connect/Entry und Connect/Summary.';
         }
 
-        $state = 'vehicle_' . $this->ReadPropertyString('VehicleID') . '_' . bin2hex(random_bytes(8));
-
         $vehicleId = trim($this->ReadPropertyString('VehicleID'));
-
         if ($vehicleId === '') {
-            return 'Fehler: VehicleID fehlt.';
+            return 'Fehler: Vehicle ID fehlt. Eine Permission-Erweiterung ist nur für ein bestehendes Fahrzeug möglich.';
         }
 
+        // Der scope-Parameter überschreibt die Dashboard-Permissions.
+        // Basis-Permissions deshalb immer beibehalten.
+        $permissions = array_values(array_unique(array_merge(
+            ['read_vin', 'read_vehicle_info'],
+            $permissions
+        )));
+
+        $state = 'vehicle_' . $vehicleId . '_' . bin2hex(random_bytes(8));
+
         $request = [
-            'DataID'         => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
-            'Command'        => 'BuildConnectURL',
-            'Mode'           => 'live',
-            'State'          => $state,
-            'Permissions'    => $permissions,
-            'VehicleID'      => $vehicleId,
-            'Reauthenticate' => true
+            'DataID'        => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
+            'Command'       => 'BuildConnectURL',
+            'Mode'          => 'live',
+            'State'         => $state,
+            'Permissions'   => $permissions,
+            'VehicleID'     => $vehicleId,
+            'Reauthenticate'=> false
         ];
 
         $this->SendDebug('Connect/RequestToSplitter', json_encode($request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
@@ -930,50 +925,6 @@ class SmartcarVehicle extends IPSModuleStrict
         }
 
         return (string)($decoded['url'] ?? '');
-    }
-
-    private function GetCurrentConnectionPermissions(): array
-    {
-        if (!$this->HasParentConnection()) {
-            return [];
-        }
-
-        $vehicleId = trim($this->ReadPropertyString('VehicleID'));
-        if ($vehicleId === '') {
-            return [];
-        }
-
-        $result = $this->SendDataToParent(json_encode([
-            'DataID'  => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
-            'Command' => 'LoadConnections'
-        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
-
-        $connections = json_decode((string)$result, true);
-        if (!is_array($connections)) {
-            return [];
-        }
-
-        foreach ($connections as $connection) {
-            if (!is_array($connection)) {
-                continue;
-            }
-
-            if ((string)($connection['vehicleId'] ?? '') !== $vehicleId) {
-                continue;
-            }
-
-            $permissions = $connection['permissions'] ?? [];
-            if (!is_array($permissions)) {
-                return [];
-            }
-
-            return array_values(array_unique(array_filter(array_map(
-                static fn($permission): string => trim((string)$permission),
-                $permissions
-            ))));
-        }
-
-        return [];
     }
 
     private function GetSelectedPermissions(): array

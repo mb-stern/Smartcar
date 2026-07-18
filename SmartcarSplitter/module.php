@@ -723,15 +723,6 @@ class SmartcarSplitter extends IPSModuleStrict
             return 'Fehler: Keine Permissions vorhanden.';
         }
 
-        $requiredPermissions = array_map(
-            static function (string $permission): string {
-                return str_starts_with($permission, 'required:')
-                    ? $permission
-                    : 'required:' . $permission;
-            },
-            $permissions
-        );
-
         if ($state === '') {
             $state = bin2hex(random_bytes(12));
         }
@@ -741,28 +732,51 @@ class SmartcarSplitter extends IPSModuleStrict
             $mode = 'live';
         }
 
-        $vehicleId = trim($vehicleId);
-        $isPermissionReconnect = $reauthenticate && $vehicleId !== '';
+        /*
+         * Smartcar V3 / Application Access Token Flow
+         *
+         * Erstverbindung:
+         *   /oauth/authorize
+         *   response_type=none
+         *
+         * Zusätzliche Permissions für ein bereits verbundenes Fahrzeug:
+         *   /oauth/authorize
+         *   response_type=<bestehende Vehicle ID>
+         *
+         * Wichtig:
+         * - application_id verwenden, nicht client_id.
+         * - scope überschreibt die im Dashboard konfigurierten Permissions.
+         * - Deshalb muss die Vehicle-Instanz den vollständigen gewünschten
+         *   Permission-Satz mitsenden, nicht nur die neu hinzugekommene Permission.
+         *
+         * Der separate /oauth/reauthenticate Flow ist für eine erneute
+         * OEM-/Account-Authentifizierung. Dort wäre response_type=vehicle_id
+         * und vehicle_id=<ID>. Er wird hier für Permission-Erweiterungen
+         * absichtlich nicht verwendet.
+         */
+        if ($vehicleId !== '') {
+            $query = [
+                'application_id' => $applicationId,
+                'redirect_uri'   => $redirectURI,
+                'response_type'  => $vehicleId,
+                'scope'          => implode(' ', $permissions),
+                'state'          => $state,
+                'mode'           => $mode,
+                'approval_prompt'=> 'force'
+            ];
 
-        // Application Access Token Flow:
-        // Sowohl Erstverbindung als auch erneute Berechtigungsfreigabe
-        // verwenden response_type=none.
-        //
-        // Beim Permission-Reconnect sorgt approval_prompt=force dafür,
-        // dass der Grant-Screen erneut angezeigt wird. Die vollständige
-        // kumulierte Scope-Liste wird explizit übergeben.
-        $query = [
-            'application_id' => $applicationId,
-            'response_type'  => 'none',
-            'redirect_uri'   => $redirectURI,
-            'scope'          => implode(' ', $requiredPermissions),
-            'state'          => $state,
-            'mode'           => $mode,
-            'external_id'    => 'ips_' . $this->InstanceID
-        ];
+            $flow = 'existing_vehicle_permission_authorization';
+        } else {
+            $query = [
+                'application_id' => $applicationId,
+                'redirect_uri'   => $redirectURI,
+                'response_type'  => 'none',
+                'scope'          => implode(' ', $permissions),
+                'state'          => $state,
+                'mode'           => $mode
+            ];
 
-        if ($isPermissionReconnect) {
-            $query['approval_prompt'] = 'force';
+            $flow = 'initial_connect';
         }
 
         $url = 'https://connect.smartcar.com/oauth/authorize?' . http_build_query(
@@ -773,14 +787,12 @@ class SmartcarSplitter extends IPSModuleStrict
         );
 
         $this->SendDebug('ConnectURL/Build', json_encode([
-            'flow'                => $isPermissionReconnect ? 'vehicle_permission_reconnect' : 'initial_connect',
-            'vehicleId'           => $vehicleId,
-            'responseType'        => 'none',
-            'applicationId'       => $applicationId,
-            'permissions'         => $permissions,
-            'requiredPermissions' => $requiredPermissions,
-            'approvalPrompt'      => $query['approval_prompt'] ?? 'auto',
-            'url'                 => $url
+            'flow'          => $flow,
+            'vehicleId'     => $vehicleId,
+            'responseType'  => $query['response_type'],
+            'applicationId' => $applicationId,
+            'permissions'   => $permissions,
+            'url'           => $url
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
         return $url;
