@@ -216,10 +216,10 @@ class SmartcarConfigurator extends IPSModuleStrict
             $mode = 'live';
         }
 
-        // Keine expliziten OAuth-Scopes mitsenden.
-        // Smartcar verwendet dadurch die im Dashboard veröffentlichte
-        // Vehicle-Access-Konfiguration der Application.
-        $permissions = [];
+        $permissions = [
+            'read_vin',
+            'read_vehicle_info'
+        ];
 
         $state = 'configurator_' . $mode . '_' . bin2hex(random_bytes(8));
 
