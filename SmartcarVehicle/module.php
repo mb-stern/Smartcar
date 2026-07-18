@@ -300,9 +300,12 @@ class SmartcarVehicle extends IPSModuleStrict
         $year = $this->ReadPropertyInteger('Year');
         $powertrainType = strtoupper(trim($this->ReadPropertyString('PowertrainType')));
 
+        
+        /*
         if ($powertrainType === 'ICE') {
             $powertrainType = '';
         }
+            */
 
         $region = 'EUROPE';
 
