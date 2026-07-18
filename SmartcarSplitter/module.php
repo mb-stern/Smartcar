@@ -159,6 +159,14 @@ class SmartcarSplitter extends IPSModuleStrict
             case 'LoadConnections':
                 return json_encode($this->LoadConnections(), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
+            case 'GetConnectionPermissions':
+                return json_encode(
+                    $this->GetConnectionPermissions(
+                        (string)($data['VehicleID'] ?? '')
+                    ),
+                    JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+                );
+
             case 'BuildConnectURL':
                 return json_encode([
                     'success' => true,
@@ -282,6 +290,65 @@ class SmartcarSplitter extends IPSModuleStrict
         }
 
         return $connections;
+    }
+
+
+    public function GetConnectionPermissions(string $vehicleId): array
+    {
+        $vehicleId = trim($vehicleId);
+
+        if ($vehicleId === '') {
+            return [
+                'success' => false,
+                'error' => 'VehicleID fehlt.'
+            ];
+        }
+
+        $connections = $this->LoadConnections();
+
+        foreach ($connections as $connection) {
+            if (!is_array($connection)) {
+                continue;
+            }
+
+            if ((string)($connection['vehicleId'] ?? '') !== $vehicleId) {
+                continue;
+            }
+
+            $permissions = $connection['permissions'] ?? [];
+            if (!is_array($permissions)) {
+                $permissions = [];
+            }
+
+            $result = [
+                'success'      => true,
+                'vehicleId'    => $vehicleId,
+                'connectionId' => (string)($connection['connectionId'] ?? ''),
+                'permissions'  => array_values($permissions)
+            ];
+
+            $this->SendDebug(
+                'ConnectionPermissions',
+                json_encode($result, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                0
+            );
+
+            return $result;
+        }
+
+        $result = [
+            'success' => false,
+            'vehicleId' => $vehicleId,
+            'error' => 'Keine Connection für VehicleID gefunden.'
+        ];
+
+        $this->SendDebug(
+            'ConnectionPermissions',
+            json_encode($result, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            0
+        );
+
+        return $result;
     }
 
     public function ApiGetVehicle(string $vehicleId, string $userId = ''): array
