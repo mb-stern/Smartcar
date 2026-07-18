@@ -693,10 +693,6 @@ class SmartcarSplitter extends IPSModuleStrict
 
         $permissions = array_values(array_unique(array_filter(array_map('strval', $permissions))));
 
-        if (empty($permissions)) {
-            return 'Fehler: Keine Permissions aus den aktivierten Signalen gefunden.';
-        }
-
         if ($state === '') {
             $state = bin2hex(random_bytes(12));
         }
@@ -705,10 +701,17 @@ class SmartcarSplitter extends IPSModuleStrict
             'response_type' => 'code',
             'client_id'     => $clientID,
             'redirect_uri'  => $redirectURI,
-            'scope'         => implode(' ', $permissions),
             'state'         => $state,
             'mode'          => $mode !== '' ? $mode : 'live'
         ];
+
+        // Nur dann einen Scope-Parameter setzen, wenn der aufrufende Client
+        // tatsächlich Permissions vorgibt. Der Configurator kann dadurch
+        // einen Initial-Connect ohne explizite Scopes starten; die Vehicle-
+        // Instanz übergibt später weiterhin gezielt ihre ausgewählten Scopes.
+        if (!empty($permissions)) {
+            $query['scope'] = implode(' ', $permissions);
+        }
 
         $url = 'https://connect.smartcar.com/oauth/authorize?' . http_build_query($query);
 
@@ -825,9 +828,11 @@ class SmartcarSplitter extends IPSModuleStrict
             }
 
             $instanceId = $this->FindVehicleInstanceByVehicleId($vehicleId);
+            $isNew = false;
 
             if ($instanceId === 0) {
                 $instanceId = IPS_CreateInstance('{1E1B7C9A-2D4F-4E8A-9C3B-7F6D5A4E2B10}');
+                $isNew = true;
 
                 $this->SendDebug(
                     'Connect/CreateVehicle',
@@ -836,13 +841,40 @@ class SmartcarSplitter extends IPSModuleStrict
                 );
             }
 
+            $caption = trim((string)($connection['caption'] ?? ''));
+            if ($caption === '') {
+                $caption = $vehicleId;
+            }
+
+            // Die VehicleID muss vor ApplyChanges gesetzt werden. Andernfalls
+            // wechselt die Vehicle-Instanz in den Fehlerstatus und kann beim
+            // nächsten Synchronisieren nicht mehr über die VehicleID gefunden
+            // werden, wodurch Dubletten entstehen können.
+            IPS_SetProperty($instanceId, 'VehicleID', $vehicleId);
             IPS_SetProperty($instanceId, 'ConnectionID', (string)($connection['connectionId'] ?? ''));
             IPS_SetProperty($instanceId, 'UserID', (string)($connection['userId'] ?? ''));
-            IPS_SetProperty($instanceId, 'VehicleCaption', (string)($connection['caption'] ?? $vehicleId));
+            IPS_SetProperty($instanceId, 'VehicleCaption', $caption);
             IPS_SetProperty($instanceId, 'Make', (string)($connection['make'] ?? ''));
             IPS_SetProperty($instanceId, 'Model', (string)($connection['model'] ?? ''));
             IPS_SetProperty($instanceId, 'Year', (int)($connection['year'] ?? 0));
             IPS_SetProperty($instanceId, 'PowertrainType', (string)($connection['powertrainType'] ?? ''));
+
+            IPS_SetName($instanceId, $caption);
+
+            // Die automatisch angelegte Vehicle-Instanz direkt mit diesem
+            // Splitter verbinden. Ohne Parent-Verbindung können spätere API-
+            // Aufrufe der Vehicle-Instanz nicht funktionieren.
+            @IPS_ConnectInstance($instanceId, $this->InstanceID);
+
+            // Neue Instanzen neben dem Splitter einsortieren. Das entspricht
+            // in der üblichen Modulstruktur der gemeinsamen Kategorie von
+            // Splitter, Configurator und Vehicles.
+            if ($isNew) {
+                $targetParentId = IPS_GetParent($this->InstanceID);
+                if ($targetParentId > 0 && IPS_GetParent($instanceId) !== $targetParentId) {
+                    @IPS_SetParent($instanceId, $targetParentId);
+                }
+            }
 
             IPS_ApplyChanges($instanceId);
         }

@@ -243,16 +243,12 @@ class SmartcarConfigurator extends IPSModuleStrict
             $mode = 'live';
         }
 
-        $permissions = [
-            'read_vin',
-            'read_vehicle_info',
-            'read_odometer',
-            'read_location',
-            'read_battery',
-            'read_charge',
-            'read_tires',
-            'read_security'
-        ];
+        // Initial Connect: keine expliziten Scopes übergeben.
+        // Smartcar verwendet damit die im Dashboard unter Vehicle Access
+        // konfigurierten Standardberechtigungen. Die für Signale/Befehle
+        // benötigten Scopes werden später gezielt durch die Vehicle-Instanz
+        // beim erneuten Connect übergeben.
+        $permissions = [];
 
         $state = 'configurator_' . $mode . '_' . bin2hex(random_bytes(8));
 
