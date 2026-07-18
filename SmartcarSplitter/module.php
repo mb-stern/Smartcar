@@ -696,7 +696,7 @@ class SmartcarSplitter extends IPSModuleStrict
 
     public function BuildConnectURL(string $mode, string $state, array $permissions, string $vehicleId = '', bool $reauthenticate = false): string
     {
-        $clientId = trim($this->ReadPropertyString('ClientID'));
+        $applicationId = trim($this->ReadPropertyString('ApplicationID'));
 
         $hookAddress = 'smartcar_' . $this->InstanceID;
         $hookPath = '/hook/' . $hookAddress;
@@ -706,8 +706,8 @@ class SmartcarSplitter extends IPSModuleStrict
             $redirectURI = $this->BuildSymconConnectURL($hookPath);
         }
 
-        if ($clientId === '') {
-            return 'Fehler: Client ID fehlt.';
+        if ($applicationId === '') {
+            return 'Fehler: Application ID für Smartcar Connect fehlt.';
         }
 
         if ($redirectURI === '') {
@@ -743,7 +743,7 @@ class SmartcarSplitter extends IPSModuleStrict
              */
             $query = [
                 'response_type' => 'vehicle_id',
-                'client_id'     => $clientId,
+                'application_id'=> $applicationId,
                 'vehicle_id'    => $vehicleId,
                 'redirect_uri'  => $redirectURI,
                 'scope'         => implode(' ', $permissions),
@@ -764,7 +764,7 @@ class SmartcarSplitter extends IPSModuleStrict
              * normaler Smartcar Connect Authorization-Code-Flow.
              */
             $query = [
-                'client_id'      => $clientId,
+                'application_id' => $applicationId,
                 'redirect_uri'   => $redirectURI,
                 'response_type'  => 'code',
                 'scope'          => implode(' ', $permissions),
@@ -783,7 +783,8 @@ class SmartcarSplitter extends IPSModuleStrict
         }
 
         $this->SendDebug('ConnectURL/Build', json_encode([
-            'flow'         => $flow,
+            'flow'          => $flow,
+            'applicationId' => $applicationId,
             'vehicleId'    => $vehicleId,
             'responseType' => $query['response_type'],
             'permissions'  => $permissions,
