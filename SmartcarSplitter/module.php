@@ -696,7 +696,10 @@ class SmartcarSplitter extends IPSModuleStrict
 
     public function BuildConnectURL(string $mode, string $state, array $permissions, string $vehicleId = '', bool $reauthenticate = false): string
     {
-        $connectClientId = trim($this->ReadPropertyString('ApplicationID'));
+        // Für Smartcar Connect die Connect-/Application-ID verwenden.
+        // ClientID/ClientSecret bleiben ausschließlich für den
+        // Application-Access-Token gegen iam.smartcar.com zuständig.
+        $clientId = trim($this->ReadPropertyString('ApplicationID'));
 
         $hookAddress = 'smartcar_' . $this->InstanceID;
         $hookPath = '/hook/' . $hookAddress;
@@ -706,7 +709,7 @@ class SmartcarSplitter extends IPSModuleStrict
             $redirectURI = $this->BuildSymconConnectURL($hookPath);
         }
 
-        if ($connectClientId === '') {
+        if ($clientId === '') {
             return 'Fehler: Application ID für Smartcar Connect fehlt.';
         }
 
@@ -732,13 +735,16 @@ class SmartcarSplitter extends IPSModuleStrict
             $mode = 'live';
         }
 
-        $isVehicleReauth = $reauthenticate && $vehicleId !== '';
-
+        // Bewährter normaler Smartcar Connect Flow.
+        // Sowohl Erstverbindung als auch erneute Autorisierung werden
+        // über /oauth/authorize mit response_type=code gestartet.
+        // Die VehicleID wird nur über "state" mitgeführt und ist kein
+        // OAuth response_type.
         $query = [
-            'response_type' => $isVehicleReauth ? $vehicleId : 'code',
-            'client_id'     => $connectClientId,
-            'scope'         => implode(' ', $permissions),
+            'response_type' => 'code',
+            'client_id'     => $clientId,
             'redirect_uri'  => $redirectURI,
+            'scope'         => implode(' ', $permissions),
             'state'         => $state,
             'mode'          => $mode
         ];
@@ -751,12 +757,12 @@ class SmartcarSplitter extends IPSModuleStrict
         );
 
         $this->SendDebug('ConnectURL/Build', json_encode([
-            'flow'            => $isVehicleReauth ? 'vehicle_reauthentication' : 'initial_connect',
-            'vehicleId'       => $vehicleId,
-            'responseType'    => $query['response_type'],
-            'connectClientId' => $connectClientId,
-            'permissions'     => $permissions,
-            'url'             => $url
+            'flow'          => $vehicleId !== '' ? 'vehicle_permission_connect' : 'initial_connect',
+            'vehicleId'     => $vehicleId,
+            'responseType'  => 'code',
+            'clientId'      => $clientId,
+            'permissions'   => $permissions,
+            'url'           => $url
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
         return $url;
