@@ -892,13 +892,11 @@ class SmartcarVehicle extends IPSModuleStrict
         $state = 'vehicle_' . $this->ReadPropertyString('VehicleID') . '_' . bin2hex(random_bytes(8));
 
         $request = [
-            'DataID'        => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
-            'Command'       => 'BuildConnectURL',
-            'Mode'          => 'live',
-            'State'         => $state,
-            'Permissions'   => $permissions,
-            'VehicleID'     => $this->ReadPropertyString('VehicleID'),
-            'Reauthenticate'=> true
+            'DataID'      => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
+            'Command'     => 'BuildConnectURL',
+            'Mode'        => 'live',
+            'State'       => $state,
+            'Permissions' => $permissions
         ];
 
         $this->SendDebug('Connect/RequestToSplitter', json_encode($request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
