@@ -711,53 +711,11 @@ class SmartcarSplitter extends IPSModuleStrict
             $mode = 'live';
         }
 
-        if ($reauthenticate) {
-            $vehicleId = trim($vehicleId);
-            if ($vehicleId === '') {
-                return 'Fehler: Vehicle ID für Re-Authentication fehlt.';
-            }
-
-            // Bestehende Fahrzeugverbindung gezielt re-authentifizieren.
-            // Der Erstconnect bleibt unverändert. Für bereits verbundene
-            // Fahrzeuge verwenden wir den von Smartcar vorgesehenen
-            // Re-Authentication-Endpunkt mit response_type=vehicle_id.
-            //
-            // Die aktuell in der Vehicle-Instanz ausgewählten Permissions
-            // werden explizit als scope übergeben. Mit required: verhindern
-            // wir, dass diese beim Consent-Dialog abgewählt werden können.
-            $requiredPermissions = array_map(
-                static function (string $permission): string {
-                    return strpos($permission, 'required:') === 0
-                        ? $permission
-                        : 'required:' . $permission;
-                },
-                $permissions
-            );
-
-            $query = [
-                'response_type'  => 'vehicle_id',
-                'application_id' => $applicationId,
-                'vehicle_id'     => $vehicleId,
-                'redirect_uri'   => $redirectURI,
-                'scope'          => implode(' ', $requiredPermissions),
-                'state'          => $state,
-                'external_id'    => 'ips_' . $this->InstanceID
-            ];
-
-            $url = 'https://connect.smartcar.com/oauth/reauthenticate?' . http_build_query($query);
-
-            $this->SendDebug('ConnectURL/Build', json_encode([
-                'reauthentication'    => true,
-                'permissionUpdate'    => true,
-                'vehicleId'           => $vehicleId,
-                'permissions'         => $permissions,
-                'requiredPermissions' => $requiredPermissions,
-                'url'                 => $url
-            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
-
-            return $url;
-        }
-
+        // Sowohl Erstverbindung als auch spätere Permission-Aktualisierung
+        // verwenden bewusst denselben bewährten Smartcar-Connect-Flow.
+        // Die VehicleID wird bei einer Permission-Aktualisierung ausschließlich
+        // über den State mitgeführt und nach dem Redirect zur vorhandenen
+        // IP-Symcon-Fahrzeuginstanz aufgelöst.
         $query = [
             'response_type' => 'code',
             'client_id'     => $applicationId,
@@ -770,8 +728,8 @@ class SmartcarSplitter extends IPSModuleStrict
         $url = 'https://connect.smartcar.com/oauth/authorize?' . http_build_query($query);
 
         $this->SendDebug('ConnectURL/Build', json_encode([
-            'reauthentication' => false,
-            'vehicleId'        => '',
+            'permissionUpdate' => strncmp($state, 'vehicle_', 8) === 0,
+            'vehicleId'        => trim($vehicleId),
             'permissions'      => $permissions,
             'url'              => $url
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
