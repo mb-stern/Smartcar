@@ -722,25 +722,26 @@ class SmartcarSplitter extends IPSModuleStrict
                 return 'Fehler: VehicleID für Re-Authentication fehlt.';
             }
 
+            // Re-Authentication über den normalen Authorize-Endpunkt.
+            // Die VehicleID wird direkt als response_type übergeben.
             $query = [
-                'response_type' => 'vehicle_id',
+                'response_type' => $vehicleId,
                 'client_id'     => $clientId,
                 'redirect_uri'  => $redirectURI,
-                'vehicle_id'    => $vehicleId,
                 'scope'         => implode(' ', $permissions),
                 'state'         => $state,
                 'mode'          => $mode
             ];
 
-            $url = 'https://connect.smartcar.com/oauth/reauthenticate?' . http_build_query(
+            $url = 'https://connect.smartcar.com/oauth/authorize?' . http_build_query(
                 $query,
                 '',
                 '&',
                 PHP_QUERY_RFC3986
             );
 
-            $flow = 'reauthenticate';
-            $responseType = 'vehicle_id';
+            $flow = 'reauthenticate_via_authorize';
+            $responseType = $vehicleId;
         } else {
             $query = [
                 'response_type' => 'code',
