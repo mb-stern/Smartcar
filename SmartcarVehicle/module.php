@@ -20,12 +20,6 @@ class SmartcarVehicle extends IPSModuleStrict
     $this->RegisterAttributeString('CompatibilityCache', '[]');
     $this->RegisterAttributeInteger('CompatibilityCacheAt', 0);
 
-    $this->RegisterTimer(
-        'InvalidInstanceDeleteTimer',
-        0,
-        'SMCARV_DeleteInvalidInstance($_IPS["TARGET"]);'
-    );
-
     $lastSignalsExists = (bool)@$this->GetIDForIdent('LastSignalsAt');
     $this->RegisterVariableInteger('LastSignalsAt', 'Letzte Signale', '~UnixTimestamp');
 
@@ -41,26 +35,9 @@ class SmartcarVehicle extends IPSModuleStrict
     {
         parent::ApplyChanges();
 
-        $vehicleId = trim($this->ReadPropertyString('VehicleID'));
-        $connectionId = trim($this->ReadPropertyString('ConnectionID'));
-        $userId = trim($this->ReadPropertyString('UserID'));
-
-        if ($vehicleId === '' && $connectionId === '' && $userId === '') {
-            $message = 'Diese Smartcar Fahrzeug-Instanz darf nur über den Smartcar-Konfigurator erstellt werden. Die Instanz wird automatisch gelöscht.';
-
-            $this->SetStatus(201);
-            $this->SendDebug('Instance/CreateError', $message, 0);
-            IPS_LogMessage('SmartcarVehicle', $message);
-
-            $this->SetTimerInterval('InvalidInstanceDeleteTimer', 1000);
-            return;
-        }
-
-        $this->SetTimerInterval('InvalidInstanceDeleteTimer', 0);
-
         $this->CreateProfile();
 
-        if ($vehicleId === '') {
+        if ($this->ReadPropertyString('VehicleID') === '') {
             $this->SetStatus(201);
             return;
         }
@@ -68,28 +45,6 @@ class SmartcarVehicle extends IPSModuleStrict
         $this->SetStatus(102);
 
         $this->ApplySelectedCapabilities();
-    }
-
-    public function DeleteInvalidInstance(): void
-    {
-        $this->SetTimerInterval('InvalidInstanceDeleteTimer', 0);
-
-        $vehicleId = trim($this->ReadPropertyString('VehicleID'));
-        $connectionId = trim($this->ReadPropertyString('ConnectionID'));
-        $userId = trim($this->ReadPropertyString('UserID'));
-
-        if ($vehicleId !== '' || $connectionId !== '' || $userId !== '') {
-            return;
-        }
-
-        $instanceId = $this->InstanceID;
-
-        IPS_LogMessage(
-            'SmartcarVehicle',
-            'Manuell erstellte Smartcar Fahrzeug-Instanz ' . $instanceId . ' wird gelöscht.'
-        );
-
-        @IPS_DeleteInstance($instanceId);
     }
 
     public function RequestAction($Ident, $Value): void
