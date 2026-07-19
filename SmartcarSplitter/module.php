@@ -1707,22 +1707,83 @@ class SmartcarSplitter extends IPSModuleStrict
                     $vehicleId
                 );
 
-            if (
-                $instanceId > 0
-                && function_exists(
-                    'SMCARV_ApplySelectedCapabilities'
-                )
-            ) {
-                SMCARV_ApplySelectedCapabilities(
-                    $instanceId
-                );
+            if ($instanceId > 0) {
+                if (
+                    function_exists(
+                        'SMCARV_ApplySelectedCapabilities'
+                    )
+                ) {
+                    SMCARV_ApplySelectedCapabilities(
+                        $instanceId
+                    );
+                }
+
+                if (
+                    function_exists(
+                        'SMCARV_FetchSelectedSignals'
+                    )
+                ) {
+                    SMCARV_FetchSelectedSignals(
+                        $instanceId,
+                        []
+                    );
+                }
 
                 $this->SendDebug(
-                    'Connect/Reauthenticate',
-                    'Aktuelle Capabilities angewendet für Instanz ' .
+                    'Connect/VehicleRefresh',
+                    'Capabilities angewendet und aktivierte Signale neu abgerufen für Instanz ' .
                     $instanceId,
                     0
                 );
+            }
+        } elseif ($userId !== '') {
+            $instanceIds =
+                @IPS_GetInstanceListByModuleID(
+                    self::VEHICLE_MODULE_ID
+                );
+
+            if (is_array($instanceIds)) {
+                foreach ($instanceIds as $instanceId) {
+                    $instanceUserId =
+                        (string)@IPS_GetProperty(
+                            $instanceId,
+                            'UserID'
+                        );
+
+                    if ($instanceUserId !== $userId) {
+                        continue;
+                    }
+
+                    if (
+                        function_exists(
+                            'SMCARV_ApplySelectedCapabilities'
+                        )
+                    ) {
+                        SMCARV_ApplySelectedCapabilities(
+                            $instanceId
+                        );
+                    }
+
+                    if (
+                        function_exists(
+                            'SMCARV_FetchSelectedSignals'
+                        )
+                    ) {
+                        SMCARV_FetchSelectedSignals(
+                            $instanceId,
+                            []
+                        );
+                    }
+
+                    $this->SendDebug(
+                        'Connect/UserRefresh',
+                        'Capabilities angewendet und aktivierte Signale neu abgerufen für UserID=' .
+                        $userId .
+                        ', Instanz=' .
+                        $instanceId,
+                        0
+                    );
+                }
             }
         }
 
