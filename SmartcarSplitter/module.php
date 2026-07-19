@@ -2128,7 +2128,10 @@ class SmartcarSplitter extends IPSModuleStrict
         $url =
             'https://vehicle.api.smartcar.com/v3/connections?' .
             http_build_query([
-                'filter[user_id]' => $userId,
+                // Aktuelle V3 API-Referenz verwendet userId (CamelCase).
+                'filter[userId]' => $userId,
+                // Ohne diesen Filter liefert /connections standardmässig nur Live-Fahrzeuge.
+                'filter[vehicle.mode]' => 'simulated',
                 'page[size]' => 100
             ]);
 
