@@ -1745,7 +1745,7 @@ class SmartcarVehicle extends IPSModuleStrict
         }
 
         $id = @$this->GetIDForIdent($ident);
-        if ($id && $position !== null) {
+        if ($created && $id && $position !== null) {
             IPS_SetPosition($id, $position);
         }
 
