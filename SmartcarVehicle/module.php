@@ -188,11 +188,6 @@ class SmartcarVehicle extends IPSModuleStrict
             ],
             'actions' => [
                 [
-                    'type' => 'Button',
-                    'caption' => 'Kompatibilitätsliste neu laden',
-                    'onClick' => 'SMCARV_ReloadCompatibility($id);'
-                ],
-                [
                     'type' => 'Label',
                     'caption' => 'Die Berechtigungen für den Fahrzeugzugriff werden im Smartcar Dashboard unter „Configuration → Vehicle Access“ festgelegt. Empfohlen wird, dort die mit dem Fahrzeug kompatiblen Signale aus der untenstehenden Liste auszuwählen. Im Zweifelsfall können auch alle gewünschten Signale aktiviert werden. Nach Änderungen an den Berechtigungen muss „Vehicle Access synchronisieren“ verwendet werden, damit die neuen Berechtigungen für das bereits verbundene Fahrzeug übernommen werden. Anschließend können in der untenstehenden Liste die gewünschten Signale ausgewählt werden. Für aktivierte Signale werden die entsprechenden Variablen automatisch erstellt.'
                 ],
