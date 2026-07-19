@@ -189,7 +189,7 @@ class SmartcarVehicle extends IPSModuleStrict
             'actions' => [
                 [
                     'type' => 'Label',
-                    'caption' => 'Die Berechtigungen für den Fahrzeugzugriff werden im Smartcar Dashboard unter „Configuration → Vehicle Access“ festgelegt. Empfohlen wird, dort die mit dem Fahrzeug kompatiblen Signale aus der oben stehenden Liste auszuwählen. Im Zweifelsfall können auch alle Signale aktiviert werden, es werden eh nur die kompatiblen Signale gelistet. Nach Änderungen an den Berechtigungen muss „Vehicle Access synchronisieren“ verwendet werden, damit die neuen Berechtigungen für das bereits verbundene Fahrzeug übernommen werden. Anschließend können in der oben stehenden Liste die gewünschten Signale ausgewählt werden und die Variablen werden erstellt.'
+                    'caption' => 'Die Auswahl hier bestimmt nur, welche Variablen in IP-Symcon erstellt werden. Die Zugriffsberechtigungen werden ausschließlich unter Smartcar → Configuration → Vehicle Access verwaltet.'
                 ],
                 [
                     'type' => 'Button',
