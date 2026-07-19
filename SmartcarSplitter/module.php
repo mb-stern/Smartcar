@@ -1712,9 +1712,14 @@ class SmartcarSplitter extends IPSModuleStrict
             );
         }
 
-        // Connections zuerst aktualisieren, damit UserID und Connection-Daten
-        // nach dem Connect auf dem aktuellen Stand sind.
-        $this->SyncVehiclesFromConnectionsWithRetry();
+        // Nach response_type=none liefert Smartcar im Redirect die user_id.
+        // Die neu autorisierte Connection deshalb zuerst gezielt über diese
+        // user_id suchen. Das ist insbesondere für simulierte Fahrzeuge wichtig.
+        if ($userId !== '') {
+            $this->SyncVehiclesForUserWithRetry($userId);
+        } else {
+            $this->SyncVehiclesFromConnectionsWithRetry();
+        }
 
         // Nur beim bewussten "Vehicle Access synchronisieren"-Flow:
         // bestehende Webhook-Subscription entfernen und neu erstellen.
@@ -2104,6 +2109,214 @@ class SmartcarSplitter extends IPSModuleStrict
                 $createResponse['body']
                 ?? ''
         ];
+    }
+
+    private function LoadConnectionsForUser(string $userId): array
+    {
+        $userId = trim($userId);
+
+        if ($userId === '') {
+            return [];
+        }
+
+        $token = $this->GetValidApplicationAccessToken();
+
+        if ($token === '') {
+            return [];
+        }
+
+        $url =
+            'https://vehicle.api.smartcar.com/v3/connections?' .
+            http_build_query([
+                'filter[user_id]' => $userId,
+                'page[size]' => 100
+            ]);
+
+        $response = $this->HttpRequestRaw(
+            'Connections/User',
+            'GET',
+            $url,
+            [
+                'Authorization: Bearer ' . $token,
+                'Accept: application/json',
+                'sc-user-id: ' . $userId
+            ]
+        );
+
+        if (
+            $response === null
+            || $response['statusCode'] !== 200
+        ) {
+            $this->SendDebug(
+                'Connections/User',
+                'Fehler für UserID=' . $userId . ': ' .
+                json_encode(
+                    $response,
+                    JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+                ),
+                0
+            );
+            return [];
+        }
+
+        $data = json_decode($response['body'], true);
+
+        if (
+            !is_array($data)
+            || !isset($data['data'])
+            || !is_array($data['data'])
+        ) {
+            $this->SendDebug(
+                'Connections/User',
+                'Unerwartete Antwort für UserID=' . $userId . ': ' .
+                $response['body'],
+                0
+            );
+            return [];
+        }
+
+        $connections = [];
+
+        foreach ($data['data'] as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+
+            $connectionId = (string)($item['id'] ?? '');
+
+            $attributes = is_array($item['attributes'] ?? null)
+                ? $item['attributes']
+                : [];
+
+            $vehicle = is_array($attributes['vehicle'] ?? null)
+                ? $attributes['vehicle']
+                : [];
+
+            $vehicleId = (string)(
+                $item['relationships']['vehicle']['data']['id']
+                ?? ''
+            );
+
+            $itemUserId = (string)(
+                $item['relationships']['user']['data']['id']
+                ?? $userId
+            );
+
+            if (
+                $connectionId === ''
+                || $vehicleId === ''
+            ) {
+                continue;
+            }
+
+            $make = (string)($vehicle['make'] ?? '');
+            $model = (string)($vehicle['model'] ?? '');
+            $year = (string)($vehicle['year'] ?? '');
+
+            $modeValue = (string)(
+                $vehicle['mode']
+                ?? ($attributes['mode'] ?? '')
+            );
+
+            $powertrainType = (string)(
+                $vehicle['powertrainType']
+                ?? ''
+            );
+
+            $caption = trim(
+                $make . ' ' . $model . ' ' . $year
+            );
+
+            if ($caption === '') {
+                $caption = $vehicleId;
+            }
+
+            $connections[] = [
+                'connectionId' => $connectionId,
+                'vehicleId' => $vehicleId,
+                'userId' => $itemUserId,
+                'caption' => $caption,
+                'make' => $make,
+                'model' => $model,
+                'year' => $year,
+                'mode' => $modeValue,
+                'powertrainType' => $powertrainType,
+                'permissions' => $attributes['permissions'] ?? []
+            ];
+        }
+
+        $this->SendDebug(
+            'Connections/User',
+            'UserID=' . $userId .
+            ', gefundene Connections=' . count($connections),
+            0
+        );
+
+        return $connections;
+    }
+
+    private function SyncVehiclesForUserWithRetry(
+        string $userId,
+        int $maxAttempts = 10
+    ): void {
+        $userId = trim($userId);
+
+        if ($userId === '') {
+            $this->SyncVehiclesFromConnectionsWithRetry($maxAttempts);
+            return;
+        }
+
+        $maxAttempts = max(1, $maxAttempts);
+
+        for (
+            $attempt = 1;
+            $attempt <= $maxAttempts;
+            $attempt++
+        ) {
+            $connections =
+                $this->LoadConnectionsForUser($userId);
+
+            $this->SendDebug(
+                'Connect/SyncUserVehicles',
+                'Versuch ' .
+                $attempt .
+                '/' .
+                $maxAttempts .
+                ', UserID=' .
+                $userId .
+                ', Connections=' .
+                count($connections),
+                0
+            );
+
+            if (!empty($connections)) {
+                $this->UpdateVehiclesFromConnections(
+                    $connections
+                );
+
+                // Danach zusätzlich die allgemeine Liste synchronisieren,
+                // damit bestehende Fahrzeuge ebenfalls aktuell bleiben.
+                $this->SyncVehiclesFromConnectionsWithRetry(1);
+                return;
+            }
+
+            if ($attempt < $maxAttempts) {
+                usleep(1000000);
+            }
+        }
+
+        $this->SendDebug(
+            'Connect/SyncUserVehicles',
+            'Nach ' .
+            $maxAttempts .
+            ' Versuchen keine Connection für UserID=' .
+            $userId .
+            ' gefunden.',
+            0
+        );
+
+        // Fallback auf die normale Gesamtsynchronisierung.
+        $this->SyncVehiclesFromConnectionsWithRetry(1);
     }
 
     private function SyncVehiclesFromConnectionsWithRetry(
