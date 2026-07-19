@@ -188,8 +188,9 @@ class SmartcarVehicle extends IPSModuleStrict
             ],
             'actions' => [
                 [
-                    'type' => 'Label',
-                    'caption' => 'Die Berechtigungen für den Fahrzeugzugriff werden im Smartcar Dashboard unter „Configuration → Vehicle Access“ festgelegt. Empfohlen wird, dort die mit dem Fahrzeug kompatiblen Signale aus der oben stehenden Liste auszuwählen. Im Zweifelsfall können auch alle Signale aktiviert werden, es werden eh nur die kompatiblen Signale gelistet. Nach Änderungen an den Berechtigungen muss „Vehicle Access synchronisieren“ verwendet werden, damit die neuen Berechtigungen für das bereits verbundene Fahrzeug übernommen werden. Anschließend können in der oben stehenden Liste die gewünschten Signale ausgewählt werden. Für aktivierte Signale werden die entsprechenden Variablen automatisch erstellt.'
+                    'type' => 'Button',
+                    'caption' => 'Kompatibilitätsliste neu laden',
+                    'onClick' => 'SMCARV_ReloadCompatibility($id);'
                 ],
                 [
                     'type' => 'Button',
@@ -886,27 +887,13 @@ class SmartcarVehicle extends IPSModuleStrict
             return 'Fehler: VehicleID fehlt. Re-Authentication kann nicht gestartet werden.';
         }
 
-        $permissions = $this->GetSelectedPermissions();
-
-        $this->SendDebug(
-            'Connect/Permissions',
-            'Permissions count=' . count($permissions) . ' values=' .
-            json_encode($permissions, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
-            0
-        );
-
-        if (empty($permissions)) {
-            return 'Fehler: Keine aktivierten Signale/Befehle mit Permission ausgewählt.';
-        }
-
         $state = 'vehicle_' . $vehicleId . '_' . bin2hex(random_bytes(8));
 
         $request = [
-            'DataID'      => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
-            'Command'     => 'BuildReauthURL',
-            'VehicleID'   => $vehicleId,
-            'State'       => $state,
-            'Permissions' => $permissions
+            'DataID'    => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
+            'Command'   => 'BuildReauthURL',
+            'VehicleID' => $vehicleId,
+            'State'     => $state
         ];
 
         $this->SendDebug(
