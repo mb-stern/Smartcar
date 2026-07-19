@@ -101,26 +101,6 @@ class SmartcarVehicle extends IPSModuleStrict
 
     public function GetConfigurationForm(): string
     {
-        if (trim($this->ReadPropertyString('VehicleID')) === '') {
-            return json_encode([
-                'elements' => [
-                    [
-                        'type' => 'Label',
-                        'caption' => 'Diese Smartcar Fahrzeug-Instanz wurde nicht über den Smartcar-Konfigurator erstellt.'
-                    ],
-                    [
-                        'type' => 'Label',
-                        'caption' => 'Fahrzeug-Instanzen müssen zwingend über den Smartcar-Konfigurator angelegt werden, damit Vehicle ID, Connection ID, User ID und die weiteren Fahrzeugdaten korrekt übernommen werden.'
-                    ],
-                    [
-                        'type' => 'Label',
-                        'caption' => 'Bitte löschen Sie diese Instanz wieder und erstellen Sie das Fahrzeug anschließend über den Smartcar-Konfigurator.'
-                    ]
-                ],
-                'actions' => []
-            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-        }
-
         $capabilities = [];
 
         if ($this->HasParentConnection()) {
