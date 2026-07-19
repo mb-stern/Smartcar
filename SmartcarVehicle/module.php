@@ -880,19 +880,13 @@ class SmartcarVehicle extends IPSModuleStrict
             return 'Fehler: Kein Smartcar Splitter verbunden.';
         }
 
-        $vehicleId = trim($this->ReadPropertyString('VehicleID'));
-
-        if ($vehicleId === '') {
-            return 'Fehler: VehicleID fehlt. Re-Authentication kann nicht gestartet werden.';
-        }
-
-        $state = 'vehicle_' . $vehicleId . '_' . bin2hex(random_bytes(8));
+        $state = 'vehicle_access_' . bin2hex(random_bytes(8));
 
         $request = [
-            'DataID'    => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
-            'Command'   => 'BuildReauthURL',
-            'VehicleID' => $vehicleId,
-            'State'     => $state
+            'DataID'  => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
+            'Command' => 'BuildConnectURL',
+            'Mode'    => 'live',
+            'State'   => $state
         ];
 
         $this->SendDebug(
@@ -910,7 +904,7 @@ class SmartcarVehicle extends IPSModuleStrict
         $decoded = json_decode((string)$result, true);
 
         if (!is_array($decoded) || empty($decoded['success'])) {
-            return 'Fehler beim Erzeugen der Re-Authentication URL: ' . (string)$result;
+            return 'Fehler beim Erzeugen der Connect URL: ' . (string)$result;
         }
 
         return (string)($decoded['url'] ?? '');
