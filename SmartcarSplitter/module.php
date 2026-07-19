@@ -370,139 +370,198 @@ class SmartcarSplitter extends IPSModuleStrict
 
     public function LoadConnections(): array
     {
-        $token = $this->GetValidApplicationAccessToken();
+        $managementToken =
+            trim(
+                $this->ReadPropertyString(
+                    'ManagementToken'
+                )
+            );
 
-        if ($token === '') {
+        if ($managementToken === '') {
+            $this->SendDebug(
+                'Connections/Management',
+                'ManagementToken fehlt.',
+                0
+            );
             return [];
         }
 
-        /*
-         * WICHTIG:
-         * Smartcar V3 filtert /connections standardmässig auf vehicle.mode=live.
-         * Deshalb müssen Live- und Simulator-Verbindungen explizit separat
-         * abgefragt und anschliessend zusammengeführt werden.
-         */
-        $allItems = [];
+        $url =
+            'https://management.smartcar.com/v2.0/management/connections';
 
-        foreach (['live', 'simulated'] as $mode) {
-            $query = http_build_query([
-                'filter[vehicle.mode]' => $mode,
-                'page[size]' => 100
-            ]);
+        $response = $this->HttpRequestRaw(
+            'Connections/Management',
+            'GET',
+            $url,
+            [
+                'Authorization: Bearer ' . $managementToken,
+                'Accept: application/json'
+            ]
+        );
 
-            $url =
-                'https://vehicle.api.smartcar.com/v3/connections?' .
-                $query;
-
-            $response = $this->HttpRequestRaw(
-                'Connections/' . ucfirst($mode),
-                'GET',
-                $url,
-                [
-                    'Authorization: Bearer ' . $token,
-                    'Accept: application/json'
-                ]
-            );
-
-            if (
-                $response === null
-                || $response['statusCode'] !== 200
-            ) {
-                $this->SendDebug(
-                    'Connections/' . ucfirst($mode),
-                    'Fehler: ' . json_encode(
-                        $response,
-                        JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
-                    ),
-                    0
-                );
-                continue;
-            }
-
-            $data = json_decode($response['body'], true);
-
-            if (
-                !is_array($data)
-                || !isset($data['data'])
-                || !is_array($data['data'])
-            ) {
-                $this->SendDebug(
-                    'Connections/' . ucfirst($mode),
-                    'Unerwartete Antwort: ' . $response['body'],
-                    0
-                );
-                continue;
-            }
-
+        if (
+            $response === null
+            || $response['statusCode'] < 200
+            || $response['statusCode'] >= 300
+        ) {
             $this->SendDebug(
-                'Connections/' . ucfirst($mode),
-                'Gefundene Connections: ' . count($data['data']),
+                'Connections/Management',
+                'Fehler: ' .
+                json_encode(
+                    $response,
+                    JSON_UNESCAPED_SLASHES |
+                    JSON_UNESCAPED_UNICODE
+                ),
                 0
             );
-
-            foreach ($data['data'] as $item) {
-                if (!is_array($item)) {
-                    continue;
-                }
-
-                $connectionId = (string)($item['id'] ?? '');
-
-                // Doppelte Connections sicher vermeiden.
-                if ($connectionId !== '') {
-                    $allItems[$connectionId] = $item;
-                } else {
-                    $allItems[] = $item;
-                }
-            }
+            return [];
         }
+
+        $data =
+            json_decode(
+                $response['body'],
+                true
+            );
+
+        if (!is_array($data)) {
+            $this->SendDebug(
+                'Connections/Management',
+                'Ungültige JSON-Antwort: ' .
+                $response['body'],
+                0
+            );
+            return [];
+        }
+
+        $items =
+            is_array($data['data'] ?? null)
+                ? $data['data']
+                : (
+                    array_is_list($data)
+                        ? $data
+                        : []
+                );
 
         $connections = [];
 
-        foreach ($allItems as $item) {
-            $connectionId = (string)($item['id'] ?? '');
-
-            $attributes = is_array($item['attributes'] ?? null)
-                ? $item['attributes']
-                : [];
-
-            $vehicle = is_array($attributes['vehicle'] ?? null)
-                ? $attributes['vehicle']
-                : [];
-
-            $vehicleId = (string)(
-                $item['relationships']['vehicle']['data']['id']
-                ?? ''
-            );
-
-            $userId = (string)(
-                $item['relationships']['user']['data']['id']
-                ?? ''
-            );
-
-            if (
-                $connectionId === ''
-                || $vehicleId === ''
-            ) {
+        foreach ($items as $item) {
+            if (!is_array($item)) {
                 continue;
             }
 
-            $make = (string)($vehicle['make'] ?? '');
-            $model = (string)($vehicle['model'] ?? '');
-            $year = (string)($vehicle['year'] ?? '');
+            $attributes =
+                is_array(
+                    $item['attributes']
+                    ?? null
+                )
+                    ? $item['attributes']
+                    : [];
 
-            $modeValue = (string)(
-                $vehicle['mode']
-                ?? ($attributes['mode'] ?? '')
-            );
+            $vehicleId =
+                (string)(
+                    $item['vehicleId']
+                    ?? $attributes['vehicleId']
+                    ?? $item['relationships']['vehicle']['data']['id']
+                    ?? ''
+                );
 
-            $powertrainType = (string)(
-                $vehicle['powertrainType']
-                ?? ''
-            );
+            $userId =
+                (string)(
+                    $item['userId']
+                    ?? $attributes['userId']
+                    ?? $item['relationships']['user']['data']['id']
+                    ?? ''
+                );
 
-            $caption = trim(
-                $make . ' ' . $model . ' ' . $year
-            );
+            $connectionId =
+                (string)(
+                    $item['connectionId']
+                    ?? $item['id']
+                    ?? ''
+                );
+
+            $mode =
+                (string)(
+                    $item['mode']
+                    ?? $attributes['mode']
+                    ?? ''
+                );
+
+            if ($vehicleId === '') {
+                continue;
+            }
+
+            // Fahrzeugdetails über die bestehende V3 API ergänzen.
+            $vehicleResult =
+                $this->ApiGetVehicle(
+                    $vehicleId,
+                    $userId
+                );
+
+            $vehicleBody =
+                is_array(
+                    $vehicleResult['body']
+                    ?? null
+                )
+                    ? $vehicleResult['body']
+                    : [];
+
+            $vehicleData =
+                is_array(
+                    $vehicleBody['data']
+                    ?? null
+                )
+                    ? $vehicleBody['data']
+                    : $vehicleBody;
+
+            $vehicleAttributes =
+                is_array(
+                    $vehicleData['attributes']
+                    ?? null
+                )
+                    ? $vehicleData['attributes']
+                    : $vehicleData;
+
+            $make =
+                (string)(
+                    $vehicleAttributes['make']
+                    ?? ''
+                );
+
+            $model =
+                (string)(
+                    $vehicleAttributes['model']
+                    ?? ''
+                );
+
+            $year =
+                (string)(
+                    $vehicleAttributes['year']
+                    ?? ''
+                );
+
+            $powertrainType =
+                (string)(
+                    $vehicleAttributes['powertrainType']
+                    ?? ''
+                );
+
+            if ($mode === '') {
+                $mode =
+                    (string)(
+                        $vehicleAttributes['mode']
+                        ?? ''
+                    );
+            }
+
+            $caption =
+                trim(
+                    $make .
+                    ' ' .
+                    $model .
+                    ' ' .
+                    $year
+                );
 
             if ($caption === '') {
                 $caption = $vehicleId;
@@ -516,15 +575,18 @@ class SmartcarSplitter extends IPSModuleStrict
                 'make' => $make,
                 'model' => $model,
                 'year' => $year,
-                'mode' => $modeValue,
+                'mode' => $mode,
                 'powertrainType' => $powertrainType,
-                'permissions' => $attributes['permissions'] ?? []
+                'permissions' =>
+                    $attributes['permissions']
+                    ?? []
             ];
         }
 
         $this->SendDebug(
-            'Connections/Merged',
-            'Gesamt nach Zusammenführung: ' . count($connections),
+            'Connections/Management',
+            'Gefundene Connections: ' .
+            count($connections),
             0
         );
 
@@ -1409,7 +1471,8 @@ class SmartcarSplitter extends IPSModuleStrict
             'application_id' => $applicationID,
             'redirect_uri' => $redirectURI,
             'state' => $state,
-            'mode' => $mode
+            'mode' => $mode,
+            'country' => 'CH'
         ];
 
         $url =
