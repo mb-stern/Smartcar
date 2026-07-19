@@ -1588,131 +1588,199 @@ class SmartcarSplitter extends IPSModuleStrict
 
     private function HandleConnectRedirect(): void
     {
-        $error = (string)($_GET['error'] ?? '');
-        $errorDescription = (string)($_GET['error_description'] ?? '');
+        $error =
+            (string)(
+                $_GET['error']
+                ?? ''
+            );
+
+        $errorDescription =
+            (string)(
+                $_GET['error_description']
+                ?? ''
+            );
 
         if ($error !== '') {
-            $this->SendDebug('Connect/RedirectError', $error . ' ' . $errorDescription, 0);
+            $this->SendDebug(
+                'Connect/RedirectError',
+                $error .
+                ' ' .
+                $errorDescription,
+                0
+            );
+
             http_response_code(200);
-            header('Content-Type: text/html; charset=utf-8');
+
+            header(
+                'Content-Type: text/html; charset=utf-8'
+            );
+
             echo '<!doctype html><html><head><meta charset="utf-8"><title>Smartcar Connect</title></head><body>';
             echo '<h2>Smartcar Connect fehlgeschlagen</h2>';
-            echo '<p>' . htmlspecialchars($error . ' ' . $errorDescription) . '</p>';
+            echo '<p>' .
+                htmlspecialchars(
+                    $error .
+                    ' ' .
+                    $errorDescription
+                ) .
+                '</p>';
             echo '<p>Dieses Fenster kann geschlossen werden.</p>';
             echo '</body></html>';
+
             return;
         }
 
-        $code = (string)($_GET['code'] ?? '');
-        $userId = (string)($_GET['user_id'] ?? ($_GET['userId'] ?? ''));
-        $state = (string)($_GET['state'] ?? '');
-        $redirectVehicleId = (string)($_GET['vehicle_id'] ?? ($_GET['vehicleId'] ?? ''));
+        $code =
+            (string)(
+                $_GET['code']
+                ?? ''
+            );
+
+        $userId =
+            (string)(
+                $_GET['user_id']
+                ?? (
+                    $_GET['userId']
+                    ?? ''
+                )
+            );
+
+        $state =
+            (string)(
+                $_GET['state']
+                ?? ''
+            );
+
+        $redirectVehicleId =
+            (string)(
+                $_GET['vehicle_id']
+                ?? (
+                    $_GET['vehicleId']
+                    ?? ''
+                )
+            );
 
         $this->SendDebug(
             'Connect/Redirect',
             json_encode([
-                'code' => $code !== '' ? '<present>' : '',
-                'vehicle_id' => $redirectVehicleId,
-                'user_id' => $userId,
-                'state' => $state
-            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                'code' =>
+                    $code !== ''
+                        ? '<present>'
+                        : '',
+                'vehicle_id' =>
+                    $redirectVehicleId,
+                'user_id' =>
+                    $userId,
+                'state' =>
+                    $state
+            ], JSON_UNESCAPED_SLASHES |
+               JSON_UNESCAPED_UNICODE),
             0
         );
 
-        $syncVehicleId = $this->ExtractVehicleIdFromVehicleAccessSyncState($state);
-
-        if ($syncVehicleId !== '' && $redirectVehicleId === '') {
-            $this->SendDebug(
-                'Connect/VehicleAccessSync',
-                'Phase 1 abgeschlossen. Starte Reauth für VehicleID=' . $syncVehicleId,
-                0
-            );
-
-            $this->SyncVehiclesFromConnectionsWithRetry();
-
-            $reauthState = 'vehicle_access_reauth_' .
-                $syncVehicleId .
-                '_' .
-                bin2hex(random_bytes(8));
-
-            $reauthUrl = $this->BuildReauthURL($syncVehicleId, $reauthState);
-
-            if (str_starts_with($reauthUrl, 'https://')) {
-                $this->SendDebug(
-                    'Connect/VehicleAccessSync',
-                    'Weiterleitung zu Phase 2: ' . $reauthUrl,
-                    0
+        /*
+         * Beim Reauth-Flow liefert Smartcar die Vehicle ID direkt zurück.
+         * Für ältere/bisherige Flows bleibt der State-Fallback erhalten.
+         */
+        $vehicleId =
+            $redirectVehicleId !== ''
+                ? $redirectVehicleId
+                : $this->ExtractVehicleIdFromState(
+                    $state
                 );
 
-                header('Location: ' . $reauthUrl, true, 302);
-                exit;
-            }
-
-            $this->SendDebug(
-                'Connect/VehicleAccessSync',
-                'Reauth URL konnte nicht erzeugt werden: ' . $reauthUrl,
-                0
+        if (
+            $vehicleId !== ''
+            && $userId !== ''
+        ) {
+            $this->UpdateVehicleUserId(
+                $vehicleId,
+                $userId
             );
-
-            http_response_code(200);
-            header('Content-Type: text/html; charset=utf-8');
-            echo '<!doctype html><html><head><meta charset="utf-8"><title>Smartcar Connect</title></head><body>';
-            echo '<h2>Vehicle Access konnte nicht vollständig synchronisiert werden</h2>';
-            echo '<p>' . htmlspecialchars($reauthUrl) . '</p>';
-            echo '</body></html>';
-            return;
-        }
-
-        $vehicleId = $redirectVehicleId !== ''
-            ? $redirectVehicleId
-            : $this->ExtractVehicleIdFromState($state);
-
-        if ($vehicleId !== '' && $userId !== '') {
-            $this->UpdateVehicleUserId($vehicleId, $userId);
         }
 
         $this->SyncVehiclesFromConnectionsWithRetry();
 
         if ($vehicleId !== '') {
-            $instanceId = $this->FindVehicleInstanceByVehicleId($vehicleId);
+            $instanceId =
+                $this->FindVehicleInstanceByVehicleId(
+                    $vehicleId
+                );
 
             if ($instanceId > 0) {
-                if (function_exists('SMCARV_ApplySelectedCapabilities')) {
-                    SMCARV_ApplySelectedCapabilities($instanceId);
+                if (
+                    function_exists(
+                        'SMCARV_ApplySelectedCapabilities'
+                    )
+                ) {
+                    SMCARV_ApplySelectedCapabilities(
+                        $instanceId
+                    );
                 }
 
-                if (function_exists('SMCARV_FetchSelectedSignals')) {
-                    SMCARV_FetchSelectedSignals($instanceId, []);
+                if (
+                    function_exists(
+                        'SMCARV_FetchSelectedSignals'
+                    )
+                ) {
+                    SMCARV_FetchSelectedSignals(
+                        $instanceId,
+                        []
+                    );
                 }
 
                 $this->SendDebug(
                     'Connect/VehicleRefresh',
-                    'Vehicle Access synchronisiert und aktivierte Signale neu abgerufen für Instanz ' . $instanceId,
+                    'Capabilities angewendet und aktivierte Signale neu abgerufen für Instanz ' .
+                    $instanceId,
                     0
                 );
             }
         } elseif ($userId !== '') {
-            $instanceIds = @IPS_GetInstanceListByModuleID(self::VEHICLE_MODULE_ID);
+            $instanceIds =
+                @IPS_GetInstanceListByModuleID(
+                    self::VEHICLE_MODULE_ID
+                );
 
             if (is_array($instanceIds)) {
                 foreach ($instanceIds as $instanceId) {
-                    $instanceUserId = (string)@IPS_GetProperty($instanceId, 'UserID');
+                    $instanceUserId =
+                        (string)@IPS_GetProperty(
+                            $instanceId,
+                            'UserID'
+                        );
 
                     if ($instanceUserId !== $userId) {
                         continue;
                     }
 
-                    if (function_exists('SMCARV_ApplySelectedCapabilities')) {
-                        SMCARV_ApplySelectedCapabilities($instanceId);
+                    if (
+                        function_exists(
+                            'SMCARV_ApplySelectedCapabilities'
+                        )
+                    ) {
+                        SMCARV_ApplySelectedCapabilities(
+                            $instanceId
+                        );
                     }
 
-                    if (function_exists('SMCARV_FetchSelectedSignals')) {
-                        SMCARV_FetchSelectedSignals($instanceId, []);
+                    if (
+                        function_exists(
+                            'SMCARV_FetchSelectedSignals'
+                        )
+                    ) {
+                        SMCARV_FetchSelectedSignals(
+                            $instanceId,
+                            []
+                        );
                     }
 
                     $this->SendDebug(
                         'Connect/UserRefresh',
-                        'Aktivierte Signale neu abgerufen für UserID=' . $userId . ', Instanz=' . $instanceId,
+                        'Capabilities angewendet und aktivierte Signale neu abgerufen für UserID=' .
+                        $userId .
+                        ', Instanz=' .
+                        $instanceId,
                         0
                     );
                 }
@@ -1720,27 +1788,24 @@ class SmartcarSplitter extends IPSModuleStrict
         }
 
         http_response_code(200);
-        header('Content-Type: text/html; charset=utf-8');
+
+        header(
+            'Content-Type: text/html; charset=utf-8'
+        );
+
         echo '<!doctype html><html><head><meta charset="utf-8"><title>Smartcar Connect</title>';
         echo '<style>body{font-family:Arial,sans-serif;margin:40px;color:#222}.ok{color:#16803c}</style>';
         echo '</head><body>';
         echo '<h2 class="ok">Smartcar erfolgreich verbunden</h2>';
+
         if ($vehicleId !== '') {
-            echo '<p>Vehicle Access wurde synchronisiert und das Fahrzeug erneut autorisiert.</p>';
+            echo '<p>Die Berechtigungen für das Fahrzeug wurden erneut bestätigt.</p>';
         } else {
             echo '<p>Die Verbindung zum OEM wurde bestätigt.</p>';
         }
+
         echo '<p>Du kannst dieses Fenster jetzt schließen und zu IP-Symcon zurückkehren.</p>';
         echo '</body></html>';
-    }
-
-    private function ExtractVehicleIdFromVehicleAccessSyncState(string $state): string
-    {
-        if (preg_match('/^vehicle_access_sync_([0-9a-fA-F-]{36})_[0-9a-fA-F]+$/', $state, $m)) {
-            return $m[1];
-        }
-
-        return '';
     }
 
     private function SyncVehiclesFromConnectionsWithRetry(
@@ -2025,7 +2090,7 @@ class SmartcarSplitter extends IPSModuleStrict
     ): string {
         if (
             preg_match(
-                '/(?:vehicle|reauth|vehicle_access_reauth)_([0-9a-fA-F-]{36})_/',
+                '/(?:vehicle|reauth)_([0-9a-fA-F-]{36})_/',
                 $state,
                 $m
             )

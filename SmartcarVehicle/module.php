@@ -189,7 +189,7 @@ class SmartcarVehicle extends IPSModuleStrict
             'actions' => [
                 [
                     'type' => 'Label',
-                    'caption' => 'Die Berechtigungen für den Fahrzeugzugriff werden im Smartcar Dashboard unter „Configuration → Vehicle Access“ festgelegt. Empfohlen wird, dort die mit dem Fahrzeug kompatiblen Signale aus der oben stehenden Liste auszuwählen. Im Zweifelsfall können auch alle Signale aktiviert werden, es werden eh nur die kompatiblen Signale gelistet. Nach Änderungen an den Berechtigungen muss „Vehicle Access synchronisieren“ verwendet werden, damit die neuen Berechtigungen für das bereits verbundene Fahrzeug übernommen werden. Anschließend können in der oben stehenden Liste die gewünschten Signale ausgewählt werden und die Variablen werden erstellt.'
+                    'caption' => 'Die Berechtigungen für den Fahrzeugzugriff werden im Smartcar Dashboard unter „Configuration → Vehicle Access“ festgelegt. Empfohlen wird, dort die mit dem Fahrzeug kompatiblen Signale aus der oben stehenden Liste auszuwählen. Im Zweifelsfall können auch alle Signale aktiviert werden, es werden eh nur die kompatiblen Signale gelistet. Nach Änderungen an den Berechtigungen muss „Vehicle Access synchronisieren“ verwendet werden, damit die neuen Berechtigungen für das bereits verbundene Fahrzeug übernommen werden. Anschließend können in der oben stehenden Liste die gewünschten Signale ausgewählt werden. Für aktivierte Signale werden die entsprechenden Variablen automatisch erstellt.'
                 ],
                 [
                     'type' => 'Button',
@@ -874,7 +874,7 @@ class SmartcarVehicle extends IPSModuleStrict
 
     public function GenerateConnectURL(): string
     {
-        $this->SendDebug('Connect/Start', 'Vehicle Access synchronisieren gestartet (Phase 1: Connect).', 0);
+        $this->SendDebug('Connect/Start', 'Vehicle Access synchronisieren gestartet.', 0);
 
         if (!$this->HasParentConnection()) {
             return 'Fehler: Kein Smartcar Splitter verbunden.';
@@ -883,16 +883,16 @@ class SmartcarVehicle extends IPSModuleStrict
         $vehicleId = trim($this->ReadPropertyString('VehicleID'));
 
         if ($vehicleId === '') {
-            return 'Fehler: VehicleID fehlt.';
+            return 'Fehler: VehicleID fehlt. Re-Authentication kann nicht gestartet werden.';
         }
 
-        $state = 'vehicle_access_sync_' . $vehicleId . '_' . bin2hex(random_bytes(8));
+        $state = 'vehicle_' . $vehicleId . '_' . bin2hex(random_bytes(8));
 
         $request = [
-            'DataID'  => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
-            'Command' => 'BuildConnectURL',
-            'Mode'    => 'live',
-            'State'   => $state
+            'DataID'    => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
+            'Command'   => 'BuildReauthURL',
+            'VehicleID' => $vehicleId,
+            'State'     => $state
         ];
 
         $this->SendDebug(
@@ -910,7 +910,7 @@ class SmartcarVehicle extends IPSModuleStrict
         $decoded = json_decode((string)$result, true);
 
         if (!is_array($decoded) || empty($decoded['success'])) {
-            return 'Fehler beim Erzeugen der Connect URL: ' . (string)$result;
+            return 'Fehler beim Erzeugen der Re-Authentication URL: ' . (string)$result;
         }
 
         return (string)($decoded['url'] ?? '');
