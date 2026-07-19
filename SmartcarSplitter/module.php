@@ -1619,53 +1619,15 @@ class SmartcarSplitter extends IPSModuleStrict
             0
         );
 
+        // Vehicle-Access-Sync bleibt beim normalen Connect-/Authorize-Flow.
+        // Es wird KEIN automatischer zweiter Reauth-Flow gestartet.
         $syncVehicleId = $this->ExtractVehicleIdFromVehicleAccessSyncState($state);
-
-        if ($syncVehicleId !== '' && $redirectVehicleId === '') {
-            $this->SendDebug(
-                'Connect/VehicleAccessSync',
-                'Phase 1 abgeschlossen. Starte Reauth für VehicleID=' . $syncVehicleId,
-                0
-            );
-
-            $this->SyncVehiclesFromConnectionsWithRetry();
-
-            $reauthState = 'vehicle_access_reauth_' .
-                $syncVehicleId .
-                '_' .
-                bin2hex(random_bytes(8));
-
-            $reauthUrl = $this->BuildReauthURL($syncVehicleId, $reauthState);
-
-            if (str_starts_with($reauthUrl, 'https://')) {
-                $this->SendDebug(
-                    'Connect/VehicleAccessSync',
-                    'Weiterleitung zu Phase 2: ' . $reauthUrl,
-                    0
-                );
-
-                header('Location: ' . $reauthUrl, true, 302);
-                exit;
-            }
-
-            $this->SendDebug(
-                'Connect/VehicleAccessSync',
-                'Reauth URL konnte nicht erzeugt werden: ' . $reauthUrl,
-                0
-            );
-
-            http_response_code(200);
-            header('Content-Type: text/html; charset=utf-8');
-            echo '<!doctype html><html><head><meta charset="utf-8"><title>Smartcar Connect</title></head><body>';
-            echo '<h2>Vehicle Access konnte nicht vollständig synchronisiert werden</h2>';
-            echo '<p>' . htmlspecialchars($reauthUrl) . '</p>';
-            echo '</body></html>';
-            return;
-        }
 
         $vehicleId = $redirectVehicleId !== ''
             ? $redirectVehicleId
-            : $this->ExtractVehicleIdFromState($state);
+            : ($syncVehicleId !== ''
+                ? $syncVehicleId
+                : $this->ExtractVehicleIdFromState($state));
 
         if ($vehicleId !== '' && $userId !== '') {
             $this->UpdateVehicleUserId($vehicleId, $userId);
@@ -1687,7 +1649,7 @@ class SmartcarSplitter extends IPSModuleStrict
 
                 $this->SendDebug(
                     'Connect/VehicleRefresh',
-                    'Vehicle Access synchronisiert und aktivierte Signale neu abgerufen für Instanz ' . $instanceId,
+                    'Vehicle Access über Connect synchronisiert und aktivierte Signale neu abgerufen für Instanz ' . $instanceId,
                     0
                 );
             }
@@ -1725,11 +1687,7 @@ class SmartcarSplitter extends IPSModuleStrict
         echo '<style>body{font-family:Arial,sans-serif;margin:40px;color:#222}.ok{color:#16803c}</style>';
         echo '</head><body>';
         echo '<h2 class="ok">Smartcar erfolgreich verbunden</h2>';
-        if ($vehicleId !== '') {
-            echo '<p>Vehicle Access wurde synchronisiert und das Fahrzeug erneut autorisiert.</p>';
-        } else {
-            echo '<p>Die Verbindung zum OEM wurde bestätigt.</p>';
-        }
+        echo '<p>Vehicle Access wurde über den normalen Connect-Flow synchronisiert.</p>';
         echo '<p>Du kannst dieses Fenster jetzt schließen und zu IP-Symcon zurückkehren.</p>';
         echo '</body></html>';
     }
