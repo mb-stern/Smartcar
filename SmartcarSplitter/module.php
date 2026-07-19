@@ -394,7 +394,7 @@ class SmartcarSplitter extends IPSModuleStrict
             'GET',
             $url,
             [
-                'Authorization: Bearer ' . $managementToken,
+                'Authorization: Basic ' . base64_encode('default:' . $managementToken),
                 'Accept: application/json'
             ]
         );
@@ -434,13 +434,9 @@ class SmartcarSplitter extends IPSModuleStrict
         }
 
         $items =
-            is_array($data['data'] ?? null)
-                ? $data['data']
-                : (
-                    array_is_list($data)
-                        ? $data
-                        : []
-                );
+            is_array($data['connections'] ?? null)
+                ? $data['connections']
+                : [];
 
         $connections = [];
 
