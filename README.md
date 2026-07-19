@@ -18,6 +18,7 @@ Du findest alle Funktionen für das Smartcar-Symcon-Repository in den entspreche
 
 | Version | Datum | Änderungen |
 |----------|--------|------------|
+| **4.4** | 19.07.2026 | - Smartcar hat den Authorisierungsprozess geändert, dieser ist nun den neuen Vorgaben angepasst.Die Zugriffsberechtigungen werden nun ausschließlich unter Smartcar → Configuration → Vehicle Access verwaltet<br>- Ein Fehler wurde beseitigt, dass eine fehlerhafte Vehicle-Instanz erstellt wurde.<br>- Der Konfigurator ist nun mit dem Element von Symcon aufgebaut. |
 | **4.3** | 12.07.2026 | - Variablen aktualisieren sich nur noch, wenn sich der Datenstand ändert.<br>- Der OEM Aktualisierungszeitpunkt kann über zusätzliche Variablen eingeblendet werden.<br>- Die Variablen bekommen beim Erstellen eine Positionen im Objektbaum, um die Übersichtlichkeit zu verbessern. |
 | **4.2** | 24.05.2026 | - Signalverarbeitung erweitert und bestehende aktualisiert. |
 | **4.1** | 06.05.2026 | - Control Permissions wurden bisher noch nicht gesetzt. Alle aktuell möglichen Steuerbefehle sollten nun funktionieren. |

@@ -89,12 +89,6 @@ class SmartcarSplitter extends IPSModuleStrict
                         : 'URL-Quelle: Automatisch über Symcon Connect'
                 ],
                 [
-                    'type' => 'Label',
-                    'caption' =>
-                        'Cloudflare Tunnel: Die öffentliche URL muss auf diesen Hook zeigen, z. B. ' .
-                        'https://deine-domain.tld' . $hookPath
-                ],
-                [
                     'type' => 'ValidationTextBox',
                     'name' => 'ManualRedirectURI',
                     'caption' => 'Redirect-/Webhook-URI manuell überschreiben'

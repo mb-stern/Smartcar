@@ -36,7 +36,8 @@
 | Feld / Aktion | Beschreibung |
 |------|---------------|
 | **Redirect URI** | Wird vom Modul angezeigt und muss in der Smartcar Application hinterlegt werden (OAuth Redirect URI). |
-| **Manuelle Redirect URI** | Optional. Nur verwenden, wenn nicht automatisch die Symcon-Connect-URL genutzt werden soll. |
+| **Aktuelle Redirect URI** | Hier wird die aktuell verwendete Webhook Adresse angezeigt. Diese Adresse kommt in die Smartcar-Konfiguration. |
+| **Redirect URI manuell überschreiben** | Optional. Nur verwenden, wenn nicht automatisch die Symcon-Connect-URL genutzt werden soll. |
 | **Client ID** | Client ID aus der Smartcar Application. |
 | **Client Secret** | Client Secret aus der Smartcar Application. |
 | **Application ID** | ID der Smartcar Application. |
@@ -44,20 +45,8 @@
 
 ---
 
-## 5. Authentifizierung
 
-Die Verbindung erfolgt über OAuth2:
-
-1. Klick auf **„Mit Smartcar verbinden“**  
-2. Login beim Fahrzeughersteller  
-3. Bestätigung der Berechtigungen  
-4. Rückleitung zu IP-Symcon  
-
-Access- und Refresh-Tokens werden automatisch verwaltet und regelmäßig erneuert.
-
----
-
-## 6. Webhooks (Push)
+## 5. Webhooks (Push)
 
 - Smartcar sendet Ereignisse an den Webhook des Splitters.  
 - Der Splitter validiert und verarbeitet die eingehenden Daten.  
@@ -67,20 +56,20 @@ Access- und Refresh-Tokens werden automatisch verwaltet und regelmäßig erneuer
 
 ---
 
-## 7. Datenverarbeitung
+## 6. Datenverarbeitung
 
 - Die Kommunikation erfolgt über interne IPS-Nachrichten (DataID).  
 - Der Splitter fungiert als zentrale Schnittstelle zwischen Smartcar API und Fahrzeugmodulen.  
 
 ---
 
-## 8. Debugging
+## 7. Debugging
 
 Alle API-Anfragen, Token-Vorgänge und Webhook-Daten können im Debug-Fenster analysiert werden.
 
 ---
 
-## 9. Lizenz
+## 8. Lizenz
 
 Dieses Modul steht unter der **MIT-Lizenz**.  
 © 2025 Stefan Künzli  
