@@ -675,16 +675,36 @@ class SmartcarSplitter extends IPSModuleStrict
             'https://vehicle.api.smartcar.com/v3' .
             $path;
 
+        $userId = trim($userId);
+
         $headers = [
             'Authorization: Bearer ' . $token,
             'Accept: application/json'
         ];
 
         if ($userId !== '') {
+            // V3 benötigt für den Fahrzeugzugriff den Benutzerkontext.
+            // Bewusst mit der von Smartcar dokumentierten Schreibweise.
             $headers[] =
-                'sc-user-id: ' .
+                'SC-User-ID: ' .
                 $userId;
         }
+
+        // Request-Kontext sichtbar machen, ohne den Access Token zu loggen.
+        $this->SendDebug(
+            'ApiRequest/Context',
+            json_encode(
+                [
+                    'method' => $method,
+                    'path' => $path,
+                    'scUserId' => $userId,
+                    'hasScUserId' => $userId !== ''
+                ],
+                JSON_UNESCAPED_SLASHES |
+                JSON_UNESCAPED_UNICODE
+            ),
+            0
+        );
 
         $content = null;
 
