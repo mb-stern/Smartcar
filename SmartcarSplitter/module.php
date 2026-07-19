@@ -1409,8 +1409,7 @@ class SmartcarSplitter extends IPSModuleStrict
             'application_id' => $applicationID,
             'redirect_uri' => $redirectURI,
             'state' => $state,
-            'mode' => $mode,
-            'country' => 'CH'
+            'mode' => $mode
         ];
 
         $url =
