@@ -201,11 +201,6 @@ class SmartcarVehicle extends IPSModuleStrict
                     'onClick' => 'SMCARV_FetchSelectedSignals($id, []);'
                 ],
                 [
-                    'type' => 'Button',
-                    'caption' => 'Webhook neu abonnieren',
-                    'onClick' => 'echo SMCARV_ResubscribeWebhook($id);'
-                ],
-                [
                     'type'    => 'Label',
                     'caption' => ''
                 ],
@@ -874,48 +869,6 @@ class SmartcarVehicle extends IPSModuleStrict
     private function BuildSignalIdent(string $code): string
     {
         return 'Sig_' . preg_replace('/[^A-Za-z0-9_]/', '_', $code);
-    }
-
-    public function ResubscribeWebhook(): string
-    {
-        $this->SendDebug('Webhook/ManualResubscribe', 'Manuelles erneutes Abonnieren gestartet.', 0);
-
-        if (!$this->HasParentConnection()) {
-            return 'Fehler: Kein Smartcar Splitter verbunden.';
-        }
-
-        $vehicleId = trim($this->ReadPropertyString('VehicleID'));
-        $userId = trim($this->ReadPropertyString('UserID'));
-
-        if ($vehicleId === '') {
-            return 'Fehler: VehicleID fehlt.';
-        }
-
-        if ($userId === '') {
-            return 'Fehler: UserID fehlt.';
-        }
-
-        $result = $this->SendDataToParent(json_encode([
-            'DataID' => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
-            'Command' => 'ResubscribeVehicleWebhook',
-            'VehicleID' => $vehicleId,
-            'UserID' => $userId
-        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
-
-        $this->SendDebug('Webhook/ManualResubscribeResult', (string)$result, 0);
-
-        $decoded = json_decode((string)$result, true);
-
-        if (!is_array($decoded)) {
-            return 'Fehler: Ungültige Antwort vom Smartcar Splitter.';
-        }
-
-        if (empty($decoded['success'])) {
-            return 'Webhook konnte nicht neu abonniert werden: ' .
-                (string)($decoded['error'] ?? 'Unbekannter Fehler');
-        }
-
-        return 'Webhook wurde erfolgreich neu abonniert.';
     }
 
     public function GenerateConnectURL(): string

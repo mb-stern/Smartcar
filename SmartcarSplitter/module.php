@@ -244,15 +244,6 @@ class SmartcarSplitter extends IPSModuleStrict
                     JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
                 );
 
-            case 'ResubscribeVehicleWebhook':
-                return json_encode(
-                    $this->ResubscribeVehicleWebhook(
-                        (string)($data['VehicleID'] ?? ''),
-                        (string)($data['UserID'] ?? '')
-                    ),
-                    JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
-                );
-
             case 'BuildConnectURL':
                 $url = $this->BuildConnectURL(
                     (string)($data['Mode'] ?? 'live'),
