@@ -886,13 +886,27 @@ class SmartcarVehicle extends IPSModuleStrict
             return 'Fehler: VehicleID fehlt. Re-Authentication kann nicht gestartet werden.';
         }
 
+        $permissions = $this->GetSelectedPermissions();
+
+        $this->SendDebug(
+            'Connect/Permissions',
+            'Permissions count=' . count($permissions) . ' values=' .
+            json_encode($permissions, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            0
+        );
+
+        if (empty($permissions)) {
+            return 'Fehler: Keine aktivierten Signale/Befehle mit Permission ausgewählt.';
+        }
+
         $state = 'vehicle_' . $vehicleId . '_' . bin2hex(random_bytes(8));
 
         $request = [
-            'DataID'    => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
-            'Command'   => 'BuildReauthURL',
-            'VehicleID' => $vehicleId,
-            'State'     => $state
+            'DataID'      => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
+            'Command'     => 'BuildReauthURL',
+            'VehicleID'   => $vehicleId,
+            'State'       => $state,
+            'Permissions' => $permissions
         ];
 
         $this->SendDebug(
