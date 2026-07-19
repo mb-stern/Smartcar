@@ -376,49 +376,89 @@ class SmartcarSplitter extends IPSModuleStrict
             return [];
         }
 
-        $url =
-            'https://vehicle.api.smartcar.com/v3/connections?page[size]=100';
+        /*
+         * WICHTIG:
+         * Smartcar V3 filtert /connections standardmässig auf vehicle.mode=live.
+         * Deshalb müssen Live- und Simulator-Verbindungen explizit separat
+         * abgefragt und anschliessend zusammengeführt werden.
+         */
+        $allItems = [];
 
-        $response = $this->HttpRequestRaw(
-            'Connections',
-            'GET',
-            $url,
-            [
-                'Authorization: Bearer ' . $token,
-                'Accept: application/json'
-            ]
-        );
+        foreach (['live', 'simulated'] as $mode) {
+            $query = http_build_query([
+                'filter[vehicle.mode]' => $mode,
+                'page[size]' => 100
+            ]);
 
-        if (
-            $response === null
-            || $response['statusCode'] !== 200
-        ) {
+            $url =
+                'https://vehicle.api.smartcar.com/v3/connections?' .
+                $query;
+
+            $response = $this->HttpRequestRaw(
+                'Connections/' . ucfirst($mode),
+                'GET',
+                $url,
+                [
+                    'Authorization: Bearer ' . $token,
+                    'Accept: application/json'
+                ]
+            );
+
+            if (
+                $response === null
+                || $response['statusCode'] !== 200
+            ) {
+                $this->SendDebug(
+                    'Connections/' . ucfirst($mode),
+                    'Fehler: ' . json_encode(
+                        $response,
+                        JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+                    ),
+                    0
+                );
+                continue;
+            }
+
+            $data = json_decode($response['body'], true);
+
+            if (
+                !is_array($data)
+                || !isset($data['data'])
+                || !is_array($data['data'])
+            ) {
+                $this->SendDebug(
+                    'Connections/' . ucfirst($mode),
+                    'Unerwartete Antwort: ' . $response['body'],
+                    0
+                );
+                continue;
+            }
+
             $this->SendDebug(
-                'Connections',
-                'Fehler: ' . json_encode($response),
+                'Connections/' . ucfirst($mode),
+                'Gefundene Connections: ' . count($data['data']),
                 0
             );
-            return [];
-        }
 
-        $data = json_decode($response['body'], true);
+            foreach ($data['data'] as $item) {
+                if (!is_array($item)) {
+                    continue;
+                }
 
-        if (
-            !is_array($data)
-            || !isset($data['data'])
-            || !is_array($data['data'])
-        ) {
-            $this->SendDebug(
-                'Connections',
-                'Unerwartete Antwort: ' . $response['body'],
-                0
-            );
-            return [];
+                $connectionId = (string)($item['id'] ?? '');
+
+                // Doppelte Connections sicher vermeiden.
+                if ($connectionId !== '') {
+                    $allItems[$connectionId] = $item;
+                } else {
+                    $allItems[] = $item;
+                }
+            }
         }
 
         $connections = [];
 
-        foreach ($data['data'] as $item) {
+        foreach ($allItems as $item) {
             $connectionId = (string)($item['id'] ?? '');
 
             $attributes = is_array($item['attributes'] ?? null)
@@ -481,6 +521,12 @@ class SmartcarSplitter extends IPSModuleStrict
                 'permissions' => $attributes['permissions'] ?? []
             ];
         }
+
+        $this->SendDebug(
+            'Connections/Merged',
+            'Gesamt nach Zusammenführung: ' . count($connections),
+            0
+        );
 
         return $connections;
     }
