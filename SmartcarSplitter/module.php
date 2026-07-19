@@ -16,7 +16,6 @@ class SmartcarSplitter extends IPSModuleStrict
         $this->RegisterPropertyString('ManualRedirectURI', '');
         $this->RegisterPropertyString('ManagementToken', '');
         $this->RegisterPropertyString('ApplicationID', '');
-        $this->RegisterPropertyString('WebhookID', '');
 
         $this->RegisterAttributeString('ApplicationAccessToken', '');
         $this->RegisterAttributeInteger('TokenExpiresAt', 0);
@@ -120,11 +119,6 @@ class SmartcarSplitter extends IPSModuleStrict
                     'name' => 'ManagementToken',
                     'caption' => 'Application Management Token'
                 ],
-                [
-                    'type' => 'ValidationTextBox',
-                    'name' => 'WebhookID',
-                    'caption' => 'Webhook ID für erneutes Abonnieren'
-                ]
             ]
         ];
 
@@ -1815,17 +1809,6 @@ class SmartcarSplitter extends IPSModuleStrict
 
     private function GetWebhookIdForResubscribe(): string
     {
-        $configured =
-            trim(
-                $this->ReadPropertyString(
-                    'WebhookID'
-                )
-            );
-
-        if ($configured !== '') {
-            return $configured;
-        }
-
         return
             trim(
                 $this->ReadAttributeString(
@@ -1869,7 +1852,7 @@ class SmartcarSplitter extends IPSModuleStrict
             return [
                 'success' => false,
                 'error' =>
-                    'WebhookID fehlt. Bitte im Splitter konfigurieren oder zuerst einen Webhook empfangen.'
+                    'WebhookID fehlt. Es wurde bisher noch keine Webhook-ID automatisch empfangen.'
             ];
         }
 
