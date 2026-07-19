@@ -101,6 +101,25 @@ class SmartcarVehicle extends IPSModuleStrict
 
     public function GetConfigurationForm(): string
     {
+        // Eine reguläre Fahrzeug-Instanz erhält ihre VehicleID beim Erstellen
+        // über den Smartcar-Konfigurator. Ist sie leer, wurde die Instanz
+        // in der Regel manuell angelegt.
+        if (trim($this->ReadPropertyString('VehicleID')) === '') {
+            return json_encode([
+                'elements' => [
+                    [
+                        'type' => 'Label',
+                        'caption' => 'Diese Smartcar Fahrzeug-Instanz darf nicht manuell erstellt werden.'
+                    ],
+                    [
+                        'type' => 'Label',
+                        'caption' => 'Bitte löschen Sie diese Instanz wieder und erstellen Sie das Fahrzeug ausschließlich über den Smartcar-Konfigurator.'
+                    ]
+                ],
+                'actions' => []
+            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        }
+
         $capabilities = [];
 
         if ($this->HasParentConnection()) {
@@ -119,7 +138,10 @@ class SmartcarVehicle extends IPSModuleStrict
                     'name' => 'ShowOEMUpdatedAtVariables',
                     'caption' => 'OEM-Aktualisierungszeit je Signal als zusätzliche Variable anzeigen'
                 ],
-
+                [
+                    'type' => 'Label',
+                    'caption' => 'Die Auswahl unten bestimmt nur, welche Variablen in IP-Symcon erstellt werden. Die Zugriffsberechtigungen werden ausschließlich unter Smartcar → Configuration → Vehicle Access verwaltet. Nach Änderungen ist zwingen der Button zu betätigen.'
+                ],
                 [
                 'type' => 'List',
                 'name' => 'SelectedCapabilities',
@@ -189,12 +211,7 @@ class SmartcarVehicle extends IPSModuleStrict
             'actions' => [
                 [
                     'type' => 'Button',
-                    'caption' => 'Kompatibilitätsliste neu laden',
-                    'onClick' => 'SMCARV_ReloadCompatibility($id);'
-                ],
-                [
-                    'type' => 'Button',
-                    'caption' => 'Gewählte Signale bei Smartcar registrieren',
+                    'caption' => 'Vehicle Access synchronisieren',
                     'onClick' => 'echo SMCARV_GenerateConnectURL($id);'
                 ],
                 [
@@ -300,9 +317,15 @@ class SmartcarVehicle extends IPSModuleStrict
         $year = $this->ReadPropertyInteger('Year');
         $powertrainType = strtoupper(trim($this->ReadPropertyString('PowertrainType')));
 
+       
+
+        //Test für falsch zugeordnete PowertrainType, z.B. ICE bei einem Elektrofahrzeug.
+         
+        /*
         if ($powertrainType === 'ICE') {
             $powertrainType = '';
         }
+        */
 
         $region = 'EUROPE';
 
@@ -789,9 +812,124 @@ class SmartcarVehicle extends IPSModuleStrict
     }
 
 
+    private function GetFixedSignalPosition(string $signalCode): int
+    {
+        $signalCode = strtolower(trim($signalCode));
+
+        // Feste Position pro Signal. Die Position hängt nicht davon ab,
+        // wann oder in welcher Reihenfolge ein Signal aktiviert wurde.
+        $positions = [
+            'tractionbattery-stateofcharge' => 100,
+            'tractionbattery-range' => 200,
+            'tractionbattery-nominalcapacity' => 300,
+            'tractionbattery-chargecompletiontime' => 400,
+            'tractionbattery-maxrangechargecounter' => 500,
+            'tractionbattery-nominalcapacities' => 600,
+            'charge-detailedchargingstatus' => 700,
+            'charge-ischarging' => 800,
+            'charge-ischargingcableconnected' => 900,
+            'charge-chargelimits' => 1000,
+            'charge-amperage' => 1100,
+            'charge-maximumamperage' => 1200,
+            'charge-amperagerequested' => 1300,
+            'charge-chargerate' => 1400,
+            'charge-voltage' => 1500,
+            'charge-power' => 1600,
+            'charge-energyadded' => 1700,
+            'charge-timetocomplete' => 1800,
+            'charge-fastchargertype' => 1900,
+            'charge-isfastchargerpresent' => 2000,
+            'charge-chargingconnectortype' => 2100,
+            'charge-chargerphases' => 2200,
+            'charge-chargetimers' => 2300,
+            'charge-chargerecords' => 2400,
+            'charge-ischargingcablelatched' => 2500,
+            'charge-ischargingportflapopen' => 2600,
+            'closure-chargeportstatuscolor' => 2700,
+            'location-preciselocation' => 2800,
+            'odometer-traveleddistance' => 2900,
+            'closure-islocked' => 3000,
+            'closure-doors' => 3100,
+            'closure-windows' => 3200,
+            'closure-sunroof' => 3300,
+            'closure-enginecover' => 3400,
+            'closure-fronttrunk' => 3500,
+            'closure-reartrunk' => 3600,
+            'closure-tailgate' => 3700,
+            'connectivitystatus-isonline' => 3800,
+            'connectivitystatus-isasleep' => 3900,
+            'connectivitystatus-isdigitalkeypaired' => 4000,
+            'connectivitysoftware-currentfirmwareversion' => 4100,
+            'internalcombustionengine-fuellevel' => 4200,
+            'internalcombustionengine-oillife' => 4300,
+            'internalcombustionengine-oilpressure' => 4400,
+            'internalcombustionengine-oiltemperature' => 4500,
+            'internalcombustionengine-waterinfuel' => 4600,
+            'tractionbattery-isheateractive' => 4700,
+            'climate-externaltemperature' => 4800,
+            'climate-internaltemperature' => 4900,
+            'wheel-tires' => 5000,
+            'wheel-style' => 5100,
+            'vehicleidentification-vin' => 5200,
+            'vehicleidentification-trim' => 5300,
+            'vehicleidentification-exteriorcolor' => 5400,
+            'vehicleidentification-packages' => 5500,
+            'vehicleidentification-nickname' => 5600,
+            'vehicleidentification-make' => 5700,
+            'vehicleidentification-model' => 5800,
+            'vehicleidentification-year' => 5900,
+            'vehicleuseraccount-permissions' => 6000,
+            'vehicleuseraccount-role' => 6100,
+            'lowvoltagebattery-stateofcharge' => 6200,
+            'internalcombustionengine-amountremaining' => 6300,
+            'lowvoltagebattery-status' => 6400,
+            'internalcombustionengine-range' => 6500,
+            'transmission-gearstate' => 6600,
+            'transmission-drivemode' => 6700,
+            'surveillance-isenabled' => 6800,
+            'surveillance-brand' => 6900,
+            'diagnostics-dtccount' => 7000,
+            'diagnostics-dtclist' => 7100,
+            'diagnostics-abs' => 7200,
+            'diagnostics-activesafety' => 7300,
+            'diagnostics-airbag' => 7400,
+            'diagnostics-brakefluid' => 7500,
+            'diagnostics-driverassistance' => 7600,
+            'diagnostics-emissions' => 7700,
+            'diagnostics-engine' => 7800,
+            'diagnostics-evbatteryconditioning' => 7900,
+            'diagnostics-evcharging' => 8000,
+            'diagnostics-evdriveunit' => 8100,
+            'diagnostics-evhvbattery' => 8200,
+            'diagnostics-lighting' => 8300,
+            'diagnostics-mil' => 8400,
+            'diagnostics-telematics' => 8500,
+            'diagnostics-tirepressure' => 8600,
+            'diagnostics-tirepressuremonitoring' => 8700,
+            'diagnostics-transmission' => 8800,
+            'diagnostics-washerfluid' => 8900,
+            'hvac-cabintargettemperature' => 9000,
+            'hvac-iscabinhvacactive' => 9100,
+            'hvac-isfrontdefrosteractive' => 9200,
+            'hvac-isreardefrosteractive' => 9300,
+            'hvac-issteeringheateractive' => 9400,
+            'motion-currentspeed' => 9500,
+            'service-isinservice' => 9600,
+            'service-records' => 9700,
+        ];
+
+        if (isset($positions[$signalCode])) {
+            return $positions[$signalCode];
+        }
+
+        // Fallback für künftig unbekannte Signale:
+        // stabil aus dem Signalcode abgeleitet und außerhalb des festen Bereichs.
+        return 20000 + ((int)sprintf('%u', crc32($signalCode)) % 2000) * 10;
+    }
+
     private function BuildSelectedSignalPositionMap(array $selected): array
     {
-        $signals = [];
+        $positions = [];
 
         foreach ($selected as $entry) {
             if (strtolower((string)($entry['type'] ?? '')) !== 'signal') {
@@ -807,28 +945,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 continue;
             }
 
-            $signals[] = [
-                'code'  => $signalCode,
-                'group' => (string)($entry['group'] ?? ''),
-                'name'  => (string)($entry['name'] ?? $signalCode)
-            ];
-        }
-
-        usort($signals, static function (array $a, array $b): int {
-            $groupCompare = strcasecmp($a['group'], $b['group']);
-            if ($groupCompare !== 0) {
-                return $groupCompare;
-            }
-
-            return strcasecmp($a['name'], $b['name']);
-        });
-
-        $positions = [];
-        $position = 100;
-
-        foreach ($signals as $signal) {
-            $positions[$signal['code']] = $position;
-            $position += 10;
+            $positions[$signalCode] = $this->GetFixedSignalPosition($signalCode);
         }
 
         return $positions;
@@ -836,8 +953,7 @@ class SmartcarVehicle extends IPSModuleStrict
 
     private function GetSignalBasePosition(string $signalCode): int
     {
-        $positions = $this->BuildSelectedSignalPositionMap($this->GetSelectedCapabilitiesResolved());
-        return $positions[$signalCode] ?? 8000;
+        return $this->GetFixedSignalPosition($signalCode);
     }
 
     private function BuildOEMTimestampIdent(string $code): string
@@ -875,37 +991,41 @@ class SmartcarVehicle extends IPSModuleStrict
 
     public function GenerateConnectURL(): string
     {
-        $this->SendDebug('Connect/Start', 'GenerateConnectURL gestartet.', 0);
+        $this->SendDebug('Connect/Start', 'Vehicle Access synchronisieren gestartet (Phase 1: Connect).', 0);
 
-        $permissions = $this->GetSelectedPermissions();
+        if (!$this->HasParentConnection()) {
+            return 'Fehler: Kein Smartcar Splitter verbunden.';
+        }
+
+        $vehicleId = trim($this->ReadPropertyString('VehicleID'));
+
+        if ($vehicleId === '') {
+            return 'Fehler: VehicleID fehlt.';
+        }
+
+        $state = 'vehicle_access_sync_' . $vehicleId . '_' . bin2hex(random_bytes(8));
+
+        $request = [
+            'DataID'  => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
+            'Command' => 'BuildConnectURL',
+            'Mode'    => 'live',
+            'State'   => $state
+        ];
 
         $this->SendDebug(
-            'Connect/Result',
-            'Permissions count=' . count($permissions) . ' values=' . json_encode($permissions, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            'Connect/RequestToSplitter',
+            json_encode($request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
             0
         );
 
-        if (empty($permissions)) {
-            return 'Fehler: Keine aktivierten Signale/Befehle mit Permission ausgewählt. Bitte Debug prüfen: Connect/SelectedCapabilitiesRaw, Connect/Entry und Connect/Summary.';
-        }
-
-        $state = 'vehicle_' . $this->ReadPropertyString('VehicleID') . '_' . bin2hex(random_bytes(8));
-
-        $request = [
-            'DataID'      => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
-            'Command'     => 'BuildConnectURL',
-            'Mode'        => 'live',
-            'State'       => $state,
-            'Permissions' => $permissions
-        ];
-
-        $this->SendDebug('Connect/RequestToSplitter', json_encode($request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
-
-        $result = $this->SendDataToParent(json_encode($request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        $result = $this->SendDataToParent(
+            json_encode($request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+        );
 
         $this->SendDebug('Connect/SplitterResponse', (string)$result, 0);
 
         $decoded = json_decode((string)$result, true);
+
         if (!is_array($decoded) || empty($decoded['success'])) {
             return 'Fehler beim Erzeugen der Connect URL: ' . (string)$result;
         }
@@ -1038,7 +1158,7 @@ class SmartcarVehicle extends IPSModuleStrict
         $managedIdents = [];
         $newSignalCodes = [];
         $signalPositions = $this->BuildSelectedSignalPositionMap($selected);
-        $commandPosition = 9000;
+        $commandPosition = 50000;
 
         // Alle möglichen Signal- und Command-Variablen aus der Compatibility-Liste sammeln
         $cache = json_decode($this->ReadAttributeString('CompatibilityCache'), true);

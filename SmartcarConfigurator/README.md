@@ -37,8 +37,6 @@ Die Oberfläche stellt automatisch alle verfügbaren Fahrzeuge und Aktionen bere
 | Aktion | Beschreibung |
 |--------|--------------|
 | **Neues Live-Fahrzeug verbinden** | Startet den Smartcar-Connect-Prozess, um ein neues Fahrzeug mit deinem Smartcar-Account zu verbinden. |
-| **Liste aktualisieren** | Aktualisiert die Fahrzeugliste, ohne das Konfigurationsformular neu zu laden (z. B. nach dem Hinzufügen eines Fahrzeugs). |
-| **Alle fehlenden Fahrzeug-Instanzen erstellen** | Erstellt automatisch für alle in Smartcar vorhandenen Fahrzeuge die entsprechenden IP-Symcon Fahrzeug-Instanzen. |
 | **Smartcar-Fahrzeuge** | Zeigt alle in deinem Smartcar-Account vorhandenen Fahrzeuge an. |
 
 ---
