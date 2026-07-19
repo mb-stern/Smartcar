@@ -121,7 +121,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 ],
                 [
                     'type' => 'Label',
-                    'caption' => 'Die Auswahl hier bestimmt nur, welche Variablen in IP-Symcon erstellt werden. Die Zugriffsberechtigungen werden ausschließlich unter Smartcar → Configuration → Vehicle Access verwaltet.'
+                    'caption' => 'Die Auswahl unten bestimmt nur, welche Variablen in IP-Symcon erstellt werden. Die Zugriffsberechtigungen werden ausschließlich unter Smartcar → Configuration → Vehicle Access verwaltet. Nach Änderungen im Dashboard -> Vehicle Access ist zwingen der Button 'Vehicle Access synchronisieren' zu betätigen.'
                 ],
                 [
                 'type' => 'List',
