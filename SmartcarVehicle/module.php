@@ -874,13 +874,19 @@ class SmartcarVehicle extends IPSModuleStrict
 
     public function GenerateConnectURL(): string
     {
-        $this->SendDebug('Connect/Start', 'Vehicle Access synchronisieren gestartet.', 0);
+        $this->SendDebug('Connect/Start', 'Vehicle Access synchronisieren gestartet (Phase 1: Connect).', 0);
 
         if (!$this->HasParentConnection()) {
             return 'Fehler: Kein Smartcar Splitter verbunden.';
         }
 
-        $state = 'vehicle_access_' . bin2hex(random_bytes(8));
+        $vehicleId = trim($this->ReadPropertyString('VehicleID'));
+
+        if ($vehicleId === '') {
+            return 'Fehler: VehicleID fehlt.';
+        }
+
+        $state = 'vehicle_access_sync_' . $vehicleId . '_' . bin2hex(random_bytes(8));
 
         $request = [
             'DataID'  => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
