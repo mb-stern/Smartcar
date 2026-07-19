@@ -119,7 +119,10 @@ class SmartcarVehicle extends IPSModuleStrict
                     'name' => 'ShowOEMUpdatedAtVariables',
                     'caption' => 'OEM-Aktualisierungszeit je Signal als zusätzliche Variable anzeigen'
                 ],
-
+                [
+                    'type' => 'Label',
+                    'caption' => 'Die Auswahl hier bestimmt nur, welche Variablen in IP-Symcon erstellt werden. Die Zugriffsberechtigungen werden ausschließlich unter Smartcar → Configuration → Vehicle Access verwaltet.'
+                ],
                 [
                 'type' => 'List',
                 'name' => 'SelectedCapabilities',
@@ -187,10 +190,6 @@ class SmartcarVehicle extends IPSModuleStrict
             ]
             ],
             'actions' => [
-                [
-                    'type' => 'Label',
-                    'caption' => 'Die Auswahl hier bestimmt nur, welche Variablen in IP-Symcon erstellt werden. Die Zugriffsberechtigungen werden ausschließlich unter Smartcar → Configuration → Vehicle Access verwaltet.'
-                ],
                 [
                     'type' => 'Button',
                     'caption' => 'Vehicle Access synchronisieren',
