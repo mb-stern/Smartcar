@@ -157,7 +157,7 @@ class SmartcarVehicle extends IPSModuleStrict
                         ],
                         [
                             'type' => 'Label',
-                            'caption' => 'Smartcar-Permissions werden dadurch nicht serverseitig umgangen. Bereits mitgelieferte Werte werden trotz status=ERROR/type=PERMISSION verarbeitet.'
+                            'caption' => 'Funktioniert nur bei manueller Datenabfrage. Bereits mitgelieferte Werte werden trotz status=ERROR/type=PERMISSION verarbeitet.'
                         ],
                         [
                             'type' => 'CheckBox',
