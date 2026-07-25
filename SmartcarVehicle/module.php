@@ -442,318 +442,133 @@ class SmartcarVehicle extends IPSModuleStrict
 
     public function FetchSelectedSignals(array $onlySignalCodes = []): void
     {
-        if (!$this->HasParentConnection()) {
-            $this->SendDebug(
-                'FetchSignals/Error',
-                'Kein Splitter/Parent verbunden.',
-                0
-            );
-            return;
-        }
-
-        $vehicleId =
-            trim(
-                $this->ReadPropertyString(
-                    'VehicleID'
-                )
-            );
-
-        $userId =
-            trim(
-                $this->ReadPropertyString(
-                    'UserID'
-                )
-            );
-
-        if ($vehicleId === '' || $userId === '') {
-            $this->SendDebug(
-                'FetchSignals/Error',
-                'VehicleID oder UserID fehlt.',
-                0
-            );
-            return;
-        }
-
-        $selectedMap =
-            $this->GetSelectedSignalMap();
-
-        if (empty($selectedMap)) {
-            $this->SendDebug(
-                'FetchSignals/Done',
-                json_encode([
-                    'mode' => empty($onlySignalCodes)
-                        ? 'full'
-                        : 'partial',
-                    'requested' => 0,
-                    'applied' => 0,
-                    'failed' => 0,
-                    'skipped' => 0
-                ], JSON_UNESCAPED_SLASHES |
-                   JSON_UNESCAPED_UNICODE),
-                0
-            );
-            return;
-        }
-
-        $targetCodes = [];
-
         if (!empty($onlySignalCodes)) {
-            foreach ($onlySignalCodes as $signalCode) {
-                $signalCode =
-                    trim(
-                        (string)$signalCode
-                    );
-
-                if (
-                    $signalCode !== ''
-                    && isset(
-                        $selectedMap[$signalCode]
-                    )
-                ) {
-                    $targetCodes[$signalCode] =
-                        true;
-                }
-            }
-
             $this->SendDebug(
                 'FetchSignals/Start',
-                'Einzelabruf für ausgewählte neue Signale: ' .
-                implode(
-                    ', ',
-                    array_keys(
-                        $targetCodes
-                    )
-                ),
+                'Teilabruf für neue Signale: ' . implode(', ', $onlySignalCodes),
                 0
             );
         } else {
-            foreach (
-                array_keys($selectedMap)
-                as $signalCode
-            ) {
-                $targetCodes[$signalCode] =
-                    true;
-            }
+            $this->SendDebug('FetchSignals/Start', 'Sammelabruf aller Signale gestartet.', 0);
+        }
 
-            $this->SendDebug(
-                'FetchSignals/Start',
-                'Einzelabruf aller aktivierten Signale gestartet. Anzahl=' .
-                count($targetCodes),
-                0
-            );
+        if (!$this->HasParentConnection()) {
+            $this->SendDebug('FetchSignals/Error', 'Kein Splitter/Parent verbunden.', 0);
+            return;
+        }
+
+        $vehicleId = $this->ReadPropertyString('VehicleID');
+        $userId    = $this->ReadPropertyString('UserID');
+
+        if ($vehicleId === '' || $userId === '') {
+            $this->SendDebug('FetchSignals/Error', 'VehicleID oder UserID fehlt.', 0);
+            return;
+        }
+
+        $result = $this->SendDataToParent(json_encode([
+            'DataID'    => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
+            'Command'   => 'GetSignals',
+            'VehicleID' => $vehicleId,
+            'UserID'    => $userId
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+
+        $this->SendDebug('FetchSignals/RAW', (string)$result, 0);
+
+        $decoded = json_decode((string)$result, true);
+        if (!is_array($decoded) || empty($decoded['success'])) {
+            $this->SendDebug('FetchSignals/Error', 'GetSignals fehlgeschlagen: ' . (string)$result, 0);
+            return;
+        }
+
+        $signals = $decoded['body']['data']['signals']
+            ?? $decoded['body']['data']
+            ?? $decoded['body']['signals']
+            ?? [];
+
+        if (!is_array($signals)) {
+            $this->SendDebug('FetchSignals/Error', 'Keine Signals im Response gefunden.', 0);
+            return;
+        }
+
+        $selectedMap = $this->GetSelectedSignalMap();
+
+        $onlyMap = [];
+        foreach ($onlySignalCodes as $code) {
+            $onlyMap[(string)$code] = true;
         }
 
         $applied = 0;
-        $failed = 0;
         $skipped = 0;
 
-        foreach (
-            array_keys($targetCodes)
-            as $signalCode
-        ) {
-            $this->SendDebug(
-                'FetchSignals/Request',
-                $signalCode,
-                0
-            );
-
-            $result =
-                $this->SendDataToParent(
-                    json_encode([
-                        'DataID' =>
-                            '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
-                        'Command' =>
-                            'GetSignal',
-                        'VehicleID' =>
-                            $vehicleId,
-                        'UserID' =>
-                            $userId,
-                        'SignalCode' =>
-                            $signalCode
-                    ], JSON_UNESCAPED_SLASHES |
-                       JSON_UNESCAPED_UNICODE)
-                );
-
-            $this->SendDebug(
-                'FetchSignals/RAW/' .
-                $signalCode,
-                (string)$result,
-                0
-            );
-
-            $decoded =
-                json_decode(
-                    (string)$result,
-                    true
-                );
-
-            if (
-                !is_array($decoded)
-                || empty($decoded['success'])
-            ) {
-                $this->SendDebug(
-                    'FetchSignals/Error/' .
-                    $signalCode,
-                    'GetSignal fehlgeschlagen: ' .
-                    (string)$result,
-                    0
-                );
-
-                $failed++;
-                continue;
-            }
-
-            $signal =
-                $decoded['body']['data']
-                ?? $decoded['body']
-                ?? [];
-
-            if (
-                isset($signal[0])
-                && is_array($signal[0])
-            ) {
-                $signal = $signal[0];
-            }
-
+        foreach ($signals as $signal) {
             if (!is_array($signal)) {
-                $this->SendDebug(
-                    'FetchSignals/Error/' .
-                    $signalCode,
-                    'Kein Signalobjekt im Response gefunden.',
-                    0
-                );
-
-                $failed++;
                 continue;
             }
 
-            $attributes =
-                is_array(
-                    $signal['attributes']
-                    ?? null
-                )
-                    ? $signal['attributes']
-                    : $signal;
-
-            $body =
-                is_array(
-                    $attributes['body']
-                    ?? null
-                )
-                    ? $attributes['body']
-                    : [];
-
-            $status =
-                is_array(
-                    $attributes['status']
-                    ?? null
-                )
-                    ? $attributes['status']
-                    : null;
-
-            $meta =
-                is_array(
-                    $signal['meta']
-                    ?? null
-                )
-                    ? $signal['meta']
-                    : (
-                        is_array(
-                            $attributes['meta']
-                            ?? null
-                        )
-                            ? $attributes['meta']
-                            : []
-                    );
-
-            $this->SendDebug(
-                'FetchSignals/Value/' .
-                $signalCode,
-                json_encode([
-                    'body' =>
-                        $body,
-                    'status' =>
-                        $status
-                ], JSON_UNESCAPED_SLASHES |
-                   JSON_UNESCAPED_UNICODE),
-                0
-            );
-
-            $this->SendDebug(
-                'FetchSignals/Meta/' .
-                $signalCode,
-                json_encode([
-                    'retrievedAt' =>
-                        $this->FormatSmartcarTimestamp(
-                            $meta['retrievedAt']
-                            ?? null
-                        ),
-                    'oemUpdatedAt' =>
-                        $this->FormatSmartcarTimestamp(
-                            $meta['oemUpdatedAt']
-                            ?? null
-                        ),
-                    'ingestedAt' =>
-                        $this->FormatSmartcarTimestamp(
-                            $meta['ingestedAt']
-                            ?? null
-                        )
-                ], JSON_UNESCAPED_SLASHES |
-                   JSON_UNESCAPED_UNICODE),
-                0
-            );
-
-            if (
-                $status !== null
-                && isset($status['value'])
-                && !in_array(
-                    strtoupper(
-                        (string)$status['value']
-                    ),
-                    ['SUCCESS', 'OK'],
-                    true
-                )
-            ) {
-                $this->ApplySignalFromV3(
-                    $signalCode,
-                    $body,
-                    $status,
-                    $selectedMap[$signalCode],
-                    $meta
-                );
-
+            $signalCode = (string)($signal['code'] ?? $signal['id'] ?? '');
+            if ($signalCode === '') {
                 $skipped++;
                 continue;
             }
 
-            $this->ApplySignalFromV3(
-                $signalCode,
-                $body,
-                $status,
-                $selectedMap[$signalCode],
-                $meta
+            if (!empty($onlyMap) && !isset($onlyMap[$signalCode])) {
+                $skipped++;
+                continue;
+            }
+
+            
+            if (!isset($selectedMap[$signalCode])) {
+                //$this->SendDebug('FetchSignals/SkipNotSelected', $signalCode, 0);
+                $skipped++;
+                continue;
+            }
+
+            if (!empty($onlyMap) && !isset($onlyMap[$signalCode])) {
+                $this->SendDebug('FetchSignals/SkipNotNew', $signalCode, 0);
+                $skipped++;
+                continue;
+            }
+
+            $attributes = is_array($signal['attributes'] ?? null) ? $signal['attributes'] : $signal;
+
+            $body = is_array($attributes['body'] ?? null) ? $attributes['body'] : [];
+            $status = is_array($attributes['status'] ?? null) ? $attributes['status'] : null;
+            $meta = is_array($signal['meta'] ?? null)
+                ? $signal['meta']
+                : (is_array($attributes['meta'] ?? null) ? $attributes['meta'] : []);
+
+            $this->SendDebug(
+                'FetchSignals/RAW/' . $signalCode,
+                json_encode([
+                    'body' => $body,
+                    'status' => $status
+                ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                0
             );
 
+            $this->SendDebug('FetchSignals/Meta/' . $signalCode, json_encode([
+                'retrievedAt'  => $this->FormatSmartcarTimestamp($meta['retrievedAt'] ?? null),
+                'oemUpdatedAt' => $this->FormatSmartcarTimestamp($meta['oemUpdatedAt'] ?? null)
+            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+
+             $this->SendDebug(
+                'FetchSignals/Apply',
+                (!empty($onlyMap) ? '[NEU] ' : '') . $signalCode,
+                0
+            );
+
+            $this->ApplySignalFromV3($signalCode, $body, $status, $selectedMap[$signalCode], $meta);
             $applied++;
         }
 
         $this->SendDebug(
             'FetchSignals/Done',
             json_encode([
-                'mode' =>
-                    empty($onlySignalCodes)
-                        ? 'full'
-                        : 'partial',
-                'requested' =>
-                    count($targetCodes),
-                'applied' =>
-                    $applied,
-                'failed' =>
-                    $failed,
-                'skipped' =>
-                    $skipped
-            ], JSON_UNESCAPED_SLASHES |
-               JSON_UNESCAPED_UNICODE),
+                'mode'    => empty($onlySignalCodes) ? 'full' : 'partial',
+                'requested' => count($onlySignalCodes),
+                'applied' => $applied,
+                'skipped' => $skipped
+            ]),
             0
         );
     }
