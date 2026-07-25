@@ -776,9 +776,18 @@ class SmartcarSplitter extends IPSModuleStrict
                 $make;
         }
 
+        // PowertrainType bewusst NICHT als harten Compatibility-Filter verwenden.
+        // Smartcar kann insbesondere Plug-in-Hybride in der Connection als ICE
+        // melden. Mit filter[powertrainType]=ICE würden dann passende PHEV-
+        // Compatibility-Einträge bereits serverseitig ausgeschlossen.
         if ($powertrainType !== '') {
-            $query['filter[powertrainType]'] =
-                $powertrainType;
+            $this->SendDebug(
+                'Compatibility/Powertrain',
+                'Connection meldet PowertrainType=' .
+                $powertrainType .
+                '; Compatibility-Abfrage erfolgt testweise ohne Powertrain-Filter.',
+                0
+            );
         }
 
         $url =
