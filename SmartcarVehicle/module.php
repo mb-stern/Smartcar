@@ -15,6 +15,7 @@ class SmartcarVehicle extends IPSModuleStrict
     $this->RegisterPropertyInteger('Year', 0);
     $this->RegisterPropertyString('PowertrainType', '');
     $this->RegisterPropertyBoolean('IgnoreCompatibilityPowertrainFilter', false);
+    $this->RegisterPropertyBoolean('UseBodyDespitePermissionError', false);
     $this->RegisterPropertyString('SelectedCapabilities', '[]');
     $this->RegisterPropertyBoolean('ShowOEMUpdatedAtVariables', false);
     $this->RegisterAttributeString('LastOEMSignalTimes', '{}');
@@ -136,18 +137,34 @@ class SmartcarVehicle extends IPSModuleStrict
                 ['type' => 'Label', 'caption' => 'Fahrzeug: ' . $this->ReadPropertyString('VehicleCaption')],
                 ['type' => 'Label', 'caption' => 'Antrieb: ' . $this->ReadPropertyString('PowertrainType')],
                 [
-                    'type' => 'CheckBox',
-                    'name' => 'IgnoreCompatibilityPowertrainFilter',
-                    'caption' => 'Expertenmodus: Powertrain-Filter bei der Compatibility-Abfrage ignorieren'
-                ],
-                [
-                    'type' => 'Label',
-                    'caption' => 'Für von Smartcar falsch klassifizierte Fahrzeuge. Dadurch werden passende Capabilities anderer Powertrain-Typen angezeigt und auswählbar. Fehlende Smartcar-Permissions werden dadurch nicht umgangen.'
-                ],
-                [
-                    'type' => 'CheckBox',
-                    'name' => 'ShowOEMUpdatedAtVariables',
-                    'caption' => 'OEM-Aktualisierungszeit je Signal als zusätzliche Variable anzeigen'
+                    'type' => 'ExpansionPanel',
+                    'caption' => 'Erweiterte Einstellungen',
+                    'expanded' => false,
+                    'items' => [
+                        [
+                            'type' => 'CheckBox',
+                            'name' => 'IgnoreCompatibilityPowertrainFilter',
+                            'caption' => 'Powertrain-Filter bei der Compatibility-Abfrage ignorieren'
+                        ],
+                        [
+                            'type' => 'Label',
+                            'caption' => 'Für von Smartcar falsch klassifizierte Fahrzeuge. Dadurch werden passende Capabilities anderer Powertrain-Typen angezeigt und auswählbar.'
+                        ],
+                        [
+                            'type' => 'CheckBox',
+                            'name' => 'UseBodyDespitePermissionError',
+                            'caption' => 'Daten trotz Smartcar-PERMISSION-Fehler verwenden, wenn ein Wert mitgeliefert wird'
+                        ],
+                        [
+                            'type' => 'Label',
+                            'caption' => 'Smartcar-Permissions werden dadurch nicht serverseitig umgangen. Bereits mitgelieferte Werte werden trotz status=ERROR/type=PERMISSION verarbeitet.'
+                        ],
+                        [
+                            'type' => 'CheckBox',
+                            'name' => 'ShowOEMUpdatedAtVariables',
+                            'caption' => 'OEM-Aktualisierungszeit je Signal als zusätzliche Variable anzeigen'
+                        ]
+                    ]
                 ],
                 [
                     'type' => 'Label',
@@ -740,15 +757,67 @@ class SmartcarVehicle extends IPSModuleStrict
     private function ApplySignalFromV3(string $code, array $body, ?array $status, array $definitionMeta, array $signalMeta = []): bool
     {
         if ($status !== null && isset($status['value'])) {
-            $statusValue = strtoupper((string)$status['value']);
+            $statusValue =
+                strtoupper(
+                    (string)$status['value']
+                );
 
-            if ($statusValue !== 'SUCCESS' && $statusValue !== 'OK') {
+            if (
+                $statusValue !== 'SUCCESS'
+                && $statusValue !== 'OK'
+            ) {
+                $error =
+                    is_array(
+                        $status['error']
+                        ?? null
+                    )
+                        ? $status['error']
+                        : [];
+
+                $errorType =
+                    strtoupper(
+                        (string)(
+                            $error['type']
+                            ?? ''
+                        )
+                    );
+
+                $useBodyDespitePermissionError =
+                    $this->ReadPropertyBoolean(
+                        'UseBodyDespitePermissionError'
+                    );
+
+                $canUsePermissionBody =
+                    $useBodyDespitePermissionError
+                    && $errorType === 'PERMISSION'
+                    && !empty($body);
+
+                if (!$canUsePermissionBody) {
+                    $this->SendDebug(
+                        'SignalStatus/' . $code,
+                        json_encode([
+                            'status' => $status,
+                            'bodyPresent' => !empty($body),
+                            'permissionOverride' =>
+                                $useBodyDespitePermissionError
+                        ], JSON_UNESCAPED_SLASHES |
+                           JSON_UNESCAPED_UNICODE),
+                        0
+                    );
+
+                    return false;
+                }
+
                 $this->SendDebug(
-                    'SignalStatus/' . $code,
-                    json_encode($status, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                    'SignalStatus/PermissionOverride/' .
+                    $code,
+                    json_encode([
+                        'status' => $status,
+                        'body' => $body
+                    ], JSON_UNESCAPED_SLASHES |
+                       JSON_UNESCAPED_UNICODE),
                     0
                 );
-                return false;
             }
         }
 
