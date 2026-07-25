@@ -1047,7 +1047,7 @@ class SmartcarSplitter extends IPSModuleStrict
                     } else {
                         $this->SendDebug(
                             'Webhook/Sequence',
-                            'Keine gültige meta.sequence vorhanden; VEHICLE_STATE wird aus Kompatibilitätsgründen normal verarbeitet.',
+                            'Keine gültige meta.sequence vorhanden; VEHICLE_STATE wird normal verarbeitet.',
                             0
                         );
                     }
