@@ -163,6 +163,10 @@ class SmartcarVehicle extends IPSModuleStrict
                             'type' => 'CheckBox',
                             'name' => 'ShowOEMUpdatedAtVariables',
                             'caption' => 'OEM-Aktualisierungszeit je Signal als zusätzliche Variable anzeigen'
+                        ],
+                        [
+                            'type' => 'Label',
+                            'caption' => 'Zeitpunkt je Signal als zusätzliche Variable, als diese vom OEM aktualiert wurden. Bei fehlerhaften Permissions wird kein Zeitpunkt angezeigt'
                         ]
                     ]
                 ],
