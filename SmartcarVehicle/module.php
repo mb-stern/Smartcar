@@ -176,71 +176,80 @@ class SmartcarVehicle extends IPSModuleStrict
                     'type' => 'Label',
                     'caption' => 'Die Auswahl unten bestimmt nur, welche kompatiblen Signale und Befehle in IP-Symcon verwendet werden. Die in Smartcar unter Configuration → Vehicle Access konfigurierten Berechtigungen werden im Connect-Flow angefordert. Bei bestehenden Fahrzeugen müssen Änderungen anschließend über „Vehicle Access synchronisieren“ erneut autorisiert werden.'
                 ],
-                [
-                'type' => 'List',
-                'name' => 'SelectedCapabilities',
-                'caption' => 'Kompatible Signale / Befehle',
-                'rowCount' => 10,
-                'add' => false,
-                'delete' => false,
-                'sort' => [
-                    'column' => 'sortKey',
-                    'direction' => 'ascending'
-                ],
-                'columns' => [
-                    [
-                        'caption' => '',
-                        'name' => 'sortKey',
-                        'width' => '0px',
-                        'visible' => false,
-                        'edit' => ['type' => 'ValidationTextBox']
-                    ],
-                    [
-                        'caption' => '',
-                        'name' => 'capabilityKey',
-                        'width' => '0px',
-                        'visible' => false,
-                        'edit' => ['type' => 'ValidationTextBox']
-                    ],
-                    [
-                        'caption' => 'Aktiv',
-                        'name' => 'selected',
-                        'width' => '80px',
-                        'edit' => ['type' => 'CheckBox']
-                    ],
-                    [
-                        'caption' => 'Typ',
-                        'name' => 'type',
-                        'width' => '90px',
-                    ],
-                    [
-                        'caption' => 'Gruppe',
-                        'name' => 'group',
-                        'width' => '160px',
-                    ],
-                    [
-                        'caption' => 'Name',
-                        'name' => 'name',
-                        'width' => 'auto',
-                    ],
-                    [
-                        'caption' => 'Capability',
-                        'name' => 'capability',
-                        'width' => '220px',
-                    ],
-                    [
-                        'caption' => 'Code',
-                        'name' => 'code',
-                        'width' => '220px',
-                    ],
-                    [
-                        'caption' => 'Permission',
-                        'name' => 'permission',
-                        'width' => '180px',
-                    ]
-                ],
-                'values' => $capabilities
-            ]
+                ...(!empty($capabilities)
+                    ? [[
+                        'type' => 'List',
+                        'name' => 'SelectedCapabilities',
+                        'caption' => 'Kompatible Signale / Befehle',
+                        'rowCount' => 10,
+                        'add' => false,
+                        'delete' => false,
+                        'sort' => [
+                            'column' => 'sortKey',
+                            'direction' => 'ascending'
+                        ],
+                        'columns' => [
+                            [
+                                'caption' => '',
+                                'name' => 'sortKey',
+                                'width' => '0px',
+                                'visible' => false,
+                                'edit' => ['type' => 'ValidationTextBox']
+                            ],
+                            [
+                                'caption' => '',
+                                'name' => 'capabilityKey',
+                                'width' => '0px',
+                                'visible' => false,
+                                'edit' => ['type' => 'ValidationTextBox']
+                            ],
+                            [
+                                'caption' => 'Aktiv',
+                                'name' => 'selected',
+                                'width' => '80px',
+                                'edit' => ['type' => 'CheckBox']
+                            ],
+                            [
+                                'caption' => 'Typ',
+                                'name' => 'type',
+                                'width' => '90px'
+                            ],
+                            [
+                                'caption' => 'Gruppe',
+                                'name' => 'group',
+                                'width' => '160px'
+                            ],
+                            [
+                                'caption' => 'Name',
+                                'name' => 'name',
+                                'width' => 'auto'
+                            ],
+                            [
+                                'caption' => 'Capability',
+                                'name' => 'capability',
+                                'width' => '220px'
+                            ],
+                            [
+                                'caption' => 'Code',
+                                'name' => 'code',
+                                'width' => '220px'
+                            ],
+                            [
+                                'caption' => 'Permission',
+                                'name' => 'permission',
+                                'width' => '180px'
+                            ]
+                        ],
+                        'values' => $capabilities
+                    ]]
+                    : [[
+                        'type' => 'Label',
+                        'caption' =>
+                            'Keine kompatiblen Signale/Befehle für den aktuell verwendeten Powertrain "' .
+                            strtoupper(trim($this->ReadPropertyString('PowertrainType'))) .
+                            '" gefunden. Falls Smartcar das Fahrzeug falsch klassifiziert, aktivieren Sie unter „Erweiterte Einstellungen“ den Powertrain-Filter-Override.'
+                    ]])
+
             ],
             'actions' => [
                 [
@@ -487,12 +496,17 @@ class SmartcarVehicle extends IPSModuleStrict
             );
         } else {
             $this->WriteAttributeString('CompatibilityCache', '[]');
-            $this->WriteAttributeInteger('CompatibilityCacheAt', 0);
+            $this->WriteAttributeInteger('CompatibilityCacheAt', time());
             $this->WriteAttributeBoolean(
                 'CompatibilityCacheIgnorePowertrain',
                 $ignorePowertrainFilter
             );
-            $this->SendDebug('Compatibility/Cache', 'Leeres Ergebnis wird nicht gecacht.', 0);
+            $this->SendDebug(
+                'Compatibility/Cache',
+                'Leeres Ergebnis gecacht. IgnorePowertrain=' .
+                ($ignorePowertrainFilter ? 'true' : 'false'),
+                0
+            );
         }
 
         return $filtered;
