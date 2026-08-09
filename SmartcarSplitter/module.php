@@ -2868,6 +2868,37 @@ class SmartcarSplitter extends IPSModuleStrict
                 )
             );
 
+            $mode =
+                strtolower(
+                    trim(
+                        (string)(
+                            $connection['mode']
+                            ?? 'live'
+                        )
+                    )
+                );
+
+            if (!in_array($mode, ['live', 'simulated'], true)) {
+                $mode = 'live';
+            }
+
+            IPS_SetProperty(
+                $instanceId,
+                'Mode',
+                $mode
+            );
+
+            $this->SendDebug(
+                'Connect/VehicleMode',
+                'Instanz=' .
+                $instanceId .
+                ', VehicleID=' .
+                $vehicleId .
+                ', Mode=' .
+                $mode,
+                0
+            );
+
             IPS_SetName(
                 $instanceId,
                 $caption

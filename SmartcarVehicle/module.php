@@ -14,6 +14,7 @@ class SmartcarVehicle extends IPSModuleStrict
     $this->RegisterPropertyString('Model', '');
     $this->RegisterPropertyInteger('Year', 0);
     $this->RegisterPropertyString('PowertrainType', '');
+    $this->RegisterPropertyString('Mode', 'live');
     $this->RegisterPropertyBoolean('IgnoreCompatibilityPowertrainFilter', false);
     $this->RegisterPropertyString('SelectedCapabilities', '[]');
     $this->RegisterPropertyBoolean('ShowOEMUpdatedAtVariables', false);
@@ -1033,12 +1034,31 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $state = 'vehicle_access_sync_' . $vehicleId . '_' . bin2hex(random_bytes(8));
 
+        $mode =
+            strtolower(
+                trim(
+                    $this->ReadPropertyString(
+                        'Mode'
+                    )
+                )
+            );
+
+        if (!in_array($mode, ['live', 'simulated'], true)) {
+            $mode = 'live';
+        }
+
         $request = [
             'DataID'  => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
             'Command' => 'BuildConnectURL',
-            'Mode'    => 'live',
+            'Mode'    => $mode,
             'State'   => $state
         ];
+
+        $this->SendDebug(
+            'Connect/Mode',
+            'Vehicle-Modus=' . $mode,
+            0
+        );
 
         $this->SendDebug(
             'Connect/RequestToSplitter',

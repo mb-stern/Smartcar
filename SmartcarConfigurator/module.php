@@ -90,7 +90,12 @@ class SmartcarConfigurator extends IPSModuleStrict
                         'Make' => $make,
                         'Model' => $model,
                         'Year' => $year,
-                        'PowertrainType' => $powertrainType
+                        'PowertrainType' => $powertrainType,
+                        'Mode' => (
+                            strtolower(trim($mode)) === 'simulated'
+                                ? 'simulated'
+                                : 'live'
+                        )
                     ]
                 ]
             ];
