@@ -21,6 +21,7 @@ class SmartcarSplitter extends IPSModuleStrict
         $this->RegisterAttributeInteger('TokenExpiresAt', 0);
         $this->RegisterAttributeString('RedirectURI', '');
         $this->RegisterAttributeString('LastWebhookID', '');
+        $this->RegisterAttributeString('LastVehicleStateSequences', '{}');
 
         $this->RegisterTimer(
             'TokenTimer',
@@ -984,6 +985,17 @@ class SmartcarSplitter extends IPSModuleStrict
 
         switch ($eventType) {
             case 'VEHICLE_STATE':
+                if (
+                    !$this->AcceptVehicleStateSequence(
+                        $vehicleId,
+                        $payload
+                    )
+                ) {
+                    http_response_code(200);
+                    echo 'ok';
+                    return;
+                }
+
                 $triggers =
                     is_array(
                         $payload['triggers']
@@ -1244,6 +1256,150 @@ class SmartcarSplitter extends IPSModuleStrict
             ' gefunden.',
             0
         );
+    }
+
+    /**
+     * Prüft die Smartcar VEHICLE_STATE sequence.
+     *
+     * Smartcar kann Webhooks außerhalb der Erzeugungsreihenfolge zustellen.
+     * Eine kleinere Sequence als die zuletzt verarbeitete ist daher veraltet
+     * und darf neuere Fahrzeugwerte nicht überschreiben.
+     *
+     * Gleiche Sequence = Retry desselben Events. Der Retry wird akzeptiert,
+     * da das erneute Anwenden derselben Zustandswerte idempotent ist.
+     */
+    private function AcceptVehicleStateSequence(
+        string $vehicleId,
+        array $payload
+    ): bool {
+        $sequenceRaw =
+            $payload['meta']['sequence']
+            ?? null;
+
+        if (
+            $sequenceRaw === null
+            || $sequenceRaw === ''
+            || !is_numeric($sequenceRaw)
+        ) {
+            $this->SendDebug(
+                'Webhook/Sequence',
+                json_encode(
+                    [
+                        'vehicleId' => $vehicleId,
+                        'eventId' =>
+                            (string)(
+                                $payload['eventId']
+                                ?? ''
+                            ),
+                        'sequence' => null,
+                        'action' => 'ACCEPT_NO_SEQUENCE'
+                    ],
+                    JSON_UNESCAPED_SLASHES |
+                    JSON_UNESCAPED_UNICODE
+                ),
+                0
+            );
+
+            // Rückwärtskompatibel: Events ohne Sequence nicht blockieren.
+            return true;
+        }
+
+        $sequence =
+            (int)$sequenceRaw;
+
+        $raw =
+            $this->ReadAttributeString(
+                'LastVehicleStateSequences'
+            );
+
+        $sequences =
+            json_decode(
+                $raw,
+                true
+            );
+
+        if (!is_array($sequences)) {
+            $sequences = [];
+        }
+
+        $lastSequence =
+            isset($sequences[$vehicleId])
+                ? (int)$sequences[$vehicleId]
+                : null;
+
+        if (
+            $lastSequence !== null
+            && $sequence < $lastSequence
+        ) {
+            $this->SendDebug(
+                'Webhook/Sequence',
+                json_encode(
+                    [
+                        'vehicleId' => $vehicleId,
+                        'eventId' =>
+                            (string)(
+                                $payload['eventId']
+                                ?? ''
+                            ),
+                        'sequence' => $sequence,
+                        'lastSequence' => $lastSequence,
+                        'action' => 'SKIP_OLDER'
+                    ],
+                    JSON_UNESCAPED_SLASHES |
+                    JSON_UNESCAPED_UNICODE
+                ),
+                0
+            );
+
+            return false;
+        }
+
+        $action =
+            (
+                $lastSequence !== null
+                && $sequence === $lastSequence
+            )
+                ? 'ACCEPT_RETRY'
+                : 'ACCEPT_NEW';
+
+        if (
+            $lastSequence === null
+            || $sequence > $lastSequence
+        ) {
+            $sequences[$vehicleId] =
+                $sequence;
+
+            $this->WriteAttributeString(
+                'LastVehicleStateSequences',
+                json_encode(
+                    $sequences,
+                    JSON_UNESCAPED_SLASHES |
+                    JSON_UNESCAPED_UNICODE
+                )
+            );
+        }
+
+        $this->SendDebug(
+            'Webhook/Sequence',
+            json_encode(
+                [
+                    'vehicleId' => $vehicleId,
+                    'eventId' =>
+                        (string)(
+                            $payload['eventId']
+                            ?? ''
+                        ),
+                    'sequence' => $sequence,
+                    'lastSequence' => $lastSequence,
+                    'action' => $action
+                ],
+                JSON_UNESCAPED_SLASHES |
+                JSON_UNESCAPED_UNICODE
+            ),
+            0
+        );
+
+        return true;
     }
 
     private function GetRequestHeader(
