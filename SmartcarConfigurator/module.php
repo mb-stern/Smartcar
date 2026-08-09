@@ -137,8 +137,7 @@ class SmartcarConfigurator extends IPSModuleStrict
                         [
                             'caption' => 'Connection ID',
                             'name' => 'connectionId',
-                            'width' => '250px',
-                            'visible' => false
+                            'width' => '250px'
                         ],
                         [
                             'caption' => 'Modus',

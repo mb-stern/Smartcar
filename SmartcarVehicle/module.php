@@ -146,7 +146,8 @@ class SmartcarVehicle extends IPSModuleStrict
                         [
                             'type' => 'CheckBox',
                             'name' => 'IgnoreCompatibilityPowertrainFilter',
-                            'caption' => 'Powertrain-Filter bei der Compatibility-Abfrage ignorieren'
+                            'caption' => 'Powertrain-Filter bei der Compatibility-Abfrage ignorieren',
+                            'onChange' => 'SMCARV_SetIgnoreCompatibilityPowertrainFilter($id, $IgnoreCompatibilityPowertrainFilter);'
                         ],
                         [
                             'type' => 'Label',
@@ -288,6 +289,35 @@ class SmartcarVehicle extends IPSModuleStrict
 
     public function ReloadCompatibility(): void
     {
+        $this->LoadCompatibility(true);
+        $this->ReloadForm();
+    }
+
+    public function SetIgnoreCompatibilityPowertrainFilter(bool $value): void
+    {
+        IPS_SetProperty(
+            $this->InstanceID,
+            'IgnoreCompatibilityPowertrainFilter',
+            $value
+        );
+
+        IPS_ApplyChanges($this->InstanceID);
+
+        $this->WriteAttributeString('CompatibilityCache', '[]');
+        $this->WriteAttributeInteger('CompatibilityCacheAt', 0);
+        $this->WriteAttributeBoolean(
+            'CompatibilityCacheIgnorePowertrain',
+            $value
+        );
+
+        $this->SendDebug(
+            'Compatibility/Switch',
+            'Powertrain-Filter geändert. IgnorePowertrain=' .
+            ($value ? 'true' : 'false') .
+            '. Compatibility wird frisch abgefragt.',
+            0
+        );
+
         $this->LoadCompatibility(true);
         $this->ReloadForm();
     }
