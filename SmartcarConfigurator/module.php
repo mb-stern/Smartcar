@@ -71,16 +71,7 @@ class SmartcarConfigurator extends IPSModuleStrict
 
             $instanceId = $this->FindVehicleInstanceByVehicleId($vehicleId);
 
-            $v3Ready =
-                ($connection['v3Ready'] ?? true) === true;
-
-            $status =
-                (string)(
-                    $connection['status']
-                    ?? ($v3Ready ? 'V3 bereit' : 'wartet auf V3')
-                );
-
-            $row = [
+            $values[] = [
                 'instanceID' => $instanceId,
                 'name' => $caption,
                 'address' => $vehicleId,
@@ -88,13 +79,7 @@ class SmartcarConfigurator extends IPSModuleStrict
                 'connectionId' => $connectionId,
                 'mode' => $mode,
                 'powertrainType' => $powertrainType,
-                'status' => $status
-            ];
-
-            // Eine Vehicle-Instanz darf erst erzeugt werden, wenn Smartcar
-            // das Fahrzeug über /v3/connections liefert.
-            if ($v3Ready) {
-                $row['create'] = [
+                'create' => [
                     'moduleID' => self::VEHICLE_MODULE_ID,
                     'name' => $caption,
                     'configuration' => [
@@ -105,17 +90,10 @@ class SmartcarConfigurator extends IPSModuleStrict
                         'Make' => $make,
                         'Model' => $model,
                         'Year' => $year,
-                        'PowertrainType' => $powertrainType,
-                        'Mode' => (
-                            strtolower(trim($mode)) === 'simulated'
-                                ? 'simulated'
-                                : 'live'
-                        )
+                        'PowertrainType' => $powertrainType
                     ]
-                ];
-            }
-
-            $values[] = $row;
+                ]
+            ];
         }
 
         $form = [
@@ -124,11 +102,6 @@ class SmartcarConfigurator extends IPSModuleStrict
                     'type' => 'Button',
                     'caption' => 'Neues Live-Fahrzeug verbinden',
                     'onClick' => 'echo SMCARCFG_GenerateConnectURL($id, "live");'
-                ],
-                [
-                    'type' => 'Button',
-                    'caption' => 'Neues simuliertes Fahrzeug verbinden',
-                    'onClick' => 'echo SMCARCFG_GenerateConnectURL($id, "simulated");'
                 ],
                 [
                     'type' => 'Configurator',
@@ -163,11 +136,6 @@ class SmartcarConfigurator extends IPSModuleStrict
                             'width' => '100px'
                         ],
                         [
-                            'caption' => 'Status',
-                            'name' => 'status',
-                            'width' => '130px'
-                        ],
-                        [
                             'caption' => 'Powertrain',
                             'name' => 'powertrainType',
                             'width' => '120px'
@@ -189,7 +157,7 @@ class SmartcarConfigurator extends IPSModuleStrict
 
         $result = $this->SendDataToParent(json_encode([
             'DataID' => self::DATA_ID,
-            'Command' => 'LoadConfiguratorConnections'
+            'Command' => 'LoadConnections'
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
 
         $decoded = json_decode((string)$result, true);

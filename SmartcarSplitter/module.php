@@ -239,12 +239,6 @@ class SmartcarSplitter extends IPSModuleStrict
                     JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
                 );
 
-            case 'LoadConfiguratorConnections':
-                return json_encode(
-                    $this->LoadConfiguratorConnections(),
-                    JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
-                );
-
             case 'BuildConnectURL':
                 $url = $this->BuildConnectURL(
                     (string)($data['Mode'] ?? 'live'),
@@ -388,385 +382,231 @@ class SmartcarSplitter extends IPSModuleStrict
                 'https://vehicle.api.smartcar.com/v3/connections?' .
                 $query;
 
-            $response = $this->HttpRequestRaw(
-                'Connections/' . $mode,
-                'GET',
-                $url,
-                [
-                    'Authorization: Bearer ' . $token,
-                    'Accept: application/json'
-                ]
-            );
+            $page = 0;
+            $modeCount = 0;
 
-            if (
-                $response === null
-                || $response['statusCode'] !== 200
-            ) {
-                $this->SendDebug(
-                    'Connections/' . $mode,
-                    'Fehler: ' . json_encode($response),
-                    0
+            while ($url !== '' && $page < 100) {
+                $page++;
+
+                $response = $this->HttpRequestRaw(
+                    'Connections/' . $mode . '/Page' . $page,
+                    'GET',
+                    $url,
+                    [
+                        'Authorization: Bearer ' . $token,
+                        'Accept: application/json'
+                    ]
                 );
-                continue;
-            }
 
-            $data = json_decode($response['body'], true);
+                if (
+                    $response === null
+                    || $response['statusCode'] !== 200
+                ) {
+                    $this->SendDebug(
+                        'Connections/' . $mode,
+                        'Fehler auf Seite ' .
+                        $page .
+                        ': ' .
+                        json_encode(
+                            $response,
+                            JSON_UNESCAPED_SLASHES |
+                            JSON_UNESCAPED_UNICODE
+                        ),
+                        0
+                    );
+                    break;
+                }
 
-            if (
-                !is_array($data)
-                || !isset($data['data'])
-                || !is_array($data['data'])
-            ) {
-                $this->SendDebug(
-                    'Connections/' . $mode,
-                    'Unerwartete Antwort: ' . $response['body'],
-                    0
-                );
-                continue;
+                $data =
+                    json_decode(
+                        $response['body'],
+                        true
+                    );
+
+                if (
+                    !is_array($data)
+                    || !isset($data['data'])
+                    || !is_array($data['data'])
+                ) {
+                    $this->SendDebug(
+                        'Connections/' . $mode,
+                        'Unerwartete Antwort auf Seite ' .
+                        $page .
+                        ': ' .
+                        $response['body'],
+                        0
+                    );
+                    break;
+                }
+
+                foreach ($data['data'] as $item) {
+                    if (!is_array($item)) {
+                        continue;
+                    }
+
+                    $connectionId =
+                        (string)(
+                            $item['id']
+                            ?? ''
+                        );
+
+                    $attributes =
+                        is_array(
+                            $item['attributes']
+                            ?? null
+                        )
+                            ? $item['attributes']
+                            : [];
+
+                    $vehicle =
+                        is_array(
+                            $attributes['vehicle']
+                            ?? null
+                        )
+                            ? $attributes['vehicle']
+                            : [];
+
+                    $vehicleId =
+                        (string)(
+                            $item['relationships']['vehicle']['data']['id']
+                            ?? ''
+                        );
+
+                    $userId =
+                        (string)(
+                            $item['relationships']['user']['data']['id']
+                            ?? ''
+                        );
+
+                    if (
+                        $connectionId === ''
+                        || $vehicleId === ''
+                    ) {
+                        continue;
+                    }
+
+                    $make =
+                        (string)(
+                            $vehicle['make']
+                            ?? ''
+                        );
+
+                    $model =
+                        (string)(
+                            $vehicle['model']
+                            ?? ''
+                        );
+
+                    $year =
+                        (string)(
+                            $vehicle['year']
+                            ?? ''
+                        );
+
+                    $modeValue =
+                        (string)(
+                            $vehicle['mode']
+                            ?? (
+                                $attributes['mode']
+                                ?? $mode
+                            )
+                        );
+
+                    $powertrainType =
+                        (string)(
+                            $vehicle['powertrainType']
+                            ?? ''
+                        );
+
+                    $caption =
+                        trim(
+                            $make .
+                            ' ' .
+                            $model .
+                            ' ' .
+                            $year
+                        );
+
+                    if ($caption === '') {
+                        $caption = $vehicleId;
+                    }
+
+                    $connections[$connectionId] = [
+                        'connectionId' => $connectionId,
+                        'vehicleId' => $vehicleId,
+                        'userId' => $userId,
+                        'caption' => $caption,
+                        'make' => $make,
+                        'model' => $model,
+                        'year' => $year,
+                        'mode' => $modeValue,
+                        'powertrainType' => $powertrainType,
+                        'permissions' =>
+                            $attributes['permissions']
+                            ?? []
+                    ];
+
+                    $modeCount++;
+                }
+
+                $next =
+                    $data['links']['next']
+                    ?? null;
+
+                if (
+                    !is_string($next)
+                    || trim($next) === ''
+                ) {
+                    $url = '';
+                    continue;
+                }
+
+                $next = trim($next);
+
+                // Smartcar kann links.next absolut oder relativ liefern.
+                if (
+                    str_starts_with(
+                        $next,
+                        'https://'
+                    )
+                ) {
+                    $url = $next;
+                } else {
+                    $url =
+                        'https://vehicle.api.smartcar.com/v3/' .
+                        ltrim(
+                            $next,
+                            '/'
+                        );
+                }
             }
 
             $this->SendDebug(
                 'Connections/' . $mode . '/Count',
                 'Gefundene Connections: ' .
-                count($data['data']),
+                $modeCount .
+                ', Seiten: ' .
+                $page,
                 0
             );
 
-            foreach ($data['data'] as $item) {
-                $connectionId = (string)($item['id'] ?? '');
-
-                $attributes = is_array($item['attributes'] ?? null)
-                    ? $item['attributes']
-                    : [];
-
-                $vehicle = is_array($attributes['vehicle'] ?? null)
-                    ? $attributes['vehicle']
-                    : [];
-
-                $vehicleId = (string)(
-                    $item['relationships']['vehicle']['data']['id']
-                    ?? ''
+            if ($page >= 100 && $url !== '') {
+                $this->SendDebug(
+                    'Connections/' . $mode . '/Pagination',
+                    'Sicherheitslimit von 100 Seiten erreicht.',
+                    0
                 );
-
-                $userId = (string)(
-                    $item['relationships']['user']['data']['id']
-                    ?? ''
-                );
-
-                if (
-                    $connectionId === ''
-                    || $vehicleId === ''
-                ) {
-                    continue;
-                }
-
-                $make = (string)($vehicle['make'] ?? '');
-                $model = (string)($vehicle['model'] ?? '');
-                $year = (string)($vehicle['year'] ?? '');
-
-                $modeValue = (string)(
-                    $vehicle['mode']
-                    ?? ($attributes['mode'] ?? $mode)
-                );
-
-                $powertrainType = (string)(
-                    $vehicle['powertrainType']
-                    ?? ''
-                );
-
-                $caption = trim(
-                    $make . ' ' . $model . ' ' . $year
-                );
-
-                if ($caption === '') {
-                    $caption = $vehicleId;
-                }
-
-                $connections[$connectionId] = [
-                    'connectionId' => $connectionId,
-                    'vehicleId' => $vehicleId,
-                    'userId' => $userId,
-                    'caption' => $caption,
-                    'make' => $make,
-                    'model' => $model,
-                    'year' => $year,
-                    'mode' => $modeValue,
-                    'powertrainType' => $powertrainType,
-                    'permissions' => $attributes['permissions'] ?? []
-                ];
             }
         }
 
-        // Management-Einträge werden bewusst NICHT in die V3-Connection-Liste
-        // gemischt. Für Vehicle-/Signal-Zugriffe ist /v3/connections die
-        // maßgebliche Quelle für vehicleId + userId.
-        $connections = array_values($connections);
+        $connections =
+            array_values(
+                $connections
+            );
 
         $this->SendDebug(
             'Connections/Combined',
-            'Gesamt: ' . count($connections),
-            0
-        );
-
-        return $connections;
-    }
-
-    private function LoadConfiguratorConnections(): array
-    {
-        $v3Connections =
-            $this->LoadConnections();
-
-        $result = [];
-        $seenVehicleIds = [];
-        $seenUserIds = [];
-
-        foreach ($v3Connections as $connection) {
-            if (!is_array($connection)) {
-                continue;
-            }
-
-            $connection['v3Ready'] = true;
-            $connection['status'] = 'V3 bereit';
-
-            $vehicleId =
-                trim(
-                    (string)(
-                        $connection['vehicleId']
-                        ?? ''
-                    )
-                );
-
-            $userId =
-                trim(
-                    (string)(
-                        $connection['userId']
-                        ?? ''
-                    )
-                );
-
-            if ($vehicleId !== '') {
-                $seenVehicleIds[$vehicleId] = true;
-            }
-
-            if ($userId !== '') {
-                $seenUserIds[$userId] = true;
-            }
-
-            $result[] = $connection;
-        }
-
-        $managementConnections =
-            $this->LoadManagementConnections();
-
-        foreach ($managementConnections as $connection) {
-            if (!is_array($connection)) {
-                continue;
-            }
-
-            $mode =
-                strtolower(
-                    trim(
-                        (string)(
-                            $connection['mode']
-                            ?? ''
-                        )
-                    )
-                );
-
-            if ($mode !== 'simulated') {
-                continue;
-            }
-
-            $vehicleId =
-                trim(
-                    (string)(
-                        $connection['vehicleId']
-                        ?? ''
-                    )
-                );
-
-            $userId =
-                trim(
-                    (string)(
-                        $connection['userId']
-                        ?? ''
-                    )
-                );
-
-            // Falls Smartcar diese Connection inzwischen auch über V3 liefert,
-            // ist sie oben bereits enthalten.
-            if (
-                ($vehicleId !== '' && isset($seenVehicleIds[$vehicleId]))
-                || ($userId !== '' && isset($seenUserIds[$userId]))
-            ) {
-                continue;
-            }
-
-            $connection['v3Ready'] = false;
-            $connection['status'] = 'wartet auf V3';
-            $connection['connectionId'] = '';
-            $connection['caption'] =
-                'Simuliertes Fahrzeug – wartet auf V3';
-
-            $result[] = $connection;
-        }
-
-        $this->SendDebug(
-            'Connections/Configurator',
-            json_encode(
-                [
-                    'total' => count($result),
-                    'v3' => count($v3Connections),
-                    'managementOnlySimulated' =>
-                        count($result) - count($v3Connections)
-                ],
-                JSON_UNESCAPED_SLASHES |
-                JSON_UNESCAPED_UNICODE
-            ),
-            0
-        );
-
-        return $result;
-    }
-
-    private function LoadManagementConnections(): array
-    {
-        $managementToken =
-            trim(
-                $this->ReadPropertyString(
-                    'ManagementToken'
-                )
-            );
-
-        if ($managementToken === '') {
-            $this->SendDebug(
-                'Connections/Management',
-                'ManagementToken fehlt.',
-                0
-            );
-
-            return [];
-        }
-
-        $url =
-            'https://management.smartcar.com/v2.0/management/connections';
-
-        $response =
-            $this->HttpRequestRaw(
-                'Connections/Management',
-                'GET',
-                $url,
-                [
-                    'Authorization: Basic ' .
-                    base64_encode(
-                        'default:' .
-                        $managementToken
-                    ),
-                    'Accept: application/json'
-                ]
-            );
-
-        if (
-            $response === null
-            || $response['statusCode'] < 200
-            || $response['statusCode'] >= 300
-        ) {
-            $this->SendDebug(
-                'Connections/Management',
-                'Fehler: ' .
-                json_encode(
-                    $response,
-                    JSON_UNESCAPED_SLASHES |
-                    JSON_UNESCAPED_UNICODE
-                ),
-                0
-            );
-
-            return [];
-        }
-
-        $data =
-            json_decode(
-                $response['body'],
-                true
-            );
-
-        if (!is_array($data)) {
-            $this->SendDebug(
-                'Connections/Management',
-                'Ungültige JSON-Antwort: ' .
-                $response['body'],
-                0
-            );
-
-            return [];
-        }
-
-        $items =
-            is_array(
-                $data['connections']
-                ?? null
-            )
-                ? $data['connections']
-                : [];
-
-        $connections = [];
-
-        foreach ($items as $item) {
-            if (!is_array($item)) {
-                continue;
-            }
-
-            $vehicleId =
-                trim(
-                    (string)(
-                        $item['vehicleId']
-                        ?? ''
-                    )
-                );
-
-            $userId =
-                trim(
-                    (string)(
-                        $item['userId']
-                        ?? ''
-                    )
-                );
-
-            $mode =
-                strtolower(
-                    trim(
-                        (string)(
-                            $item['mode']
-                            ?? ''
-                        )
-                    )
-                );
-
-            if ($vehicleId === '') {
-                continue;
-            }
-
-            $connections[] = [
-                'connectionId' => '',
-                'vehicleId' => $vehicleId,
-                'userId' => $userId,
-                'caption' =>
-                    $mode === 'simulated'
-                        ? 'Simuliertes Fahrzeug (Management)'
-                        : $vehicleId,
-                'make' => '',
-                'model' => '',
-                'year' => '',
-                'mode' => $mode,
-                'powertrainType' => '',
-                'permissions' => []
-            ];
-        }
-
-        $this->SendDebug(
-            'Connections/Management',
-            'Gefundene Connections: ' .
+            'Gesamt: ' .
             count($connections),
             0
         );
@@ -888,12 +728,28 @@ class SmartcarSplitter extends IPSModuleStrict
             );
         }
 
+        $isVehicleCommand =
+            str_contains(
+                $path,
+                '/commands/'
+            );
+
+        // Smartcar V3 Commands können lange laufen. Bei 202 bleibt die
+        // Verbindung offen, bis die vollständige Command-Antwort vorliegt.
+        $timeoutSeconds =
+            $isVehicleCommand
+                ? 210
+                : 30;
+
         $response = $this->HttpRequestRaw(
-            'ApiRequest',
+            $isVehicleCommand
+                ? 'ApiRequest/Command'
+                : 'ApiRequest',
             $method,
             $url,
             $headers,
-            $content
+            $content,
+            $timeoutSeconds
         );
 
         if (is_array($response)) {
@@ -967,7 +823,8 @@ class SmartcarSplitter extends IPSModuleStrict
         string $method,
         string $url,
         array $headers,
-        ?string $content = null
+        ?string $content = null,
+        int $timeoutSeconds = 30
     ): ?array {
         $headerText =
             implode("\r\n", $headers) .
@@ -978,7 +835,10 @@ class SmartcarSplitter extends IPSModuleStrict
                 'method' => strtoupper($method),
                 'header' => $headerText,
                 'ignore_errors' => true,
-                'timeout' => 30
+                'timeout' => max(
+                    1,
+                    $timeoutSeconds
+                )
             ]
         ];
 
@@ -2110,24 +1970,9 @@ class SmartcarSplitter extends IPSModuleStrict
             );
         }
 
-        // Beim simulierten Connect liefert Smartcar bei response_type=none
-        // keinen vehicle_id. Die frühere funktionierende Version hat daher
-        // über user_id + Management API gezielt das neue simulierte Fahrzeug
-        // gesucht und daraus die Vehicle-Instanz erzeugt.
-        $isConfiguratorSimulated =
-            str_starts_with(
-                $state,
-                'configurator_simulated_'
-            );
-
-        if ($isConfiguratorSimulated) {
-            $this->SyncSimulatedVehicleFromV3Connections(
-                $userId
-            );
-        } else {
-            // Normale Live-/Reauth-Flows wie bisher.
-            $this->SyncVehiclesFromConnectionsWithRetry();
-        }
+        // Connections zuerst aktualisieren, damit UserID und Connection-Daten
+        // nach dem Connect auf dem aktuellen Stand sind.
+        $this->SyncVehiclesFromConnectionsWithRetry();
 
         // Nur beim bewussten "Vehicle Access synchronisieren"-Flow:
         // bestehende Webhook-Subscription entfernen und neu erstellen.
@@ -2508,151 +2353,6 @@ class SmartcarSplitter extends IPSModuleStrict
         ];
     }
 
-    private function SyncSimulatedVehicleFromV3Connections(
-        string $userId,
-        int $maxAttempts = 5
-    ): void {
-        $userId = trim($userId);
-        $maxAttempts = max(1, $maxAttempts);
-
-        $managementSeen = false;
-
-        $managementConnections =
-            $this->LoadManagementConnections();
-
-        foreach ($managementConnections as $connection) {
-            if (!is_array($connection)) {
-                continue;
-            }
-
-            $mode =
-                strtolower(
-                    trim(
-                        (string)(
-                            $connection['mode']
-                            ?? ''
-                        )
-                    )
-                );
-
-            $connectionUserId =
-                trim(
-                    (string)(
-                        $connection['userId']
-                        ?? ''
-                    )
-                );
-
-            if (
-                $mode === 'simulated'
-                && (
-                    $userId === ''
-                    || $connectionUserId === $userId
-                )
-            ) {
-                $managementSeen = true;
-                break;
-            }
-        }
-
-        $this->SendDebug(
-            'Connect/SimulatedManagementSeen',
-            json_encode(
-                [
-                    'userId' => $userId,
-                    'managementSeen' => $managementSeen
-                ],
-                JSON_UNESCAPED_SLASHES |
-                JSON_UNESCAPED_UNICODE
-            ),
-            0
-        );
-
-        for (
-            $attempt = 1;
-            $attempt <= $maxAttempts;
-            $attempt++
-        ) {
-            $connections =
-                $this->LoadConnections();
-
-            $matches = [];
-
-            foreach ($connections as $connection) {
-                if (!is_array($connection)) {
-                    continue;
-                }
-
-                $mode =
-                    strtolower(
-                        trim(
-                            (string)(
-                                $connection['mode']
-                                ?? ''
-                            )
-                        )
-                    );
-
-                $connectionUserId =
-                    trim(
-                        (string)(
-                            $connection['userId']
-                            ?? ''
-                        )
-                    );
-
-                if ($mode !== 'simulated') {
-                    continue;
-                }
-
-                if (
-                    $userId !== ''
-                    && $connectionUserId !== $userId
-                ) {
-                    continue;
-                }
-
-                $matches[] =
-                    $connection;
-            }
-
-            $this->SendDebug(
-                'Connect/SyncSimulatedV3',
-                json_encode(
-                    [
-                        'attempt' => $attempt,
-                        'maxAttempts' => $maxAttempts,
-                        'userId' => $userId,
-                        'matches' => count($matches)
-                    ],
-                    JSON_UNESCAPED_SLASHES |
-                    JSON_UNESCAPED_UNICODE
-                ),
-                0
-            );
-
-            if (!empty($matches)) {
-                $this->UpdateVehiclesFromConnections(
-                    $matches
-                );
-
-                return;
-            }
-
-            if ($attempt < $maxAttempts) {
-                usleep(1000000);
-            }
-        }
-
-        $this->SendDebug(
-            'Connect/SyncSimulatedV3',
-            $managementSeen
-                ? 'Simulator in Management gefunden, aber keine V3 Connection verfügbar. Keine Vehicle-Instanz erzeugt/aktualisiert.'
-                : 'Keine simulierte Connection gefunden. Keine Vehicle-Instanz erzeugt/aktualisiert.',
-            0
-        );
-    }
-
     private function SyncVehiclesFromConnectionsWithRetry(
         int $maxAttempts = 5
     ): void {
@@ -2867,37 +2567,6 @@ class SmartcarSplitter extends IPSModuleStrict
                     $connection['powertrainType']
                     ?? ''
                 )
-            );
-
-            $mode =
-                strtolower(
-                    trim(
-                        (string)(
-                            $connection['mode']
-                            ?? 'live'
-                        )
-                    )
-                );
-
-            if (!in_array($mode, ['live', 'simulated'], true)) {
-                $mode = 'live';
-            }
-
-            IPS_SetProperty(
-                $instanceId,
-                'Mode',
-                $mode
-            );
-
-            $this->SendDebug(
-                'Connect/VehicleMode',
-                'Instanz=' .
-                $instanceId .
-                ', VehicleID=' .
-                $vehicleId .
-                ', Mode=' .
-                $mode,
-                0
             );
 
             IPS_SetName(
