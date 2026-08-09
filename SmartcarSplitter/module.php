@@ -491,70 +491,9 @@ class SmartcarSplitter extends IPSModuleStrict
             }
         }
 
-        // Zusätzlich die Management API verwenden. Diese liefert in der
-        // früher funktionierenden Version auch bereits verbundene simulierte
-        // Fahrzeuge, die in /v3/connections aktuell nicht erscheinen.
-        $managementConnections =
-            $this->LoadManagementConnections();
-
-        $managementSimulatedCount = 0;
-
-        foreach ($managementConnections as $connection) {
-            if (!is_array($connection)) {
-                continue;
-            }
-
-            $mode =
-                strtolower(
-                    trim(
-                        (string)(
-                            $connection['mode']
-                            ?? ''
-                        )
-                    )
-                );
-
-            if ($mode !== 'simulated') {
-                continue;
-            }
-
-            $vehicleId =
-                trim(
-                    (string)(
-                        $connection['vehicleId']
-                        ?? ''
-                    )
-                );
-
-            if ($vehicleId === '') {
-                continue;
-            }
-
-            $key =
-                trim(
-                    (string)(
-                        $connection['connectionId']
-                        ?? ''
-                    )
-                );
-
-            if ($key === '') {
-                $key = 'vehicle:' . $vehicleId;
-            }
-
-            $connections[$key] =
-                $connection;
-
-            $managementSimulatedCount++;
-        }
-
-        $this->SendDebug(
-            'Connections/ManagementSimulated',
-            'Gefundene simulierte Connections: ' .
-            $managementSimulatedCount,
-            0
-        );
-
+        // Management-Einträge werden bewusst NICHT in die V3-Connection-Liste
+        // gemischt. Für Vehicle-/Signal-Zugriffe ist /v3/connections die
+        // maßgebliche Quelle für vehicleId + userId.
         $connections = array_values($connections);
 
         $this->SendDebug(
@@ -654,141 +593,50 @@ class SmartcarSplitter extends IPSModuleStrict
                 continue;
             }
 
-            $attributes =
-                is_array(
-                    $item['attributes']
-                    ?? null
-                )
-                    ? $item['attributes']
-                    : [];
-
             $vehicleId =
-                (string)(
-                    $item['vehicleId']
-                    ?? $attributes['vehicleId']
-                    ?? $item['relationships']['vehicle']['data']['id']
-                    ?? ''
+                trim(
+                    (string)(
+                        $item['vehicleId']
+                        ?? ''
+                    )
                 );
 
             $userId =
-                (string)(
-                    $item['userId']
-                    ?? $attributes['userId']
-                    ?? $item['relationships']['user']['data']['id']
-                    ?? ''
-                );
-
-            $connectionId =
-                (string)(
-                    $item['connectionId']
-                    ?? $item['id']
-                    ?? ''
+                trim(
+                    (string)(
+                        $item['userId']
+                        ?? ''
+                    )
                 );
 
             $mode =
-                (string)(
-                    $item['mode']
-                    ?? $attributes['mode']
-                    ?? ''
+                strtolower(
+                    trim(
+                        (string)(
+                            $item['mode']
+                            ?? ''
+                        )
+                    )
                 );
 
             if ($vehicleId === '') {
                 continue;
             }
 
-            // Fahrzeugdetails wie in der früher funktionierenden Version
-            // über die normale V3 Vehicle API ergänzen.
-            $vehicleResult =
-                $this->ApiGetVehicle(
-                    $vehicleId,
-                    $userId
-                );
-
-            $vehicleBody =
-                is_array(
-                    $vehicleResult['body']
-                    ?? null
-                )
-                    ? $vehicleResult['body']
-                    : [];
-
-            $vehicleData =
-                is_array(
-                    $vehicleBody['data']
-                    ?? null
-                )
-                    ? $vehicleBody['data']
-                    : $vehicleBody;
-
-            $vehicleAttributes =
-                is_array(
-                    $vehicleData['attributes']
-                    ?? null
-                )
-                    ? $vehicleData['attributes']
-                    : $vehicleData;
-
-            $make =
-                (string)(
-                    $vehicleAttributes['make']
-                    ?? ''
-                );
-
-            $model =
-                (string)(
-                    $vehicleAttributes['model']
-                    ?? ''
-                );
-
-            $year =
-                (string)(
-                    $vehicleAttributes['year']
-                    ?? ''
-                );
-
-            $powertrainType =
-                (string)(
-                    $vehicleAttributes['powertrainType']
-                    ?? ''
-                );
-
-            if ($mode === '') {
-                $mode =
-                    (string)(
-                        $vehicleAttributes['mode']
-                        ?? ''
-                    );
-            }
-
-            $caption =
-                trim(
-                    $make .
-                    ' ' .
-                    $model .
-                    ' ' .
-                    $year
-                );
-
-            if ($caption === '') {
-                $caption =
-                    strtolower($mode) === 'simulated'
-                        ? 'Simuliertes Fahrzeug'
-                        : $vehicleId;
-            }
-
             $connections[] = [
-                'connectionId' => $connectionId,
+                'connectionId' => '',
                 'vehicleId' => $vehicleId,
                 'userId' => $userId,
-                'caption' => $caption,
-                'make' => $make,
-                'model' => $model,
-                'year' => $year,
+                'caption' =>
+                    $mode === 'simulated'
+                        ? 'Simuliertes Fahrzeug (Management)'
+                        : $vehicleId,
+                'make' => '',
+                'model' => '',
+                'year' => '',
                 'mode' => $mode,
-                'powertrainType' => $powertrainType,
-                'permissions' =>
-                    $attributes['permissions']
-                    ?? []
+                'powertrainType' => '',
+                'permissions' => []
             ];
         }
 
@@ -2149,7 +1997,7 @@ class SmartcarSplitter extends IPSModuleStrict
             );
 
         if ($isConfiguratorSimulated) {
-            $this->SyncSimulatedVehicleFromManagement(
+            $this->SyncSimulatedVehicleFromV3Connections(
                 $userId
             );
         } else {
@@ -2536,12 +2384,65 @@ class SmartcarSplitter extends IPSModuleStrict
         ];
     }
 
-    private function SyncSimulatedVehicleFromManagement(
+    private function SyncSimulatedVehicleFromV3Connections(
         string $userId,
-        int $maxAttempts = 3
+        int $maxAttempts = 5
     ): void {
         $userId = trim($userId);
         $maxAttempts = max(1, $maxAttempts);
+
+        $managementSeen = false;
+
+        $managementConnections =
+            $this->LoadManagementConnections();
+
+        foreach ($managementConnections as $connection) {
+            if (!is_array($connection)) {
+                continue;
+            }
+
+            $mode =
+                strtolower(
+                    trim(
+                        (string)(
+                            $connection['mode']
+                            ?? ''
+                        )
+                    )
+                );
+
+            $connectionUserId =
+                trim(
+                    (string)(
+                        $connection['userId']
+                        ?? ''
+                    )
+                );
+
+            if (
+                $mode === 'simulated'
+                && (
+                    $userId === ''
+                    || $connectionUserId === $userId
+                )
+            ) {
+                $managementSeen = true;
+                break;
+            }
+        }
+
+        $this->SendDebug(
+            'Connect/SimulatedManagementSeen',
+            json_encode(
+                [
+                    'userId' => $userId,
+                    'managementSeen' => $managementSeen
+                ],
+                JSON_UNESCAPED_SLASHES |
+                JSON_UNESCAPED_UNICODE
+            ),
+            0
+        );
 
         for (
             $attempt = 1;
@@ -2549,7 +2450,7 @@ class SmartcarSplitter extends IPSModuleStrict
             $attempt++
         ) {
             $connections =
-                $this->LoadManagementConnections();
+                $this->LoadConnections();
 
             $matches = [];
 
@@ -2592,15 +2493,17 @@ class SmartcarSplitter extends IPSModuleStrict
             }
 
             $this->SendDebug(
-                'Connect/SyncSimulatedManagement',
-                'Versuch ' .
-                $attempt .
-                '/' .
-                $maxAttempts .
-                ', UserID=' .
-                $userId .
-                ', Connections=' .
-                count($matches),
+                'Connect/SyncSimulatedV3',
+                json_encode(
+                    [
+                        'attempt' => $attempt,
+                        'maxAttempts' => $maxAttempts,
+                        'userId' => $userId,
+                        'matches' => count($matches)
+                    ],
+                    JSON_UNESCAPED_SLASHES |
+                    JSON_UNESCAPED_UNICODE
+                ),
                 0
             );
 
@@ -2618,38 +2521,12 @@ class SmartcarSplitter extends IPSModuleStrict
         }
 
         $this->SendDebug(
-            'Connect/SyncSimulatedManagement',
-            'Keine direkte UserID-Zuordnung gefunden; synchronisiere alle simulierten Management-Connections.',
+            'Connect/SyncSimulatedV3',
+            $managementSeen
+                ? 'Simulator in Management gefunden, aber keine V3 Connection verfügbar. Keine Vehicle-Instanz erzeugt/aktualisiert.'
+                : 'Keine simulierte Connection gefunden. Keine Vehicle-Instanz erzeugt/aktualisiert.',
             0
         );
-
-        $connections =
-            $this->LoadManagementConnections();
-
-        $matches = [];
-
-        foreach ($connections as $connection) {
-            if (
-                is_array($connection)
-                && strtolower(
-                    trim(
-                        (string)(
-                            $connection['mode']
-                            ?? ''
-                        )
-                    )
-                ) === 'simulated'
-            ) {
-                $matches[] =
-                    $connection;
-            }
-        }
-
-        if (!empty($matches)) {
-            $this->UpdateVehiclesFromConnections(
-                $matches
-            );
-        }
     }
 
     private function SyncVehiclesFromConnectionsWithRetry(
