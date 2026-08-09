@@ -467,8 +467,12 @@ class SmartcarVehicle extends IPSModuleStrict
         $this->SendDebug('Compatibility/FilteredCount', 'Gefilterte Einträge: ' . count($filtered), 0);
 
         if (empty($filtered)) {
-            $this->SendDebug('Compatibility/Fallback', 'Keine exakte Modell/Jahr-Übereinstimmung. Verwende ungefilterte Einträge.', 0);
-            $filtered = $items;
+            $this->SendDebug(
+                'Compatibility/NoMatch',
+                'Keine kompatiblen Fahrzeugdatensätze für Modell/Jahr/Powertrain gefunden.',
+                0
+            );
+            $filtered = [];
         }
 
         if (!empty($filtered)) {
