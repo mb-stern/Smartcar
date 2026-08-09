@@ -156,7 +156,6 @@ class SmartcarVehicle extends IPSModuleStrict
                 'rowCount' => 10,
                 'add' => false,
                 'delete' => false,
-                'loadValuesFromConfiguration' => false,
                 'sort' => [
                     'column' => 'sortKey',
                     'direction' => 'ascending'
