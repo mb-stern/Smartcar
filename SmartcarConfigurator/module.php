@@ -43,29 +43,6 @@ class SmartcarConfigurator extends IPSModuleStrict
         }
 
         $connections = $this->LoadConnectionsFromSplitter();
-
-        $this->SendDebug(
-            'Configurator/Connections',
-            json_encode(
-                array_map(
-                    static function ($connection): array {
-                        return [
-                            'vehicleId' =>
-                                (string)($connection['vehicleId'] ?? ''),
-                            'connectionId' =>
-                                (string)($connection['connectionId'] ?? ''),
-                            'mode' =>
-                                (string)($connection['mode'] ?? '')
-                        ];
-                    },
-                    $connections
-                ),
-                JSON_UNESCAPED_SLASHES |
-                JSON_UNESCAPED_UNICODE
-            ),
-            0
-        );
-
         $values = [];
 
         foreach ($connections as $connection) {
@@ -78,7 +55,7 @@ class SmartcarConfigurator extends IPSModuleStrict
                 continue;
             }
 
-            $connectionId = trim((string)($connection['connectionId'] ?? ''));
+            $connectionId = (string)($connection['connectionId'] ?? '');
             $userId = (string)($connection['userId'] ?? '');
             $caption = trim((string)($connection['caption'] ?? ''));
 
@@ -94,25 +71,12 @@ class SmartcarConfigurator extends IPSModuleStrict
 
             $instanceId = $this->FindVehicleInstanceByVehicleId($vehicleId);
 
-            // Falls eine ältere Splitter-Version die Connection ID noch nicht
-            // geliefert hat, den bereits gespeicherten Wert der Vehicle-Instanz
-            // als Fallback verwenden.
-            if ($connectionId === '' && $instanceId > 0) {
-                $connectionId =
-                    trim(
-                        (string)@IPS_GetProperty(
-                            $instanceId,
-                            'ConnectionID'
-                        )
-                    );
-            }
-
             $values[] = [
                 'instanceID' => $instanceId,
                 'name' => $caption,
                 'address' => $vehicleId,
                 'vehicleId' => $vehicleId,
-                'smartcarConnectionId' => $connectionId,
+                'connectionId' => $connectionId,
                 'mode' => $mode,
                 'powertrainType' => $powertrainType,
                 'create' => [
@@ -140,16 +104,6 @@ class SmartcarConfigurator extends IPSModuleStrict
                     'onClick' => 'echo SMCARCFG_GenerateConnectURL($id, "live");'
                 ],
                 [
-                    'type' => 'Button',
-                    'caption' => 'Neues simuliertes Fahrzeug verbinden',
-                    'onClick' => 'echo SMCARCFG_GenerateConnectURL($id, "simulated");'
-                ],
-                [
-                    'type' => 'Button',
-                    'caption' => 'Liste aktualisieren',
-                    'onClick' => 'SMCARCFG_ReloadConfiguratorForm($id);'
-                ],
-                [
                     'type' => 'Configurator',
                     'name' => 'Vehicles',
                     'caption' => 'Smartcar Fahrzeuge',
@@ -172,9 +126,9 @@ class SmartcarConfigurator extends IPSModuleStrict
                         ],
                         [
                             'caption' => 'Connection ID',
-                            'name' => 'smartcarConnectionId',
+                            'name' => 'connectionId',
                             'width' => '250px',
-                            'visible' => true
+                            'visible' => false
                         ],
                         [
                             'caption' => 'Modus',
