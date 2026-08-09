@@ -43,6 +43,29 @@ class SmartcarConfigurator extends IPSModuleStrict
         }
 
         $connections = $this->LoadConnectionsFromSplitter();
+
+        $this->SendDebug(
+            'Configurator/Connections',
+            json_encode(
+                array_map(
+                    static function ($connection): array {
+                        return [
+                            'vehicleId' =>
+                                (string)($connection['vehicleId'] ?? ''),
+                            'connectionId' =>
+                                (string)($connection['connectionId'] ?? ''),
+                            'mode' =>
+                                (string)($connection['mode'] ?? '')
+                        ];
+                    },
+                    $connections
+                ),
+                JSON_UNESCAPED_SLASHES |
+                JSON_UNESCAPED_UNICODE
+            ),
+            0
+        );
+
         $values = [];
 
         foreach ($connections as $connection) {
@@ -89,7 +112,7 @@ class SmartcarConfigurator extends IPSModuleStrict
                 'name' => $caption,
                 'address' => $vehicleId,
                 'vehicleId' => $vehicleId,
-                'connectionId' => $connectionId,
+                'smartcarConnectionId' => $connectionId,
                 'mode' => $mode,
                 'powertrainType' => $powertrainType,
                 'create' => [
@@ -149,7 +172,7 @@ class SmartcarConfigurator extends IPSModuleStrict
                         ],
                         [
                             'caption' => 'Connection ID',
-                            'name' => 'connectionId',
+                            'name' => 'smartcarConnectionId',
                             'width' => '250px',
                             'visible' => true
                         ],

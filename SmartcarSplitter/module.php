@@ -630,6 +630,36 @@ class SmartcarSplitter extends IPSModuleStrict
             0
         );
 
+        $this->SendDebug(
+            'Connections/V3/Parsed',
+            json_encode(
+                array_map(
+                    static function (array $connection): array {
+                        return [
+                            'connectionId' =>
+                                (string)($connection['connectionId'] ?? ''),
+                            'vehicleId' =>
+                                (string)($connection['vehicleId'] ?? ''),
+                            'userId' =>
+                                (string)($connection['userId'] ?? ''),
+                            'mode' =>
+                                (string)($connection['mode'] ?? ''),
+                            'permissionsCount' =>
+                                count(
+                                    is_array($connection['permissions'] ?? null)
+                                        ? $connection['permissions']
+                                        : []
+                                )
+                        ];
+                    },
+                    $connections
+                ),
+                JSON_UNESCAPED_SLASHES |
+                JSON_UNESCAPED_UNICODE
+            ),
+            0
+        );
+
         return $connections;
     }
 

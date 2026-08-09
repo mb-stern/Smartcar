@@ -186,6 +186,7 @@ class SmartcarVehicle extends IPSModuleStrict
                     'rowCount' => 10,
                     'add' => false,
                     'delete' => false,
+                    'loadValuesFromConfiguration' => false,
                     'sort' => [
                         'column' => 'sortKey',
                         'direction' => 'ascending'
@@ -291,9 +292,18 @@ class SmartcarVehicle extends IPSModuleStrict
     {
         $this->SendDebug(
             'Compatibility/Switch',
-            'Powertrain-Filter im Formular geändert. IgnorePowertrain=' .
-            ($ignorePowertrainFilter ? 'true' : 'false') .
-            '. Compatibility wird frisch abgefragt.',
+            json_encode(
+                [
+                    'ignorePowertrain' => $ignorePowertrainFilter,
+                    'savedProperty' =>
+                        $this->ReadPropertyBoolean(
+                            'IgnoreCompatibilityPowertrainFilter'
+                        ),
+                    'forceReload' => true
+                ],
+                JSON_UNESCAPED_SLASHES |
+                JSON_UNESCAPED_UNICODE
+            ),
             0
         );
 
@@ -302,6 +312,12 @@ class SmartcarVehicle extends IPSModuleStrict
                 $ignorePowertrainFilter,
                 true
             );
+
+        $this->SendDebug(
+            'Compatibility/SwitchResult',
+            'Capabilities=' . count($capabilities),
+            0
+        );
 
         $this->UpdateFormField(
             'SelectedCapabilities',
