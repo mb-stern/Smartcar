@@ -365,111 +365,139 @@ class SmartcarSplitter extends IPSModuleStrict
             return [];
         }
 
-        $url =
-            'https://vehicle.api.smartcar.com/v3/connections?page[size]=100';
-
-        $response = $this->HttpRequestRaw(
-            'Connections',
-            'GET',
-            $url,
-            [
-                'Authorization: Bearer ' . $token,
-                'Accept: application/json'
-            ]
-        );
-
-        if (
-            $response === null
-            || $response['statusCode'] !== 200
-        ) {
-            $this->SendDebug(
-                'Connections',
-                'Fehler: ' . json_encode($response),
-                0
-            );
-            return [];
-        }
-
-        $data = json_decode($response['body'], true);
-
-        if (
-            !is_array($data)
-            || !isset($data['data'])
-            || !is_array($data['data'])
-        ) {
-            $this->SendDebug(
-                'Connections',
-                'Unerwartete Antwort: ' . $response['body'],
-                0
-            );
-            return [];
-        }
-
         $connections = [];
 
-        foreach ($data['data'] as $item) {
-            $connectionId = (string)($item['id'] ?? '');
-
-            $attributes = is_array($item['attributes'] ?? null)
-                ? $item['attributes']
-                : [];
-
-            $vehicle = is_array($attributes['vehicle'] ?? null)
-                ? $attributes['vehicle']
-                : [];
-
-            $vehicleId = (string)(
-                $item['relationships']['vehicle']['data']['id']
-                ?? ''
+        foreach (['live', 'simulated'] as $mode) {
+            $query = http_build_query(
+                [
+                    'filter[vehicle.mode]' => $mode,
+                    'page[size]' => 100
+                ],
+                '',
+                '&',
+                PHP_QUERY_RFC3986
             );
 
-            $userId = (string)(
-                $item['relationships']['user']['data']['id']
-                ?? ''
+            $url =
+                'https://vehicle.api.smartcar.com/v3/connections?' .
+                $query;
+
+            $response = $this->HttpRequestRaw(
+                'Connections/' . $mode,
+                'GET',
+                $url,
+                [
+                    'Authorization: Bearer ' . $token,
+                    'Accept: application/json'
+                ]
             );
 
             if (
-                $connectionId === ''
-                || $vehicleId === ''
+                $response === null
+                || $response['statusCode'] !== 200
             ) {
+                $this->SendDebug(
+                    'Connections/' . $mode,
+                    'Fehler: ' . json_encode($response),
+                    0
+                );
                 continue;
             }
 
-            $make = (string)($vehicle['make'] ?? '');
-            $model = (string)($vehicle['model'] ?? '');
-            $year = (string)($vehicle['year'] ?? '');
+            $data = json_decode($response['body'], true);
 
-            $modeValue = (string)(
-                $vehicle['mode']
-                ?? ($attributes['mode'] ?? '')
-            );
-
-            $powertrainType = (string)(
-                $vehicle['powertrainType']
-                ?? ''
-            );
-
-            $caption = trim(
-                $make . ' ' . $model . ' ' . $year
-            );
-
-            if ($caption === '') {
-                $caption = $vehicleId;
+            if (
+                !is_array($data)
+                || !isset($data['data'])
+                || !is_array($data['data'])
+            ) {
+                $this->SendDebug(
+                    'Connections/' . $mode,
+                    'Unerwartete Antwort: ' . $response['body'],
+                    0
+                );
+                continue;
             }
 
-            $connections[] = [
-                'connectionId' => $connectionId,
-                'vehicleId' => $vehicleId,
-                'userId' => $userId,
-                'caption' => $caption,
-                'make' => $make,
-                'model' => $model,
-                'year' => $year,
-                'mode' => $modeValue,
-                'powertrainType' => $powertrainType,
-                'permissions' => $attributes['permissions'] ?? []
-            ];
+            $this->SendDebug(
+                'Connections/' . $mode . '/Count',
+                'Gefundene Connections: ' .
+                count($data['data']),
+                0
+            );
+
+            foreach ($data['data'] as $item) {
+                $connectionId = (string)($item['id'] ?? '');
+
+                $attributes = is_array($item['attributes'] ?? null)
+                    ? $item['attributes']
+                    : [];
+
+                $vehicle = is_array($attributes['vehicle'] ?? null)
+                    ? $attributes['vehicle']
+                    : [];
+
+                $vehicleId = (string)(
+                    $item['relationships']['vehicle']['data']['id']
+                    ?? ''
+                );
+
+                $userId = (string)(
+                    $item['relationships']['user']['data']['id']
+                    ?? ''
+                );
+
+                if (
+                    $connectionId === ''
+                    || $vehicleId === ''
+                ) {
+                    continue;
+                }
+
+                $make = (string)($vehicle['make'] ?? '');
+                $model = (string)($vehicle['model'] ?? '');
+                $year = (string)($vehicle['year'] ?? '');
+
+                $modeValue = (string)(
+                    $vehicle['mode']
+                    ?? ($attributes['mode'] ?? $mode)
+                );
+
+                $powertrainType = (string)(
+                    $vehicle['powertrainType']
+                    ?? ''
+                );
+
+                $caption = trim(
+                    $make . ' ' . $model . ' ' . $year
+                );
+
+                if ($caption === '') {
+                    $caption = $vehicleId;
+                }
+
+                $connections[$connectionId] = [
+                    'connectionId' => $connectionId,
+                    'vehicleId' => $vehicleId,
+                    'userId' => $userId,
+                    'caption' => $caption,
+                    'make' => $make,
+                    'model' => $model,
+                    'year' => $year,
+                    'mode' => $modeValue,
+                    'powertrainType' => $powertrainType,
+                    'permissions' => $attributes['permissions'] ?? []
+                ];
+            }
         }
+
+        $connections = array_values($connections);
+
+        $this->SendDebug(
+            'Connections/Combined',
+            'Gesamt: ' . count($connections),
+            0
+        );
 
         return $connections;
     }
