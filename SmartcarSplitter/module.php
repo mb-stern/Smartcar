@@ -239,6 +239,12 @@ class SmartcarSplitter extends IPSModuleStrict
                     JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
                 );
 
+            case 'LoadConfiguratorConnections':
+                return json_encode(
+                    $this->LoadConfiguratorConnections(),
+                    JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+                );
+
             case 'BuildConnectURL':
                 $url = $this->BuildConnectURL(
                     (string)($data['Mode'] ?? 'live'),
@@ -503,6 +509,124 @@ class SmartcarSplitter extends IPSModuleStrict
         );
 
         return $connections;
+    }
+
+    private function LoadConfiguratorConnections(): array
+    {
+        $v3Connections =
+            $this->LoadConnections();
+
+        $result = [];
+        $seenVehicleIds = [];
+        $seenUserIds = [];
+
+        foreach ($v3Connections as $connection) {
+            if (!is_array($connection)) {
+                continue;
+            }
+
+            $connection['v3Ready'] = true;
+            $connection['status'] = 'V3 bereit';
+
+            $vehicleId =
+                trim(
+                    (string)(
+                        $connection['vehicleId']
+                        ?? ''
+                    )
+                );
+
+            $userId =
+                trim(
+                    (string)(
+                        $connection['userId']
+                        ?? ''
+                    )
+                );
+
+            if ($vehicleId !== '') {
+                $seenVehicleIds[$vehicleId] = true;
+            }
+
+            if ($userId !== '') {
+                $seenUserIds[$userId] = true;
+            }
+
+            $result[] = $connection;
+        }
+
+        $managementConnections =
+            $this->LoadManagementConnections();
+
+        foreach ($managementConnections as $connection) {
+            if (!is_array($connection)) {
+                continue;
+            }
+
+            $mode =
+                strtolower(
+                    trim(
+                        (string)(
+                            $connection['mode']
+                            ?? ''
+                        )
+                    )
+                );
+
+            if ($mode !== 'simulated') {
+                continue;
+            }
+
+            $vehicleId =
+                trim(
+                    (string)(
+                        $connection['vehicleId']
+                        ?? ''
+                    )
+                );
+
+            $userId =
+                trim(
+                    (string)(
+                        $connection['userId']
+                        ?? ''
+                    )
+                );
+
+            // Falls Smartcar diese Connection inzwischen auch über V3 liefert,
+            // ist sie oben bereits enthalten.
+            if (
+                ($vehicleId !== '' && isset($seenVehicleIds[$vehicleId]))
+                || ($userId !== '' && isset($seenUserIds[$userId]))
+            ) {
+                continue;
+            }
+
+            $connection['v3Ready'] = false;
+            $connection['status'] = 'wartet auf V3';
+            $connection['connectionId'] = '';
+            $connection['caption'] =
+                'Simuliertes Fahrzeug – wartet auf V3';
+
+            $result[] = $connection;
+        }
+
+        $this->SendDebug(
+            'Connections/Configurator',
+            json_encode(
+                [
+                    'total' => count($result),
+                    'v3' => count($v3Connections),
+                    'managementOnlySimulated' =>
+                        count($result) - count($v3Connections)
+                ],
+                JSON_UNESCAPED_SLASHES |
+                JSON_UNESCAPED_UNICODE
+            ),
+            0
+        );
+
+        return $result;
     }
 
     private function LoadManagementConnections(): array

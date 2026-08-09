@@ -71,7 +71,16 @@ class SmartcarConfigurator extends IPSModuleStrict
 
             $instanceId = $this->FindVehicleInstanceByVehicleId($vehicleId);
 
-            $values[] = [
+            $v3Ready =
+                ($connection['v3Ready'] ?? true) === true;
+
+            $status =
+                (string)(
+                    $connection['status']
+                    ?? ($v3Ready ? 'V3 bereit' : 'wartet auf V3')
+                );
+
+            $row = [
                 'instanceID' => $instanceId,
                 'name' => $caption,
                 'address' => $vehicleId,
@@ -79,7 +88,13 @@ class SmartcarConfigurator extends IPSModuleStrict
                 'connectionId' => $connectionId,
                 'mode' => $mode,
                 'powertrainType' => $powertrainType,
-                'create' => [
+                'status' => $status
+            ];
+
+            // Eine Vehicle-Instanz darf erst erzeugt werden, wenn Smartcar
+            // das Fahrzeug über /v3/connections liefert.
+            if ($v3Ready) {
+                $row['create'] = [
                     'moduleID' => self::VEHICLE_MODULE_ID,
                     'name' => $caption,
                     'configuration' => [
@@ -97,8 +112,10 @@ class SmartcarConfigurator extends IPSModuleStrict
                                 : 'live'
                         )
                     ]
-                ]
-            ];
+                ];
+            }
+
+            $values[] = $row;
         }
 
         $form = [
@@ -146,6 +163,11 @@ class SmartcarConfigurator extends IPSModuleStrict
                             'width' => '100px'
                         ],
                         [
+                            'caption' => 'Status',
+                            'name' => 'status',
+                            'width' => '130px'
+                        ],
+                        [
                             'caption' => 'Powertrain',
                             'name' => 'powertrainType',
                             'width' => '120px'
@@ -167,7 +189,7 @@ class SmartcarConfigurator extends IPSModuleStrict
 
         $result = $this->SendDataToParent(json_encode([
             'DataID' => self::DATA_ID,
-            'Command' => 'LoadConnections'
+            'Command' => 'LoadConfiguratorConnections'
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
 
         $decoded = json_decode((string)$result, true);
