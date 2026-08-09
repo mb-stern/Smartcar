@@ -14,11 +14,13 @@ class SmartcarVehicle extends IPSModuleStrict
     $this->RegisterPropertyString('Model', '');
     $this->RegisterPropertyInteger('Year', 0);
     $this->RegisterPropertyString('PowertrainType', '');
+    $this->RegisterPropertyBoolean('IgnoreCompatibilityPowertrainFilter', false);
     $this->RegisterPropertyString('SelectedCapabilities', '[]');
     $this->RegisterPropertyBoolean('ShowOEMUpdatedAtVariables', false);
     $this->RegisterAttributeString('LastOEMSignalTimes', '{}');
     $this->RegisterAttributeString('CompatibilityCache', '[]');
     $this->RegisterAttributeInteger('CompatibilityCacheAt', 0);
+    $this->RegisterAttributeBoolean('CompatibilityCacheIgnorePowertrain', false);
 
     $lastSignalsExists = (bool)@$this->GetIDForIdent('LastSignalsAt');
     $this->RegisterVariableInteger('LastSignalsAt', 'Letzte Signale', '~UnixTimestamp');
@@ -135,6 +137,11 @@ class SmartcarVehicle extends IPSModuleStrict
                 ['type' => 'Label', 'caption' => 'Antrieb: ' . $this->ReadPropertyString('PowertrainType')],
                 [
                     'type' => 'CheckBox',
+                    'name' => 'IgnoreCompatibilityPowertrainFilter',
+                    'caption' => 'Powertrain-Filter bei der Compatibility-Abfrage ignorieren'
+                ],
+                [
+                    'type' => 'CheckBox',
                     'name' => 'ShowOEMUpdatedAtVariables',
                     'caption' => 'OEM-Aktualisierungszeit je Signal als zusätzliche Variable anzeigen'
                 ],
@@ -149,6 +156,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 'rowCount' => 10,
                 'add' => false,
                 'delete' => false,
+                'loadValuesFromConfiguration' => false,
                 'sort' => [
                     'column' => 'sortKey',
                     'direction' => 'ascending'
@@ -209,6 +217,11 @@ class SmartcarVehicle extends IPSModuleStrict
             ]
             ],
             'actions' => [
+                [
+                    'type' => 'Button',
+                    'caption' => 'Kompatibilitätsliste neu laden',
+                    'onClick' => 'SMCARV_ReloadCompatibility($id);'
+                ],
                 [
                     'type' => 'Button',
                     'caption' => 'Vehicle Access synchronisieren',
@@ -304,7 +317,22 @@ class SmartcarVehicle extends IPSModuleStrict
         $cacheAt = $this->ReadAttributeInteger('CompatibilityCacheAt');
         $cacheRaw = $this->ReadAttributeString('CompatibilityCache');
 
-        if (!$forceReload && $cacheRaw !== '' && $cacheAt > (time() - 86400)) {
+        $ignorePowertrainFilter =
+            $this->ReadPropertyBoolean(
+                'IgnoreCompatibilityPowertrainFilter'
+            );
+
+        $cachedIgnorePowertrain =
+            $this->ReadAttributeBoolean(
+                'CompatibilityCacheIgnorePowertrain'
+            );
+
+        if (
+            !$forceReload
+            && $cacheRaw !== ''
+            && $cacheAt > (time() - 86400)
+            && $cachedIgnorePowertrain === $ignorePowertrainFilter
+        ) {
             $cached = json_decode($cacheRaw, true);
             if (is_array($cached)) {
                 $this->SendDebug('Compatibility/Cache', 'Cache verwendet. Einträge: ' . count($cached), 0);
@@ -319,13 +347,9 @@ class SmartcarVehicle extends IPSModuleStrict
 
        
 
-        //Test für falsch zugeordnete PowertrainType, z.B. ICE bei einem Elektrofahrzeug.
-         
-        /*
-        if ($powertrainType === 'ICE') {
+        if ($ignorePowertrainFilter) {
             $powertrainType = '';
         }
-        */
 
         $region = 'EUROPE';
 
@@ -342,6 +366,7 @@ class SmartcarVehicle extends IPSModuleStrict
             'model' => $model,
             'year' => $year,
             'powertrainType' => $powertrainType,
+            'ignorePowertrainFilter' => $ignorePowertrainFilter,
             'region' => $region
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
@@ -416,10 +441,22 @@ class SmartcarVehicle extends IPSModuleStrict
                 json_encode($filtered, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
             );
             $this->WriteAttributeInteger('CompatibilityCacheAt', time());
+            $this->WriteAttributeBoolean(
+                'CompatibilityCacheIgnorePowertrain',
+                $ignorePowertrainFilter
+            );
         } else {
             $this->WriteAttributeString('CompatibilityCache', '[]');
-            $this->WriteAttributeInteger('CompatibilityCacheAt', 0);
-            $this->SendDebug('Compatibility/Cache', 'Leeres Ergebnis wird nicht gecacht.', 0);
+            $this->WriteAttributeInteger('CompatibilityCacheAt', time());
+            $this->WriteAttributeBoolean(
+                'CompatibilityCacheIgnorePowertrain',
+                $ignorePowertrainFilter
+            );
+            $this->SendDebug(
+                'Compatibility/Cache',
+                'Leeres Ergebnis wird für 24 Stunden gecacht.',
+                0
+            );
         }
 
         return $filtered;
@@ -1414,12 +1451,11 @@ class SmartcarVehicle extends IPSModuleStrict
         $cache = json_decode($this->ReadAttributeString('CompatibilityCache'), true);
 
         if (!is_array($cache) || empty($cache)) {
-            $this->SendDebug('Selected/Resolve', 'Cache leer, lade Compatibility neu.', 0);
-            $cache = $this->LoadCompatibility(false);
-        }
-
-        if (!is_array($cache) || empty($cache)) {
-            $this->SendDebug('Selected/Resolve', 'Keine Compatibility-Daten vorhanden.', 0);
+            $this->SendDebug(
+                'Selected/Resolve',
+                'Keine Compatibility-Daten im Cache vorhanden. Es wird nicht automatisch nachgeladen.',
+                0
+            );
             return [];
         }
 

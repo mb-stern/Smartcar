@@ -21,6 +21,7 @@ class SmartcarSplitter extends IPSModuleStrict
         $this->RegisterAttributeInteger('TokenExpiresAt', 0);
         $this->RegisterAttributeString('RedirectURI', '');
         $this->RegisterAttributeString('LastWebhookID', '');
+        $this->RegisterAttributeString('LastVehicleStateSequences', '{}');
 
         $this->RegisterTimer(
             'TokenTimer',
@@ -364,111 +365,251 @@ class SmartcarSplitter extends IPSModuleStrict
             return [];
         }
 
-        $url =
-            'https://vehicle.api.smartcar.com/v3/connections?page[size]=100';
-
-        $response = $this->HttpRequestRaw(
-            'Connections',
-            'GET',
-            $url,
-            [
-                'Authorization: Bearer ' . $token,
-                'Accept: application/json'
-            ]
-        );
-
-        if (
-            $response === null
-            || $response['statusCode'] !== 200
-        ) {
-            $this->SendDebug(
-                'Connections',
-                'Fehler: ' . json_encode($response),
-                0
-            );
-            return [];
-        }
-
-        $data = json_decode($response['body'], true);
-
-        if (
-            !is_array($data)
-            || !isset($data['data'])
-            || !is_array($data['data'])
-        ) {
-            $this->SendDebug(
-                'Connections',
-                'Unerwartete Antwort: ' . $response['body'],
-                0
-            );
-            return [];
-        }
-
         $connections = [];
 
-        foreach ($data['data'] as $item) {
-            $connectionId = (string)($item['id'] ?? '');
-
-            $attributes = is_array($item['attributes'] ?? null)
-                ? $item['attributes']
-                : [];
-
-            $vehicle = is_array($attributes['vehicle'] ?? null)
-                ? $attributes['vehicle']
-                : [];
-
-            $vehicleId = (string)(
-                $item['relationships']['vehicle']['data']['id']
-                ?? ''
+        foreach (['live', 'simulated'] as $mode) {
+            $query = http_build_query(
+                [
+                    'filter[vehicle.mode]' => $mode,
+                    'page[size]' => 100
+                ],
+                '',
+                '&',
+                PHP_QUERY_RFC3986
             );
 
-            $userId = (string)(
-                $item['relationships']['user']['data']['id']
-                ?? ''
-            );
+            $url =
+                'https://vehicle.api.smartcar.com/v3/connections?' .
+                $query;
 
-            if (
-                $connectionId === ''
-                || $vehicleId === ''
-            ) {
-                continue;
+            $page = 0;
+            $modeCount = 0;
+
+            while ($url !== '' && $page < 100) {
+                $page++;
+
+                $response = $this->HttpRequestRaw(
+                    'Connections/' . $mode . '/Page' . $page,
+                    'GET',
+                    $url,
+                    [
+                        'Authorization: Bearer ' . $token,
+                        'Accept: application/json'
+                    ]
+                );
+
+                if (
+                    $response === null
+                    || $response['statusCode'] !== 200
+                ) {
+                    $this->SendDebug(
+                        'Connections/' . $mode,
+                        'Fehler auf Seite ' .
+                        $page .
+                        ': ' .
+                        json_encode(
+                            $response,
+                            JSON_UNESCAPED_SLASHES |
+                            JSON_UNESCAPED_UNICODE
+                        ),
+                        0
+                    );
+                    break;
+                }
+
+                $data =
+                    json_decode(
+                        $response['body'],
+                        true
+                    );
+
+                if (
+                    !is_array($data)
+                    || !isset($data['data'])
+                    || !is_array($data['data'])
+                ) {
+                    $this->SendDebug(
+                        'Connections/' . $mode,
+                        'Unerwartete Antwort auf Seite ' .
+                        $page .
+                        ': ' .
+                        $response['body'],
+                        0
+                    );
+                    break;
+                }
+
+                foreach ($data['data'] as $item) {
+                    if (!is_array($item)) {
+                        continue;
+                    }
+
+                    $connectionId =
+                        (string)(
+                            $item['id']
+                            ?? ''
+                        );
+
+                    $attributes =
+                        is_array(
+                            $item['attributes']
+                            ?? null
+                        )
+                            ? $item['attributes']
+                            : [];
+
+                    $vehicle =
+                        is_array(
+                            $attributes['vehicle']
+                            ?? null
+                        )
+                            ? $attributes['vehicle']
+                            : [];
+
+                    $vehicleId =
+                        (string)(
+                            $item['relationships']['vehicle']['data']['id']
+                            ?? ''
+                        );
+
+                    $userId =
+                        (string)(
+                            $item['relationships']['user']['data']['id']
+                            ?? ''
+                        );
+
+                    if (
+                        $connectionId === ''
+                        || $vehicleId === ''
+                    ) {
+                        continue;
+                    }
+
+                    $make =
+                        (string)(
+                            $vehicle['make']
+                            ?? ''
+                        );
+
+                    $model =
+                        (string)(
+                            $vehicle['model']
+                            ?? ''
+                        );
+
+                    $year =
+                        (string)(
+                            $vehicle['year']
+                            ?? ''
+                        );
+
+                    $modeValue =
+                        (string)(
+                            $vehicle['mode']
+                            ?? (
+                                $attributes['mode']
+                                ?? $mode
+                            )
+                        );
+
+                    $powertrainType =
+                        (string)(
+                            $vehicle['powertrainType']
+                            ?? ''
+                        );
+
+                    $caption =
+                        trim(
+                            $make .
+                            ' ' .
+                            $model .
+                            ' ' .
+                            $year
+                        );
+
+                    if ($caption === '') {
+                        $caption = $vehicleId;
+                    }
+
+                    $connections[$connectionId] = [
+                        'connectionId' => $connectionId,
+                        'vehicleId' => $vehicleId,
+                        'userId' => $userId,
+                        'caption' => $caption,
+                        'make' => $make,
+                        'model' => $model,
+                        'year' => $year,
+                        'mode' => $modeValue,
+                        'powertrainType' => $powertrainType,
+                        'permissions' =>
+                            $attributes['permissions']
+                            ?? []
+                    ];
+
+                    $modeCount++;
+                }
+
+                $next =
+                    $data['links']['next']
+                    ?? null;
+
+                if (
+                    !is_string($next)
+                    || trim($next) === ''
+                ) {
+                    $url = '';
+                    continue;
+                }
+
+                $next = trim($next);
+
+                // Smartcar kann links.next absolut oder relativ liefern.
+                if (
+                    str_starts_with(
+                        $next,
+                        'https://'
+                    )
+                ) {
+                    $url = $next;
+                } else {
+                    $url =
+                        'https://vehicle.api.smartcar.com/v3/' .
+                        ltrim(
+                            $next,
+                            '/'
+                        );
+                }
             }
 
-            $make = (string)($vehicle['make'] ?? '');
-            $model = (string)($vehicle['model'] ?? '');
-            $year = (string)($vehicle['year'] ?? '');
-
-            $modeValue = (string)(
-                $vehicle['mode']
-                ?? ($attributes['mode'] ?? '')
+            $this->SendDebug(
+                'Connections/' . $mode . '/Count',
+                'Gefundene Connections: ' .
+                $modeCount .
+                ', Seiten: ' .
+                $page,
+                0
             );
 
-            $powertrainType = (string)(
-                $vehicle['powertrainType']
-                ?? ''
-            );
-
-            $caption = trim(
-                $make . ' ' . $model . ' ' . $year
-            );
-
-            if ($caption === '') {
-                $caption = $vehicleId;
+            if ($page >= 100 && $url !== '') {
+                $this->SendDebug(
+                    'Connections/' . $mode . '/Pagination',
+                    'Sicherheitslimit von 100 Seiten erreicht.',
+                    0
+                );
             }
-
-            $connections[] = [
-                'connectionId' => $connectionId,
-                'vehicleId' => $vehicleId,
-                'userId' => $userId,
-                'caption' => $caption,
-                'make' => $make,
-                'model' => $model,
-                'year' => $year,
-                'mode' => $modeValue,
-                'powertrainType' => $powertrainType,
-                'permissions' => $attributes['permissions'] ?? []
-            ];
         }
+
+        $connections =
+            array_values(
+                $connections
+            );
+
+        $this->SendDebug(
+            'Connections/Combined',
+            'Gesamt: ' .
+            count($connections),
+            0
+        );
 
         return $connections;
     }
@@ -587,12 +728,28 @@ class SmartcarSplitter extends IPSModuleStrict
             );
         }
 
+        $isVehicleCommand =
+            str_contains(
+                $path,
+                '/commands/'
+            );
+
+        // Smartcar V3 Commands können lange laufen. Bei 202 bleibt die
+        // Verbindung offen, bis die vollständige Command-Antwort vorliegt.
+        $timeoutSeconds =
+            $isVehicleCommand
+                ? 210
+                : 30;
+
         $response = $this->HttpRequestRaw(
-            'ApiRequest',
+            $isVehicleCommand
+                ? 'ApiRequest/Command'
+                : 'ApiRequest',
             $method,
             $url,
             $headers,
-            $content
+            $content,
+            $timeoutSeconds
         );
 
         if (is_array($response)) {
@@ -666,7 +823,8 @@ class SmartcarSplitter extends IPSModuleStrict
         string $method,
         string $url,
         array $headers,
-        ?string $content = null
+        ?string $content = null,
+        int $timeoutSeconds = 30
     ): ?array {
         $headerText =
             implode("\r\n", $headers) .
@@ -677,7 +835,10 @@ class SmartcarSplitter extends IPSModuleStrict
                 'method' => strtoupper($method),
                 'header' => $headerText,
                 'ignore_errors' => true,
-                'timeout' => 30
+                'timeout' => max(
+                    1,
+                    $timeoutSeconds
+                )
             ]
         ];
 
@@ -984,6 +1145,17 @@ class SmartcarSplitter extends IPSModuleStrict
 
         switch ($eventType) {
             case 'VEHICLE_STATE':
+                if (
+                    !$this->AcceptVehicleStateSequence(
+                        $vehicleId,
+                        $payload
+                    )
+                ) {
+                    http_response_code(200);
+                    echo 'ok';
+                    return;
+                }
+
                 $triggers =
                     is_array(
                         $payload['triggers']
@@ -1244,6 +1416,150 @@ class SmartcarSplitter extends IPSModuleStrict
             ' gefunden.',
             0
         );
+    }
+
+    /**
+     * Prüft die Smartcar VEHICLE_STATE sequence.
+     *
+     * Smartcar kann Webhooks außerhalb der Erzeugungsreihenfolge zustellen.
+     * Eine kleinere Sequence als die zuletzt verarbeitete ist daher veraltet
+     * und darf neuere Fahrzeugwerte nicht überschreiben.
+     *
+     * Gleiche Sequence = Retry desselben Events. Der Retry wird akzeptiert,
+     * da das erneute Anwenden derselben Zustandswerte idempotent ist.
+     */
+    private function AcceptVehicleStateSequence(
+        string $vehicleId,
+        array $payload
+    ): bool {
+        $sequenceRaw =
+            $payload['meta']['sequence']
+            ?? null;
+
+        if (
+            $sequenceRaw === null
+            || $sequenceRaw === ''
+            || !is_numeric($sequenceRaw)
+        ) {
+            $this->SendDebug(
+                'Webhook/Sequence',
+                json_encode(
+                    [
+                        'vehicleId' => $vehicleId,
+                        'eventId' =>
+                            (string)(
+                                $payload['eventId']
+                                ?? ''
+                            ),
+                        'sequence' => null,
+                        'action' => 'ACCEPT_NO_SEQUENCE'
+                    ],
+                    JSON_UNESCAPED_SLASHES |
+                    JSON_UNESCAPED_UNICODE
+                ),
+                0
+            );
+
+            // Rückwärtskompatibel: Events ohne Sequence nicht blockieren.
+            return true;
+        }
+
+        $sequence =
+            (int)$sequenceRaw;
+
+        $raw =
+            $this->ReadAttributeString(
+                'LastVehicleStateSequences'
+            );
+
+        $sequences =
+            json_decode(
+                $raw,
+                true
+            );
+
+        if (!is_array($sequences)) {
+            $sequences = [];
+        }
+
+        $lastSequence =
+            isset($sequences[$vehicleId])
+                ? (int)$sequences[$vehicleId]
+                : null;
+
+        if (
+            $lastSequence !== null
+            && $sequence < $lastSequence
+        ) {
+            $this->SendDebug(
+                'Webhook/Sequence',
+                json_encode(
+                    [
+                        'vehicleId' => $vehicleId,
+                        'eventId' =>
+                            (string)(
+                                $payload['eventId']
+                                ?? ''
+                            ),
+                        'sequence' => $sequence,
+                        'lastSequence' => $lastSequence,
+                        'action' => 'SKIP_OLDER'
+                    ],
+                    JSON_UNESCAPED_SLASHES |
+                    JSON_UNESCAPED_UNICODE
+                ),
+                0
+            );
+
+            return false;
+        }
+
+        $action =
+            (
+                $lastSequence !== null
+                && $sequence === $lastSequence
+            )
+                ? 'ACCEPT_RETRY'
+                : 'ACCEPT_NEW';
+
+        if (
+            $lastSequence === null
+            || $sequence > $lastSequence
+        ) {
+            $sequences[$vehicleId] =
+                $sequence;
+
+            $this->WriteAttributeString(
+                'LastVehicleStateSequences',
+                json_encode(
+                    $sequences,
+                    JSON_UNESCAPED_SLASHES |
+                    JSON_UNESCAPED_UNICODE
+                )
+            );
+        }
+
+        $this->SendDebug(
+            'Webhook/Sequence',
+            json_encode(
+                [
+                    'vehicleId' => $vehicleId,
+                    'eventId' =>
+                        (string)(
+                            $payload['eventId']
+                            ?? ''
+                        ),
+                    'sequence' => $sequence,
+                    'lastSequence' => $lastSequence,
+                    'action' => $action
+                ],
+                JSON_UNESCAPED_SLASHES |
+                JSON_UNESCAPED_UNICODE
+            ),
+            0
+        );
+
+        return true;
     }
 
     private function GetRequestHeader(
