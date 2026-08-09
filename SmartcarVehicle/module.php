@@ -322,10 +322,16 @@ class SmartcarVehicle extends IPSModuleStrict
                 'IgnoreCompatibilityPowertrainFilter'
             );
 
+        $cachedIgnorePowertrain =
+            $this->ReadAttributeBoolean(
+                'CompatibilityCacheIgnorePowertrain'
+            );
+
         if (
             !$forceReload
             && $cacheRaw !== ''
             && $cacheAt > (time() - 86400)
+            && $cachedIgnorePowertrain === $ignorePowertrainFilter
         ) {
             $cached = json_decode($cacheRaw, true);
             if (is_array($cached)) {
