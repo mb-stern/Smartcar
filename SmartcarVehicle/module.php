@@ -1551,48 +1551,15 @@ class SmartcarVehicle extends IPSModuleStrict
             return [];
         }
 
-        $cacheRaw =
-            $this->ReadAttributeString(
-                'CompatibilityCache'
-            );
+        $cache = json_decode($this->ReadAttributeString('CompatibilityCache'), true);
 
-        $cacheAt =
-            $this->ReadAttributeInteger(
-                'CompatibilityCacheAt'
-            );
-
-        $cache =
-            json_decode(
-                $cacheRaw,
-                true
-            );
-
-        if (
-            !is_array($cache)
-            || $cacheAt <= 0
-        ) {
-            $this->SendDebug(
-                'Selected/Resolve',
-                'Kein gültiger Compatibility-Cache vorhanden, lade Compatibility neu.',
-                0
-            );
-
-            $cache =
-                $this->LoadCompatibility(
-                    false
-                );
+        if (!is_array($cache) || empty($cache)) {
+            $this->SendDebug('Selected/Resolve', 'Cache leer, lade Compatibility neu.', 0);
+            $cache = $this->LoadCompatibility(false);
         }
 
-        if (
-            !is_array($cache)
-            || empty($cache)
-        ) {
-            $this->SendDebug(
-                'Selected/Resolve',
-                'Compatibility-Ergebnis ist gültig, aber leer.',
-                0
-            );
-
+        if (!is_array($cache) || empty($cache)) {
+            $this->SendDebug('Selected/Resolve', 'Keine Compatibility-Daten vorhanden.', 0);
             return [];
         }
 
