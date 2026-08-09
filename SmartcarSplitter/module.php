@@ -491,11 +491,311 @@ class SmartcarSplitter extends IPSModuleStrict
             }
         }
 
+        // Zusätzlich die Management API verwenden. Diese liefert in der
+        // früher funktionierenden Version auch bereits verbundene simulierte
+        // Fahrzeuge, die in /v3/connections aktuell nicht erscheinen.
+        $managementConnections =
+            $this->LoadManagementConnections();
+
+        $managementSimulatedCount = 0;
+
+        foreach ($managementConnections as $connection) {
+            if (!is_array($connection)) {
+                continue;
+            }
+
+            $mode =
+                strtolower(
+                    trim(
+                        (string)(
+                            $connection['mode']
+                            ?? ''
+                        )
+                    )
+                );
+
+            if ($mode !== 'simulated') {
+                continue;
+            }
+
+            $vehicleId =
+                trim(
+                    (string)(
+                        $connection['vehicleId']
+                        ?? ''
+                    )
+                );
+
+            if ($vehicleId === '') {
+                continue;
+            }
+
+            $key =
+                trim(
+                    (string)(
+                        $connection['connectionId']
+                        ?? ''
+                    )
+                );
+
+            if ($key === '') {
+                $key = 'vehicle:' . $vehicleId;
+            }
+
+            $connections[$key] =
+                $connection;
+
+            $managementSimulatedCount++;
+        }
+
+        $this->SendDebug(
+            'Connections/ManagementSimulated',
+            'Gefundene simulierte Connections: ' .
+            $managementSimulatedCount,
+            0
+        );
+
         $connections = array_values($connections);
 
         $this->SendDebug(
             'Connections/Combined',
             'Gesamt: ' . count($connections),
+            0
+        );
+
+        return $connections;
+    }
+
+    private function LoadManagementConnections(): array
+    {
+        $managementToken =
+            trim(
+                $this->ReadPropertyString(
+                    'ManagementToken'
+                )
+            );
+
+        if ($managementToken === '') {
+            $this->SendDebug(
+                'Connections/Management',
+                'ManagementToken fehlt.',
+                0
+            );
+
+            return [];
+        }
+
+        $url =
+            'https://management.smartcar.com/v2.0/management/connections';
+
+        $response =
+            $this->HttpRequestRaw(
+                'Connections/Management',
+                'GET',
+                $url,
+                [
+                    'Authorization: Basic ' .
+                    base64_encode(
+                        'default:' .
+                        $managementToken
+                    ),
+                    'Accept: application/json'
+                ]
+            );
+
+        if (
+            $response === null
+            || $response['statusCode'] < 200
+            || $response['statusCode'] >= 300
+        ) {
+            $this->SendDebug(
+                'Connections/Management',
+                'Fehler: ' .
+                json_encode(
+                    $response,
+                    JSON_UNESCAPED_SLASHES |
+                    JSON_UNESCAPED_UNICODE
+                ),
+                0
+            );
+
+            return [];
+        }
+
+        $data =
+            json_decode(
+                $response['body'],
+                true
+            );
+
+        if (!is_array($data)) {
+            $this->SendDebug(
+                'Connections/Management',
+                'Ungültige JSON-Antwort: ' .
+                $response['body'],
+                0
+            );
+
+            return [];
+        }
+
+        $items =
+            is_array(
+                $data['connections']
+                ?? null
+            )
+                ? $data['connections']
+                : [];
+
+        $connections = [];
+
+        foreach ($items as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+
+            $attributes =
+                is_array(
+                    $item['attributes']
+                    ?? null
+                )
+                    ? $item['attributes']
+                    : [];
+
+            $vehicleId =
+                (string)(
+                    $item['vehicleId']
+                    ?? $attributes['vehicleId']
+                    ?? $item['relationships']['vehicle']['data']['id']
+                    ?? ''
+                );
+
+            $userId =
+                (string)(
+                    $item['userId']
+                    ?? $attributes['userId']
+                    ?? $item['relationships']['user']['data']['id']
+                    ?? ''
+                );
+
+            $connectionId =
+                (string)(
+                    $item['connectionId']
+                    ?? $item['id']
+                    ?? ''
+                );
+
+            $mode =
+                (string)(
+                    $item['mode']
+                    ?? $attributes['mode']
+                    ?? ''
+                );
+
+            if ($vehicleId === '') {
+                continue;
+            }
+
+            // Fahrzeugdetails wie in der früher funktionierenden Version
+            // über die normale V3 Vehicle API ergänzen.
+            $vehicleResult =
+                $this->ApiGetVehicle(
+                    $vehicleId,
+                    $userId
+                );
+
+            $vehicleBody =
+                is_array(
+                    $vehicleResult['body']
+                    ?? null
+                )
+                    ? $vehicleResult['body']
+                    : [];
+
+            $vehicleData =
+                is_array(
+                    $vehicleBody['data']
+                    ?? null
+                )
+                    ? $vehicleBody['data']
+                    : $vehicleBody;
+
+            $vehicleAttributes =
+                is_array(
+                    $vehicleData['attributes']
+                    ?? null
+                )
+                    ? $vehicleData['attributes']
+                    : $vehicleData;
+
+            $make =
+                (string)(
+                    $vehicleAttributes['make']
+                    ?? ''
+                );
+
+            $model =
+                (string)(
+                    $vehicleAttributes['model']
+                    ?? ''
+                );
+
+            $year =
+                (string)(
+                    $vehicleAttributes['year']
+                    ?? ''
+                );
+
+            $powertrainType =
+                (string)(
+                    $vehicleAttributes['powertrainType']
+                    ?? ''
+                );
+
+            if ($mode === '') {
+                $mode =
+                    (string)(
+                        $vehicleAttributes['mode']
+                        ?? ''
+                    );
+            }
+
+            $caption =
+                trim(
+                    $make .
+                    ' ' .
+                    $model .
+                    ' ' .
+                    $year
+                );
+
+            if ($caption === '') {
+                $caption =
+                    strtolower($mode) === 'simulated'
+                        ? 'Simuliertes Fahrzeug'
+                        : $vehicleId;
+            }
+
+            $connections[] = [
+                'connectionId' => $connectionId,
+                'vehicleId' => $vehicleId,
+                'userId' => $userId,
+                'caption' => $caption,
+                'make' => $make,
+                'model' => $model,
+                'year' => $year,
+                'mode' => $mode,
+                'powertrainType' => $powertrainType,
+                'permissions' =>
+                    $attributes['permissions']
+                    ?? []
+            ];
+        }
+
+        $this->SendDebug(
+            'Connections/Management',
+            'Gefundene Connections: ' .
+            count($connections),
             0
         );
 
@@ -1838,9 +2138,24 @@ class SmartcarSplitter extends IPSModuleStrict
             );
         }
 
-        // Connections zuerst aktualisieren, damit UserID und Connection-Daten
-        // nach dem Connect auf dem aktuellen Stand sind.
-        $this->SyncVehiclesFromConnectionsWithRetry();
+        // Beim simulierten Connect liefert Smartcar bei response_type=none
+        // keinen vehicle_id. Die frühere funktionierende Version hat daher
+        // über user_id + Management API gezielt das neue simulierte Fahrzeug
+        // gesucht und daraus die Vehicle-Instanz erzeugt.
+        $isConfiguratorSimulated =
+            str_starts_with(
+                $state,
+                'configurator_simulated_'
+            );
+
+        if ($isConfiguratorSimulated) {
+            $this->SyncSimulatedVehicleFromManagement(
+                $userId
+            );
+        } else {
+            // Normale Live-/Reauth-Flows wie bisher.
+            $this->SyncVehiclesFromConnectionsWithRetry();
+        }
 
         // Nur beim bewussten "Vehicle Access synchronisieren"-Flow:
         // bestehende Webhook-Subscription entfernen und neu erstellen.
@@ -2219,6 +2534,122 @@ class SmartcarSplitter extends IPSModuleStrict
                 $createResponse['body']
                 ?? ''
         ];
+    }
+
+    private function SyncSimulatedVehicleFromManagement(
+        string $userId,
+        int $maxAttempts = 3
+    ): void {
+        $userId = trim($userId);
+        $maxAttempts = max(1, $maxAttempts);
+
+        for (
+            $attempt = 1;
+            $attempt <= $maxAttempts;
+            $attempt++
+        ) {
+            $connections =
+                $this->LoadManagementConnections();
+
+            $matches = [];
+
+            foreach ($connections as $connection) {
+                if (!is_array($connection)) {
+                    continue;
+                }
+
+                $mode =
+                    strtolower(
+                        trim(
+                            (string)(
+                                $connection['mode']
+                                ?? ''
+                            )
+                        )
+                    );
+
+                $connectionUserId =
+                    trim(
+                        (string)(
+                            $connection['userId']
+                            ?? ''
+                        )
+                    );
+
+                if ($mode !== 'simulated') {
+                    continue;
+                }
+
+                if (
+                    $userId !== ''
+                    && $connectionUserId !== $userId
+                ) {
+                    continue;
+                }
+
+                $matches[] =
+                    $connection;
+            }
+
+            $this->SendDebug(
+                'Connect/SyncSimulatedManagement',
+                'Versuch ' .
+                $attempt .
+                '/' .
+                $maxAttempts .
+                ', UserID=' .
+                $userId .
+                ', Connections=' .
+                count($matches),
+                0
+            );
+
+            if (!empty($matches)) {
+                $this->UpdateVehiclesFromConnections(
+                    $matches
+                );
+
+                return;
+            }
+
+            if ($attempt < $maxAttempts) {
+                usleep(1000000);
+            }
+        }
+
+        $this->SendDebug(
+            'Connect/SyncSimulatedManagement',
+            'Keine direkte UserID-Zuordnung gefunden; synchronisiere alle simulierten Management-Connections.',
+            0
+        );
+
+        $connections =
+            $this->LoadManagementConnections();
+
+        $matches = [];
+
+        foreach ($connections as $connection) {
+            if (
+                is_array($connection)
+                && strtolower(
+                    trim(
+                        (string)(
+                            $connection['mode']
+                            ?? ''
+                        )
+                    )
+                ) === 'simulated'
+            ) {
+                $matches[] =
+                    $connection;
+            }
+        }
+
+        if (!empty($matches)) {
+            $this->UpdateVehiclesFromConnections(
+                $matches
+            );
+        }
     }
 
     private function SyncVehiclesFromConnectionsWithRetry(
