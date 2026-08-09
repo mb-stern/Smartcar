@@ -21,6 +21,7 @@ class SmartcarSplitter extends IPSModuleStrict
         $this->RegisterAttributeInteger('TokenExpiresAt', 0);
         $this->RegisterAttributeString('RedirectURI', '');
         $this->RegisterAttributeString('LastWebhookID', '');
+        $this->RegisterAttributeString('LastVehicleStateSequences', '{}');
 
         $this->RegisterTimer(
             'TokenTimer',
@@ -984,6 +985,74 @@ class SmartcarSplitter extends IPSModuleStrict
 
         switch ($eventType) {
             case 'VEHICLE_STATE':
+                $sequence = 0;
+                $lastSequence = 0;
+                $lastSequences = [];
+
+                if ($vehicleId !== '') {
+                    $sequenceRaw =
+                        $payload['meta']['sequence']
+                        ?? null;
+
+                    $sequence =
+                        is_int($sequenceRaw)
+                        || (
+                            is_string($sequenceRaw)
+                            && ctype_digit($sequenceRaw)
+                        )
+                            ? (int)$sequenceRaw
+                            : 0;
+
+                    if ($sequence > 0) {
+                        $lastSequences =
+                            json_decode(
+                                $this->ReadAttributeString(
+                                    'LastVehicleStateSequences'
+                                ),
+                                true
+                            );
+
+                        if (!is_array($lastSequences)) {
+                            $lastSequences = [];
+                        }
+
+                        $lastSequence =
+                            (int)(
+                                $lastSequences[$vehicleId]
+                                ?? 0
+                            );
+
+                        if (
+                            $lastSequence > 0
+                            && $sequence <= $lastSequence
+                        ) {
+                            $this->SendDebug(
+                                'Webhook/SequenceSkip',
+                                json_encode([
+                                    'vehicleId' => $vehicleId,
+                                    'eventId' =>
+                                        $payload['eventId']
+                                        ?? '',
+                                    'sequence' => $sequence,
+                                    'lastSequence' => $lastSequence
+                                ], JSON_UNESCAPED_SLASHES |
+                                   JSON_UNESCAPED_UNICODE),
+                                0
+                            );
+
+                            http_response_code(200);
+                            echo 'ok';
+                            return;
+                        }
+                    } else {
+                        $this->SendDebug(
+                            'Webhook/Sequence',
+                            'Keine gültige meta.sequence vorhanden; VEHICLE_STATE wird normal verarbeitet.',
+                            0
+                        );
+                    }
+                }
+
                 $triggers =
                     is_array(
                         $payload['triggers']
@@ -1033,6 +1102,34 @@ class SmartcarSplitter extends IPSModuleStrict
                         $vehicleId,
                         $payload
                     );
+
+                    if ($sequence > 0) {
+                        $lastSequences[$vehicleId] =
+                            $sequence;
+
+                        $this->WriteAttributeString(
+                            'LastVehicleStateSequences',
+                            json_encode(
+                                $lastSequences,
+                                JSON_UNESCAPED_SLASHES |
+                                JSON_UNESCAPED_UNICODE
+                            )
+                        );
+
+                        $this->SendDebug(
+                            'Webhook/SequenceAccept',
+                            json_encode([
+                                'vehicleId' => $vehicleId,
+                                'eventId' =>
+                                    $payload['eventId']
+                                    ?? '',
+                                'sequence' => $sequence,
+                                'previousSequence' => $lastSequence
+                            ], JSON_UNESCAPED_SLASHES |
+                               JSON_UNESCAPED_UNICODE),
+                            0
+                        );
+                    }
                 } else {
                     $this->SendDebug(
                         'Webhook/VEHICLE_STATE',
