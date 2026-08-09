@@ -219,6 +219,11 @@ class SmartcarVehicle extends IPSModuleStrict
             'actions' => [
                 [
                     'type' => 'Button',
+                    'caption' => 'Kompatibilitätsliste neu laden',
+                    'onClick' => 'SMCARV_ReloadCompatibility($id);'
+                ],
+                [
+                    'type' => 'Button',
                     'caption' => 'Vehicle Access synchronisieren',
                     'onClick' => 'echo SMCARV_GenerateConnectURL($id);'
                 ],
@@ -317,16 +322,10 @@ class SmartcarVehicle extends IPSModuleStrict
                 'IgnoreCompatibilityPowertrainFilter'
             );
 
-        $cachedIgnorePowertrain =
-            $this->ReadAttributeBoolean(
-                'CompatibilityCacheIgnorePowertrain'
-            );
-
         if (
             !$forceReload
             && $cacheRaw !== ''
             && $cacheAt > (time() - 86400)
-            && $cachedIgnorePowertrain === $ignorePowertrainFilter
         ) {
             $cached = json_decode($cacheRaw, true);
             if (is_array($cached)) {
@@ -442,12 +441,16 @@ class SmartcarVehicle extends IPSModuleStrict
             );
         } else {
             $this->WriteAttributeString('CompatibilityCache', '[]');
-            $this->WriteAttributeInteger('CompatibilityCacheAt', 0);
+            $this->WriteAttributeInteger('CompatibilityCacheAt', time());
             $this->WriteAttributeBoolean(
                 'CompatibilityCacheIgnorePowertrain',
                 $ignorePowertrainFilter
             );
-            $this->SendDebug('Compatibility/Cache', 'Leeres Ergebnis wird nicht gecacht.', 0);
+            $this->SendDebug(
+                'Compatibility/Cache',
+                'Leeres Ergebnis wird für 24 Stunden gecacht.',
+                0
+            );
         }
 
         return $filtered;
@@ -1442,12 +1445,11 @@ class SmartcarVehicle extends IPSModuleStrict
         $cache = json_decode($this->ReadAttributeString('CompatibilityCache'), true);
 
         if (!is_array($cache) || empty($cache)) {
-            $this->SendDebug('Selected/Resolve', 'Cache leer, lade Compatibility neu.', 0);
-            $cache = $this->LoadCompatibility(false);
-        }
-
-        if (!is_array($cache) || empty($cache)) {
-            $this->SendDebug('Selected/Resolve', 'Keine Compatibility-Daten vorhanden.', 0);
+            $this->SendDebug(
+                'Selected/Resolve',
+                'Keine Compatibility-Daten im Cache vorhanden. Es wird nicht automatisch nachgeladen.',
+                0
+            );
             return [];
         }
 
