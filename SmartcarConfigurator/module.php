@@ -55,7 +55,7 @@ class SmartcarConfigurator extends IPSModuleStrict
                 continue;
             }
 
-            $connectionId = (string)($connection['connectionId'] ?? '');
+            $connectionId = trim((string)($connection['connectionId'] ?? ''));
             $userId = (string)($connection['userId'] ?? '');
             $caption = trim((string)($connection['caption'] ?? ''));
 
@@ -70,6 +70,19 @@ class SmartcarConfigurator extends IPSModuleStrict
             $powertrainType = (string)($connection['powertrainType'] ?? '');
 
             $instanceId = $this->FindVehicleInstanceByVehicleId($vehicleId);
+
+            // Falls eine ältere Splitter-Version die Connection ID noch nicht
+            // geliefert hat, den bereits gespeicherten Wert der Vehicle-Instanz
+            // als Fallback verwenden.
+            if ($connectionId === '' && $instanceId > 0) {
+                $connectionId =
+                    trim(
+                        (string)@IPS_GetProperty(
+                            $instanceId,
+                            'ConnectionID'
+                        )
+                    );
+            }
 
             $values[] = [
                 'instanceID' => $instanceId,
@@ -104,6 +117,16 @@ class SmartcarConfigurator extends IPSModuleStrict
                     'onClick' => 'echo SMCARCFG_GenerateConnectURL($id, "live");'
                 ],
                 [
+                    'type' => 'Button',
+                    'caption' => 'Neues simuliertes Fahrzeug verbinden',
+                    'onClick' => 'echo SMCARCFG_GenerateConnectURL($id, "simulated");'
+                ],
+                [
+                    'type' => 'Button',
+                    'caption' => 'Liste aktualisieren',
+                    'onClick' => 'SMCARCFG_ReloadConfiguratorForm($id);'
+                ],
+                [
                     'type' => 'Configurator',
                     'name' => 'Vehicles',
                     'caption' => 'Smartcar Fahrzeuge',
@@ -128,7 +151,7 @@ class SmartcarConfigurator extends IPSModuleStrict
                             'caption' => 'Connection ID',
                             'name' => 'connectionId',
                             'width' => '250px',
-                            'visible' => false
+                            'visible' => true
                         ],
                         [
                             'caption' => 'Modus',
