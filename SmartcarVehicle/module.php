@@ -14,14 +14,12 @@ class SmartcarVehicle extends IPSModuleStrict
     $this->RegisterPropertyString('Model', '');
     $this->RegisterPropertyInteger('Year', 0);
     $this->RegisterPropertyString('PowertrainType', '');
-    $this->RegisterPropertyBoolean('IgnoreCompatibilityPowertrainFilter', false);
-    $this->RegisterPropertyBoolean('UseBodyDespitePermissionError', false);
     $this->RegisterPropertyString('SelectedCapabilities', '[]');
     $this->RegisterPropertyBoolean('ShowOEMUpdatedAtVariables', false);
     $this->RegisterAttributeString('LastOEMSignalTimes', '{}');
     $this->RegisterAttributeString('CompatibilityCache', '[]');
     $this->RegisterAttributeInteger('CompatibilityCacheAt', 0);
-    $this->RegisterAttributeBoolean('CompatibilityCacheIgnorePowertrain', false);
+    $this->RegisterAttributeString('GrantedPermissions', '[]');
 
     $lastSignalsExists = (bool)@$this->GetIDForIdent('LastSignalsAt');
     $this->RegisterVariableInteger('LastSignalsAt', 'Letzte Signale', '~UnixTimestamp');
@@ -137,42 +135,13 @@ class SmartcarVehicle extends IPSModuleStrict
                 ['type' => 'Label', 'caption' => 'Fahrzeug: ' . $this->ReadPropertyString('VehicleCaption')],
                 ['type' => 'Label', 'caption' => 'Antrieb: ' . $this->ReadPropertyString('PowertrainType')],
                 [
-                    'type' => 'ExpansionPanel',
-                    'caption' => 'Erweiterte Einstellungen',
-                    'expanded' => false,
-                    'items' => [
-                        [
-                            'type' => 'CheckBox',
-                            'name' => 'IgnoreCompatibilityPowertrainFilter',
-                            'caption' => 'Powertrain-Filter bei der Compatibility-Abfrage ignorieren'
-                        ],
-                        [
-                            'type' => 'Label',
-                            'caption' => 'Für von Smartcar falsch klassifizierte Fahrzeuge. Dadurch werden passende Capabilities anderer Powertrain-Typen angezeigt und auswählbar.'
-                        ],
-                        [
-                            'type' => 'CheckBox',
-                            'name' => 'UseBodyDespitePermissionError',
-                            'caption' => 'Daten trotz Smartcar-PERMISSION-Fehler verwenden, wenn ein Wert mitgeliefert wird'
-                        ],
-                        [
-                            'type' => 'Label',
-                            'caption' => 'Funktioniert nur bei manueller Datenabfrage. Bereits mitgelieferte Werte werden trotz status=ERROR/type=PERMISSION verarbeitet.'
-                        ],
-                        [
-                            'type' => 'CheckBox',
-                            'name' => 'ShowOEMUpdatedAtVariables',
-                            'caption' => 'OEM-Aktualisierungszeit je Signal als zusätzliche Variable anzeigen'
-                        ],
-                        [
-                            'type' => 'Label',
-                            'caption' => 'Zeitpunkt je Signal als zusätzliche Variable, als diese vom OEM aktualiert wurden. Bei fehlerhaften Permissions wird kein Zeitpunkt angezeigt'
-                        ]
-                    ]
+                    'type' => 'CheckBox',
+                    'name' => 'ShowOEMUpdatedAtVariables',
+                    'caption' => 'OEM-Aktualisierungszeit je Signal als zusätzliche Variable anzeigen'
                 ],
                 [
                     'type' => 'Label',
-                    'caption' => 'Die Auswahl unten bestimmt nur, welche Variablen in IP-Symcon erstellt werden. Die Zugriffsberechtigungen werden ausschließlich unter Smartcar → Configuration → Vehicle Access verwaltet. Nach Änderungen ist zwingen der Button zu betätigen.'
+                    'caption' => 'Die Auswahl unten bestimmt nur, welche kompatiblen Signale und Befehle in IP-Symcon verwendet werden. Welche Berechtigungen Smartcar anfordert, wird unter Smartcar → Configuration → Vehicle Access festgelegt. Bei bestehenden Fahrzeugen werden Änderungen erst nach „Vehicle Access synchronisieren“ über den Smartcar-Reauthentication-Flow wirksam.'
                 ],
                 [
                 'type' => 'List',
@@ -336,32 +305,10 @@ class SmartcarVehicle extends IPSModuleStrict
         $cacheAt = $this->ReadAttributeInteger('CompatibilityCacheAt');
         $cacheRaw = $this->ReadAttributeString('CompatibilityCache');
 
-        $ignorePowertrainFilter =
-            $this->ReadPropertyBoolean(
-                'IgnoreCompatibilityPowertrainFilter'
-            );
-
-        $cacheIgnorePowertrain =
-            $this->ReadAttributeBoolean(
-                'CompatibilityCacheIgnorePowertrain'
-            );
-
-        if (
-            !$forceReload
-            && $cacheRaw !== ''
-            && $cacheAt > (time() - 86400)
-            && $cacheIgnorePowertrain === $ignorePowertrainFilter
-        ) {
+        if (!$forceReload && $cacheRaw !== '' && $cacheAt > (time() - 86400)) {
             $cached = json_decode($cacheRaw, true);
             if (is_array($cached)) {
-                $this->SendDebug(
-                    'Compatibility/Cache',
-                    'Cache verwendet. Einträge: ' .
-                    count($cached) .
-                    ', IgnorePowertrain=' .
-                    ($ignorePowertrainFilter ? 'true' : 'false'),
-                    0
-                );
+                $this->SendDebug('Compatibility/Cache', 'Cache verwendet. Einträge: ' . count($cached), 0);
                 return $cached;
             }
         }
@@ -369,20 +316,17 @@ class SmartcarVehicle extends IPSModuleStrict
         $make = $this->NormalizeCompatibilityMake($this->ReadPropertyString('Make'));
         $model = $this->ReadPropertyString('Model');
         $year = $this->ReadPropertyInteger('Year');
+        $powertrainType = strtoupper(trim($this->ReadPropertyString('PowertrainType')));
 
-        $reportedPowertrainType =
-            strtoupper(
-                trim(
-                    $this->ReadPropertyString(
-                        'PowertrainType'
-                    )
-                )
-            );
+       
 
-        $powertrainType =
-            $ignorePowertrainFilter
-                ? ''
-                : $reportedPowertrainType;
+        //Test für falsch zugeordnete PowertrainType, z.B. ICE bei einem Elektrofahrzeug.
+         
+        /*
+        if ($powertrainType === 'ICE') {
+            $powertrainType = '';
+        }
+        */
 
         $region = 'EUROPE';
 
@@ -398,9 +342,7 @@ class SmartcarVehicle extends IPSModuleStrict
             'make' => $make,
             'model' => $model,
             'year' => $year,
-            'reportedPowertrainType' => $reportedPowertrainType,
-            'effectivePowertrainType' => $powertrainType,
-            'ignorePowertrainFilter' => $ignorePowertrainFilter,
+            'powertrainType' => $powertrainType,
             'region' => $region
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
@@ -475,17 +417,9 @@ class SmartcarVehicle extends IPSModuleStrict
                 json_encode($filtered, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
             );
             $this->WriteAttributeInteger('CompatibilityCacheAt', time());
-            $this->WriteAttributeBoolean(
-                'CompatibilityCacheIgnorePowertrain',
-                $ignorePowertrainFilter
-            );
         } else {
             $this->WriteAttributeString('CompatibilityCache', '[]');
             $this->WriteAttributeInteger('CompatibilityCacheAt', 0);
-            $this->WriteAttributeBoolean(
-                'CompatibilityCacheIgnorePowertrain',
-                $ignorePowertrainFilter
-            );
             $this->SendDebug('Compatibility/Cache', 'Leeres Ergebnis wird nicht gecacht.', 0);
         }
 
@@ -761,67 +695,15 @@ class SmartcarVehicle extends IPSModuleStrict
     private function ApplySignalFromV3(string $code, array $body, ?array $status, array $definitionMeta, array $signalMeta = []): bool
     {
         if ($status !== null && isset($status['value'])) {
-            $statusValue =
-                strtoupper(
-                    (string)$status['value']
-                );
+            $statusValue = strtoupper((string)$status['value']);
 
-            if (
-                $statusValue !== 'SUCCESS'
-                && $statusValue !== 'OK'
-            ) {
-                $error =
-                    is_array(
-                        $status['error']
-                        ?? null
-                    )
-                        ? $status['error']
-                        : [];
-
-                $errorType =
-                    strtoupper(
-                        (string)(
-                            $error['type']
-                            ?? ''
-                        )
-                    );
-
-                $useBodyDespitePermissionError =
-                    $this->ReadPropertyBoolean(
-                        'UseBodyDespitePermissionError'
-                    );
-
-                $canUsePermissionBody =
-                    $useBodyDespitePermissionError
-                    && $errorType === 'PERMISSION'
-                    && !empty($body);
-
-                if (!$canUsePermissionBody) {
-                    $this->SendDebug(
-                        'SignalStatus/' . $code,
-                        json_encode([
-                            'status' => $status,
-                            'bodyPresent' => !empty($body),
-                            'permissionOverride' =>
-                                $useBodyDespitePermissionError
-                        ], JSON_UNESCAPED_SLASHES |
-                           JSON_UNESCAPED_UNICODE),
-                        0
-                    );
-
-                    return false;
-                }
-
+            if ($statusValue !== 'SUCCESS' && $statusValue !== 'OK') {
                 $this->SendDebug(
-                    'SignalStatus/PermissionOverride/' .
-                    $code,
-                    json_encode([
-                        'status' => $status,
-                        'body' => $body
-                    ], JSON_UNESCAPED_SLASHES |
-                       JSON_UNESCAPED_UNICODE),
+                    'SignalStatus/' . $code,
+                    json_encode($status, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
                     0
                 );
+                return false;
             }
         }
 
@@ -1110,7 +992,7 @@ class SmartcarVehicle extends IPSModuleStrict
 
     public function GenerateConnectURL(): string
     {
-        $this->SendDebug('Connect/Start', 'Vehicle Access synchronisieren gestartet (Phase 1: Connect).', 0);
+        $this->SendDebug('Connect/Start', 'Vehicle Access synchronisieren gestartet (Smartcar Reauthentication).', 0);
 
         if (!$this->HasParentConnection()) {
             return 'Fehler: Kein Smartcar Splitter verbunden.';
@@ -1125,10 +1007,11 @@ class SmartcarVehicle extends IPSModuleStrict
         $state = 'vehicle_access_sync_' . $vehicleId . '_' . bin2hex(random_bytes(8));
 
         $request = [
-            'DataID'  => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
-            'Command' => 'BuildConnectURL',
-            'Mode'    => 'live',
-            'State'   => $state
+            'DataID'    => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
+            'Command'   => 'BuildAuthorizationURL',
+            'VehicleID' => $vehicleId,
+            'Mode'      => 'live',
+            'State'     => $state
         ];
 
         $this->SendDebug(
@@ -1150,6 +1033,62 @@ class SmartcarVehicle extends IPSModuleStrict
         }
 
         return (string)($decoded['url'] ?? '');
+    }
+
+    public function UpdateGrantedPermissions(array $permissions): void
+    {
+        $normalized = [];
+
+        foreach ($permissions as $permission) {
+            if (is_string($permission) || is_numeric($permission)) {
+                $value = trim((string)$permission);
+            } elseif (is_array($permission)) {
+                $value = trim((string)(
+                    $permission['permission']
+                    ?? $permission['name']
+                    ?? $permission['id']
+                    ?? ''
+                ));
+            } else {
+                $value = '';
+            }
+
+            if ($value !== '') {
+                $normalized[$value] = true;
+            }
+        }
+
+        $normalized = array_keys($normalized);
+        sort($normalized, SORT_STRING);
+
+        $encoded = json_encode(
+            $normalized,
+            JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+        );
+
+        if ($encoded === false) {
+            $encoded = '[]';
+        }
+
+        if ($this->ReadAttributeString('GrantedPermissions') !== $encoded) {
+            $this->WriteAttributeString('GrantedPermissions', $encoded);
+
+            $this->SendDebug(
+                'Permissions/Granted',
+                'Aktuelle Connection-Permissions gespeichert: ' . $encoded,
+                0
+            );
+        }
+    }
+
+    public function GetGrantedPermissions(): array
+    {
+        $permissions = json_decode(
+            $this->ReadAttributeString('GrantedPermissions'),
+            true
+        );
+
+        return is_array($permissions) ? $permissions : [];
     }
 
     private function GetSelectedPermissions(): array
