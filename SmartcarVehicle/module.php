@@ -152,7 +152,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 ],
                 [
                     'type' => 'Label',
-                    'caption' => 'Die Signale und Berechtigungen werden ausschließlich über Smartcar → Configuration → Vehicle Access festgelegt. Variablen werden erst angelegt, wenn Smartcar dafür tatsächlich Daten liefert. Liefert ein bereits vorhandenes Signal später einen Fehler, kann es als „(nicht verifiziert)“ markiert werden.'
+                    'caption' => 'Die Signale und Berechtigungen werden ausschließlich über Smartcar → Configuration → Vehicle Access festgelegt. Variablen werden erst angelegt, wenn Smartcar dafür tatsächlich nutzbare Daten liefert.'
                 ]
             ],
             'actions' => [
@@ -640,7 +640,7 @@ class SmartcarVehicle extends IPSModuleStrict
             }
 
             $baseName = (string)($variable['name'] ?? $ident);
-            $moduleName = $verified ? $baseName : $baseName . ' (nicht verifiziert)';
+            $moduleName = $verified ? $baseName : $baseName;
             $this->UpdateModuleManagedVariableName($ident, $baseName, $moduleName);
         }
     }
@@ -876,7 +876,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 continue;
             }
             $baseName = (string)($variable['name'] ?? $ident);
-            $moduleName = $verified ? $baseName : $baseName . ' (nicht verifiziert)';
+            $moduleName = $verified ? $baseName : $baseName;
             $this->RegisterOrUpdateTypedVariable(
                 $ident,
                 $moduleName,
@@ -906,7 +906,7 @@ class SmartcarVehicle extends IPSModuleStrict
         // Bestehende Installationen ohne Tracking nur übernehmen, wenn der Name noch
         // eindeutig dem Modulstandard entspricht. Benutzerdefinierte Namen bleiben tabu.
         if ($previousModuleName === '') {
-            if ($currentName !== $baseName && $currentName !== $baseName . ' (nicht verifiziert)' && $currentName !== $newModuleName) {
+            if ($currentName !== $baseName && $currentName !== $baseName && $currentName !== $newModuleName) {
                 return;
             }
             $previousModuleName = $currentName;
