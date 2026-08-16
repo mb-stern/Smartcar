@@ -130,7 +130,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 ],
                 [
                     'type' => 'Label',
-                    'caption' => 'Die Signale und Berechtigungen werden ausschließlich über Smartcar → Configuration → Vehicle Access festgelegt. Es gibt keine Compatibility-Filterung mehr. Ein Signal bleibt „(nicht verifiziert)“, bis eine echte API- oder Webhook-Antwort dafür erfolgreich war.'
+                    'caption' => 'Die Signale und Berechtigungen werden ausschließlich über Smartcar → Configuration → Vehicle Access festgelegt. Variablen werden erst angelegt, wenn Smartcar dafür tatsächlich Daten liefert. Liefert ein bereits vorhandenes Signal später einen Fehler, kann es als „(nicht verifiziert)“ markiert werden.'
                 ]
             ],
             'actions' => [
@@ -310,9 +310,11 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $definition = $this->GetSignalDefinition($code, $body);
         $variables = $this->GetVariablesFromDefinition($definition, $body);
-        $this->EnsureSignalVariables($code, $variables, $verified);
 
         if (!$verified) {
+            // Ein Fehler darf keine neue Variable erzeugen. Bereits vorhandene,
+            // noch vom Modul benannte Variablen werden lediglich markiert.
+            $this->SetExistingSignalVerificationState($code, $variables, false);
             $this->SendDebug(
                 'SignalStatus/' . $code,
                 json_encode($status, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
@@ -321,22 +323,40 @@ class SmartcarVehicle extends IPSModuleStrict
             return false;
         }
 
-        $changed = false;
+        if (empty($body)) {
+            $this->SendDebug(
+                'SignalData/' . $code,
+                'Erfolgreicher Status, aber keine Daten im body. Keine Variable angelegt.',
+                0
+            );
+            return false;
+        }
 
+        // Nur Untervariablen berücksichtigen, für die Smartcar tatsächlich
+        // einen Wert geliefert hat. Dadurch entstehen keine leeren Platzhalter.
+        $variablesWithData = [];
+        foreach ($variables as $variable) {
+            $source = (string)($variable['source'] ?? 'value');
+            if (array_key_exists($source, $body)) {
+                $variablesWithData[] = $variable;
+            }
+        }
+
+        // Bekannte Signale: Nur Variablen mit real vorhandenen Daten anlegen.
+        if (!empty($variablesWithData)) {
+            $this->EnsureSignalVariables($code, $variablesWithData, true);
+        }
+
+        $changed = false;
         $signalBasePosition = $this->GetSignalBasePosition($code);
 
-        foreach ($variables as $variableIndex => $variable) {
+        foreach ($variablesWithData as $variableIndex => $variable) {
             $ident = (string)($variable['ident'] ?? '');
             if ($ident === '') {
                 continue;
             }
 
             $source = (string)($variable['source'] ?? 'value');
-
-            if (!array_key_exists($source, $body)) {
-                continue;
-            }
-
             $value = $body[$source];
 
             if (isset($variable['convert']) && is_callable($variable['convert'])) {
@@ -358,14 +378,12 @@ class SmartcarVehicle extends IPSModuleStrict
             );
         }
 
-        if (empty($variables) && !empty($body)) {
+        // Unbekanntes Signal mit echtem Inhalt: den kompletten body als JSON
+        // anlegen. Auch hier nur, wenn tatsächlich Daten gekommen sind.
+        if (empty($variablesWithData) && !empty($body)) {
             $ident = (string)($definition['ident'] ?? '');
             if ($ident !== '') {
                 $value = json_encode($body, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-
-                if ($this->TypedVariableValueDiffers($ident, $value, VARIABLETYPE_STRING)) {
-                    $changed = true;
-                }
 
                 $this->RegisterOrUpdateTypedVariable(
                     $ident,
@@ -376,6 +394,12 @@ class SmartcarVehicle extends IPSModuleStrict
                     false,
                     $signalBasePosition
                 );
+                $this->UpdateModuleManagedVariableName(
+                    $ident,
+                    (string)($definition['name'] ?? $code),
+                    (string)($definition['name'] ?? $code)
+                );
+                $changed = true;
             }
         }
 
@@ -408,7 +432,7 @@ class SmartcarVehicle extends IPSModuleStrict
                     VARIABLETYPE_INTEGER,
                     '~UnixTimestamp',
                     false,
-                    $signalBasePosition + max(1, count($variables))
+                    $signalBasePosition + max(1, count($variablesWithData))
                 );
             }
         }
@@ -422,6 +446,20 @@ class SmartcarVehicle extends IPSModuleStrict
         }
 
         return $changed;
+    }
+
+    private function SetExistingSignalVerificationState(string $signalCode, array $variables, bool $verified): void
+    {
+        foreach ($variables as $variable) {
+            $ident = (string)($variable['ident'] ?? '');
+            if ($ident === '' || !@$this->GetIDForIdent($ident)) {
+                continue;
+            }
+
+            $baseName = (string)($variable['name'] ?? $ident);
+            $moduleName = $verified ? $baseName : $baseName . ' (nicht verifiziert)';
+            $this->UpdateModuleManagedVariableName($ident, $baseName, $moduleName);
+        }
     }
 
 
