@@ -34,6 +34,10 @@ class SmartcarSplitter extends IPSModuleStrict
     {
         parent::ApplyChanges();
 
+        // Modul-Hooks sind volatil. Nach Updates/Neuladen deshalb sicherstellen,
+        // dass der Hook für diese Splitter-Instanz wieder registriert ist.
+        $this->RegisterHook('smartcar_' . $this->InstanceID);
+
         $hookAddress = 'smartcar_' . $this->InstanceID;
         $hookPath = '/hook/' . $hookAddress;
 
@@ -1039,6 +1043,7 @@ class SmartcarSplitter extends IPSModuleStrict
         $vehicleId =
             (string)(
                 $payload['vehicleId']
+                ?? $payload['vehicle']['id']
                 ?? $payload['data']['vehicle']['id']
                 ?? $payload['data']['vehicleId']
                 ?? ''
@@ -1095,7 +1100,8 @@ class SmartcarSplitter extends IPSModuleStrict
                         is_array($trigger)
                         && strtoupper(
                             (string)(
-                                $trigger['type']
+                                $trigger['code']
+                                ?? $trigger['type']
                                 ?? ''
                             )
                         ) === 'FIRST_DELIVERY'

@@ -36,6 +36,7 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $this->CreateProfile();
         $this->EnsureLastSignalsAtVariable();
+        $this->ApplyOEMTimestampVisibility();
 
         if ($this->ReadPropertyString('VehicleID') === '') {
             $this->SetStatus(201);
@@ -177,8 +178,6 @@ class SmartcarVehicle extends IPSModuleStrict
 
     public function SyncVehicleAccessSignals(): void
     {
-        $this->SendDebug('VehicleAccess/Signals', 'Abruf der freigegebenen V3-Signale gestartet.', 0);
-
         if (!$this->HasParentConnection()) {
             $this->SendDebug('VehicleAccess/Error', 'Kein Splitter/Parent verbunden.', 0);
             return;
@@ -213,11 +212,14 @@ class SmartcarVehicle extends IPSModuleStrict
             return;
         }
 
-        $count = 0;
+        $successful = [];
+        $unsuccessful = [];
+
         foreach ($signals as $signal) {
             if (!is_array($signal)) {
                 continue;
             }
+
             $attributes = is_array($signal['attributes'] ?? null) ? $signal['attributes'] : $signal;
             $signalCode = trim((string)($attributes['code'] ?? $signal['code'] ?? $signal['id'] ?? ''));
             if ($signalCode === '') {
@@ -226,14 +228,50 @@ class SmartcarVehicle extends IPSModuleStrict
 
             $body = is_array($attributes['body'] ?? null) ? $attributes['body'] : [];
             $status = is_array($attributes['status'] ?? null) ? $attributes['status'] : null;
-            $meta = is_array($signal['meta'] ?? null) ? $signal['meta'] : (is_array($attributes['meta'] ?? null) ? $attributes['meta'] : []);
-            $definition = $this->GetSignalDefinition($signalCode, $body);
+            $meta = is_array($signal['meta'] ?? null)
+                ? $signal['meta']
+                : (is_array($attributes['meta'] ?? null) ? $attributes['meta'] : []);
 
-            $this->ApplySignalFromV3($signalCode, $body, $status, $definition, $meta);
-            $count++;
+            $statusValue = strtoupper((string)($status['value'] ?? ''));
+            $verified = $status === null
+                || $statusValue === ''
+                || $statusValue === 'SUCCESS'
+                || $statusValue === 'OK';
+
+            if ($verified && !empty($body)) {
+                $successful[$signalCode] = $body;
+            } else {
+                $error = is_array($status['error'] ?? null) ? $status['error'] : [];
+                $unsuccessful[$signalCode] = [
+                    'status' => $statusValue !== '' ? $statusValue : 'NO_DATA',
+                    'code' => (string)($error['code'] ?? ''),
+                    'detail' => (string)($error['detail'] ?? '')
+                ];
+            }
+
+            $this->ApplySignalFromV3(
+                $signalCode,
+                $body,
+                $status,
+                $this->GetSignalDefinition($signalCode, $body),
+                $meta,
+                false
+            );
         }
 
-        $this->SendDebug('VehicleAccess/Signals', 'Verarbeitete Signale: ' . $count, 0);
+        $this->TouchLastSignalsAt();
+
+        $this->SendDebug(
+            'VehicleAccess/Erfolgreiche Signale',
+            json_encode($successful, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            0
+        );
+
+        $this->SendDebug(
+            'VehicleAccess/Nicht erfolgreiche Signale',
+            json_encode($unsuccessful, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            0
+        );
     }
 
     public function ProcessWebhookSignals(string $payloadJson): void
@@ -248,6 +286,7 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $payloadVehicleId = (string)(
             $payload['vehicleId']
+            ?? $payload['vehicle']['id']
             ?? $payload['data']['vehicle']['id']
             ?? $payload['data']['vehicleId']
             ?? ''
@@ -322,9 +361,18 @@ class SmartcarVehicle extends IPSModuleStrict
         if (!empty($oemDates)) {
             $this->SendDebug('WebhookVehicle/OEM-Date', json_encode($oemDates, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
         }
+
+        $this->TouchLastSignalsAt();
     }
 
-    private function ApplySignalFromV3(string $code, array $body, ?array $status, array $definitionMeta, array $signalMeta = []): bool
+    private function ApplySignalFromV3(
+        string $code,
+        array $body,
+        ?array $status,
+        array $definitionMeta,
+        array $signalMeta = [],
+        bool $logStatus = true
+    ): bool
     {
         $statusValue = strtoupper((string)($status['value'] ?? ''));
         $verified = $status === null || $statusValue === '' || $statusValue === 'SUCCESS' || $statusValue === 'OK';
@@ -336,20 +384,24 @@ class SmartcarVehicle extends IPSModuleStrict
             // Ein Fehler darf keine neue Variable erzeugen. Bereits vorhandene,
             // noch vom Modul benannte Variablen werden lediglich markiert.
             $this->SetExistingSignalVerificationState($code, $variables, false);
-            $this->SendDebug(
-                'SignalStatus/' . $code,
-                json_encode($status, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
-                0
-            );
+            if ($logStatus) {
+                $this->SendDebug(
+                    'SignalStatus/' . $code,
+                    json_encode($status, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                    0
+                );
+            }
             return false;
         }
 
         if (empty($body)) {
-            $this->SendDebug(
-                'SignalData/' . $code,
-                'Erfolgreicher Status, aber keine Daten im body. Keine Variable angelegt.',
-                0
-            );
+            if ($logStatus) {
+                $this->SendDebug(
+                    'SignalData/' . $code,
+                    'Erfolgreicher Status, aber keine Daten im body. Keine Variable angelegt.',
+                    0
+                );
+            }
             return false;
         }
 
@@ -455,23 +507,43 @@ class SmartcarVehicle extends IPSModuleStrict
                     false,
                     $signalBasePosition + max(1, count($variablesWithData))
                 );
-            }
-        }
 
-        if ($changed) {
-            $this->EnsureLastSignalsAtVariable();
-            $lastSignalsId = @$this->GetIDForIdent('LastSignalsAt');
-
-            if ($lastSignalsId) {
-                $now = time();
-
-                if ((int)GetValue($lastSignalsId) !== $now) {
-                    $this->SetValue('LastSignalsAt', $now);
+                $oemId = @$this->GetIDForIdent($oemIdent);
+                if ($oemId) {
+                    IPS_SetHidden($oemId, false);
                 }
             }
         }
 
         return $changed;
+    }
+
+    private function TouchLastSignalsAt(): void
+    {
+        $this->EnsureLastSignalsAtVariable();
+
+        if (@$this->GetIDForIdent('LastSignalsAt')) {
+            $this->SetValue('LastSignalsAt', time());
+        }
+    }
+
+    private function ApplyOEMTimestampVisibility(): void
+    {
+        $show = $this->ReadPropertyBoolean('ShowOEMUpdatedAtVariables');
+
+        foreach (IPS_GetChildrenIDs($this->InstanceID) as $childId) {
+            $object = @IPS_GetObject($childId);
+            if (!is_array($object)) {
+                continue;
+            }
+
+            $ident = (string)($object['ObjectIdent'] ?? '');
+            if (!str_ends_with($ident, '_OEMUpdatedAt')) {
+                continue;
+            }
+
+            IPS_SetHidden($childId, !$show);
+        }
     }
 
     private function SetExistingSignalVerificationState(string $signalCode, array $variables, bool $verified): void
