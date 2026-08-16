@@ -176,7 +176,7 @@ class SmartcarVehicle extends IPSModuleStrict
                         ['caption' => 'Name', 'name' => 'Name', 'width' => '260px'],
                         ['caption' => 'Typ', 'name' => 'Kind', 'width' => '110px'],
                         ['caption' => 'Smartcar', 'name' => 'Source', 'width' => 'auto'],
-                        ['caption' => 'Ident', 'name' => 'Ident', 'width' => '0px']
+                        ['caption' => 'Ident', 'name' => 'Ident', 'width' => '0px', 'save' => true]
                     ],
                     'values' => $this->BuildVariableSelectionRows()
                 ]
@@ -638,7 +638,7 @@ class SmartcarVehicle extends IPSModuleStrict
 
                 $ident = (string)($object['ObjectIdent'] ?? '');
                 if (str_ends_with($ident, '_OEMUpdatedAt') && (($object['ObjectType'] ?? -1) === 2)) {
-                    IPS_DeleteVariable($childId);
+                    $this->UnregisterVariable($ident);
                 }
             }
             return;
@@ -1078,16 +1078,21 @@ class SmartcarVehicle extends IPSModuleStrict
         if (!is_array($rows)) {
             return [];
         }
+
         $map = [];
         foreach ($rows as $row) {
             if (!is_array($row)) {
                 continue;
             }
+
             $ident = trim((string)($row['Ident'] ?? $row['ident'] ?? ''));
-            if ($ident !== '') {
-                $map[$ident] = (bool)($row['Active'] ?? $row['active'] ?? true);
+            if ($ident === '') {
+                continue;
             }
+
+            $map[$ident] = (bool)($row['Active'] ?? $row['active'] ?? true);
         }
+
         return $map;
     }
 
@@ -1176,7 +1181,7 @@ class SmartcarVehicle extends IPSModuleStrict
             }
             $id = @$this->GetIDForIdent($ident);
             if ($id && IPS_VariableExists($id)) {
-                IPS_DeleteVariable($id);
+                $this->UnregisterVariable($ident);
             }
         }
     }
@@ -1236,7 +1241,7 @@ class SmartcarVehicle extends IPSModuleStrict
 
             if ($definition === null || !$this->IsVariableEnabled($ident)) {
                 if ($existingId && IPS_VariableExists($existingId)) {
-                    IPS_DeleteVariable($existingId);
+                    $this->UnregisterVariable($ident);
                 }
                 continue;
             }
