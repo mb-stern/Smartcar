@@ -423,7 +423,6 @@ class SmartcarVehicle extends IPSModuleStrict
             0
         );
 
-        $this->RefreshVariableSelectionForm();
     }
 
 

@@ -2353,21 +2353,12 @@ class SmartcarSplitter extends IPSModuleStrict
             $userId
         );
 
-        IPS_ApplyChanges(
-            $instanceId
-        );
-
-        if (
-            function_exists(
-                'SMCARV_SyncVehicleAccessSignals'
-            )
-        ) {
-            SMCARV_SyncVehicleAccessSignals(
-                $instanceId
-            );
-        }
-
-        $this->SendDebug(
+        
+        // Kein ApplyChanges und kein Signal-Sync an dieser Stelle:
+        // direkt danach werden die Connections vollständig eingelesen und
+        // die Vehicle-Instanz einmal konsistent aktualisiert. Der Signal-Sync
+        // erfolgt anschließend genau einmal am Ende des Connect-Flows.
+$this->SendDebug(
             'Connect/UpdateUserID',
             'UserID gespeichert in Instanz ' .
             $instanceId,
