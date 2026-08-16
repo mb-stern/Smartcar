@@ -1,4 +1,5 @@
 <?php
+// Build 2026-08-16: kompakte Webhook-Auswahl ohne Statusspalte/ExpansionPanel.
 // Build: 2026-08-16 Webhook checkbox list v3
 
 class SmartcarVehicle extends IPSModuleStrict
@@ -234,17 +235,10 @@ class SmartcarVehicle extends IPSModuleStrict
                 }
 
                 $subscribed = (bool)($webhook['subscribed'] ?? false);
-                $enabled = (bool)($webhook['isEnabled'] ?? false);
-
-                $status = $subscribed ? 'Zugeordnet' : 'Nicht zugeordnet';
-                if (!$enabled) {
-                    $status .= ' / Webhook inaktiv';
-                }
 
                 $webhookRows[] = [
                     'Active' => $subscribed,
                     'Name' => (string)($webhook['name'] ?? $webhookId),
-                    'Status' => $status,
                     'WebhookID' => $webhookId
                 ];
             }
@@ -256,35 +250,35 @@ class SmartcarVehicle extends IPSModuleStrict
                 ];
             } else {
                 $webhookPanelItems[] = [
-                    'type' => 'List',
-                    'name' => 'WebhookSelection',
-                    'caption' => 'Webhooks',
-                    'rowCount' => 3,
-                    'add' => false,
-                    'delete' => false,
-                    'columns' => [
-                        ['caption' => 'Aktiv', 'name' => 'Active', 'width' => '70px', 'edit' => ['type' => 'CheckBox']],
-                        ['caption' => 'Webhook', 'name' => 'Name', 'width' => '260px'],
-                        ['caption' => 'Status', 'name' => 'Status', 'width' => 'auto'],
-                        ['caption' => 'WebhookID', 'name' => 'WebhookID', 'width' => '0px', 'save' => true]
-                    ],
-                    'values' => $webhookRows
-                ];
-
-                $webhookPanelItems[] = [
-                    'type' => 'Button',
-                    'caption' => 'Webhook-Zuordnung übernehmen / neu laden',
-                    'onClick' => '$rows = []; foreach ($WebhookSelection as $row) { $rows[] = $row; } echo SMCARV_ApplyWebhookSelection($id, json_encode($rows));'
+                    'type' => 'RowLayout',
+                    'items' => [
+                        [
+                            'type' => 'List',
+                            'name' => 'WebhookSelection',
+                            'caption' => 'Webhooks',
+                            'rowCount' => 3,
+                            'add' => false,
+                            'delete' => false,
+                            'columns' => [
+                                ['caption' => 'Aktiv', 'name' => 'Active', 'width' => '60px', 'edit' => ['type' => 'CheckBox']],
+                                ['caption' => 'Webhook', 'name' => 'Name', 'width' => '180px'],
+                                ['caption' => 'WebhookID', 'name' => 'WebhookID', 'width' => '0px', 'save' => true]
+                            ],
+                            'values' => $webhookRows
+                        ],
+                        [
+                            'type' => 'Button',
+                            'caption' => 'Übernehmen / neu laden',
+                            'onClick' => '$rows = []; foreach ($WebhookSelection as $row) { $rows[] = $row; } echo SMCARV_ApplyWebhookSelection($id, json_encode($rows));'
+                        ]
+                    ]
                 ];
             }
         }
 
-        $form['actions'][] = [
-            'type' => 'ExpansionPanel',
-            'caption' => 'Webhook-Zuordnungen',
-            'expanded' => false,
-            'items' => $webhookPanelItems
-        ];
+        foreach ($webhookPanelItems as $webhookItem) {
+            $form['actions'][] = $webhookItem;
+        }
 
         return json_encode($form, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     }
