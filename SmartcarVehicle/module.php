@@ -1,4 +1,5 @@
 <?php
+// Build: 2026-08-16 Webhook checkbox list v3
 
 class SmartcarVehicle extends IPSModuleStrict
 {
@@ -17,7 +18,6 @@ class SmartcarVehicle extends IPSModuleStrict
     $this->RegisterPropertyString('Permissions', '[]');
     $this->RegisterPropertyBoolean('ShowOEMUpdatedAtVariables', false);
     $this->RegisterPropertyString('VariableSelection', '[]');
-    $this->RegisterPropertyString('WebhookSelection', '[]');
     $this->RegisterAttributeString('DiscoveredVariables', '{}');
     $this->RegisterAttributeString('LastSuccessfulSignalPayloads', '{}');
     $this->RegisterAttributeString('LastOEMSignalTimes', '{}');
