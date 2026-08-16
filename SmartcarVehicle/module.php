@@ -35,6 +35,7 @@ class SmartcarVehicle extends IPSModuleStrict
         parent::ApplyChanges();
 
         $this->CreateProfile();
+        $this->EnsureLastSignalsAtVariable();
 
         if ($this->ReadPropertyString('VehicleID') === '') {
             $this->SetStatus(201);
@@ -50,6 +51,26 @@ class SmartcarVehicle extends IPSModuleStrict
         // bevor das Parent-Interface des Splitters wieder vollständig bereitsteht.
         // Die Signale werden bewusst nur über den Button bzw. nach einem
         // abgeschlossenen Connect-/Reauth-Flow synchronisiert.
+    }
+
+
+    private function EnsureLastSignalsAtVariable(): void
+    {
+        $existingId = @$this->GetIDForIdent('LastSignalsAt');
+
+        if (!$existingId) {
+            $this->RegisterVariableInteger(
+                'LastSignalsAt',
+                'Letzte Signale',
+                '~UnixTimestamp'
+            );
+
+            $existingId = @$this->GetIDForIdent('LastSignalsAt');
+        }
+
+        if ($existingId) {
+            IPS_SetPosition($existingId, 10);
+        }
     }
 
     public function RequestAction($Ident, $Value): void
@@ -438,10 +459,15 @@ class SmartcarVehicle extends IPSModuleStrict
         }
 
         if ($changed) {
-            $now = time();
+            $this->EnsureLastSignalsAtVariable();
+            $lastSignalsId = @$this->GetIDForIdent('LastSignalsAt');
 
-            if ((int)$this->GetValue('LastSignalsAt') !== $now) {
-                $this->SetValue('LastSignalsAt', $now);
+            if ($lastSignalsId) {
+                $now = time();
+
+                if ((int)GetValue($lastSignalsId) !== $now) {
+                    SetValue($lastSignalsId, $now);
+                }
             }
         }
 
