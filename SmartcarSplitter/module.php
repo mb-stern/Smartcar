@@ -1886,13 +1886,6 @@ class SmartcarSplitter extends IPSModuleStrict
                     : $this->ExtractVehicleIdFromState($state)
             );
 
-        if ($vehicleId !== '' && $userId !== '') {
-            $this->UpdateVehicleUserId(
-                $vehicleId,
-                $userId
-            );
-        }
-
         // Connections zuerst aktualisieren, damit UserID und Connection-Daten
         // nach dem Connect auf dem aktuellen Stand sind.
         $this->SyncVehiclesFromConnectionsWithRetry();
@@ -2417,80 +2410,41 @@ $this->SendDebug(
                 $caption = $vehicleId;
             }
 
-            IPS_SetProperty(
-                $instanceId,
-                'VehicleID',
-                $vehicleId
+            // Alle Vehicle-Properties in einem einzigen Konfigurationsschritt
+            // aktualisieren. Das verhindert mehrere Formular-Neuladungen durch
+            // einzelne IPS_SetProperty()-Aufrufe.
+            $configuration = json_decode(
+                (string)IPS_GetConfiguration($instanceId),
+                true
+            );
+            if (!is_array($configuration)) {
+                $configuration = [];
+            }
+
+            $configuration['VehicleID'] = $vehicleId;
+            $configuration['ConnectionID'] = (string)($connection['connectionId'] ?? '');
+            $configuration['UserID'] = (string)($connection['userId'] ?? '');
+            $configuration['VehicleCaption'] = $caption;
+            $configuration['Make'] = (string)($connection['make'] ?? '');
+            $configuration['Model'] = (string)($connection['model'] ?? '');
+            $configuration['Year'] = (int)($connection['year'] ?? 0);
+            $configuration['PowertrainType'] = (string)($connection['powertrainType'] ?? '');
+            $configuration['Permissions'] = json_encode(
+                is_array($connection['permissions'] ?? null) ? $connection['permissions'] : [],
+                JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
             );
 
-            IPS_SetProperty(
-                $instanceId,
-                'ConnectionID',
-                (string)(
-                    $connection['connectionId']
-                    ?? ''
-                )
+            $newConfiguration = json_encode(
+                $configuration,
+                JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
             );
 
-            IPS_SetProperty(
-                $instanceId,
-                'UserID',
-                (string)(
-                    $connection['userId']
-                    ?? ''
-                )
-            );
-
-            IPS_SetProperty(
-                $instanceId,
-                'VehicleCaption',
-                $caption
-            );
-
-            IPS_SetProperty(
-                $instanceId,
-                'Make',
-                (string)(
-                    $connection['make']
-                    ?? ''
-                )
-            );
-
-            IPS_SetProperty(
-                $instanceId,
-                'Model',
-                (string)(
-                    $connection['model']
-                    ?? ''
-                )
-            );
-
-            IPS_SetProperty(
-                $instanceId,
-                'Year',
-                (int)(
-                    $connection['year']
-                    ?? 0
-                )
-            );
-
-            IPS_SetProperty(
-                $instanceId,
-                'PowertrainType',
-                (string)(
-                    $connection['powertrainType']
-                    ?? ''
-                )
-            );
-
-            IPS_SetProperty(
-                $instanceId,
-                'Permissions',
-                json_encode(
-                    is_array($connection['permissions'] ?? null) ? $connection['permissions'] : [],
-                    JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
-                )
-            );
+            if ((string)IPS_GetConfiguration($instanceId) !== $newConfiguration) {
+                IPS_SetConfiguration(
+                    $instanceId,
+                    $newConfiguration
+                );
+            }
 
             IPS_SetName(
                 $instanceId,

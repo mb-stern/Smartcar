@@ -204,6 +204,8 @@ class SmartcarVehicle extends IPSModuleStrict
 
     public function SyncVehicleAccessSignals(): void
     {
+        $selectionRowsBefore = $this->BuildVariableSelectionRows();
+
         if (!$this->HasParentConnection()) {
             $this->SendDebug('VehicleAccess/Error', 'Kein Splitter/Parent verbunden.', 0);
             return;
@@ -305,7 +307,10 @@ class SmartcarVehicle extends IPSModuleStrict
 
         // Beim bewussten Abruf auch die aktuell autorisierten Steuerungen abgleichen.
         $this->ApplyVehicleAccessCommands();
-        $this->RefreshVariableSelectionForm();
+        $selectionRowsAfter = $this->BuildVariableSelectionRows();
+        if ($selectionRowsAfter !== $selectionRowsBefore) {
+            $this->RefreshVariableSelectionForm();
+        }
     }
 
     public function ProcessWebhookSignals(string $payloadJson): void
