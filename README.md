@@ -18,7 +18,7 @@ Du findest alle Funktionen für das Smartcar-Symcon-Repository in den entspreche
 
 | Version | Datum | Änderungen |
 |----------|--------|------------|
-| **4.6** | 016.08.2026 | - Die Kompatibilitärsprüfung der Fahrzeuginstanz entfällt, statt dessen werden alle empfangenen Datenpunkte, welche Werte enthalten, als Variablen angelegt.<br>- tttttt.|
+| 4.6 | 16.08.2026 | - Die Kompatibilitätsprüfung der Fahrzeuginstanz entfällt; alle empfangenen Datenpunkte mit gültigen Werten werden als Variablen angeboten.<br>- Verfügbare Signal- und Steuervariablen können im Konfigurationsformular individuell aktiviert oder deaktiviert werden.<br>- Steuervariablen werden automatisch anhand der über Vehicle Access erteilten Berechtigungen bereitgestellt. |
 | **4.5** | 09.08.2026 | - Der Webhook wird nun auf Aktualität geprüft und ältere Daten werden verworfen.<br>- In der Vehicle-Instanz kann nun der Powertrain-Filter deaktiviert werden.<br>- Einige Anpassungen zur API V3.|
 | **4.4** | 19.07.2026 | - Smartcar hat den Authorisierungsprozess geändert, dieser ist nun den neuen Vorgaben angepasst.Die Zugriffsberechtigungen werden nun ausschließlich unter Smartcar → Configuration → Vehicle Access verwaltet.<br>- Ein Fehler wurde beseitigt, dass eine fehlerhafte Vehicle-Instanz erstellt wurde.<br>- Der Konfigurator ist nun mit dem Element von Symcon aufgebaut. |
 | **4.3** | 12.07.2026 | - Variablen aktualisieren sich nur noch, wenn sich der Datenstand ändert.<br>- Der OEM Aktualisierungszeitpunkt kann über zusätzliche Variablen eingeblendet werden.<br>- Die Variablen bekommen beim Erstellen eine Positionen im Objektbaum, um die Übersichtlichkeit zu verbessern. |
