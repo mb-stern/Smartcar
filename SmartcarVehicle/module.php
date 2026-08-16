@@ -17,6 +17,7 @@ class SmartcarVehicle extends IPSModuleStrict
     $this->RegisterPropertyString('Permissions', '[]');
     $this->RegisterPropertyBoolean('ShowOEMUpdatedAtVariables', false);
     $this->RegisterPropertyString('VariableSelection', '[]');
+    $this->RegisterPropertyString('WebhookSelection', '[]');
     $this->RegisterAttributeString('DiscoveredVariables', '{}');
     $this->RegisterAttributeString('LastSuccessfulSignalPayloads', '{}');
     $this->RegisterAttributeString('LastOEMSignalTimes', '{}');
@@ -213,68 +214,63 @@ class SmartcarVehicle extends IPSModuleStrict
             ];
         } else {
             $webhooks = is_array($webhookOverview['webhooks'] ?? null) ? $webhookOverview['webhooks'] : [];
-
-            if (empty($webhooks)) {
-                $form['actions'][] = [
-                    'type' => 'Label',
-                    'caption' => 'Für diese Smartcar-Anwendung wurden keine Webhooks gefunden.'
-                ];
-            }
+            $webhookRows = [];
 
             foreach ($webhooks as $webhook) {
                 if (!is_array($webhook)) {
                     continue;
                 }
 
-                $webhookId = (string)($webhook['id'] ?? '');
+                $webhookId = trim((string)($webhook['id'] ?? ''));
                 if ($webhookId === '') {
                     continue;
                 }
 
-                $name = (string)($webhook['name'] ?? $webhookId);
                 $subscribed = (bool)($webhook['subscribed'] ?? false);
                 $enabled = (bool)($webhook['isEnabled'] ?? false);
-                $autoSubscribe = (bool)($webhook['autoSubscribe'] ?? false);
-                $signals = is_array($webhook['signals'] ?? null) ? $webhook['signals'] : [];
 
+                $status = $subscribed ? 'Zugeordnet' : 'Nicht zugeordnet';
+                if (!$enabled) {
+                    $status .= ' / Webhook inaktiv';
+                }
+
+                $webhookRows[] = [
+                    'Active' => $subscribed,
+                    'Name' => (string)($webhook['name'] ?? $webhookId),
+                    'Status' => $status,
+                    'WebhookID' => $webhookId
+                ];
+            }
+
+            if (empty($webhookRows)) {
                 $form['actions'][] = [
                     'type' => 'Label',
-                    'caption' =>
-                        ($subscribed ? '✓ Zugeordnet' : '○ Nicht zugeordnet') .
-                        ' | ' . $name .
-                        ' | Webhook ' . ($enabled ? 'aktiv' : 'inaktiv') .
-                        ($autoSubscribe ? ' | Auto-Subscribe' : '') .
-                        (!empty($signals) ? ' | Signale: ' . implode(', ', $signals) : '')
+                    'caption' => 'Für diese Smartcar-Anwendung wurden keine Webhooks gefunden.'
+                ];
+            } else {
+                $form['actions'][] = [
+                    'type' => 'List',
+                    'name' => 'WebhookSelection',
+                    'caption' => 'Webhooks',
+                    'rowCount' => 3,
+                    'add' => false,
+                    'delete' => false,
+                    'columns' => [
+                        ['caption' => 'Aktiv', 'name' => 'Active', 'width' => '70px', 'edit' => ['type' => 'CheckBox']],
+                        ['caption' => 'Webhook', 'name' => 'Name', 'width' => '260px'],
+                        ['caption' => 'Status', 'name' => 'Status', 'width' => 'auto'],
+                        ['caption' => 'WebhookID', 'name' => 'WebhookID', 'width' => '0px', 'save' => true]
+                    ],
+                    'values' => $webhookRows
                 ];
 
-                $escapedWebhookId = addslashes($webhookId);
-
-                if ($subscribed) {
-                    $form['actions'][] = [
-                        'type' => 'Button',
-                        'caption' => 'Webhook neu laden: ' . $name,
-                        'onClick' => "echo SMCARV_ReloadWebhook(\$id, '" . $escapedWebhookId . "');"
-                    ];
-                    $form['actions'][] = [
-                        'type' => 'Button',
-                        'caption' => 'Zuordnung entfernen: ' . $name,
-                        'onClick' => "echo SMCARV_UnsubscribeWebhook(\$id, '" . $escapedWebhookId . "');"
-                    ];
-                } else {
-                    $form['actions'][] = [
-                        'type' => 'Button',
-                        'caption' => 'Webhook zuordnen: ' . $name,
-                        'onClick' => "echo SMCARV_SubscribeWebhook(\$id, '" . $escapedWebhookId . "');"
-                    ];
-                }
+                $form['actions'][] = [
+                    'type' => 'Button',
+                    'caption' => 'Webhook-Zuordnung übernehmen / neu laden',
+                    'onClick' => 'echo SMCARV_ApplyWebhookSelection($id, json_encode($WebhookSelection));'
+                ];
             }
         }
-
-        $form['actions'][] = [
-            'type' => 'Button',
-            'caption' => 'Webhook-Liste aktualisieren',
-            'onClick' => 'SMCARV_ReloadWebhookForm($id);'
-        ];
 
         return json_encode($form, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     }
@@ -299,6 +295,133 @@ class SmartcarVehicle extends IPSModuleStrict
         $decoded = json_decode((string)$result, true);
         if (!is_array($decoded)) {
             return ['success' => false, 'error' => 'Ungültige Antwort vom Splitter.', 'webhooks' => []];
+        }
+
+        return $decoded;
+    }
+
+    public function ApplyWebhookSelection(string $selectionJson): string
+    {
+        if (!$this->HasParentConnection()) {
+            return 'Fehler: Kein Smartcar Splitter verbunden.';
+        }
+
+        $rows = json_decode($selectionJson, true);
+        if (!is_array($rows)) {
+            return 'Fehler: Webhook-Auswahl ist ungültig.';
+        }
+
+        $desired = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+
+            $webhookId = trim((string)($row['WebhookID'] ?? ''));
+            if ($webhookId !== '' && (bool)($row['Active'] ?? false)) {
+                $desired[$webhookId] = true;
+            }
+        }
+
+        $overview = $this->GetWebhookOverviewFromParent();
+        if (empty($overview['success'])) {
+            return 'Fehler: ' . (string)($overview['error'] ?? 'Webhook-Zuordnungen konnten nicht geladen werden.');
+        }
+
+        $webhooks = is_array($overview['webhooks'] ?? null) ? $overview['webhooks'] : [];
+        $current = [];
+        $known = [];
+
+        foreach ($webhooks as $webhook) {
+            if (!is_array($webhook)) {
+                continue;
+            }
+
+            $webhookId = trim((string)($webhook['id'] ?? ''));
+            if ($webhookId === '') {
+                continue;
+            }
+
+            $known[$webhookId] = true;
+            if ((bool)($webhook['subscribed'] ?? false)) {
+                $current[$webhookId] = true;
+            }
+        }
+
+        // Nur Webhooks berücksichtigen, die die Management API aktuell tatsächlich liefert.
+        $desired = array_intersect_key($desired, $known);
+
+        $toSubscribe = array_diff_key($desired, $current);
+        $toUnsubscribe = array_diff_key($current, $desired);
+        $hasChanges = !empty($toSubscribe) || !empty($toUnsubscribe);
+
+        $messages = [];
+
+        if ($hasChanges) {
+            foreach (array_keys($toUnsubscribe) as $webhookId) {
+                $result = $this->ExecuteWebhookManagementCommandRaw('UnsubscribeWebhook', $webhookId);
+                if (empty($result['success'])) {
+                    return 'Fehler beim Entfernen von Webhook ' . $webhookId . ': ' . (string)($result['error'] ?? 'Unbekannter Fehler');
+                }
+                $messages[] = 'entfernt';
+            }
+
+            foreach (array_keys($toSubscribe) as $webhookId) {
+                $result = $this->ExecuteWebhookManagementCommandRaw('SubscribeWebhook', $webhookId);
+                if (empty($result['success'])) {
+                    return 'Fehler beim Zuordnen von Webhook ' . $webhookId . ': ' . (string)($result['error'] ?? 'Unbekannter Fehler');
+                }
+                $messages[] = 'zugeordnet';
+            }
+        } else {
+            // Keine Änderung an den Häkchen: die weiterhin gewählten Webhooks neu abonnieren.
+            // Bei nur einem gewählten Webhook entspricht dies dem gewünschten "Neu laden".
+            foreach (array_keys($desired) as $webhookId) {
+                $result = $this->ExecuteWebhookManagementCommandRaw('ReloadWebhook', $webhookId);
+                if (empty($result['success'])) {
+                    return 'Fehler beim Neu laden von Webhook ' . $webhookId . ': ' . (string)($result['error'] ?? 'Unbekannter Fehler');
+                }
+                $messages[] = 'neu geladen';
+            }
+
+            if (empty($desired)) {
+                $this->ReloadForm();
+                return 'Keine Webhook-Zuordnung ausgewählt.';
+            }
+        }
+
+        $this->ReloadForm();
+
+        if ($hasChanges) {
+            return 'Webhook-Zuordnung wurde übernommen.';
+        }
+
+        return 'Webhook wurde neu geladen.';
+    }
+
+    private function ExecuteWebhookManagementCommandRaw(string $command, string $webhookId): array
+    {
+        $webhookId = trim($webhookId);
+        $vehicleId = trim($this->ReadPropertyString('VehicleID'));
+        $userId = trim($this->ReadPropertyString('UserID'));
+
+        if ($webhookId === '' || $vehicleId === '' || $userId === '') {
+            return ['success' => false, 'error' => 'WebhookID, VehicleID oder UserID fehlt.'];
+        }
+
+        $result = $this->SendDataToParent(json_encode([
+            'DataID' => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
+            'Command' => $command,
+            'WebhookID' => $webhookId,
+            'VehicleID' => $vehicleId,
+            'UserID' => $userId
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+
+        $this->SendDebug('WebhookManagement/' . $command, (string)$result, 0);
+
+        $decoded = json_decode((string)$result, true);
+        if (!is_array($decoded)) {
+            return ['success' => false, 'error' => (string)$result];
         }
 
         return $decoded;
