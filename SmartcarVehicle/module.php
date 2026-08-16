@@ -16,6 +16,9 @@ class SmartcarVehicle extends IPSModuleStrict
     $this->RegisterPropertyString('PowertrainType', '');
     $this->RegisterPropertyString('Permissions', '[]');
     $this->RegisterPropertyBoolean('ShowOEMUpdatedAtVariables', false);
+    $this->RegisterPropertyString('VariableSelection', '[]');
+    $this->RegisterAttributeString('DiscoveredVariables', '{}');
+    $this->RegisterAttributeString('LastSuccessfulSignalPayloads', '{}');
     $this->RegisterAttributeString('LastOEMSignalTimes', '{}');
     $this->RegisterAttributeString('ModuleVariableNames', '{}');
 
@@ -45,7 +48,9 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $this->SetStatus(102);
 
+        $this->ApplyVariableSelection();
         $this->ApplyVehicleAccessCommands();
+        $this->RestoreSelectedSignalsFromCache();
 
         // Kein API-/Parent-Aufruf in ApplyChanges():
         // Bei Modul-Updates kann IP-Symcon die Instanz bereits anwenden,
@@ -152,7 +157,23 @@ class SmartcarVehicle extends IPSModuleStrict
                 ],
                 [
                     'type' => 'Label',
-                    'caption' => 'Die Signale und Berechtigungen werden ausschließlich über Smartcar → Configuration → Vehicle Access festgelegt. Variablen werden erst angelegt, wenn Smartcar dafür tatsächlich nutzbare Daten liefert.'
+                    'caption' => 'Die Signale und Berechtigungen werden ausschließlich über Smartcar → Configuration → Vehicle Access festgelegt. Erkannte Variablen sind standardmäßig aktiv und können hier gezielt abgewählt werden.'
+                ],
+                [
+                    'type' => 'List',
+                    'name' => 'VariableSelection',
+                    'caption' => 'Variablen',
+                    'rowCount' => 14,
+                    'add' => false,
+                    'delete' => false,
+                    'columns' => [
+                        ['caption' => 'Aktiv', 'name' => 'Active', 'width' => '70px', 'edit' => ['type' => 'CheckBox']],
+                        ['caption' => 'Name', 'name' => 'Name', 'width' => '260px'],
+                        ['caption' => 'Typ', 'name' => 'Kind', 'width' => '110px'],
+                        ['caption' => 'Smartcar', 'name' => 'Source', 'width' => 'auto'],
+                        ['caption' => 'Ident', 'name' => 'Ident', 'width' => '0px']
+                    ],
+                    'values' => $this->BuildVariableSelectionRows()
                 ]
             ],
             'actions' => [
@@ -249,6 +270,10 @@ class SmartcarVehicle extends IPSModuleStrict
                 ];
             }
 
+            if ($verified && $this->HasMeaningfulSignalData($body)) {
+                $this->RememberSuccessfulSignal($signalCode, $body, $status, $meta);
+            }
+
             $this->ApplySignalFromV3(
                 $signalCode,
                 $body,
@@ -272,6 +297,10 @@ class SmartcarVehicle extends IPSModuleStrict
             json_encode($unsuccessful, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
             0
         );
+
+        // Beim bewussten Abruf auch die aktuell autorisierten Steuerungen abgleichen.
+        $this->ApplyVehicleAccessCommands();
+        $this->RefreshVariableSelectionForm();
     }
 
     public function ProcessWebhookSignals(string $payloadJson): void
@@ -361,6 +390,10 @@ class SmartcarVehicle extends IPSModuleStrict
                 ];
             }
 
+            if ($verified && $this->HasMeaningfulSignalData($body)) {
+                $this->RememberSuccessfulSignal($signalCode, $body, $status, $meta);
+            }
+
             $this->ApplySignalFromV3(
                 $signalCode,
                 $body,
@@ -384,6 +417,8 @@ class SmartcarVehicle extends IPSModuleStrict
             json_encode($unsuccessful, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
             0
         );
+
+        $this->RefreshVariableSelectionForm();
     }
 
 
@@ -464,7 +499,12 @@ class SmartcarVehicle extends IPSModuleStrict
             }
         }
 
-        // Bekannte Signale: Nur Variablen mit real vorhandenen Daten anlegen.
+        // Nur vom Benutzer aktivierte Variablen anlegen/aktualisieren.
+        $variablesWithData = array_values(array_filter(
+            $variablesWithData,
+            fn(array $variable): bool => $this->IsVariableEnabled((string)($variable['ident'] ?? ''))
+        ));
+
         if (!empty($variablesWithData)) {
             $this->EnsureSignalVariables($code, $variablesWithData, true);
         }
@@ -504,7 +544,7 @@ class SmartcarVehicle extends IPSModuleStrict
         // anlegen. Auch hier nur, wenn tatsächlich Daten gekommen sind.
         if (empty($variablesWithData) && !empty($body)) {
             $ident = (string)($definition['ident'] ?? '');
-            if ($ident !== '') {
+            if ($ident !== '' && $this->IsVariableEnabled($ident)) {
                 $value = json_encode($body, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
                 $this->RegisterOrUpdateTypedVariable(
@@ -543,7 +583,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 );
             }
 
-            if ($this->ReadPropertyBoolean('ShowOEMUpdatedAtVariables')) {
+            if ($this->ReadPropertyBoolean('ShowOEMUpdatedAtVariables') && $this->IsSignalEnabled($code, $body)) {
                 $oemIdent = $this->BuildOEMTimestampIdent($code);
                 $oemName = (string)($definitionMeta['name'] ?? $definition['name'] ?? $code) . ' – OEM-Datenstand';
 
@@ -945,84 +985,202 @@ class SmartcarVehicle extends IPSModuleStrict
     }
 
 
+
+    private function RefreshVariableSelectionForm(): void
+    {
+        try {
+            $this->UpdateFormField(
+                'VariableSelection',
+                'values',
+                json_encode($this->BuildVariableSelectionRows(), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+            );
+        } catch (Throwable $e) {
+            // Das Konfigurationsformular ist nicht zwingend geöffnet.
+        }
+    }
+
+    private function ReadDiscoveredVariables(): array
+    {
+        $data = json_decode($this->ReadAttributeString('DiscoveredVariables'), true);
+        return is_array($data) ? $data : [];
+    }
+
+    private function WriteDiscoveredVariables(array $data): void
+    {
+        ksort($data);
+        $this->WriteAttributeString('DiscoveredVariables', json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+    }
+
+    private function GetVariableSelectionMap(): array
+    {
+        $rows = json_decode($this->ReadPropertyString('VariableSelection'), true);
+        if (!is_array($rows)) {
+            return [];
+        }
+        $map = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $ident = trim((string)($row['Ident'] ?? $row['ident'] ?? ''));
+            if ($ident !== '') {
+                $map[$ident] = (bool)($row['Active'] ?? $row['active'] ?? true);
+            }
+        }
+        return $map;
+    }
+
+    private function IsVariableEnabled(string $ident): bool
+    {
+        if ($ident === '') {
+            return false;
+        }
+        $selection = $this->GetVariableSelectionMap();
+        return !array_key_exists($ident, $selection) || $selection[$ident];
+    }
+
+    private function BuildVariableSelectionRows(): array
+    {
+        $selection = $this->GetVariableSelectionMap();
+        $discovered = $this->ReadDiscoveredVariables();
+        $rows = [];
+
+        uasort($discovered, static function (array $a, array $b): int {
+            $kindCompare = strcmp((string)($a['kind'] ?? ''), (string)($b['kind'] ?? ''));
+            return $kindCompare !== 0 ? $kindCompare : strcasecmp((string)($a['name'] ?? ''), (string)($b['name'] ?? ''));
+        });
+
+        foreach ($discovered as $ident => $entry) {
+            $rows[] = [
+                'Active' => $selection[$ident] ?? true,
+                'Name' => (string)($entry['name'] ?? $ident),
+                'Kind' => (string)($entry['kind'] ?? 'Signal'),
+                'Source' => (string)($entry['source'] ?? ''),
+                'Ident' => $ident
+            ];
+        }
+        return $rows;
+    }
+
+    private function RememberSuccessfulSignal(string $code, array $body, ?array $status, array $meta): void
+    {
+        $definition = $this->GetSignalDefinition($code, $body);
+        $variables = $this->GetVariablesFromDefinition($definition, $body);
+        $discovered = $this->ReadDiscoveredVariables();
+        $found = false;
+
+        foreach ($variables as $variable) {
+            $source = (string)($variable['source'] ?? 'value');
+            $ident = (string)($variable['ident'] ?? '');
+            if ($ident === '' || !array_key_exists($source, $body)) {
+                continue;
+            }
+            $found = true;
+            $discovered[$ident] = [
+                'ident' => $ident,
+                'name' => (string)($variable['name'] ?? $ident),
+                'kind' => 'Signal',
+                'source' => $code . ($source !== 'value' ? ' / ' . $source : ''),
+                'signalCode' => $code
+            ];
+        }
+
+        if (!$found) {
+            $ident = (string)($definition['ident'] ?? '');
+            if ($ident !== '') {
+                $discovered[$ident] = [
+                    'ident' => $ident,
+                    'name' => (string)($definition['name'] ?? $code),
+                    'kind' => 'Signal',
+                    'source' => $code,
+                    'signalCode' => $code
+                ];
+            }
+        }
+        $this->WriteDiscoveredVariables($discovered);
+
+        $cache = json_decode($this->ReadAttributeString('LastSuccessfulSignalPayloads'), true);
+        if (!is_array($cache)) {
+            $cache = [];
+        }
+        $cache[$code] = ['body' => $body, 'status' => $status, 'meta' => $meta];
+        $this->WriteAttributeString('LastSuccessfulSignalPayloads', json_encode($cache, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+    }
+
+    private function ApplyVariableSelection(): void
+    {
+        foreach ($this->GetVariableSelectionMap() as $ident => $enabled) {
+            if ($enabled) {
+                continue;
+            }
+            $id = @$this->GetIDForIdent($ident);
+            if ($id && IPS_VariableExists($id)) {
+                IPS_DeleteVariable($id);
+            }
+        }
+    }
+
+    private function RestoreSelectedSignalsFromCache(): void
+    {
+        $cache = json_decode($this->ReadAttributeString('LastSuccessfulSignalPayloads'), true);
+        if (!is_array($cache)) {
+            return;
+        }
+        foreach ($cache as $code => $payload) {
+            if (!is_array($payload)) {
+                continue;
+            }
+            $body = is_array($payload['body'] ?? null) ? $payload['body'] : [];
+            if (!$this->HasMeaningfulSignalData($body)) {
+                continue;
+            }
+            $status = is_array($payload['status'] ?? null) ? $payload['status'] : null;
+            $meta = is_array($payload['meta'] ?? null) ? $payload['meta'] : [];
+            $this->ApplySignalFromV3((string)$code, $body, $status, $this->GetSignalDefinition((string)$code, $body), $meta, false);
+        }
+    }
+
+    private function IsSignalEnabled(string $code, array $body): bool
+    {
+        $definition = $this->GetSignalDefinition($code, $body);
+        foreach ($this->GetVariablesFromDefinition($definition, $body) as $variable) {
+            $source = (string)($variable['source'] ?? 'value');
+            $ident = (string)($variable['ident'] ?? '');
+            if ($ident !== '' && array_key_exists($source, $body) && $this->IsVariableEnabled($ident)) {
+                return true;
+            }
+        }
+        $ident = (string)($definition['ident'] ?? '');
+        return $ident !== '' && $this->IsVariableEnabled($ident);
+    }
+
     private function ApplyVehicleAccessCommands(): void
     {
         $permissions = json_decode($this->ReadPropertyString('Permissions'), true);
         if (!is_array($permissions)) {
             $permissions = [];
         }
-
         $permissions = array_values(array_unique(array_filter(
             array_map(static fn($permission): string => strtolower(trim((string)$permission)), $permissions),
             static fn(string $permission): bool => $permission !== ''
         )));
 
-        $this->SendDebug(
-            'VehicleAccess/Permissions',
-            json_encode($permissions, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
-            0
-        );
+        $this->SendDebug('VehicleAccess/Permissions', json_encode($permissions, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+        $definitions = $this->GetAvailableCommandDefinitions($permissions);
+        $this->RememberAvailableCommands($definitions);
 
-        $hasCharge = in_array('control_charge', $permissions, true);
-        $hasSecurity = in_array('control_security', $permissions, true);
-        $hasNavigation = in_array('control_navigation', $permissions, true);
-
-        $commandDefinitions = [
-            'CommandChargeStart' => [
-                'allowed' => $hasCharge,
-                'name' => 'Laden starten',
-                'type' => VARIABLETYPE_BOOLEAN,
-                'profile' => '~Switch',
-                'position' => 900
-            ],
-            'CommandChargeStop' => [
-                'allowed' => $hasCharge,
-                'name' => 'Laden stoppen',
-                'type' => VARIABLETYPE_BOOLEAN,
-                'profile' => '~Switch',
-                'position' => 901
-            ],
-            'CommandChargeLimit' => [
-                'allowed' => $hasCharge,
-                'name' => 'Ladelimit',
-                'type' => VARIABLETYPE_INTEGER,
-                'profile' => '~Intensity.100',
-                'position' => 902
-            ],
-            'CommandSecurityLock' => [
-                'allowed' => $hasSecurity,
-                'name' => 'Fahrzeug verriegeln',
-                'type' => VARIABLETYPE_BOOLEAN,
-                'profile' => '~Switch',
-                'position' => 910
-            ],
-            'CommandSecurityUnlock' => [
-                'allowed' => $hasSecurity,
-                'name' => 'Fahrzeug entriegeln',
-                'type' => VARIABLETYPE_BOOLEAN,
-                'profile' => '~Switch',
-                'position' => 911
-            ],
-            'CommandNavigationDestination' => [
-                'allowed' => $hasNavigation,
-                'name' => 'Ziel setzen',
-                'type' => VARIABLETYPE_STRING,
-                'profile' => '',
-                'position' => 920
-            ]
-        ];
-
-        foreach ($commandDefinitions as $ident => $definition) {
+        foreach (['CommandChargeStart','CommandChargeStop','CommandChargeLimit','CommandSecurityLock','CommandSecurityUnlock','CommandNavigationDestination'] as $ident) {
+            $definition = $definitions[$ident] ?? null;
             $existingId = @$this->GetIDForIdent($ident);
 
-            if (!(bool)$definition['allowed']) {
-                if ($existingId !== false && $existingId > 0 && IPS_VariableExists($existingId)) {
+            if ($definition === null || !$this->IsVariableEnabled($ident)) {
+                if ($existingId && IPS_VariableExists($existingId)) {
                     IPS_DeleteVariable($existingId);
                 }
                 continue;
             }
 
-            if ($existingId === false || $existingId <= 0) {
+            if (!$existingId) {
                 $this->RegisterOrUpdateTypedVariable(
                     $ident,
                     (string)$definition['name'],
@@ -1034,11 +1192,42 @@ class SmartcarVehicle extends IPSModuleStrict
                 );
                 $existingId = @$this->GetIDForIdent($ident);
             }
-
-            if ($existingId !== false && $existingId > 0 && IPS_VariableExists($existingId)) {
+            if ($existingId && IPS_VariableExists($existingId)) {
                 $this->EnableAction($ident);
             }
         }
+    }
+
+    private function GetAvailableCommandDefinitions(array $permissions): array
+    {
+        $definitions = [];
+        if (in_array('control_charge', $permissions, true)) {
+            $definitions['CommandChargeStart'] = ['name'=>'Laden starten','type'=>VARIABLETYPE_BOOLEAN,'profile'=>'~Switch','position'=>50000,'source'=>'control_charge'];
+            $definitions['CommandChargeStop'] = ['name'=>'Laden stoppen','type'=>VARIABLETYPE_BOOLEAN,'profile'=>'~Switch','position'=>50010,'source'=>'control_charge'];
+            $definitions['CommandChargeLimit'] = ['name'=>'Ladelimit','type'=>VARIABLETYPE_INTEGER,'profile'=>'~Intensity.100','position'=>50020,'source'=>'control_charge'];
+        }
+        if (in_array('control_security', $permissions, true)) {
+            $definitions['CommandSecurityLock'] = ['name'=>'Fahrzeug verriegeln','type'=>VARIABLETYPE_BOOLEAN,'profile'=>'~Switch','position'=>50030,'source'=>'control_security'];
+            $definitions['CommandSecurityUnlock'] = ['name'=>'Fahrzeug entriegeln','type'=>VARIABLETYPE_BOOLEAN,'profile'=>'~Switch','position'=>50040,'source'=>'control_security'];
+        }
+        if (in_array('control_navigation', $permissions, true)) {
+            $definitions['CommandNavigationDestination'] = ['name'=>'Ziel setzen','type'=>VARIABLETYPE_STRING,'profile'=>'','position'=>50050,'source'=>'control_navigation'];
+        }
+        return $definitions;
+    }
+
+    private function RememberAvailableCommands(array $definitions): void
+    {
+        $discovered = $this->ReadDiscoveredVariables();
+        foreach ($discovered as $ident => $entry) {
+            if (($entry['kind'] ?? '') === 'Steuerung' && !isset($definitions[$ident])) {
+                unset($discovered[$ident]);
+            }
+        }
+        foreach ($definitions as $ident => $definition) {
+            $discovered[$ident] = ['ident'=>$ident,'name'=>(string)$definition['name'],'kind'=>'Steuerung','source'=>(string)$definition['source']];
+        }
+        $this->WriteDiscoveredVariables($discovered);
     }
 
     private function HasParentConnection(): bool
