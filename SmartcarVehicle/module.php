@@ -466,7 +466,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 $now = time();
 
                 if ((int)GetValue($lastSignalsId) !== $now) {
-                    SetValue($lastSignalsId, $now);
+                    $this->SetValue('LastSignalsAt', $now);
                 }
             }
         }
