@@ -552,25 +552,54 @@ class SmartcarVehicle extends IPSModuleStrict
     {
         $show = $this->ReadPropertyBoolean('ShowOEMUpdatedAtVariables');
 
-        foreach (IPS_GetChildrenIDs($this->InstanceID) as $childId) {
-            $object = @IPS_GetObject($childId);
-            if (!is_array($object)) {
-                continue;
-            }
+        if (!$show) {
+            foreach (IPS_GetChildrenIDs($this->InstanceID) as $childId) {
+                $object = @IPS_GetObject($childId);
+                if (!is_array($object)) {
+                    continue;
+                }
 
-            $ident = (string)($object['ObjectIdent'] ?? '');
-            if (!str_ends_with($ident, '_OEMUpdatedAt')) {
-                continue;
-            }
-
-            if (!$show) {
-                if (($object['ObjectType'] ?? -1) === 2) {
+                $ident = (string)($object['ObjectIdent'] ?? '');
+                if (str_ends_with($ident, '_OEMUpdatedAt') && (($object['ObjectType'] ?? -1) === 2)) {
                     IPS_DeleteVariable($childId);
                 }
+            }
+            return;
+        }
+
+        // Beim Einschalten sofort aus den zuletzt empfangenen OEM-Zeitstempeln
+        // wiederherstellen. Dafür ist keine neue API-/Webhook-Abfrage nötig.
+        $stored = json_decode($this->ReadAttributeString('LastOEMSignalTimes'), true);
+        if (!is_array($stored)) {
+            return;
+        }
+
+        foreach ($stored as $code => $timestamp) {
+            $code = (string)$code;
+            $timestamp = (int)$timestamp;
+
+            if ($code === '' || $timestamp <= 0) {
                 continue;
             }
 
-            IPS_SetHidden($childId, false);
+            $definition = $this->GetSignalDefinition($code);
+            $oemIdent = $this->BuildOEMTimestampIdent($code);
+            $oemName = (string)($definition['name'] ?? $code) . ' – OEM-Datenstand';
+
+            $this->RegisterOrUpdateTypedVariable(
+                $oemIdent,
+                $oemName,
+                $timestamp,
+                VARIABLETYPE_INTEGER,
+                '~UnixTimestamp',
+                false,
+                $this->GetSignalBasePosition($code) + 99
+            );
+
+            $oemId = @$this->GetIDForIdent($oemIdent);
+            if ($oemId) {
+                IPS_SetHidden($oemId, false);
+            }
         }
     }
 
