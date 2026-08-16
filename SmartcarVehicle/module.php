@@ -1,4 +1,5 @@
 <?php
+// Build: 2026-08-16 Webhook checkbox list v3
 
 class SmartcarVehicle extends IPSModuleStrict
 {
@@ -148,13 +149,25 @@ class SmartcarVehicle extends IPSModuleStrict
             ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         }
 
+        $webhookOverview = $this->GetWebhookOverviewFromParent();
+
         $form = [
             'elements' => [
-                ['type' => 'Label', 'caption' => 'Vehicle ID: ' . $this->ReadPropertyString('VehicleID')],
-                ['type' => 'Label', 'caption' => 'Connection ID: ' . $this->ReadPropertyString('ConnectionID')],
-                ['type' => 'Label', 'caption' => 'User ID: ' . $this->ReadPropertyString('UserID')],
-                ['type' => 'Label', 'caption' => 'Fahrzeug: ' . $this->ReadPropertyString('VehicleCaption')],
-                ['type' => 'Label', 'caption' => 'Antrieb: ' . $this->ReadPropertyString('PowertrainType')],
+                [
+                    'type' => 'RowLayout',
+                    'items' => [
+                        ['type' => 'Label', 'caption' => 'Fahrzeug: ' . $this->ReadPropertyString('VehicleCaption')],
+                        ['type' => 'Label', 'caption' => 'Antrieb: ' . $this->ReadPropertyString('PowertrainType')]
+                    ]
+                ],
+                [
+                    'type' => 'RowLayout',
+                    'items' => [
+                        ['type' => 'Label', 'caption' => 'Vehicle ID: ' . $this->ReadPropertyString('VehicleID')],
+                        ['type' => 'Label', 'caption' => 'Connection ID: ' . $this->ReadPropertyString('ConnectionID')],
+                        ['type' => 'Label', 'caption' => 'User ID: ' . $this->ReadPropertyString('UserID')]
+                    ]
+                ],
                 [
                     'type' => 'CheckBox',
                     'name' => 'ShowOEMUpdatedAtVariables',
@@ -199,7 +212,292 @@ class SmartcarVehicle extends IPSModuleStrict
             ]
         ];
 
+        $webhookPanelItems = [];
+
+        if (empty($webhookOverview['success'])) {
+            $webhookPanelItems[] = [
+                'type' => 'Label',
+                'caption' => 'Webhooks konnten nicht geladen werden: ' . (string)($webhookOverview['error'] ?? 'Unbekannter Fehler')
+            ];
+        } else {
+            $webhooks = is_array($webhookOverview['webhooks'] ?? null) ? $webhookOverview['webhooks'] : [];
+            $webhookRows = [];
+
+            foreach ($webhooks as $webhook) {
+                if (!is_array($webhook)) {
+                    continue;
+                }
+
+                $webhookId = trim((string)($webhook['id'] ?? ''));
+                if ($webhookId === '') {
+                    continue;
+                }
+
+                $subscribed = (bool)($webhook['subscribed'] ?? false);
+                $enabled = (bool)($webhook['isEnabled'] ?? false);
+
+                $status = $subscribed ? 'Zugeordnet' : 'Nicht zugeordnet';
+                if (!$enabled) {
+                    $status .= ' / Webhook inaktiv';
+                }
+
+                $webhookRows[] = [
+                    'Active' => $subscribed,
+                    'Name' => (string)($webhook['name'] ?? $webhookId),
+                    'Status' => $status,
+                    'WebhookID' => $webhookId
+                ];
+            }
+
+            if (empty($webhookRows)) {
+                $webhookPanelItems[] = [
+                    'type' => 'Label',
+                    'caption' => 'Für diese Smartcar-Anwendung wurden keine Webhooks gefunden.'
+                ];
+            } else {
+                $webhookPanelItems[] = [
+                    'type' => 'List',
+                    'name' => 'WebhookSelection',
+                    'caption' => 'Webhooks',
+                    'rowCount' => 3,
+                    'add' => false,
+                    'delete' => false,
+                    'columns' => [
+                        ['caption' => 'Aktiv', 'name' => 'Active', 'width' => '70px', 'edit' => ['type' => 'CheckBox']],
+                        ['caption' => 'Webhook', 'name' => 'Name', 'width' => '260px'],
+                        ['caption' => 'Status', 'name' => 'Status', 'width' => 'auto'],
+                        ['caption' => 'WebhookID', 'name' => 'WebhookID', 'width' => '0px', 'save' => true]
+                    ],
+                    'values' => $webhookRows
+                ];
+
+                $webhookPanelItems[] = [
+                    'type' => 'Button',
+                    'caption' => 'Webhook-Zuordnung übernehmen / neu laden',
+                    'onClick' => '$rows = []; foreach ($WebhookSelection as $row) { $rows[] = $row; } echo SMCARV_ApplyWebhookSelection($id, json_encode($rows));'
+                ];
+            }
+        }
+
+        $form['actions'][] = [
+            'type' => 'ExpansionPanel',
+            'caption' => 'Webhook-Zuordnungen',
+            'expanded' => false,
+            'items' => $webhookPanelItems
+        ];
+
         return json_encode($form, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    }
+
+    private function GetWebhookOverviewFromParent(): array
+    {
+        if (!$this->HasParentConnection()) {
+            return ['success' => false, 'error' => 'Kein Splitter/Parent verbunden.', 'webhooks' => []];
+        }
+
+        $vehicleId = trim($this->ReadPropertyString('VehicleID'));
+        if ($vehicleId === '') {
+            return ['success' => false, 'error' => 'VehicleID fehlt.', 'webhooks' => []];
+        }
+
+        $result = $this->SendDataToParent(json_encode([
+            'DataID' => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
+            'Command' => 'GetWebhookOverview',
+            'VehicleID' => $vehicleId
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+
+        $decoded = json_decode((string)$result, true);
+        if (!is_array($decoded)) {
+            return ['success' => false, 'error' => 'Ungültige Antwort vom Splitter.', 'webhooks' => []];
+        }
+
+        return $decoded;
+    }
+
+    public function ApplyWebhookSelection(string $selectionJson): string
+    {
+        if (!$this->HasParentConnection()) {
+            return 'Fehler: Kein Smartcar Splitter verbunden.';
+        }
+
+        $rows = json_decode($selectionJson, true);
+        if (!is_array($rows)) {
+            return 'Fehler: Webhook-Auswahl ist ungültig.';
+        }
+
+        $desired = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+
+            $webhookId = trim((string)($row['WebhookID'] ?? ''));
+            if ($webhookId !== '' && (bool)($row['Active'] ?? false)) {
+                $desired[$webhookId] = true;
+            }
+        }
+
+        $overview = $this->GetWebhookOverviewFromParent();
+        if (empty($overview['success'])) {
+            return 'Fehler: ' . (string)($overview['error'] ?? 'Webhook-Zuordnungen konnten nicht geladen werden.');
+        }
+
+        $webhooks = is_array($overview['webhooks'] ?? null) ? $overview['webhooks'] : [];
+        $current = [];
+        $known = [];
+
+        foreach ($webhooks as $webhook) {
+            if (!is_array($webhook)) {
+                continue;
+            }
+
+            $webhookId = trim((string)($webhook['id'] ?? ''));
+            if ($webhookId === '') {
+                continue;
+            }
+
+            $known[$webhookId] = true;
+            if ((bool)($webhook['subscribed'] ?? false)) {
+                $current[$webhookId] = true;
+            }
+        }
+
+        // Nur Webhooks berücksichtigen, die die Management API aktuell tatsächlich liefert.
+        $desired = array_intersect_key($desired, $known);
+
+        $toSubscribe = array_diff_key($desired, $current);
+        $toUnsubscribe = array_diff_key($current, $desired);
+        $hasChanges = !empty($toSubscribe) || !empty($toUnsubscribe);
+
+        $messages = [];
+
+        if ($hasChanges) {
+            foreach (array_keys($toUnsubscribe) as $webhookId) {
+                $result = $this->ExecuteWebhookManagementCommandRaw('UnsubscribeWebhook', $webhookId);
+                if (empty($result['success'])) {
+                    return 'Fehler beim Entfernen von Webhook ' . $webhookId . ': ' . (string)($result['error'] ?? 'Unbekannter Fehler');
+                }
+                $messages[] = 'entfernt';
+            }
+
+            foreach (array_keys($toSubscribe) as $webhookId) {
+                $result = $this->ExecuteWebhookManagementCommandRaw('SubscribeWebhook', $webhookId);
+                if (empty($result['success'])) {
+                    return 'Fehler beim Zuordnen von Webhook ' . $webhookId . ': ' . (string)($result['error'] ?? 'Unbekannter Fehler');
+                }
+                $messages[] = 'zugeordnet';
+            }
+        } else {
+            // Keine Änderung an den Häkchen: die weiterhin gewählten Webhooks neu abonnieren.
+            // Bei nur einem gewählten Webhook entspricht dies dem gewünschten "Neu laden".
+            foreach (array_keys($desired) as $webhookId) {
+                $result = $this->ExecuteWebhookManagementCommandRaw('ReloadWebhook', $webhookId);
+                if (empty($result['success'])) {
+                    return 'Fehler beim Neu laden von Webhook ' . $webhookId . ': ' . (string)($result['error'] ?? 'Unbekannter Fehler');
+                }
+                $messages[] = 'neu geladen';
+            }
+
+            if (empty($desired)) {
+                return 'Keine Webhook-Zuordnung ausgewählt.';
+            }
+        }
+
+        // Formular hier bewusst NICHT sofort neu laden. Nach Remove/Create kann die
+        // Smartcar Management API die neue Subscription für einen kurzen Moment noch
+        // nicht in der Übersicht liefern. Ein sofortiges ReloadForm() würde dadurch
+        // den gerade gesetzten Haken wieder auf false zurücksetzen.
+
+        if ($hasChanges) {
+            return 'Webhook-Zuordnung wurde übernommen.';
+        }
+
+        return 'Webhook wurde neu geladen.';
+    }
+
+    private function ExecuteWebhookManagementCommandRaw(string $command, string $webhookId): array
+    {
+        $webhookId = trim($webhookId);
+        $vehicleId = trim($this->ReadPropertyString('VehicleID'));
+        $userId = trim($this->ReadPropertyString('UserID'));
+
+        if ($webhookId === '' || $vehicleId === '' || $userId === '') {
+            return ['success' => false, 'error' => 'WebhookID, VehicleID oder UserID fehlt.'];
+        }
+
+        $result = $this->SendDataToParent(json_encode([
+            'DataID' => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
+            'Command' => $command,
+            'WebhookID' => $webhookId,
+            'VehicleID' => $vehicleId,
+            'UserID' => $userId
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+
+        $this->SendDebug('WebhookManagement/' . $command, (string)$result, 0);
+
+        $decoded = json_decode((string)$result, true);
+        if (!is_array($decoded)) {
+            return ['success' => false, 'error' => (string)$result];
+        }
+
+        return $decoded;
+    }
+
+    public function SubscribeWebhook(string $webhookId): string
+    {
+        return $this->ExecuteWebhookManagementCommand('SubscribeWebhook', $webhookId, 'Webhook-Zuordnung wird angelegt.');
+    }
+
+    public function UnsubscribeWebhook(string $webhookId): string
+    {
+        return $this->ExecuteWebhookManagementCommand('UnsubscribeWebhook', $webhookId, 'Webhook-Zuordnung wurde entfernt.');
+    }
+
+    public function ReloadWebhook(string $webhookId): string
+    {
+        return $this->ExecuteWebhookManagementCommand('ReloadWebhook', $webhookId, 'Webhook wurde neu zugeordnet; Smartcar startet die neue Subscription.');
+    }
+
+    public function ReloadWebhookForm(): void
+    {
+        $this->ReloadForm();
+    }
+
+    private function ExecuteWebhookManagementCommand(string $command, string $webhookId, string $successText): string
+    {
+        if (!$this->HasParentConnection()) {
+            return 'Fehler: Kein Smartcar Splitter verbunden.';
+        }
+
+        $webhookId = trim($webhookId);
+        $vehicleId = trim($this->ReadPropertyString('VehicleID'));
+        $userId = trim($this->ReadPropertyString('UserID'));
+
+        if ($webhookId === '' || $vehicleId === '' || $userId === '') {
+            return 'Fehler: WebhookID, VehicleID oder UserID fehlt.';
+        }
+
+        $result = $this->SendDataToParent(json_encode([
+            'DataID' => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
+            'Command' => $command,
+            'WebhookID' => $webhookId,
+            'VehicleID' => $vehicleId,
+            'UserID' => $userId
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+
+        $decoded = json_decode((string)$result, true);
+        $this->SendDebug('WebhookManagement/' . $command, (string)$result, 0);
+
+        if (!is_array($decoded) || empty($decoded['success'])) {
+            $error = is_array($decoded) ? (string)($decoded['error'] ?? '') : '';
+            return 'Fehler: ' . ($error !== '' ? $error : (string)$result);
+        }
+
+        // Create Subscription liefert 202 und wird von Smartcar asynchron verarbeitet.
+        // Formular neu laden, damit der aktuelle Management-API-Stand sichtbar wird.
+        $this->ReloadForm();
+
+        return $successText;
     }
 
     public function SyncVehicleAccessSignals(): void
