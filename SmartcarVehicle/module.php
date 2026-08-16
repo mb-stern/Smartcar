@@ -267,7 +267,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 $form['actions'][] = [
                     'type' => 'Button',
                     'caption' => 'Webhook-Zuordnung übernehmen / neu laden',
-                    'onClick' => 'echo SMCARV_ApplyWebhookSelection($id, json_encode($WebhookSelection));'
+                    'onClick' => '$rows = []; foreach ($WebhookSelection as $row) { $rows[] = $row; } echo SMCARV_ApplyWebhookSelection($id, json_encode($rows));'
                 ];
             }
         }
