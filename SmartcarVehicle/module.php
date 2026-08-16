@@ -944,50 +944,100 @@ class SmartcarVehicle extends IPSModuleStrict
         };
     }
 
+
     private function ApplyVehicleAccessCommands(): void
     {
         $permissions = json_decode($this->ReadPropertyString('Permissions'), true);
         if (!is_array($permissions)) {
-            return;
-        }
-        $permissionMap = [];
-        foreach ($permissions as $permission) {
-            if (is_string($permission)) {
-                $permissionMap[strtolower($permission)] = true;
-            }
-        }
-        $commands = [];
-        if (isset($permissionMap['control_charge'])) {
-            $commands = array_merge($commands, ['charge-start', 'charge-stop', 'charge-set-limit']);
-        }
-        if (isset($permissionMap['control_security'])) {
-            $commands = array_merge($commands, ['security-lock', 'security-unlock']);
-        }
-        if (isset($permissionMap['control_navigation'])) {
-            $commands[] = 'navigation-set-destination';
+            $permissions = [];
         }
 
-        $position = 50000;
-        foreach (array_unique($commands) as $command) {
-            $definition = $this->GetCommandDefinition($command);
-            if (empty($definition)) {
+        $permissions = array_values(array_unique(array_filter(
+            array_map(static fn($permission): string => strtolower(trim((string)$permission)), $permissions),
+            static fn(string $permission): bool => $permission !== ''
+        )));
+
+        $this->SendDebug(
+            'VehicleAccess/Permissions',
+            json_encode($permissions, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            0
+        );
+
+        $hasCharge = in_array('control_charge', $permissions, true);
+        $hasSecurity = in_array('control_security', $permissions, true);
+        $hasNavigation = in_array('control_navigation', $permissions, true);
+
+        $commandDefinitions = [
+            'CommandChargeStart' => [
+                'allowed' => $hasCharge,
+                'name' => 'Laden starten',
+                'type' => VARIABLETYPE_BOOLEAN,
+                'profile' => '~Switch',
+                'position' => 900
+            ],
+            'CommandChargeStop' => [
+                'allowed' => $hasCharge,
+                'name' => 'Laden stoppen',
+                'type' => VARIABLETYPE_BOOLEAN,
+                'profile' => '~Switch',
+                'position' => 901
+            ],
+            'CommandChargeLimit' => [
+                'allowed' => $hasCharge,
+                'name' => 'Ladelimit',
+                'type' => VARIABLETYPE_INTEGER,
+                'profile' => '~Intensity.100',
+                'position' => 902
+            ],
+            'CommandSecurityLock' => [
+                'allowed' => $hasSecurity,
+                'name' => 'Fahrzeug verriegeln',
+                'type' => VARIABLETYPE_BOOLEAN,
+                'profile' => '~Switch',
+                'position' => 910
+            ],
+            'CommandSecurityUnlock' => [
+                'allowed' => $hasSecurity,
+                'name' => 'Fahrzeug entriegeln',
+                'type' => VARIABLETYPE_BOOLEAN,
+                'profile' => '~Switch',
+                'position' => 911
+            ],
+            'CommandNavigationDestination' => [
+                'allowed' => $hasNavigation,
+                'name' => 'Ziel setzen',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'position' => 920
+            ]
+        ];
+
+        foreach ($commandDefinitions as $ident => $definition) {
+            $existingId = @$this->GetIDForIdent($ident);
+
+            if (!(bool)$definition['allowed']) {
+                if ($existingId !== false && $existingId > 0 && IPS_VariableExists($existingId)) {
+                    IPS_DeleteVariable($existingId);
+                }
                 continue;
             }
-            $ident = (string)($definition['ident'] ?? '');
-            if ($ident === '') {
-                continue;
+
+            if ($existingId === false || $existingId <= 0) {
+                $this->RegisterOrUpdateTypedVariable(
+                    $ident,
+                    (string)$definition['name'],
+                    $definition['type'] === VARIABLETYPE_STRING ? '' : 0,
+                    (int)$definition['type'],
+                    (string)$definition['profile'],
+                    true,
+                    (int)$definition['position']
+                );
+                $existingId = @$this->GetIDForIdent($ident);
             }
-            $this->RegisterOrUpdateTypedVariable(
-                $ident,
-                (string)($definition['name'] ?? $ident),
-                $this->GetDefaultValueForType((int)($definition['type'] ?? VARIABLETYPE_STRING)),
-                (int)($definition['type'] ?? VARIABLETYPE_STRING),
-                (string)($definition['profile'] ?? ''),
-                true,
-                $position
-            );
-            $this->EnableAction($ident);
-            $position += 10;
+
+            if ($existingId !== false && $existingId > 0 && IPS_VariableExists($existingId)) {
+                $this->EnableAction($ident);
+            }
         }
     }
 
@@ -1123,6 +1173,8 @@ class SmartcarVehicle extends IPSModuleStrict
         if (!is_array($decoded) || empty($decoded['success'])) {
             return false;
         }
+
+        $this->ApplyVehicleAccessCommands();
 
         return true;
     }
