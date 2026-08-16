@@ -563,7 +563,14 @@ class SmartcarVehicle extends IPSModuleStrict
                 continue;
             }
 
-            IPS_SetHidden($childId, !$show);
+            if (!$show) {
+                if (($object['ObjectType'] ?? -1) === 2) {
+                    IPS_DeleteVariable($childId);
+                }
+                continue;
+            }
+
+            IPS_SetHidden($childId, false);
         }
     }
 
