@@ -176,7 +176,7 @@ class SmartcarVehicle extends IPSModuleStrict
                         ['caption' => 'Name', 'name' => 'Name', 'width' => '260px'],
                         ['caption' => 'Typ', 'name' => 'Kind', 'width' => '110px'],
                         ['caption' => 'Smartcar', 'name' => 'Source', 'width' => 'auto'],
-                        ['caption' => 'Ident', 'name' => 'Ident', 'width' => '0px']
+                        ['caption' => 'Ident', 'name' => 'Ident', 'width' => '0px', 'save' => true]
                     ],
                     'values' => $this->BuildVariableSelectionRows()
                 ]
