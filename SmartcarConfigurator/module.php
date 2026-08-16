@@ -90,7 +90,8 @@ class SmartcarConfigurator extends IPSModuleStrict
                         'Make' => $make,
                         'Model' => $model,
                         'Year' => $year,
-                        'PowertrainType' => $powertrainType
+                        'PowertrainType' => $powertrainType,
+                        'Permissions' => json_encode($connection['permissions'] ?? [], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
                     ]
                 ]
             ];
