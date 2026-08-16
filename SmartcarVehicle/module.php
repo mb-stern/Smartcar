@@ -48,6 +48,11 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $this->SetStatus(102);
 
+        // Bereits vorhandene Signalvariablen (z. B. aus einer älteren Modulversion)
+        // sofort in die Auswahlliste übernehmen. Dabei werden weder Namen noch Werte
+        // verändert.
+        $this->RememberExistingSignalVariables();
+
         $this->ApplyVariableSelection();
         $this->ApplyVehicleAccessCommands();
         $this->RestoreSelectedSignalsFromCache();
@@ -986,6 +991,58 @@ class SmartcarVehicle extends IPSModuleStrict
 
 
 
+    private function RememberExistingSignalVariables(): void
+    {
+        $discovered = $this->ReadDiscoveredVariables();
+        $changed = false;
+
+        $commandIdents = [
+            'CommandChargeStart',
+            'CommandChargeStop',
+            'CommandChargeLimit',
+            'CommandSecurityLock',
+            'CommandSecurityUnlock',
+            'CommandNavigationDestination'
+        ];
+
+        foreach (IPS_GetChildrenIDs($this->InstanceID) as $childId) {
+            if (!IPS_VariableExists($childId)) {
+                continue;
+            }
+
+            $object = @IPS_GetObject($childId);
+            if (!is_array($object)) {
+                continue;
+            }
+
+            $ident = trim((string)($object['ObjectIdent'] ?? ''));
+            if ($ident === ''
+                || $ident === 'LastSignalsAt'
+                || in_array($ident, $commandIdents, true)
+                || str_ends_with($ident, '_OEMUpdatedAt')) {
+                continue;
+            }
+
+            // Bereits bekannte Einträge nicht überschreiben; insbesondere bleiben
+            // der echte Smartcar-Signalcode und der Modul-Standardname erhalten.
+            if (isset($discovered[$ident]) && is_array($discovered[$ident])) {
+                continue;
+            }
+
+            $discovered[$ident] = [
+                'ident' => $ident,
+                'name' => (string)($object['ObjectName'] ?? $ident),
+                'kind' => 'Signal',
+                'source' => 'Bestehende Variable'
+            ];
+            $changed = true;
+        }
+
+        if ($changed) {
+            $this->WriteDiscoveredVariables($discovered);
+        }
+    }
+
     private function RefreshVariableSelectionForm(): void
     {
         try {
@@ -1193,6 +1250,9 @@ class SmartcarVehicle extends IPSModuleStrict
                 $existingId = @$this->GetIDForIdent($ident);
             }
             if ($existingId && IPS_VariableExists($existingId)) {
+                // Steuerungen gehören immer ans Ende des Objektbaums. Auch bereits
+                // vorhandene Variablen aus älteren Zwischenversionen zurücksetzen.
+                IPS_SetPosition($existingId, (int)$definition['position']);
                 $this->EnableAction($ident);
             }
         }
