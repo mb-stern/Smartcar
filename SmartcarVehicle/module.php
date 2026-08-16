@@ -205,10 +205,6 @@ class SmartcarVehicle extends IPSModuleStrict
                     'type' => 'Button',
                     'caption' => 'Signale aus Vehicle Access abrufen',
                     'onClick' => 'SMCARV_SyncVehicleAccessSignals($id);'
-                ],
-                [
-                    'type' => 'Label',
-                    'caption' => 'Hinweis: Änderungen an Vehicle Access gelten für bestehende Fahrzeugverbindungen erst nach erneuter Autorisierung.'
                 ]
             ]
         ];
