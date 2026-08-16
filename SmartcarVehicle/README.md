@@ -32,7 +32,7 @@
 
 ## 4. Einrichten der Instanz
 
-<img width="1781" height="888" alt="image" src="https://github.com/user-attachments/assets/3a7f6a1e-d0a7-4a40-8376-8b5880d63e24" />
+<img width="1781" height="888" alt="image" src="https://github.com/user-attachments/assets/141ec08f-b3e9-4c36-b7ed-7bbdaa2bb5fa" />
 
 Die Berechtigungen für Fahrzeugdaten und Steuerfunktionen werden unter **Smartcar → Configuration → Vehicle Access** festgelegt.
 
