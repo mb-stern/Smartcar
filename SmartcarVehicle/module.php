@@ -45,9 +45,11 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $this->ApplyVehicleAccessCommands();
 
-        if ($this->HasParentConnection() && $this->ReadPropertyString('UserID') !== '') {
-            $this->SyncVehicleAccessSignals();
-        }
+        // Kein API-/Parent-Aufruf in ApplyChanges():
+        // Bei Modul-Updates kann IP-Symcon die Instanz bereits anwenden,
+        // bevor das Parent-Interface des Splitters wieder vollständig bereitsteht.
+        // Die Signale werden bewusst nur über den Button bzw. nach einem
+        // abgeschlossenen Connect-/Reauth-Flow synchronisiert.
     }
 
     public function RequestAction($Ident, $Value): void
