@@ -153,11 +153,21 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $form = [
             'elements' => [
-                ['type' => 'Label', 'caption' => 'Vehicle ID: ' . $this->ReadPropertyString('VehicleID')],
-                ['type' => 'Label', 'caption' => 'Connection ID: ' . $this->ReadPropertyString('ConnectionID')],
-                ['type' => 'Label', 'caption' => 'User ID: ' . $this->ReadPropertyString('UserID')],
-                ['type' => 'Label', 'caption' => 'Fahrzeug: ' . $this->ReadPropertyString('VehicleCaption')],
-                ['type' => 'Label', 'caption' => 'Antrieb: ' . $this->ReadPropertyString('PowertrainType')],
+                [
+                    'type' => 'RowLayout',
+                    'items' => [
+                        ['type' => 'Label', 'caption' => 'Fahrzeug: ' . $this->ReadPropertyString('VehicleCaption')],
+                        ['type' => 'Label', 'caption' => 'Antrieb: ' . $this->ReadPropertyString('PowertrainType')]
+                    ]
+                ],
+                [
+                    'type' => 'RowLayout',
+                    'items' => [
+                        ['type' => 'Label', 'caption' => 'Vehicle ID: ' . $this->ReadPropertyString('VehicleID')],
+                        ['type' => 'Label', 'caption' => 'Connection ID: ' . $this->ReadPropertyString('ConnectionID')],
+                        ['type' => 'Label', 'caption' => 'User ID: ' . $this->ReadPropertyString('UserID')]
+                    ]
+                ],
                 [
                     'type' => 'CheckBox',
                     'name' => 'ShowOEMUpdatedAtVariables',
@@ -202,13 +212,10 @@ class SmartcarVehicle extends IPSModuleStrict
             ]
         ];
 
-        $form['actions'][] = [
-            'type' => 'Label',
-            'caption' => 'Webhook-Zuordnungen für dieses Fahrzeug'
-        ];
+        $webhookPanelItems = [];
 
         if (empty($webhookOverview['success'])) {
-            $form['actions'][] = [
+            $webhookPanelItems[] = [
                 'type' => 'Label',
                 'caption' => 'Webhooks konnten nicht geladen werden: ' . (string)($webhookOverview['error'] ?? 'Unbekannter Fehler')
             ];
@@ -243,12 +250,12 @@ class SmartcarVehicle extends IPSModuleStrict
             }
 
             if (empty($webhookRows)) {
-                $form['actions'][] = [
+                $webhookPanelItems[] = [
                     'type' => 'Label',
                     'caption' => 'Für diese Smartcar-Anwendung wurden keine Webhooks gefunden.'
                 ];
             } else {
-                $form['actions'][] = [
+                $webhookPanelItems[] = [
                     'type' => 'List',
                     'name' => 'WebhookSelection',
                     'caption' => 'Webhooks',
@@ -264,13 +271,20 @@ class SmartcarVehicle extends IPSModuleStrict
                     'values' => $webhookRows
                 ];
 
-                $form['actions'][] = [
+                $webhookPanelItems[] = [
                     'type' => 'Button',
                     'caption' => 'Webhook-Zuordnung übernehmen / neu laden',
                     'onClick' => '$rows = []; foreach ($WebhookSelection as $row) { $rows[] = $row; } echo SMCARV_ApplyWebhookSelection($id, json_encode($rows));'
                 ];
             }
         }
+
+        $form['actions'][] = [
+            'type' => 'ExpansionPanel',
+            'caption' => 'Webhook-Zuordnungen',
+            'expanded' => false,
+            'items' => $webhookPanelItems
+        ];
 
         return json_encode($form, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     }
