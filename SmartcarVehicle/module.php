@@ -327,7 +327,8 @@ class SmartcarVehicle extends IPSModuleStrict
             'meta'            => $payload['meta'] ?? []
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
-        $oemDates = [];
+        $successful = [];
+        $unsuccessful = [];
 
         foreach ($signals as $signal) {
             if (!is_array($signal)) {
@@ -340,29 +341,49 @@ class SmartcarVehicle extends IPSModuleStrict
             }
 
             $meta = is_array($signal['meta'] ?? null) ? $signal['meta'] : [];
-
-            $oemDates[$signalCode] = [
-                'ingestedAt'   => $this->FormatSmartcarTimestamp($meta['ingestedAt'] ?? null),
-                'retrievedAt'  => $this->FormatSmartcarTimestamp($meta['retrievedAt'] ?? null),
-                'oemUpdatedAt' => $this->FormatSmartcarTimestamp($meta['oemUpdatedAt'] ?? null)
-            ];
-
-            $body   = is_array($signal['body'] ?? null) ? $signal['body'] : [];
+            $body = is_array($signal['body'] ?? null) ? $signal['body'] : [];
             $status = is_array($signal['status'] ?? null) ? $signal['status'] : null;
 
-            $this->SendDebug('WebhookVehicle/Apply/' . $signalCode, json_encode([
-                'body'   => $body,
-                'status' => $status
-            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+            $statusValue = strtoupper((string)($status['value'] ?? ''));
+            $verified = $status === null
+                || $statusValue === ''
+                || $statusValue === 'SUCCESS'
+                || $statusValue === 'OK';
 
-            $this->ApplySignalFromV3($signalCode, $body, $status, $this->GetSignalDefinition($signalCode, $body), $meta);
-        }
+            if ($verified && !empty($body)) {
+                $successful[$signalCode] = $body;
+            } else {
+                $error = is_array($status['error'] ?? null) ? $status['error'] : [];
+                $unsuccessful[$signalCode] = [
+                    'status' => $statusValue !== '' ? $statusValue : 'NO_DATA',
+                    'code' => (string)($error['code'] ?? ''),
+                    'detail' => (string)($error['detail'] ?? '')
+                ];
+            }
 
-        if (!empty($oemDates)) {
-            $this->SendDebug('WebhookVehicle/OEM-Date', json_encode($oemDates, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+            $this->ApplySignalFromV3(
+                $signalCode,
+                $body,
+                $status,
+                $this->GetSignalDefinition($signalCode, $body),
+                $meta,
+                false
+            );
         }
 
         $this->TouchLastSignalsAt();
+
+        $this->SendDebug(
+            'WebhookVehicle/Erfolgreiche Signale',
+            json_encode($successful, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            0
+        );
+
+        $this->SendDebug(
+            'WebhookVehicle/Nicht erfolgreiche Signale',
+            json_encode($unsuccessful, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            0
+        );
     }
 
     private function ApplySignalFromV3(
