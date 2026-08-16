@@ -238,7 +238,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 || $statusValue === 'SUCCESS'
                 || $statusValue === 'OK';
 
-            if ($verified && !empty($body)) {
+            if ($verified && $this->HasMeaningfulSignalData($body)) {
                 $successful[$signalCode] = $body;
             } else {
                 $error = is_array($status['error'] ?? null) ? $status['error'] : [];
@@ -350,7 +350,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 || $statusValue === 'SUCCESS'
                 || $statusValue === 'OK';
 
-            if ($verified && !empty($body)) {
+            if ($verified && $this->HasMeaningfulSignalData($body)) {
                 $successful[$signalCode] = $body;
             } else {
                 $error = is_array($status['error'] ?? null) ? $status['error'] : [];
@@ -386,6 +386,34 @@ class SmartcarVehicle extends IPSModuleStrict
         );
     }
 
+
+    private function HasMeaningfulSignalData(array $body): bool
+    {
+        foreach ($body as $value) {
+            if ($value === null) {
+                continue;
+            }
+
+            if (is_array($value)) {
+                if ($this->HasMeaningfulSignalData($value)) {
+                    return true;
+                }
+                continue;
+            }
+
+            // false, 0 und "0" sind gültige Nutzwerte.
+            if (is_bool($value) || is_int($value) || is_float($value)) {
+                return true;
+            }
+
+            if (is_string($value) && trim($value) !== '') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private function ApplySignalFromV3(
         string $code,
         array $body,
@@ -415,11 +443,11 @@ class SmartcarVehicle extends IPSModuleStrict
             return false;
         }
 
-        if (empty($body)) {
+        if (!$this->HasMeaningfulSignalData($body)) {
             if ($logStatus) {
                 $this->SendDebug(
                     'SignalData/' . $code,
-                    'Erfolgreicher Status, aber keine Daten im body. Keine Variable angelegt.',
+                    'Erfolgreicher Status, aber keine nutzbaren Daten im body. Keine Variable angelegt.',
                     0
                 );
             }
