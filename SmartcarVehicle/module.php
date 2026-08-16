@@ -385,12 +385,14 @@ class SmartcarVehicle extends IPSModuleStrict
             }
 
             if (empty($desired)) {
-                $this->ReloadForm();
                 return 'Keine Webhook-Zuordnung ausgewählt.';
             }
         }
 
-        $this->ReloadForm();
+        // Formular hier bewusst NICHT sofort neu laden. Nach Remove/Create kann die
+        // Smartcar Management API die neue Subscription für einen kurzen Moment noch
+        // nicht in der Übersicht liefern. Ein sofortiges ReloadForm() würde dadurch
+        // den gerade gesetzten Haken wieder auf false zurücksetzen.
 
         if ($hasChanges) {
             return 'Webhook-Zuordnung wurde übernommen.';
