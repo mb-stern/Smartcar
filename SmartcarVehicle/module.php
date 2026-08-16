@@ -253,18 +253,18 @@ class SmartcarVehicle extends IPSModuleStrict
                     $form['actions'][] = [
                         'type' => 'Button',
                         'caption' => 'Webhook neu laden: ' . $name,
-                        'onClick' => "echo SMCARV_ReloadWebhook($id, '" . $escapedWebhookId . "');"
+                        'onClick' => "echo SMCARV_ReloadWebhook(\$id, '" . $escapedWebhookId . "');"
                     ];
                     $form['actions'][] = [
                         'type' => 'Button',
                         'caption' => 'Zuordnung entfernen: ' . $name,
-                        'onClick' => "echo SMCARV_UnsubscribeWebhook($id, '" . $escapedWebhookId . "');"
+                        'onClick' => "echo SMCARV_UnsubscribeWebhook(\$id, '" . $escapedWebhookId . "');"
                     ];
                 } else {
                     $form['actions'][] = [
                         'type' => 'Button',
                         'caption' => 'Webhook zuordnen: ' . $name,
-                        'onClick' => "echo SMCARV_SubscribeWebhook($id, '" . $escapedWebhookId . "');"
+                        'onClick' => "echo SMCARV_SubscribeWebhook(\$id, '" . $escapedWebhookId . "');"
                     ];
                 }
             }
