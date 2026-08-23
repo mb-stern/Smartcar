@@ -1,4 +1,6 @@
 <?php
+// Build 2026-08-16: kompakte Webhook-Auswahl ohne Statusspalte/ExpansionPanel.
+// Build: 2026-08-16 Webhook checkbox list v3
 
 class SmartcarVehicle extends IPSModuleStrict
 {
@@ -14,11 +16,13 @@ class SmartcarVehicle extends IPSModuleStrict
     $this->RegisterPropertyString('Model', '');
     $this->RegisterPropertyInteger('Year', 0);
     $this->RegisterPropertyString('PowertrainType', '');
-    $this->RegisterPropertyString('SelectedCapabilities', '[]');
+    $this->RegisterPropertyString('Permissions', '[]');
     $this->RegisterPropertyBoolean('ShowOEMUpdatedAtVariables', false);
+    $this->RegisterPropertyString('VariableSelection', '[]');
+    $this->RegisterAttributeString('DiscoveredVariables', '{}');
+    $this->RegisterAttributeString('LastSuccessfulSignalPayloads', '{}');
     $this->RegisterAttributeString('LastOEMSignalTimes', '{}');
-    $this->RegisterAttributeString('CompatibilityCache', '[]');
-    $this->RegisterAttributeInteger('CompatibilityCacheAt', 0);
+    $this->RegisterAttributeString('ModuleVariableNames', '{}');
 
     $lastSignalsExists = (bool)@$this->GetIDForIdent('LastSignalsAt');
     $this->RegisterVariableInteger('LastSignalsAt', 'Letzte Signale', '~UnixTimestamp');
@@ -36,6 +40,8 @@ class SmartcarVehicle extends IPSModuleStrict
         parent::ApplyChanges();
 
         $this->CreateProfile();
+        $this->EnsureLastSignalsAtVariable();
+        $this->ApplyOEMTimestampVisibility();
 
         if ($this->ReadPropertyString('VehicleID') === '') {
             $this->SetStatus(201);
@@ -44,7 +50,40 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $this->SetStatus(102);
 
-        $this->ApplySelectedCapabilities();
+        // Bereits vorhandene Signalvariablen (z. B. aus einer älteren Modulversion)
+        // sofort in die Auswahlliste übernehmen. Dabei werden weder Namen noch Werte
+        // verändert.
+        $this->RememberExistingSignalVariables();
+
+        $this->ApplyVariableSelection();
+        $this->ApplyVehicleAccessCommands();
+        $this->RestoreSelectedSignalsFromCache();
+
+        // Kein API-/Parent-Aufruf in ApplyChanges():
+        // Bei Modul-Updates kann IP-Symcon die Instanz bereits anwenden,
+        // bevor das Parent-Interface des Splitters wieder vollständig bereitsteht.
+        // Die Signale werden bewusst nur über den Button bzw. nach einem
+        // abgeschlossenen Connect-/Reauth-Flow synchronisiert.
+    }
+
+
+    private function EnsureLastSignalsAtVariable(): void
+    {
+        $existingId = @$this->GetIDForIdent('LastSignalsAt');
+
+        if (!$existingId) {
+            $this->RegisterVariableInteger(
+                'LastSignalsAt',
+                'Letzte Signale',
+                '~UnixTimestamp'
+            );
+
+            $existingId = @$this->GetIDForIdent('LastSignalsAt');
+        }
+
+        if ($existingId) {
+            IPS_SetPosition($existingId, 10);
+        }
     }
 
     public function RequestAction($Ident, $Value): void
@@ -101,412 +140,407 @@ class SmartcarVehicle extends IPSModuleStrict
 
     public function GetConfigurationForm(): string
     {
-        $capabilities = [];
-
-        if ($this->HasParentConnection()) {
-            $capabilities = $this->GetCompatibilityCapabilitiesForForm();
+        if (trim($this->ReadPropertyString('VehicleID')) === '') {
+            return json_encode([
+                'elements' => [
+                    ['type' => 'Label', 'caption' => 'Diese Smartcar Fahrzeug-Instanz darf nicht manuell erstellt werden.'],
+                    ['type' => 'Label', 'caption' => 'Bitte löschen Sie diese Instanz wieder und erstellen Sie das Fahrzeug ausschließlich über den Smartcar-Konfigurator.']
+                ],
+                'actions' => []
+            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         }
+
+        $webhookOverview = $this->GetWebhookOverviewFromParent();
 
         $form = [
             'elements' => [
-                ['type' => 'Label', 'caption' => 'Vehicle ID: ' . $this->ReadPropertyString('VehicleID')],
-                ['type' => 'Label', 'caption' => 'Connection ID: ' . $this->ReadPropertyString('ConnectionID')],
-                ['type' => 'Label', 'caption' => 'User ID: ' . $this->ReadPropertyString('UserID')],
-                ['type' => 'Label', 'caption' => 'Fahrzeug: ' . $this->ReadPropertyString('VehicleCaption')],
-                ['type' => 'Label', 'caption' => 'Antrieb: ' . $this->ReadPropertyString('PowertrainType')],
+                [
+                    'type' => 'RowLayout',
+                    'items' => [
+                        ['type' => 'Label', 'caption' => 'Fahrzeug: ' . $this->ReadPropertyString('VehicleCaption')],
+                        ['type' => 'Label', 'caption' => 'Antrieb: ' . $this->ReadPropertyString('PowertrainType')]
+                    ]
+                ],
+                [
+                    'type' => 'RowLayout',
+                    'items' => [
+                        ['type' => 'Label', 'caption' => 'Vehicle ID: ' . $this->ReadPropertyString('VehicleID')],
+                        ['type' => 'Label', 'caption' => 'Connection ID: ' . $this->ReadPropertyString('ConnectionID')],
+                        ['type' => 'Label', 'caption' => 'User ID: ' . $this->ReadPropertyString('UserID')]
+                    ]
+                ],
                 [
                     'type' => 'CheckBox',
                     'name' => 'ShowOEMUpdatedAtVariables',
                     'caption' => 'OEM-Aktualisierungszeit je Signal als zusätzliche Variable anzeigen'
                 ],
-
                 [
-                'type' => 'List',
-                'name' => 'SelectedCapabilities',
-                'caption' => 'Kompatible Signale / Befehle',
-                'rowCount' => 10,
-                'add' => false,
-                'delete' => false,
-                'sort' => [
-                    'column' => 'sortKey',
-                    'direction' => 'ascending'
+                    'type' => 'Label',
+                    'caption' => 'Die Signale und Berechtigungen werden ausschließlich über Smartcar → Configuration → Vehicle Access festgelegt. Erkannte Variablen sind standardmäßig aktiv und können hier gezielt abgewählt werden.'
                 ],
-                'columns' => [
-                    [
-                        'caption' => '',
-                        'name' => 'sortKey',
-                        'width' => '0px',
-                        'visible' => false,
-                        'edit' => ['type' => 'ValidationTextBox']
+                [
+                    'type' => 'List',
+                    'name' => 'VariableSelection',
+                    'caption' => 'Variablen',
+                    'rowCount' => 14,
+                    'add' => false,
+                    'delete' => false,
+                    'columns' => [
+                        ['caption' => 'Aktiv', 'name' => 'Active', 'width' => '70px', 'edit' => ['type' => 'CheckBox']],
+                        ['caption' => 'Name', 'name' => 'Name', 'width' => '260px'],
+                        ['caption' => 'Typ', 'name' => 'Kind', 'width' => '110px'],
+                        ['caption' => 'Smartcar', 'name' => 'Source', 'width' => 'auto'],
+                        ['caption' => 'Ident', 'name' => 'Ident', 'width' => '0px', 'save' => true]
                     ],
-                    [
-                        'caption' => '',
-                        'name' => 'capabilityKey',
-                        'width' => '0px',
-                        'visible' => false,
-                        'edit' => ['type' => 'ValidationTextBox']
-                    ],
-                    [
-                        'caption' => 'Aktiv',
-                        'name' => 'selected',
-                        'width' => '80px',
-                        'edit' => ['type' => 'CheckBox']
-                    ],
-                    [
-                        'caption' => 'Typ',
-                        'name' => 'type',
-                        'width' => '90px',
-                    ],
-                    [
-                        'caption' => 'Gruppe',
-                        'name' => 'group',
-                        'width' => '160px',
-                    ],
-                    [
-                        'caption' => 'Name',
-                        'name' => 'name',
-                        'width' => 'auto',
-                    ],
-                    [
-                        'caption' => 'Capability',
-                        'name' => 'capability',
-                        'width' => '220px',
-                    ],
-                    [
-                        'caption' => 'Code',
-                        'name' => 'code',
-                        'width' => '220px',
-                    ],
-                    [
-                        'caption' => 'Permission',
-                        'name' => 'permission',
-                        'width' => '180px',
-                    ]
-                ],
-                'values' => $capabilities
-            ]
+                    'values' => $this->BuildVariableSelectionRows()
+                ]
             ],
             'actions' => [
                 [
                     'type' => 'Button',
-                    'caption' => 'Kompatibilitätsliste neu laden',
-                    'onClick' => 'SMCARV_ReloadCompatibility($id);'
-                ],
-                [
-                    'type' => 'Button',
-                    'caption' => 'Gewählte Signale bei Smartcar registrieren',
+                    'caption' => 'Vehicle Access synchronisieren',
                     'onClick' => 'echo SMCARV_GenerateConnectURL($id);'
                 ],
                 [
                     'type' => 'Button',
-                    'caption' => 'Aktivierte Signale abrufen',
-                    'onClick' => 'SMCARV_FetchSelectedSignals($id, []);'
-                ],
-                [
-                    'type'    => 'Label',
-                    'caption' => ''
-                ],
-                [
-                    'type'  => 'RowLayout',
-                    'items' => [
-                        [
-                                'type'   => 'Image',
-                                'onClick'=> "echo 'https://paypal.me/mbstern';",
-                                'image'=> "data:image/jpeg;base64,/9j/4QAYRXhpZgAASUkqAAgAAAAAAAAAAAAAAP/sABFEdWNreQABAAQAAAA8AAD/7gAOQWRvYmUAZMAAAAAB/9sAhAAGBAQEBQQGBQUGCQYFBgkLCAYGCAsMCgoLCgoMEAwMDAwMDBAMDg8QDw4MExMUFBMTHBsbGxwfHx8fHx8fHx8fAQcHBw0MDRgQEBgaFREVGh8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx//wAARCABLAGQDAREAAhEBAxEB/8QAqwABAAICAwEBAAAAAAAAAAAAAAUGAgcDBAgJAQEBAAIDAQAAAAAAAAAAAAAAAAMEAgUGARAAAQMCAwMEDwMICwAAAAAAAgEDBAAFERIGIRMHMdEUFkFRcSKyk6PDJFSEFTZGZmEyCIGxQlKSIzODkaFigmOz00QlVRgRAAICAQIDBQYFBQAAAAAAAAABAgMREgQhMQVBUWEiE/BxgaGxBpHRQhQVwfEyUiP/2gAMAwEAAhEDEQA/AN+WWywr/CS63VDfkPmeUc5CICJKKCKCqbNlAd/qNpr1YvGHz0A6jaa9WLxh89AOo2mvVi8YfPQDqNpr1YvGHz0A6jaa9WLxh89AOo2mvVi8YfPQDqNpr1YvGHz0A6jaa9WLxh89AOo2mvVi8YfPQDqNpr1YvGHz0A6jaa9WLxh89ARnuVr3/wC4t+97o3PSui51+9jly5vvZezhQEnob4ajd1zw1oCeoBQCgFAeZtWfik1ZbtT3W3W22284MKU7GYceR4nCFk1DMSi4KbVHHYldDT0eEoJtvLRrrN7JSaSIr/1nr3/q7Z+y/wD6tS/wtXfL5GH76Xci4aC/FPFul1j2zVFtC3dKMWmrhGMiZEyXAd6B98Iqv6WZcOzVTc9HcYuUHnHYTVb1N4Zv6tIXhQCgFAV/569g85QGWhvhqN3XPDWgJ6gFAKA4LhLbhwJMxxcG4zRvGq9psVJfzVlGOWkeN4WT53SZJyZD0lxcTfMnTVe2aqS/nru0sLBz74s6XSj7SVD6rJfTR+g+6ZIAjiRKgiiY44rsSitZ44JcT6E6Nv8ADvunok2Kpd6KNPgf3wdbREISw/prkd3t5U2OMjZbHeQ3FanHkTdVi2KAUBX/AJ69g85QGWhvhqN3XPDWgJ6gFAKAp/F+6LbOGOpZaLlLoLrIL/afTcp/W5VrYw1XRXiRXvEGeElElHKAqRLsERTFVVewiJXZS5GjTXNmAWi7GSCEJ9SXYibo+aq2h9xk9zUuco/ii26T0VKalt3C6AjaMrmYjLgpKachHhyYdqrNVLzlmj6l1aMouuvjnm/yPWPBCG8zpJ19xFQZUozax7IiIhin94VrnOuTTuS7om5+2q3Hbtv9UvyRsKtMdEKAUBX/AJ69g85QGWhvhqN3XPDWgJ6gFAKA1F+KK59E4XnGQsCuE2Oxh2xFVeX/ACq2nSIZuz3JlTeSxA8waGY3l9RzDYy0Z4/auAp4VdZHmct1aeKH4tI2xpzTl11Fcfd9uESfQCdJXCyigjgiqq7eyqVjudzCmOqXI5/Z7Ke4nohz5l8snAu6HIA7zMaZjIuJtRlI3CTtZiQRHu7a1F/XYJeRNvxOg232xNyzbJKPhzNwwYMWBDZhxG0ajRwRtpseRBHYlc3ZNzk5Pi2djVXGuKjFYijnrAzFAKAr/wA9ewecoDLQ3w1G7rnhrQE9QCgFAUzidwvtnEC3QoNwmyITcJ5XwWPkXMRAod8hiXIi7Kt7TduhtpJ5IbqVNYZp7UfBCFodyO7ZnZ10dnIYPKbYkLYtqKphuhTaSr2e1XRdO6h6revTHByv3BtmowjBOXF9hduB1knx7hc50qM6wKNAw0roEGZSJSLDMicmVKq9cvjKMYpp8cnv2ztpxnOUk1wxx9vA29XOHXigFAKAUBX/AJ69g85QGWhvhqN3XPDWgNAyeKvFSdB1ZqS36lhQbTY5xsQ7e+wwrj4K4qADSqKqSoOXl5a6JbOhOEHFuUlz4mud02m0+CNl2HjvpKPpawytX3Fm3Xy5xQffiNg4eVCVUF0hBD3YuCmdM3YWtfZ06bnJVrMUyxHcR0rVzJ5njHw3eisTG7yBRJMz3czI3TyNlJyiWTMoYJ3pouK7KgexuTxp44z8CRXw7yQvOvdM2y7rYXZo+/SiuS24IiZkjbYEeYyEVEEwBfvKlY1bWc0pY8ucGN16hFvtSbNadfNfsabjaiO7xXAefVkbcTTe8JBVcSwFEXL3tdB+w27tdWh8Fzyzj/5TdxpVznHjLGnCybGd4kaSiOtxbhPCPOyCUhlEM0aNRRVAiEVRFTkwrSrpt0lmMcx+p0b6xt4NRnLEscefDwIy6a2emah0tGsEpCgXQ3XJJ7vabTRYKnfpmH7h7anq2SjXY7F5o4x737IrX9Sc7qY0vyTznh2L3+5lh1pqVrTGlLpf3W98NuYJ4WVLLnNNgBmwXDMSonJWv29XqTUe83Vk9MWzWjf4jrYPDTrZJgC3dHJbkGNZhexzutoJqSuKCKgI2aES5fs7NbB9Kl62hPy4zkr/ALtaNXaWuBxb04xpOy3vVD7Vll3ljpLFuQjkO5FxUVEQDeEmXBVXLhVaWym5yjDzKPaSq9KKcuGS02DUNk1Da2rrZZjc63vYo2+3jhiK4EioqIqKi8qKlVrKpQlpksMkjJSWUdD569g85UZkcGmSlDolSiBvZQtSFjtoqIpOIpZBxXBExKsoYys8jx8jWHCf8PVhTTrczXdl3uoCkOuE068RCLeKICELR7tccFL8tbje9TlrxVLy4KdO1WPMuJxM6R4h6Y1/q2XbNJRb/Evyf8ZOdeZaajMoK5WVA9uVBwBQRExypguFeu+qyqCc3Fx5rvGicZPCzkgLzojqx+G9+FqdBtt8W5dOhMKQkayVcRsGx3akmJMivIuxO5U1e49Td5hxjpx8P7kcq9NWHweS5aI4d6kj6KvmpLuBzteapj/vd4oi40w5gIspjlQVyd8SdwexUM93X68IrhVBkW5oslt54WbJL6lt0hwv0/CtsCVcbeJXoAE3ycMjQXeX7mZW1y9yot51SyUpKMvJ/T6kHT+iUwhGU4/9O33/AEKzE01re3WO+WIbA1MdnOOGt2J1vExPBO9QlzKX6Q4qmC1fnuaJ2Qs1uOn9OGauGz3VdVlXpqTlnzZXt7iW01o++QdR2WTIiKMS0Wnd5s4LjKczEYIiLjji6u3kqtut5XKqaT805/L2Rc2XT7YX1uS8sK/D/J5z9SF11B4q604XJa5tjbg3i43NtqVEYdBRagNkh70yJxUVVIU2Cv5Kh28qKrtSlmKj8zdWKc4YxxyQnEfgA63EusvS7DlxuF7ksNNxl3bbUCNsKQYKRJmU1aBFXlw2VNtepZaU+CivxfYYW7b/AF7Tk1fw51fbeIQXq2QblcbMlsj26CdlnNQpUbo4CCtkryLi2WVS2duvKN1XKrS3FS1NvUspns6ZKWVnGOw2bwp0m3pjR0eAkJ23OvOuypEJ+QMtxs3S5CeAQElyiOOCcta7eXepZnOfhgsUw0xwd/569g85VUlMtDfDUb7Ccx/bWgJ6gFAdO42a0XJWVuMJiYsY95H6Q0Du7P8AWDOi5V+1KzjZKPJ4PHFPmdysD0UAoBQCgFAKAUBX8U69YY7egcn8ygIeLj0iZuen/wAc83unDo2P879L9bLsoDs+k/UHkKAek/UHkKAek/UHkKAek/UHkKAek/UHkKAek/UHkKAek/UHkKAek/UHkKAek/UHkKAek/UHkKAek/UHkKAiv3fvf/db/P8A4nvT+H4nd0B//9k="
-                        ],
-                        [
-                            'type'    => 'Label',
-                            'caption' => "Sag danke und unterstütze den Modulentwickler: paypal.me/mbstern"
-                         ]
-                    ]
+                    'caption' => 'Signale aus Vehicle Access abrufen',
+                    'onClick' => 'SMCARV_SyncVehicleAccessSignals($id);'
                 ]
             ]
         ];
 
+        $webhookPanelItems = [];
+
+        if (empty($webhookOverview['success'])) {
+            $webhookPanelItems[] = [
+                'type' => 'Label',
+                'caption' => 'Webhooks konnten nicht geladen werden: ' . (string)($webhookOverview['error'] ?? 'Unbekannter Fehler')
+            ];
+        } else {
+            $webhooks = is_array($webhookOverview['webhooks'] ?? null) ? $webhookOverview['webhooks'] : [];
+            $webhookRows = [];
+
+            foreach ($webhooks as $webhook) {
+                if (!is_array($webhook)) {
+                    continue;
+                }
+
+                $webhookId = trim((string)($webhook['id'] ?? ''));
+                if ($webhookId === '') {
+                    continue;
+                }
+
+                $subscribed = (bool)($webhook['subscribed'] ?? false);
+
+                $webhookRows[] = [
+                    'Active' => $subscribed,
+                    'Name' => (string)($webhook['name'] ?? $webhookId),
+                    'WebhookID' => $webhookId
+                ];
+            }
+
+            if (empty($webhookRows)) {
+                $webhookPanelItems[] = [
+                    'type' => 'Label',
+                    'caption' => 'Für diese Smartcar-Anwendung wurden keine Webhooks gefunden.'
+                ];
+            } else {
+                $webhookPanelItems[] = [
+                    'type' => 'RowLayout',
+                    'items' => [
+                        [
+                            'type' => 'List',
+                            'name' => 'WebhookSelection',
+                            'caption' => 'Webhooks',
+                            'rowCount' => 3,
+                            'add' => false,
+                            'delete' => false,
+                            'columns' => [
+                                ['caption' => 'Aktiv', 'name' => 'Active', 'width' => '60px', 'edit' => ['type' => 'CheckBox']],
+                                ['caption' => 'Webhook', 'name' => 'Name', 'width' => '180px'],
+                                ['caption' => 'WebhookID', 'name' => 'WebhookID', 'width' => '0px', 'save' => true]
+                            ],
+                            'values' => $webhookRows
+                        ],
+                        [
+                            'type' => 'Button',
+                            'caption' => 'Übernehmen / neu laden',
+                            'onClick' => '$rows = []; foreach ($WebhookSelection as $row) { $rows[] = $row; } echo SMCARV_ApplyWebhookSelection($id, json_encode($rows));'
+                        ]
+                    ]
+                ];
+            }
+        }
+
+        foreach ($webhookPanelItems as $webhookItem) {
+            $form['actions'][] = $webhookItem;
+        }
+
         return json_encode($form, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     }
 
-    public function ReloadCompatibility(): void
+    private function GetWebhookOverviewFromParent(): array
     {
-        $this->LoadCompatibility(true);
+        if (!$this->HasParentConnection()) {
+            return ['success' => false, 'error' => 'Kein Splitter/Parent verbunden.', 'webhooks' => []];
+        }
+
+        $vehicleId = trim($this->ReadPropertyString('VehicleID'));
+        if ($vehicleId === '') {
+            return ['success' => false, 'error' => 'VehicleID fehlt.', 'webhooks' => []];
+        }
+
+        $result = $this->SendDataToParent(json_encode([
+            'DataID' => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
+            'Command' => 'GetWebhookOverview',
+            'VehicleID' => $vehicleId
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+
+        $decoded = json_decode((string)$result, true);
+        if (!is_array($decoded)) {
+            return ['success' => false, 'error' => 'Ungültige Antwort vom Splitter.', 'webhooks' => []];
+        }
+
+        return $decoded;
+    }
+
+    public function ApplyWebhookSelection(string $selectionJson): string
+    {
+        if (!$this->HasParentConnection()) {
+            return 'Fehler: Kein Smartcar Splitter verbunden.';
+        }
+
+        $rows = json_decode($selectionJson, true);
+        if (!is_array($rows)) {
+            return 'Fehler: Webhook-Auswahl ist ungültig.';
+        }
+
+        $desired = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+
+            $webhookId = trim((string)($row['WebhookID'] ?? ''));
+            if ($webhookId !== '' && (bool)($row['Active'] ?? false)) {
+                $desired[$webhookId] = true;
+            }
+        }
+
+        $overview = $this->GetWebhookOverviewFromParent();
+        if (empty($overview['success'])) {
+            return 'Fehler: ' . (string)($overview['error'] ?? 'Webhook-Zuordnungen konnten nicht geladen werden.');
+        }
+
+        $webhooks = is_array($overview['webhooks'] ?? null) ? $overview['webhooks'] : [];
+        $current = [];
+        $known = [];
+
+        foreach ($webhooks as $webhook) {
+            if (!is_array($webhook)) {
+                continue;
+            }
+
+            $webhookId = trim((string)($webhook['id'] ?? ''));
+            if ($webhookId === '') {
+                continue;
+            }
+
+            $known[$webhookId] = true;
+            if ((bool)($webhook['subscribed'] ?? false)) {
+                $current[$webhookId] = true;
+            }
+        }
+
+        // Nur Webhooks berücksichtigen, die die Management API aktuell tatsächlich liefert.
+        $desired = array_intersect_key($desired, $known);
+
+        $toSubscribe = array_diff_key($desired, $current);
+        $toUnsubscribe = array_diff_key($current, $desired);
+        $hasChanges = !empty($toSubscribe) || !empty($toUnsubscribe);
+
+        $messages = [];
+
+        if ($hasChanges) {
+            foreach (array_keys($toUnsubscribe) as $webhookId) {
+                $result = $this->ExecuteWebhookManagementCommandRaw('UnsubscribeWebhook', $webhookId);
+                if (empty($result['success'])) {
+                    return 'Fehler beim Entfernen von Webhook ' . $webhookId . ': ' . (string)($result['error'] ?? 'Unbekannter Fehler');
+                }
+                $messages[] = 'entfernt';
+            }
+
+            foreach (array_keys($toSubscribe) as $webhookId) {
+                $result = $this->ExecuteWebhookManagementCommandRaw('SubscribeWebhook', $webhookId);
+                if (empty($result['success'])) {
+                    return 'Fehler beim Zuordnen von Webhook ' . $webhookId . ': ' . (string)($result['error'] ?? 'Unbekannter Fehler');
+                }
+                $messages[] = 'zugeordnet';
+            }
+        } else {
+            // Keine Änderung an den Häkchen: die weiterhin gewählten Webhooks neu abonnieren.
+            // Bei nur einem gewählten Webhook entspricht dies dem gewünschten "Neu laden".
+            foreach (array_keys($desired) as $webhookId) {
+                $result = $this->ExecuteWebhookManagementCommandRaw('ReloadWebhook', $webhookId);
+                if (empty($result['success'])) {
+                    return 'Fehler beim Neu laden von Webhook ' . $webhookId . ': ' . (string)($result['error'] ?? 'Unbekannter Fehler');
+                }
+                $messages[] = 'neu geladen';
+            }
+
+            if (empty($desired)) {
+                return 'Keine Webhook-Zuordnung ausgewählt.';
+            }
+        }
+
+        // Formular hier bewusst NICHT sofort neu laden. Nach Remove/Create kann die
+        // Smartcar Management API die neue Subscription für einen kurzen Moment noch
+        // nicht in der Übersicht liefern. Ein sofortiges ReloadForm() würde dadurch
+        // den gerade gesetzten Haken wieder auf false zurücksetzen.
+
+        if ($hasChanges) {
+            return 'Webhook-Zuordnung wurde übernommen.';
+        }
+
+        return 'Webhook wurde neu geladen.';
+    }
+
+    private function ExecuteWebhookManagementCommandRaw(string $command, string $webhookId): array
+    {
+        $webhookId = trim($webhookId);
+        $vehicleId = trim($this->ReadPropertyString('VehicleID'));
+        $userId = trim($this->ReadPropertyString('UserID'));
+
+        if ($webhookId === '' || $vehicleId === '' || $userId === '') {
+            return ['success' => false, 'error' => 'WebhookID, VehicleID oder UserID fehlt.'];
+        }
+
+        $result = $this->SendDataToParent(json_encode([
+            'DataID' => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
+            'Command' => $command,
+            'WebhookID' => $webhookId,
+            'VehicleID' => $vehicleId,
+            'UserID' => $userId
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+
+        $this->SendDebug('WebhookManagement/' . $command, (string)$result, 0);
+
+        $decoded = json_decode((string)$result, true);
+        if (!is_array($decoded)) {
+            return ['success' => false, 'error' => (string)$result];
+        }
+
+        return $decoded;
+    }
+
+    public function SubscribeWebhook(string $webhookId): string
+    {
+        return $this->ExecuteWebhookManagementCommand('SubscribeWebhook', $webhookId, 'Webhook-Zuordnung wird angelegt.');
+    }
+
+    public function UnsubscribeWebhook(string $webhookId): string
+    {
+        return $this->ExecuteWebhookManagementCommand('UnsubscribeWebhook', $webhookId, 'Webhook-Zuordnung wurde entfernt.');
+    }
+
+    public function ReloadWebhook(string $webhookId): string
+    {
+        return $this->ExecuteWebhookManagementCommand('ReloadWebhook', $webhookId, 'Webhook wurde neu zugeordnet; Smartcar startet die neue Subscription.');
+    }
+
+    public function ReloadWebhookForm(): void
+    {
         $this->ReloadForm();
     }
 
-    private function BuildCapabilityKey(string $type, string $capability, string $code): string
+    private function ExecuteWebhookManagementCommand(string $command, string $webhookId, string $successText): string
     {
-        return strtolower(trim($type) . '|' . trim($capability) . '|' . trim($code));
-    }
-
-    private function GetCompatibilityCapabilitiesForForm(): array
-    {
-        $data = $this->LoadCompatibility(false);
-        $values = $this->BuildCapabilitiesListFromCompatibilityItems($data);
-
-        $selected = json_decode($this->ReadPropertyString('SelectedCapabilities'), true);
-        if (!is_array($selected)) {
-            $selected = [];
+        if (!$this->HasParentConnection()) {
+            return 'Fehler: Kein Smartcar Splitter verbunden.';
         }
 
-        $selectedByCapabilityKey = [];
+        $webhookId = trim($webhookId);
+        $vehicleId = trim($this->ReadPropertyString('VehicleID'));
+        $userId = trim($this->ReadPropertyString('UserID'));
 
-        foreach ($selected as $entry) {
-            if (!is_array($entry)) {
-                continue;
-            }
-
-            $capabilityKey = (string)($entry['capabilityKey'] ?? '');
-            if ($capabilityKey === '') {
-                continue;
-            }
-
-            $selectedByCapabilityKey[$capabilityKey] =
-                ($entry['selected'] ?? false) === true ||
-                ($entry['selected'] ?? false) === 1 ||
-                ($entry['selected'] ?? false) === '1' ||
-                strtolower((string)($entry['selected'] ?? '')) === 'true';
+        if ($webhookId === '' || $vehicleId === '' || $userId === '') {
+            return 'Fehler: WebhookID, VehicleID oder UserID fehlt.';
         }
 
-        foreach ($values as &$entry) {
-            $capabilityKey = (string)($entry['capabilityKey'] ?? '');
-            if ($capabilityKey !== '' && isset($selectedByCapabilityKey[$capabilityKey])) {
-                $entry['selected'] = $selectedByCapabilityKey[$capabilityKey];
-            }
-        }
-        unset($entry);
-
-        return $values;
-    }
-
-    private function LoadCompatibility(bool $forceReload): array
-    {
-
-    if (!$this->HasParentConnection()) {
-        $this->SendDebug('Compatibility/Error', 'Kein Splitter/Parent verbunden.', 0);
-        return [];
-    }
-        $cacheAt = $this->ReadAttributeInteger('CompatibilityCacheAt');
-        $cacheRaw = $this->ReadAttributeString('CompatibilityCache');
-
-        if (!$forceReload && $cacheRaw !== '' && $cacheAt > (time() - 86400)) {
-            $cached = json_decode($cacheRaw, true);
-            if (is_array($cached)) {
-                $this->SendDebug('Compatibility/Cache', 'Cache verwendet. Einträge: ' . count($cached), 0);
-                return $cached;
-            }
-        }
-
-        $make = $this->NormalizeCompatibilityMake($this->ReadPropertyString('Make'));
-        $model = $this->ReadPropertyString('Model');
-        $year = $this->ReadPropertyInteger('Year');
-        $powertrainType = strtoupper(trim($this->ReadPropertyString('PowertrainType')));
-
-        if ($powertrainType === 'ICE') {
-            $powertrainType = '';
-        }
-
-        $region = 'EUROPE';
-
-        $request = [
+        $result = $this->SendDataToParent(json_encode([
             'DataID' => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
-            'Command' => 'GetCompatibleVehicles',
-            'Make' => $make,
-            'PowertrainType' => $powertrainType,
-            'Region' => $region
-        ];
-
-        $this->SendDebug('Compatibility/Request', json_encode([
-            'make' => $make,
-            'model' => $model,
-            'year' => $year,
-            'powertrainType' => $powertrainType,
-            'region' => $region
-        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
-
-        $result = $this->SendDataToParent(json_encode($request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
-
-        $this->SendDebug('Compatibility/RAW', (string)$result, 0);
+            'Command' => $command,
+            'WebhookID' => $webhookId,
+            'VehicleID' => $vehicleId,
+            'UserID' => $userId
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
 
         $decoded = json_decode((string)$result, true);
+        $this->SendDebug('WebhookManagement/' . $command, (string)$result, 0);
 
-        if (!is_array($decoded)) {
-            $this->SendDebug('Compatibility/Error', 'Antwort ist kein JSON.', 0);
-            return [];
+        if (!is_array($decoded) || empty($decoded['success'])) {
+            $error = is_array($decoded) ? (string)($decoded['error'] ?? '') : '';
+            return 'Fehler: ' . ($error !== '' ? $error : (string)$result);
         }
 
-        if (empty($decoded['success'])) {
-            $this->SendDebug('Compatibility/Error', 'success=false: ' . json_encode($decoded, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
-            return [];
-        }
+        // Create Subscription liefert 202 und wird von Smartcar asynchron verarbeitet.
+        // Formular neu laden, damit der aktuelle Management-API-Stand sichtbar wird.
+        $this->ReloadForm();
 
-        $body = is_array($decoded['body'] ?? null) ? $decoded['body'] : [];
-
-        $this->SendDebug('Compatibility/BodyKeys', implode(', ', array_keys($body)), 0);
-
-        $items = is_array($body['data'] ?? null) ? $body['data'] : [];
-
-        $this->SendDebug('Compatibility/DataCount', 'Ungefilterte Einträge: ' . count($items), 0);
-
-        $filtered = [];
-        $normalizedVehicleModel = $this->NormalizeText($model);
-
-        foreach ($items as $item) {
-            $attributes = is_array($item['attributes'] ?? null) ? $item['attributes'] : [];
-
-            $itemModel = $this->NormalizeText((string)($attributes['model'] ?? ''));
-            $years = is_array($attributes['years'] ?? null) ? $attributes['years'] : [];
-
-            $startYear = (int)($years['start'] ?? 0);
-            $endYear = (int)($years['end'] ?? 9999);
-
-            $yearMatches = ($year <= 0 || ($year >= $startYear && $year <= $endYear));
-
-            $modelMatches =
-                $normalizedVehicleModel === '' ||
-                $itemModel === '' ||
-                str_contains($normalizedVehicleModel, $itemModel) ||
-                str_contains($itemModel, $normalizedVehicleModel) ||
-                str_contains($normalizedVehicleModel, explode(' ', $itemModel)[0] ?? $itemModel);
-
-            $itemPowertrainType = strtoupper((string)($attributes['powertrainType'] ?? ''));
-            $wantedPowertrainType = strtoupper($powertrainType);
-
-            $powertrainMatches =
-                $wantedPowertrainType === '' ||
-                $itemPowertrainType === '' ||
-                $itemPowertrainType === $wantedPowertrainType;
-
-            if ($yearMatches && $modelMatches && $powertrainMatches) {
-                $filtered[] = $item;
-            }
-        }
-
-        $this->SendDebug('Compatibility/FilteredCount', 'Gefilterte Einträge: ' . count($filtered), 0);
-
-        if (empty($filtered)) {
-            $this->SendDebug('Compatibility/Fallback', 'Keine exakte Modell/Jahr-Übereinstimmung. Verwende ungefilterte Einträge.', 0);
-            $filtered = $items;
-        }
-
-        if (!empty($filtered)) {
-            $this->WriteAttributeString(
-                'CompatibilityCache',
-                json_encode($filtered, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
-            );
-            $this->WriteAttributeInteger('CompatibilityCacheAt', time());
-        } else {
-            $this->WriteAttributeString('CompatibilityCache', '[]');
-            $this->WriteAttributeInteger('CompatibilityCacheAt', 0);
-            $this->SendDebug('Compatibility/Cache', 'Leeres Ergebnis wird nicht gecacht.', 0);
-        }
-
-        return $filtered;
+        return $successText;
     }
 
-    private function NormalizeCompatibilityMake(string $make): string
+    public function SyncVehicleAccessSignals(): void
     {
-        return match (strtoupper(trim($make))) {
-            'MERCEDES_BENZ', 'MERCEDES-BENZ' => 'MERCEDES-BENZ',
-            default => trim($make)
-        };
-    }
-    private function NormalizeText(string $text): string
-    {
-        $text = strtoupper(trim($text));
-        $text = str_replace(['_', '-'], ' ', $text);
-        $text = preg_replace('/\s+/', ' ', $text);
-        return $text;
-    }
-
-    public function FetchSelectedSignals(array $onlySignalCodes = []): void
-    {
-        if (!empty($onlySignalCodes)) {
-            $this->SendDebug(
-                'FetchSignals/Start',
-                'Teilabruf für neue Signale: ' . implode(', ', $onlySignalCodes),
-                0
-            );
-        } else {
-            $this->SendDebug('FetchSignals/Start', 'Sammelabruf aller Signale gestartet.', 0);
-        }
+        $selectionRowsBefore = $this->BuildVariableSelectionRows();
 
         if (!$this->HasParentConnection()) {
-            $this->SendDebug('FetchSignals/Error', 'Kein Splitter/Parent verbunden.', 0);
+            $this->SendDebug('VehicleAccess/Error', 'Kein Splitter/Parent verbunden.', 0);
             return;
         }
 
-        $vehicleId = $this->ReadPropertyString('VehicleID');
-        $userId    = $this->ReadPropertyString('UserID');
-
+        $vehicleId = trim($this->ReadPropertyString('VehicleID'));
+        $userId = trim($this->ReadPropertyString('UserID'));
         if ($vehicleId === '' || $userId === '') {
-            $this->SendDebug('FetchSignals/Error', 'VehicleID oder UserID fehlt.', 0);
+            $this->SendDebug('VehicleAccess/Error', 'VehicleID oder UserID fehlt.', 0);
             return;
         }
 
         $result = $this->SendDataToParent(json_encode([
-            'DataID'    => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
-            'Command'   => 'GetSignals',
+            'DataID' => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
+            'Command' => 'GetSignals',
             'VehicleID' => $vehicleId,
-            'UserID'    => $userId
+            'UserID' => $userId
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
-
-        $this->SendDebug('FetchSignals/RAW', (string)$result, 0);
 
         $decoded = json_decode((string)$result, true);
         if (!is_array($decoded) || empty($decoded['success'])) {
-            $this->SendDebug('FetchSignals/Error', 'GetSignals fehlgeschlagen: ' . (string)$result, 0);
+            $this->SendDebug('VehicleAccess/Error', 'GetSignals fehlgeschlagen: ' . (string)$result, 0);
             return;
         }
 
-        $signals = $decoded['body']['data']['signals']
-            ?? $decoded['body']['data']
-            ?? $decoded['body']['signals']
-            ?? [];
-
+        $signals = $decoded['body']['data'] ?? $decoded['body']['signals'] ?? [];
+        if (is_array($signals) && isset($signals['signals']) && is_array($signals['signals'])) {
+            $signals = $signals['signals'];
+        }
         if (!is_array($signals)) {
-            $this->SendDebug('FetchSignals/Error', 'Keine Signals im Response gefunden.', 0);
+            $this->SendDebug('VehicleAccess/Error', 'Keine Signalliste in der V3-Antwort gefunden.', 0);
             return;
         }
 
-        $selectedMap = $this->GetSelectedSignalMap();
-
-        $onlyMap = [];
-        foreach ($onlySignalCodes as $code) {
-            $onlyMap[(string)$code] = true;
-        }
-
-        $applied = 0;
-        $skipped = 0;
+        $successful = [];
+        $unsuccessful = [];
 
         foreach ($signals as $signal) {
             if (!is_array($signal)) {
                 continue;
             }
 
-            $signalCode = (string)($signal['code'] ?? $signal['id'] ?? '');
-            if ($signalCode === '') {
-                $skipped++;
-                continue;
-            }
-
-            if (!empty($onlyMap) && !isset($onlyMap[$signalCode])) {
-                $skipped++;
-                continue;
-            }
-
-            
-            if (!isset($selectedMap[$signalCode])) {
-                //$this->SendDebug('FetchSignals/SkipNotSelected', $signalCode, 0);
-                $skipped++;
-                continue;
-            }
-
-            if (!empty($onlyMap) && !isset($onlyMap[$signalCode])) {
-                $this->SendDebug('FetchSignals/SkipNotNew', $signalCode, 0);
-                $skipped++;
-                continue;
-            }
-
             $attributes = is_array($signal['attributes'] ?? null) ? $signal['attributes'] : $signal;
+            $signalCode = trim((string)($attributes['code'] ?? $signal['code'] ?? $signal['id'] ?? ''));
+            if ($signalCode === '') {
+                continue;
+            }
 
             $body = is_array($attributes['body'] ?? null) ? $attributes['body'] : [];
             $status = is_array($attributes['status'] ?? null) ? $attributes['status'] : null;
@@ -514,40 +548,57 @@ class SmartcarVehicle extends IPSModuleStrict
                 ? $signal['meta']
                 : (is_array($attributes['meta'] ?? null) ? $attributes['meta'] : []);
 
-            $this->SendDebug(
-                'FetchSignals/RAW/' . $signalCode,
-                json_encode([
-                    'body' => $body,
-                    'status' => $status
-                ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
-                0
+            $statusValue = strtoupper((string)($status['value'] ?? ''));
+            $verified = $status === null
+                || $statusValue === ''
+                || $statusValue === 'SUCCESS'
+                || $statusValue === 'OK';
+
+            if ($verified && $this->HasMeaningfulSignalData($body)) {
+                $successful[$signalCode] = $body;
+            } else {
+                $error = is_array($status['error'] ?? null) ? $status['error'] : [];
+                $unsuccessful[$signalCode] = [
+                    'status' => $statusValue !== '' ? $statusValue : 'NO_DATA',
+                    'code' => (string)($error['code'] ?? ''),
+                    'detail' => (string)($error['detail'] ?? '')
+                ];
+            }
+
+            if ($verified && $this->HasMeaningfulSignalData($body)) {
+                $this->RememberSuccessfulSignal($signalCode, $body, $status, $meta);
+            }
+
+            $this->ApplySignalFromV3(
+                $signalCode,
+                $body,
+                $status,
+                $this->GetSignalDefinition($signalCode, $body),
+                $meta,
+                false
             );
-
-            $this->SendDebug('FetchSignals/Meta/' . $signalCode, json_encode([
-                'retrievedAt'  => $this->FormatSmartcarTimestamp($meta['retrievedAt'] ?? null),
-                'oemUpdatedAt' => $this->FormatSmartcarTimestamp($meta['oemUpdatedAt'] ?? null)
-            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
-
-             $this->SendDebug(
-                'FetchSignals/Apply',
-                (!empty($onlyMap) ? '[NEU] ' : '') . $signalCode,
-                0
-            );
-
-            $this->ApplySignalFromV3($signalCode, $body, $status, $selectedMap[$signalCode], $meta);
-            $applied++;
         }
 
+        $this->TouchLastSignalsAt();
+
         $this->SendDebug(
-            'FetchSignals/Done',
-            json_encode([
-                'mode'    => empty($onlySignalCodes) ? 'full' : 'partial',
-                'requested' => count($onlySignalCodes),
-                'applied' => $applied,
-                'skipped' => $skipped
-            ]),
+            'VehicleAccess/Erfolgreiche Signale',
+            json_encode($successful, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
             0
         );
+
+        $this->SendDebug(
+            'VehicleAccess/Nicht erfolgreiche Signale',
+            json_encode($unsuccessful, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            0
+        );
+
+        // Beim bewussten Abruf auch die aktuell autorisierten Steuerungen abgleichen.
+        $this->ApplyVehicleAccessCommands();
+        $selectionRowsAfter = $this->BuildVariableSelectionRows();
+        if ($selectionRowsAfter !== $selectionRowsBefore) {
+            $this->RefreshVariableSelectionForm();
+        }
     }
 
     public function ProcessWebhookSignals(string $payloadJson): void
@@ -562,6 +613,7 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $payloadVehicleId = (string)(
             $payload['vehicleId']
+            ?? $payload['vehicle']['id']
             ?? $payload['data']['vehicle']['id']
             ?? $payload['data']['vehicleId']
             ?? ''
@@ -602,9 +654,8 @@ class SmartcarVehicle extends IPSModuleStrict
             'meta'            => $payload['meta'] ?? []
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
-        $selectedMap = $this->GetSelectedSignalMap();
-
-        $oemDates = [];
+        $successful = [];
+        $unsuccessful = [];
 
         foreach ($signals as $signal) {
             if (!is_array($signal)) {
@@ -617,90 +668,154 @@ class SmartcarVehicle extends IPSModuleStrict
             }
 
             $meta = is_array($signal['meta'] ?? null) ? $signal['meta'] : [];
-
-            $oemDates[$signalCode] = [
-                'ingestedAt'   => $this->FormatSmartcarTimestamp($meta['ingestedAt'] ?? null),
-                'retrievedAt'  => $this->FormatSmartcarTimestamp($meta['retrievedAt'] ?? null),
-                'oemUpdatedAt' => $this->FormatSmartcarTimestamp($meta['oemUpdatedAt'] ?? null)
-            ];
-
-            if (!isset($selectedMap[$signalCode])) {
-                $this->SendDebug('WebhookVehicle/Skip', 'Signal nicht aktiviert: ' . $signalCode, 0);
-                continue;
-            }
-
-            $body   = is_array($signal['body'] ?? null) ? $signal['body'] : [];
+            $body = is_array($signal['body'] ?? null) ? $signal['body'] : [];
             $status = is_array($signal['status'] ?? null) ? $signal['status'] : null;
 
-            $this->SendDebug('WebhookVehicle/Apply/' . $signalCode, json_encode([
-                'body'   => $body,
-                'status' => $status
-            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+            $statusValue = strtoupper((string)($status['value'] ?? ''));
+            $verified = $status === null
+                || $statusValue === ''
+                || $statusValue === 'SUCCESS'
+                || $statusValue === 'OK';
 
-            $this->ApplySignalFromV3($signalCode, $body, $status, $selectedMap[$signalCode], $meta);
+            if ($verified && $this->HasMeaningfulSignalData($body)) {
+                $successful[$signalCode] = $body;
+            } else {
+                $error = is_array($status['error'] ?? null) ? $status['error'] : [];
+                $unsuccessful[$signalCode] = [
+                    'status' => $statusValue !== '' ? $statusValue : 'NO_DATA',
+                    'code' => (string)($error['code'] ?? ''),
+                    'detail' => (string)($error['detail'] ?? '')
+                ];
+            }
+
+            if ($verified && $this->HasMeaningfulSignalData($body)) {
+                $this->RememberSuccessfulSignal($signalCode, $body, $status, $meta);
+            }
+
+            $this->ApplySignalFromV3(
+                $signalCode,
+                $body,
+                $status,
+                $this->GetSignalDefinition($signalCode, $body),
+                $meta,
+                false
+            );
         }
 
-        if (!empty($oemDates)) {
-            $this->SendDebug('WebhookVehicle/OEM-Date', json_encode($oemDates, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
-        }
+        $this->TouchLastSignalsAt();
+
+        $this->SendDebug(
+            'WebhookVehicle/Erfolgreiche Signale',
+            json_encode($successful, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            0
+        );
+
+        $this->SendDebug(
+            'WebhookVehicle/Nicht erfolgreiche Signale',
+            json_encode($unsuccessful, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            0
+        );
+
     }
 
-    private function GetSelectedSignalMap(): array
-    {
-        $entries = $this->GetSelectedCapabilitiesResolved();
-        $map = [];
 
-        foreach ($entries as $entry) {
-            if (strtolower((string)($entry['type'] ?? '')) !== 'signal') {
+    private function HasMeaningfulSignalData(array $body): bool
+    {
+        foreach ($body as $value) {
+            if ($value === null) {
                 continue;
             }
 
-            $signalCode = (string)($entry['capability'] ?? '');
-            if ($signalCode === '') {
-                $signalCode = (string)($entry['code'] ?? '');
+            if (is_array($value)) {
+                if ($this->HasMeaningfulSignalData($value)) {
+                    return true;
+                }
+                continue;
             }
 
-            if ($signalCode !== '') {
-                $map[$signalCode] = $entry;
+            // false, 0 und "0" sind gültige Nutzwerte.
+            if (is_bool($value) || is_int($value) || is_float($value)) {
+                return true;
+            }
+
+            if (is_string($value) && trim($value) !== '') {
+                return true;
             }
         }
 
-        return $map;
+        return false;
     }
 
-    private function ApplySignalFromV3(string $code, array $body, ?array $status, array $definitionMeta, array $signalMeta = []): bool
+    private function ApplySignalFromV3(
+        string $code,
+        array $body,
+        ?array $status,
+        array $definitionMeta,
+        array $signalMeta = [],
+        bool $logStatus = true
+    ): bool
     {
-        if ($status !== null && isset($status['value'])) {
-            $statusValue = strtoupper((string)$status['value']);
+        $statusValue = strtoupper((string)($status['value'] ?? ''));
+        $verified = $status === null || $statusValue === '' || $statusValue === 'SUCCESS' || $statusValue === 'OK';
 
-            if ($statusValue !== 'SUCCESS' && $statusValue !== 'OK') {
+        $definition = $this->GetSignalDefinition($code, $body);
+        $variables = $this->GetVariablesFromDefinition($definition, $body);
+
+        if (!$verified) {
+            // Ein Fehler darf keine neue Variable erzeugen. Bereits vorhandene,
+            // noch vom Modul benannte Variablen werden lediglich markiert.
+            $this->SetExistingSignalVerificationState($code, $variables, false);
+            if ($logStatus) {
                 $this->SendDebug(
                     'SignalStatus/' . $code,
                     json_encode($status, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
                     0
                 );
-                return false;
+            }
+            return false;
+        }
+
+        if (!$this->HasMeaningfulSignalData($body)) {
+            if ($logStatus) {
+                $this->SendDebug(
+                    'SignalData/' . $code,
+                    'Erfolgreicher Status, aber keine nutzbaren Daten im body. Keine Variable angelegt.',
+                    0
+                );
+            }
+            return false;
+        }
+
+        // Nur Untervariablen berücksichtigen, für die Smartcar tatsächlich
+        // einen Wert geliefert hat. Dadurch entstehen keine leeren Platzhalter.
+        $variablesWithData = [];
+        foreach ($variables as $variable) {
+            $source = (string)($variable['source'] ?? 'value');
+            if (array_key_exists($source, $body)) {
+                $variablesWithData[] = $variable;
             }
         }
 
-        $changed = false;
-        $definition = $this->GetSignalDefinition($code, $body);
-        $variables = $this->GetVariablesFromDefinition($definition, $body);
+        // Nur vom Benutzer aktivierte Variablen anlegen/aktualisieren.
+        $variablesWithData = array_values(array_filter(
+            $variablesWithData,
+            fn(array $variable): bool => $this->IsVariableEnabled((string)($variable['ident'] ?? ''))
+        ));
 
+        if (!empty($variablesWithData)) {
+            $this->EnsureSignalVariables($code, $variablesWithData, true);
+        }
+
+        $changed = false;
         $signalBasePosition = $this->GetSignalBasePosition($code);
 
-        foreach ($variables as $variableIndex => $variable) {
+        foreach ($variablesWithData as $variableIndex => $variable) {
             $ident = (string)($variable['ident'] ?? '');
             if ($ident === '') {
                 continue;
             }
 
             $source = (string)($variable['source'] ?? 'value');
-
-            if (!array_key_exists($source, $body)) {
-                continue;
-            }
-
             $value = $body[$source];
 
             if (isset($variable['convert']) && is_callable($variable['convert'])) {
@@ -722,14 +837,12 @@ class SmartcarVehicle extends IPSModuleStrict
             );
         }
 
-        if (empty($variables) && !empty($body)) {
+        // Unbekanntes Signal mit echtem Inhalt: den kompletten body als JSON
+        // anlegen. Auch hier nur, wenn tatsächlich Daten gekommen sind.
+        if (empty($variablesWithData) && !empty($body)) {
             $ident = (string)($definition['ident'] ?? '');
-            if ($ident !== '') {
+            if ($ident !== '' && $this->IsVariableEnabled($ident)) {
                 $value = json_encode($body, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-
-                if ($this->TypedVariableValueDiffers($ident, $value, VARIABLETYPE_STRING)) {
-                    $changed = true;
-                }
 
                 $this->RegisterOrUpdateTypedVariable(
                     $ident,
@@ -740,6 +853,12 @@ class SmartcarVehicle extends IPSModuleStrict
                     false,
                     $signalBasePosition
                 );
+                $this->UpdateModuleManagedVariableName(
+                    $ident,
+                    (string)($definition['name'] ?? $code),
+                    (string)($definition['name'] ?? $code)
+                );
+                $changed = true;
             }
         }
 
@@ -761,7 +880,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 );
             }
 
-            if ($this->ReadPropertyBoolean('ShowOEMUpdatedAtVariables')) {
+            if ($this->ReadPropertyBoolean('ShowOEMUpdatedAtVariables') && $this->IsSignalEnabled($code, $body)) {
                 $oemIdent = $this->BuildOEMTimestampIdent($code);
                 $oemName = (string)($definitionMeta['name'] ?? $definition['name'] ?? $code) . ' – OEM-Datenstand';
 
@@ -772,26 +891,216 @@ class SmartcarVehicle extends IPSModuleStrict
                     VARIABLETYPE_INTEGER,
                     '~UnixTimestamp',
                     false,
-                    $signalBasePosition + max(1, count($variables))
+                    $signalBasePosition + max(1, count($variablesWithData))
                 );
-            }
-        }
 
-        if ($changed) {
-            $now = time();
-
-            if ((int)$this->GetValue('LastSignalsAt') !== $now) {
-                $this->SetValue('LastSignalsAt', $now);
+                $oemId = @$this->GetIDForIdent($oemIdent);
+                if ($oemId) {
+                    IPS_SetHidden($oemId, false);
+                }
             }
         }
 
         return $changed;
     }
 
+    private function TouchLastSignalsAt(): void
+    {
+        $this->EnsureLastSignalsAtVariable();
+
+        if (@$this->GetIDForIdent('LastSignalsAt')) {
+            $this->SetValue('LastSignalsAt', time());
+        }
+    }
+
+    private function ApplyOEMTimestampVisibility(): void
+    {
+        $show = $this->ReadPropertyBoolean('ShowOEMUpdatedAtVariables');
+
+        if (!$show) {
+            foreach (IPS_GetChildrenIDs($this->InstanceID) as $childId) {
+                $object = @IPS_GetObject($childId);
+                if (!is_array($object)) {
+                    continue;
+                }
+
+                $ident = (string)($object['ObjectIdent'] ?? '');
+                if (str_ends_with($ident, '_OEMUpdatedAt') && (($object['ObjectType'] ?? -1) === 2)) {
+                    $this->UnregisterVariable($ident);
+                }
+            }
+            return;
+        }
+
+        // Beim Einschalten sofort aus den zuletzt empfangenen OEM-Zeitstempeln
+        // wiederherstellen. Dafür ist keine neue API-/Webhook-Abfrage nötig.
+        $stored = json_decode($this->ReadAttributeString('LastOEMSignalTimes'), true);
+        if (!is_array($stored)) {
+            return;
+        }
+
+        foreach ($stored as $code => $timestamp) {
+            $code = (string)$code;
+            $timestamp = (int)$timestamp;
+
+            if ($code === '' || $timestamp <= 0) {
+                continue;
+            }
+
+            $definition = $this->GetSignalDefinition($code);
+            $oemIdent = $this->BuildOEMTimestampIdent($code);
+            $oemName = (string)($definition['name'] ?? $code) . ' – OEM-Datenstand';
+
+            $this->RegisterOrUpdateTypedVariable(
+                $oemIdent,
+                $oemName,
+                $timestamp,
+                VARIABLETYPE_INTEGER,
+                '~UnixTimestamp',
+                false,
+                $this->GetSignalBasePosition($code) + 99
+            );
+
+            $oemId = @$this->GetIDForIdent($oemIdent);
+            if ($oemId) {
+                IPS_SetHidden($oemId, false);
+            }
+        }
+    }
+
+    private function SetExistingSignalVerificationState(string $signalCode, array $variables, bool $verified): void
+    {
+        foreach ($variables as $variable) {
+            $ident = (string)($variable['ident'] ?? '');
+            if ($ident === '' || !@$this->GetIDForIdent($ident)) {
+                continue;
+            }
+
+            $baseName = (string)($variable['name'] ?? $ident);
+            $moduleName = $verified ? $baseName : $baseName;
+            $this->UpdateModuleManagedVariableName($ident, $baseName, $moduleName);
+        }
+    }
+
+
+    private function GetFixedSignalPosition(string $signalCode): int
+    {
+        $signalCode = strtolower(trim($signalCode));
+
+        // Feste Position pro Signal. Die Position hängt nicht davon ab,
+        // wann oder in welcher Reihenfolge ein Signal aktiviert wurde.
+        $positions = [
+            'tractionbattery-stateofcharge' => 100,
+            'tractionbattery-range' => 200,
+            'tractionbattery-nominalcapacity' => 300,
+            'tractionbattery-chargecompletiontime' => 400,
+            'tractionbattery-maxrangechargecounter' => 500,
+            'tractionbattery-nominalcapacities' => 600,
+            'charge-detailedchargingstatus' => 700,
+            'charge-ischarging' => 800,
+            'charge-ischargingcableconnected' => 900,
+            'charge-chargelimits' => 1000,
+            'charge-amperage' => 1100,
+            'charge-maximumamperage' => 1200,
+            'charge-amperagerequested' => 1300,
+            'charge-chargerate' => 1400,
+            'charge-voltage' => 1500,
+            'charge-power' => 1600,
+            'charge-energyadded' => 1700,
+            'charge-timetocomplete' => 1800,
+            'charge-fastchargertype' => 1900,
+            'charge-isfastchargerpresent' => 2000,
+            'charge-chargingconnectortype' => 2100,
+            'charge-chargerphases' => 2200,
+            'charge-chargetimers' => 2300,
+            'charge-chargerecords' => 2400,
+            'charge-ischargingcablelatched' => 2500,
+            'charge-ischargingportflapopen' => 2600,
+            'closure-chargeportstatuscolor' => 2700,
+            'location-preciselocation' => 2800,
+            'odometer-traveleddistance' => 2900,
+            'closure-islocked' => 3000,
+            'closure-doors' => 3100,
+            'closure-windows' => 3200,
+            'closure-sunroof' => 3300,
+            'closure-enginecover' => 3400,
+            'closure-fronttrunk' => 3500,
+            'closure-reartrunk' => 3600,
+            'closure-tailgate' => 3700,
+            'connectivitystatus-isonline' => 3800,
+            'connectivitystatus-isasleep' => 3900,
+            'connectivitystatus-isdigitalkeypaired' => 4000,
+            'connectivitysoftware-currentfirmwareversion' => 4100,
+            'internalcombustionengine-fuellevel' => 4200,
+            'internalcombustionengine-oillife' => 4300,
+            'internalcombustionengine-oilpressure' => 4400,
+            'internalcombustionengine-oiltemperature' => 4500,
+            'internalcombustionengine-waterinfuel' => 4600,
+            'tractionbattery-isheateractive' => 4700,
+            'climate-externaltemperature' => 4800,
+            'climate-internaltemperature' => 4900,
+            'wheel-tires' => 5000,
+            'wheel-style' => 5100,
+            'vehicleidentification-vin' => 5200,
+            'vehicleidentification-trim' => 5300,
+            'vehicleidentification-exteriorcolor' => 5400,
+            'vehicleidentification-packages' => 5500,
+            'vehicleidentification-nickname' => 5600,
+            'vehicleidentification-make' => 5700,
+            'vehicleidentification-model' => 5800,
+            'vehicleidentification-year' => 5900,
+            'vehicleuseraccount-permissions' => 6000,
+            'vehicleuseraccount-role' => 6100,
+            'lowvoltagebattery-stateofcharge' => 6200,
+            'internalcombustionengine-amountremaining' => 6300,
+            'lowvoltagebattery-status' => 6400,
+            'internalcombustionengine-range' => 6500,
+            'transmission-gearstate' => 6600,
+            'transmission-drivemode' => 6700,
+            'surveillance-isenabled' => 6800,
+            'surveillance-brand' => 6900,
+            'diagnostics-dtccount' => 7000,
+            'diagnostics-dtclist' => 7100,
+            'diagnostics-abs' => 7200,
+            'diagnostics-activesafety' => 7300,
+            'diagnostics-airbag' => 7400,
+            'diagnostics-brakefluid' => 7500,
+            'diagnostics-driverassistance' => 7600,
+            'diagnostics-emissions' => 7700,
+            'diagnostics-engine' => 7800,
+            'diagnostics-evbatteryconditioning' => 7900,
+            'diagnostics-evcharging' => 8000,
+            'diagnostics-evdriveunit' => 8100,
+            'diagnostics-evhvbattery' => 8200,
+            'diagnostics-lighting' => 8300,
+            'diagnostics-mil' => 8400,
+            'diagnostics-telematics' => 8500,
+            'diagnostics-tirepressure' => 8600,
+            'diagnostics-tirepressuremonitoring' => 8700,
+            'diagnostics-transmission' => 8800,
+            'diagnostics-washerfluid' => 8900,
+            'hvac-cabintargettemperature' => 9000,
+            'hvac-iscabinhvacactive' => 9100,
+            'hvac-isfrontdefrosteractive' => 9200,
+            'hvac-isreardefrosteractive' => 9300,
+            'hvac-issteeringheateractive' => 9400,
+            'motion-currentspeed' => 9500,
+            'service-isinservice' => 9600,
+            'service-records' => 9700,
+        ];
+
+        if (isset($positions[$signalCode])) {
+            return $positions[$signalCode];
+        }
+
+        // Fallback für künftig unbekannte Signale:
+        // stabil aus dem Signalcode abgeleitet und außerhalb des festen Bereichs.
+        return 20000 + ((int)sprintf('%u', crc32($signalCode)) % 2000) * 10;
+    }
 
     private function BuildSelectedSignalPositionMap(array $selected): array
     {
-        $signals = [];
+        $positions = [];
 
         foreach ($selected as $entry) {
             if (strtolower((string)($entry['type'] ?? '')) !== 'signal') {
@@ -807,28 +1116,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 continue;
             }
 
-            $signals[] = [
-                'code'  => $signalCode,
-                'group' => (string)($entry['group'] ?? ''),
-                'name'  => (string)($entry['name'] ?? $signalCode)
-            ];
-        }
-
-        usort($signals, static function (array $a, array $b): int {
-            $groupCompare = strcasecmp($a['group'], $b['group']);
-            if ($groupCompare !== 0) {
-                return $groupCompare;
-            }
-
-            return strcasecmp($a['name'], $b['name']);
-        });
-
-        $positions = [];
-        $position = 100;
-
-        foreach ($signals as $signal) {
-            $positions[$signal['code']] = $position;
-            $position += 10;
+            $positions[$signalCode] = $this->GetFixedSignalPosition($signalCode);
         }
 
         return $positions;
@@ -836,8 +1124,7 @@ class SmartcarVehicle extends IPSModuleStrict
 
     private function GetSignalBasePosition(string $signalCode): int
     {
-        $positions = $this->BuildSelectedSignalPositionMap($this->GetSelectedCapabilitiesResolved());
-        return $positions[$signalCode] ?? 8000;
+        return $this->GetFixedSignalPosition($signalCode);
     }
 
     private function BuildOEMTimestampIdent(string $code): string
@@ -875,37 +1162,41 @@ class SmartcarVehicle extends IPSModuleStrict
 
     public function GenerateConnectURL(): string
     {
-        $this->SendDebug('Connect/Start', 'GenerateConnectURL gestartet.', 0);
+        $this->SendDebug('Connect/Start', 'Vehicle Access synchronisieren gestartet (Phase 1: Connect).', 0);
 
-        $permissions = $this->GetSelectedPermissions();
+        if (!$this->HasParentConnection()) {
+            return 'Fehler: Kein Smartcar Splitter verbunden.';
+        }
+
+        $vehicleId = trim($this->ReadPropertyString('VehicleID'));
+
+        if ($vehicleId === '') {
+            return 'Fehler: VehicleID fehlt.';
+        }
+
+        $state = 'vehicle_access_sync_' . $vehicleId . '_' . bin2hex(random_bytes(8));
+
+        $request = [
+            'DataID'  => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
+            'Command' => 'BuildConnectURL',
+            'Mode'    => 'live',
+            'State'   => $state
+        ];
 
         $this->SendDebug(
-            'Connect/Result',
-            'Permissions count=' . count($permissions) . ' values=' . json_encode($permissions, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            'Connect/RequestToSplitter',
+            json_encode($request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
             0
         );
 
-        if (empty($permissions)) {
-            return 'Fehler: Keine aktivierten Signale/Befehle mit Permission ausgewählt. Bitte Debug prüfen: Connect/SelectedCapabilitiesRaw, Connect/Entry und Connect/Summary.';
-        }
-
-        $state = 'vehicle_' . $this->ReadPropertyString('VehicleID') . '_' . bin2hex(random_bytes(8));
-
-        $request = [
-            'DataID'      => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
-            'Command'     => 'BuildConnectURL',
-            'Mode'        => 'live',
-            'State'       => $state,
-            'Permissions' => $permissions
-        ];
-
-        $this->SendDebug('Connect/RequestToSplitter', json_encode($request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
-
-        $result = $this->SendDataToParent(json_encode($request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        $result = $this->SendDataToParent(
+            json_encode($request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+        );
 
         $this->SendDebug('Connect/SplitterResponse', (string)$result, 0);
 
         $decoded = json_decode((string)$result, true);
+
         if (!is_array($decoded) || empty($decoded['success'])) {
             return 'Fehler beim Erzeugen der Connect URL: ' . (string)$result;
         }
@@ -913,96 +1204,56 @@ class SmartcarVehicle extends IPSModuleStrict
         return (string)($decoded['url'] ?? '');
     }
 
-    private function GetSelectedPermissions(): array
+    private function EnsureSignalVariables(string $signalCode, array $variables, bool $verified): void
     {
-        $entries = $this->GetSelectedCapabilitiesResolved();
-        $permissions = [];
-
-        foreach ($entries as $entry) {
-            $permission = trim((string)($entry['permission'] ?? ''));
-
-            if ($permission === '' && strtolower((string)($entry['type'] ?? '')) === 'command') {
-                $permission = $this->GetCommandPermission((string)($entry['code'] ?? ''));
+        $basePosition = $this->GetSignalBasePosition($signalCode);
+        foreach ($variables as $index => $variable) {
+            $ident = (string)($variable['ident'] ?? '');
+            if ($ident === '') {
+                continue;
             }
-
-            if ($permission !== '') {
-                $permissions[$permission] = true;
-            }
-        }
-
-        return array_keys($permissions);
-    }
-
-    private function CreateSignalVariable(string $signalCode, string $name, int $basePosition): bool
-    {
-        $definition = $this->GetSignalDefinition($signalCode, []);
-        $createdAny = false;
-
-        foreach ($this->GetVariablesFromDefinition($definition, []) as $variableIndex => $variable) {
-            $created = $this->RegisterOrUpdateTypedVariable(
-                $variable['ident'],
-                $variable['name'],
-                $this->GetDefaultValueForType($variable['type']),
-                $variable['type'],
-                $variable['profile'],
+            $baseName = (string)($variable['name'] ?? $ident);
+            $moduleName = $verified ? $baseName : $baseName;
+            $this->RegisterOrUpdateTypedVariable(
+                $ident,
+                $moduleName,
+                $this->GetDefaultValueForType((int)($variable['type'] ?? VARIABLETYPE_STRING)),
+                (int)($variable['type'] ?? VARIABLETYPE_STRING),
+                (string)($variable['profile'] ?? ''),
                 true,
-                $basePosition + (int)$variableIndex
+                $basePosition + (int)$index
             );
-
-            if ($created) {
-                $createdAny = true;
-            }
+            $this->UpdateModuleManagedVariableName($ident, $baseName, $moduleName);
         }
-
-        return $createdAny;
     }
 
-    private function FetchSingleSelectedSignal(string $signalCode): void
+    private function UpdateModuleManagedVariableName(string $ident, string $baseName, string $newModuleName): void
     {
-        if (!$this->HasParentConnection()) {
+        $id = @$this->GetIDForIdent($ident);
+        if (!$id) {
             return;
         }
+        $names = json_decode($this->ReadAttributeString('ModuleVariableNames'), true);
+        if (!is_array($names)) {
+            $names = [];
+        }
+        $currentName = (string)(IPS_GetObject($id)['ObjectName'] ?? '');
+        $previousModuleName = (string)($names[$ident] ?? '');
 
-        $vehicleId = $this->ReadPropertyString('VehicleID');
-        $userId = $this->ReadPropertyString('UserID');
-
-        if ($vehicleId === '' || $userId === '') {
-            return;
+        // Bestehende Installationen ohne Tracking nur übernehmen, wenn der Name noch
+        // eindeutig dem Modulstandard entspricht. Benutzerdefinierte Namen bleiben tabu.
+        if ($previousModuleName === '') {
+            if ($currentName !== $baseName && $currentName !== $baseName && $currentName !== $newModuleName) {
+                return;
+            }
+            $previousModuleName = $currentName;
         }
 
-        $result = $this->SendDataToParent(json_encode([
-            'DataID'     => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
-            'Command'    => 'GetSignal',
-            'VehicleID'  => $vehicleId,
-            'UserID'     => $userId,
-            'SignalCode' => $signalCode
-        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
-
-        $decoded = json_decode((string)$result, true);
-        if (!is_array($decoded) || empty($decoded['success'])) {
-            $this->SendDebug('FetchSignal/Error/' . $signalCode, (string)$result, 0);
-            return;
+        if ($currentName === $previousModuleName && $currentName !== $newModuleName) {
+            IPS_SetName($id, $newModuleName);
         }
-
-        $signal = $decoded['body']['data']
-            ?? $decoded['body']
-            ?? [];
-
-        if (!is_array($signal)) {
-            return;
-        }
-
-        $attributes = is_array($signal['attributes'] ?? null) ? $signal['attributes'] : $signal;
-
-        $body = is_array($attributes['body'] ?? null) ? $attributes['body'] : [];
-        $status = is_array($attributes['status'] ?? null) ? $attributes['status'] : null;
-        $signalMeta = is_array($signal['meta'] ?? null)
-            ? $signal['meta']
-            : (is_array($attributes['meta'] ?? null) ? $attributes['meta'] : []);
-
-        $definitionMeta = $this->GetSignalDefinition($signalCode, $body);
-
-        $this->ApplySignalFromV3($signalCode, $body, $status, $definitionMeta, $signalMeta);
+        $names[$ident] = $newModuleName;
+        $this->WriteAttributeString('ModuleVariableNames', json_encode($names, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
     }
 
     private function GetVariablesFromDefinition(array $definition, array $body): array
@@ -1010,13 +1261,12 @@ class SmartcarVehicle extends IPSModuleStrict
         if (($definition['special'] ?? '') === 'multiple') {
             return $definition['variables'] ?? [];
         }
-
         return [[
-            'ident'   => $definition['ident'] ?? '',
-            'name'    => $definition['name'] ?? '',
-            'type'    => $definition['type'] ?? VARIABLETYPE_STRING,
+            'ident' => $definition['ident'] ?? '',
+            'name' => $definition['name'] ?? '',
+            'type' => $definition['type'] ?? VARIABLETYPE_STRING,
             'profile' => $definition['profile'] ?? '',
-            'source'  => $definition['source'] ?? 'value',
+            'source' => $definition['source'] ?? 'value',
             'convert' => $definition['convert'] ?? null
         ]];
     }
@@ -1026,329 +1276,315 @@ class SmartcarVehicle extends IPSModuleStrict
         return match ($type) {
             VARIABLETYPE_BOOLEAN => false,
             VARIABLETYPE_INTEGER => 0,
-            VARIABLETYPE_FLOAT   => 0.0,
-            default              => ''
+            VARIABLETYPE_FLOAT => 0.0,
+            default => ''
         };
     }
 
-    public function ApplySelectedCapabilities(): void
+
+
+    private function RememberExistingSignalVariables(): void
     {
-        $selected = $this->GetSelectedCapabilitiesResolved();
-        $wantedIdents = [];
-        $managedIdents = [];
-        $newSignalCodes = [];
-        $signalPositions = $this->BuildSelectedSignalPositionMap($selected);
-        $commandPosition = 9000;
+        $discovered = $this->ReadDiscoveredVariables();
+        $changed = false;
 
-        // Alle möglichen Signal- und Command-Variablen aus der Compatibility-Liste sammeln
-        $cache = json_decode($this->ReadAttributeString('CompatibilityCache'), true);
-        if (is_array($cache)) {
-            $allCapabilities = $this->BuildCapabilitiesListFromCompatibilityItems($cache);
+        $commandIdents = [
+            'CommandChargeStart',
+            'CommandChargeStop',
+            'CommandChargeLimit',
+            'CommandSecurityLock',
+            'CommandSecurityUnlock',
+            'CommandNavigationDestination'
+        ];
 
-            foreach ($allCapabilities as $entry) {
-                $type = strtolower((string)($entry['type'] ?? ''));
-
-                if ($type === 'signal') {
-                    $signalCode = (string)($entry['capability'] ?? '');
-                    if ($signalCode === '') {
-                        $signalCode = (string)($entry['code'] ?? '');
-                    }
-
-                    if ($signalCode === '') {
-                        continue;
-                    }
-
-                    $definition = $this->GetSignalDefinition($signalCode, []);
-
-                    foreach ($this->GetVariablesFromDefinition($definition, []) as $variable) {
-                        $ident = (string)($variable['ident'] ?? '');
-                        if ($ident !== '') {
-                            $managedIdents[$ident] = true;
-                        }
-                    }
-
-                    $managedIdents[$this->BuildOEMTimestampIdent($signalCode)] = true;
-
-                    continue;
-                }
-
-                if ($type === 'command') {
-                    $commandKey = $this->GetCommandKeyFromCapability($entry);
-                    $definition = $this->GetCommandDefinition($commandKey);
-
-                    if (!empty($definition)) {
-                        $ident = (string)($definition['ident'] ?? '');
-                        if ($ident !== '') {
-                            $managedIdents[$ident] = true;
-                        }
-                    }
-
-                    continue;
-                }
-            }
-        }
-
-        // Ausgewählte Signale und Commands erstellen und als gewünscht markieren
-        foreach ($selected as $entry) {
-            $type = strtolower((string)($entry['type'] ?? ''));
-
-            if ($type === 'signal') {
-                $signalCode = (string)($entry['capability'] ?? '');
-                if ($signalCode === '') {
-                    $signalCode = (string)($entry['code'] ?? '');
-                }
-
-                if ($signalCode === '') {
-                    continue;
-                }
-
-                $definition = $this->GetSignalDefinition($signalCode, []);
-
-                foreach ($this->GetVariablesFromDefinition($definition, []) as $variable) {
-                    $ident = (string)($variable['ident'] ?? '');
-                    if ($ident !== '') {
-                        $wantedIdents[$ident] = true;
-                        $managedIdents[$ident] = true;
-                    }
-                }
-
-                $oemIdent = $this->BuildOEMTimestampIdent($signalCode);
-                $managedIdents[$oemIdent] = true;
-
-                if ($this->ReadPropertyBoolean('ShowOEMUpdatedAtVariables')) {
-                    $wantedIdents[$oemIdent] = true;
-
-                    $storedOEMTimes = json_decode($this->ReadAttributeString('LastOEMSignalTimes'), true);
-                    if (!is_array($storedOEMTimes)) {
-                        $storedOEMTimes = [];
-                    }
-
-                    $this->RegisterOrUpdateTypedVariable(
-                        $oemIdent,
-                        (string)($entry['name'] ?? $signalCode) . ' – OEM-Datenstand',
-                        (int)($storedOEMTimes[$signalCode] ?? 0),
-                        VARIABLETYPE_INTEGER,
-                        '~UnixTimestamp',
-                        true,
-                        ($signalPositions[$signalCode] ?? 1000) + max(1, count($this->GetVariablesFromDefinition($definition, [])))
-                    );
-                }
-
-                $name = (string)($entry['name'] ?? $signalCode);
-                $created = $this->CreateSignalVariable(
-                    $signalCode,
-                    $name,
-                    $signalPositions[$signalCode] ?? 1000
-                );
-
-                if ($created) {
-                    $newSignalCodes[$signalCode] = true;
-                }
-
-                continue;
-            }
-
-            if ($type === 'command') {
-                $commandKey = $this->GetCommandKeyFromCapability($entry);
-                $definition = $this->GetCommandDefinition($commandKey);
-
-                if (empty($definition)) {
-                    $this->SendDebug(
-                        'Commands/Unknown',
-                        json_encode($entry, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
-                        0
-                    );
-                    continue;
-                }
-
-                $ident = (string)($definition['ident'] ?? '');
-                if ($ident === '') {
-                    continue;
-                }
-
-                $wantedIdents[$ident] = true;
-                $managedIdents[$ident] = true;
-
-                $this->RegisterOrUpdateTypedVariable(
-                    $ident,
-                    (string)($definition['name'] ?? $ident),
-                    $this->GetDefaultValueForType((int)($definition['type'] ?? VARIABLETYPE_STRING)),
-                    (int)($definition['type'] ?? VARIABLETYPE_STRING),
-                    (string)($definition['profile'] ?? ''),
-                    true,
-                    $commandPosition
-                );
-                $commandPosition += 10;
-
-                $this->EnableAction($ident);
-
-                continue;
-            }
-        }
-
-        // Nicht mehr gewünschte, aber vom Modul verwaltete Variablen löschen
         foreach (IPS_GetChildrenIDs($this->InstanceID) as $childId) {
-            $object = IPS_GetObject($childId);
-            $ident = (string)($object['ObjectIdent'] ?? '');
+            if (!IPS_VariableExists($childId)) {
+                continue;
+            }
 
+            $object = @IPS_GetObject($childId);
+            if (!is_array($object)) {
+                continue;
+            }
+
+            $ident = trim((string)($object['ObjectIdent'] ?? ''));
+            if ($ident === ''
+                || $ident === 'LastSignalsAt'
+                || in_array($ident, $commandIdents, true)
+                || str_ends_with($ident, '_OEMUpdatedAt')) {
+                continue;
+            }
+
+            // Bereits bekannte Einträge nicht überschreiben; insbesondere bleiben
+            // der echte Smartcar-Signalcode und der Modul-Standardname erhalten.
+            if (isset($discovered[$ident]) && is_array($discovered[$ident])) {
+                continue;
+            }
+
+            $discovered[$ident] = [
+                'ident' => $ident,
+                'name' => (string)($object['ObjectName'] ?? $ident),
+                'kind' => 'Signal',
+                'source' => 'Bestehende Variable'
+            ];
+            $changed = true;
+        }
+
+        if ($changed) {
+            $this->WriteDiscoveredVariables($discovered);
+        }
+    }
+
+    private function RefreshVariableSelectionForm(): void
+    {
+        try {
+            $this->UpdateFormField(
+                'VariableSelection',
+                'values',
+                json_encode($this->BuildVariableSelectionRows(), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+            );
+        } catch (Throwable $e) {
+            // Das Konfigurationsformular ist nicht zwingend geöffnet.
+        }
+    }
+
+    private function ReadDiscoveredVariables(): array
+    {
+        $data = json_decode($this->ReadAttributeString('DiscoveredVariables'), true);
+        return is_array($data) ? $data : [];
+    }
+
+    private function WriteDiscoveredVariables(array $data): void
+    {
+        ksort($data);
+        $this->WriteAttributeString('DiscoveredVariables', json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+    }
+
+    private function GetVariableSelectionMap(): array
+    {
+        $rows = json_decode($this->ReadPropertyString('VariableSelection'), true);
+        if (!is_array($rows)) {
+            return [];
+        }
+
+        $map = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+
+            $ident = trim((string)($row['Ident'] ?? $row['ident'] ?? ''));
             if ($ident === '') {
                 continue;
             }
 
-            if (!isset($managedIdents[$ident])) {
+            $map[$ident] = (bool)($row['Active'] ?? $row['active'] ?? true);
+        }
+
+        return $map;
+    }
+
+    private function IsVariableEnabled(string $ident): bool
+    {
+        if ($ident === '') {
+            return false;
+        }
+        $selection = $this->GetVariableSelectionMap();
+        return !array_key_exists($ident, $selection) || $selection[$ident];
+    }
+
+    private function BuildVariableSelectionRows(): array
+    {
+        $selection = $this->GetVariableSelectionMap();
+        $discovered = $this->ReadDiscoveredVariables();
+        $rows = [];
+
+        uasort($discovered, static function (array $a, array $b): int {
+            $kindCompare = strcmp((string)($a['kind'] ?? ''), (string)($b['kind'] ?? ''));
+            return $kindCompare !== 0 ? $kindCompare : strcasecmp((string)($a['name'] ?? ''), (string)($b['name'] ?? ''));
+        });
+
+        foreach ($discovered as $ident => $entry) {
+            $rows[] = [
+                'Active' => $selection[$ident] ?? true,
+                'Name' => (string)($entry['name'] ?? $ident),
+                'Kind' => (string)($entry['kind'] ?? 'Signal'),
+                'Source' => (string)($entry['source'] ?? ''),
+                'Ident' => $ident
+            ];
+        }
+        return $rows;
+    }
+
+    private function RememberSuccessfulSignal(string $code, array $body, ?array $status, array $meta): void
+    {
+        $definition = $this->GetSignalDefinition($code, $body);
+        $variables = $this->GetVariablesFromDefinition($definition, $body);
+        $discovered = $this->ReadDiscoveredVariables();
+        $found = false;
+
+        foreach ($variables as $variable) {
+            $source = (string)($variable['source'] ?? 'value');
+            $ident = (string)($variable['ident'] ?? '');
+            if ($ident === '' || !array_key_exists($source, $body)) {
                 continue;
             }
+            $found = true;
+            $discovered[$ident] = [
+                'ident' => $ident,
+                'name' => (string)($variable['name'] ?? $ident),
+                'kind' => 'Signal',
+                'source' => $code . ($source !== 'value' ? ' / ' . $source : ''),
+                'signalCode' => $code
+            ];
+        }
 
-            if (!isset($wantedIdents[$ident])) {
-                $this->SendDebug('Variables/Delete', 'Lösche nicht mehr ausgewählte Variable: ' . $ident, 0);
+        if (!$found) {
+            $ident = (string)($definition['ident'] ?? '');
+            if ($ident !== '') {
+                $discovered[$ident] = [
+                    'ident' => $ident,
+                    'name' => (string)($definition['name'] ?? $code),
+                    'kind' => 'Signal',
+                    'source' => $code,
+                    'signalCode' => $code
+                ];
+            }
+        }
+        $this->WriteDiscoveredVariables($discovered);
+
+        $cache = json_decode($this->ReadAttributeString('LastSuccessfulSignalPayloads'), true);
+        if (!is_array($cache)) {
+            $cache = [];
+        }
+        $cache[$code] = ['body' => $body, 'status' => $status, 'meta' => $meta];
+        $this->WriteAttributeString('LastSuccessfulSignalPayloads', json_encode($cache, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+    }
+
+    private function ApplyVariableSelection(): void
+    {
+        foreach ($this->GetVariableSelectionMap() as $ident => $enabled) {
+            if ($enabled) {
+                continue;
+            }
+            $id = @$this->GetIDForIdent($ident);
+            if ($id && IPS_VariableExists($id)) {
                 $this->UnregisterVariable($ident);
             }
         }
+    }
 
-        if (!empty($newSignalCodes)) {
-            $this->FetchSelectedSignals(array_keys($newSignalCodes));
+    private function RestoreSelectedSignalsFromCache(): void
+    {
+        $cache = json_decode($this->ReadAttributeString('LastSuccessfulSignalPayloads'), true);
+        if (!is_array($cache)) {
+            return;
+        }
+        foreach ($cache as $code => $payload) {
+            if (!is_array($payload)) {
+                continue;
+            }
+            $body = is_array($payload['body'] ?? null) ? $payload['body'] : [];
+            if (!$this->HasMeaningfulSignalData($body)) {
+                continue;
+            }
+            $status = is_array($payload['status'] ?? null) ? $payload['status'] : null;
+            $meta = is_array($payload['meta'] ?? null) ? $payload['meta'] : [];
+            $this->ApplySignalFromV3((string)$code, $body, $status, $this->GetSignalDefinition((string)$code, $body), $meta, false);
         }
     }
 
-    private function BuildCapabilitiesListFromCompatibilityItems(array $data): array
+    private function IsSignalEnabled(string $code, array $body): bool
     {
-        $temp = [];
-
-        foreach ($data as $item) {
-            $attributes = is_array($item['attributes'] ?? null) ? $item['attributes'] : [];
-            $capabilities = is_array($attributes['capabilities'] ?? null) ? $attributes['capabilities'] : [];
-
-            foreach ($capabilities as $capability) {
-                if (!is_array($capability)) {
-                    continue;
-                }
-
-                $type       = (string)($capability['type'] ?? '');
-                $group      = (string)($capability['group'] ?? '');
-                $name       = (string)($capability['name'] ?? '');
-                $code       = (string)($capability['code'] ?? '');
-                $capKey     = (string)($capability['capability'] ?? '');
-                $permission = (string)($capability['permission'] ?? '');
-
-                if ($permission === '' && strtolower($type) === 'command') {
-                    $permission = $this->GetCommandPermission($code);
-                }
-
-                if ($code === '' && $capKey === '') {
-                    continue;
-                }
-
-                $uniqueKey = strtolower($type . '|' . $group . '|' . $code . '|' . $capKey);
-
-                if (!isset($temp[$uniqueKey])) {
-                    $displayName = $name !== '' ? $name : $capKey;
-
-                    $typeOrder = match (strtolower($type)) {
-                        'signal'  => '0',
-                        'command' => '1',
-                        default   => '9'
-                    };
-
-                    $sortKey = $typeOrder
-                        . '|' . strtoupper($group)
-                        . '|' . strtoupper($displayName)
-                        . '|' . strtoupper($code);
-
-                    $temp[$uniqueKey] = [
-                    'sortKey'       => $sortKey,
-                    'capabilityKey' => $this->BuildCapabilityKey($type, $capKey, $code),
-                    'selected'      => false,
-                    'capability'    => $capKey,
-                    'type'          => $type,
-                    'name'          => $displayName,
-                    'group'         => $group,
-                    'code'          => $code,
-                    'permission'    => $permission
-                ];
-                    continue;
-                }
-
-                if ($temp[$uniqueKey]['permission'] === '' && $permission !== '') {
-                    $temp[$uniqueKey]['permission'] = $permission;
-                }
+        $definition = $this->GetSignalDefinition($code, $body);
+        foreach ($this->GetVariablesFromDefinition($definition, $body) as $variable) {
+            $source = (string)($variable['source'] ?? 'value');
+            $ident = (string)($variable['ident'] ?? '');
+            if ($ident !== '' && array_key_exists($source, $body) && $this->IsVariableEnabled($ident)) {
+                return true;
             }
         }
-
-        $values = array_values($temp);
-
-        usort($values, function ($a, $b) {
-            return strcasecmp((string)$a['sortKey'], (string)$b['sortKey']);
-        });
-
-        return $values;
+        $ident = (string)($definition['ident'] ?? '');
+        return $ident !== '' && $this->IsVariableEnabled($ident);
     }
 
-    private function GetSelectedCapabilitiesResolved(): array
+    private function ApplyVehicleAccessCommands(): void
     {
-        $saved = json_decode($this->ReadPropertyString('SelectedCapabilities'), true);
-        if (!is_array($saved)) {
-            $this->SendDebug('Selected/Resolve', 'SelectedCapabilities ist kein Array.', 0);
-            return [];
+        $permissions = json_decode($this->ReadPropertyString('Permissions'), true);
+        if (!is_array($permissions)) {
+            $permissions = [];
         }
+        $permissions = array_values(array_unique(array_filter(
+            array_map(static fn($permission): string => strtolower(trim((string)$permission)), $permissions),
+            static fn(string $permission): bool => $permission !== ''
+        )));
 
-        $cache = json_decode($this->ReadAttributeString('CompatibilityCache'), true);
+        $this->SendDebug('VehicleAccess/Permissions', json_encode($permissions, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+        $definitions = $this->GetAvailableCommandDefinitions($permissions);
+        $this->RememberAvailableCommands($definitions);
 
-        if (!is_array($cache) || empty($cache)) {
-            $this->SendDebug('Selected/Resolve', 'Cache leer, lade Compatibility neu.', 0);
-            $cache = $this->LoadCompatibility(false);
-        }
+        foreach (['CommandChargeStart','CommandChargeStop','CommandChargeLimit','CommandSecurityLock','CommandSecurityUnlock','CommandNavigationDestination'] as $ident) {
+            $definition = $definitions[$ident] ?? null;
+            $existingId = @$this->GetIDForIdent($ident);
 
-        if (!is_array($cache) || empty($cache)) {
-            $this->SendDebug('Selected/Resolve', 'Keine Compatibility-Daten vorhanden.', 0);
-            return [];
-        }
-
-        $fullList = $this->BuildCapabilitiesListFromCompatibilityItems($cache);
-
-        $fullByCapabilityKey = [];
-        foreach ($fullList as $entry) {
-            $capabilityKey = (string)($entry['capabilityKey'] ?? '');
-            if ($capabilityKey !== '') {
-                $fullByCapabilityKey[$capabilityKey] = $entry;
-            }
-        }
-
-        $result = [];
-
-        foreach ($saved as $savedEntry) {
-            if (!is_array($savedEntry)) {
+            if ($definition === null || !$this->IsVariableEnabled($ident)) {
+                if ($existingId && IPS_VariableExists($existingId)) {
+                    $this->UnregisterVariable($ident);
+                }
                 continue;
             }
 
-            $selected =
-                ($savedEntry['selected'] ?? false) === true ||
-                ($savedEntry['selected'] ?? false) === 1 ||
-                ($savedEntry['selected'] ?? false) === '1' ||
-                strtolower((string)($savedEntry['selected'] ?? '')) === 'true';
-
-            if (!$selected) {
-                continue;
+            if (!$existingId) {
+                $this->RegisterOrUpdateTypedVariable(
+                    $ident,
+                    (string)$definition['name'],
+                    $definition['type'] === VARIABLETYPE_STRING ? '' : 0,
+                    (int)$definition['type'],
+                    (string)$definition['profile'],
+                    true,
+                    (int)$definition['position']
+                );
+                $existingId = @$this->GetIDForIdent($ident);
             }
-
-            $capabilityKey = (string)($savedEntry['capabilityKey'] ?? '');
-            if ($capabilityKey === '') {
-                continue;
+            if ($existingId && IPS_VariableExists($existingId)) {
+                // Steuerungen gehören immer ans Ende des Objektbaums. Auch bereits
+                // vorhandene Variablen aus älteren Zwischenversionen zurücksetzen.
+                IPS_SetPosition($existingId, (int)$definition['position']);
+                $this->EnableAction($ident);
             }
-
-            if (!isset($fullByCapabilityKey[$capabilityKey])) {
-                $this->SendDebug('Selected/ResolveMissing', 'Kein FullEntry für capabilityKey=' . $capabilityKey, 0);
-                continue;
-            }
-
-            $entry = $fullByCapabilityKey[$capabilityKey];
-            $entry['selected'] = true;
-
-            $result[] = $entry;
         }
+    }
 
-        $this->SendDebug('Selected/Resolve', 'Ausgewählte Einträge: ' . count($result), 0);
+    private function GetAvailableCommandDefinitions(array $permissions): array
+    {
+        $definitions = [];
+        if (in_array('control_charge', $permissions, true)) {
+            $definitions['CommandChargeStart'] = ['name'=>'Laden starten','type'=>VARIABLETYPE_BOOLEAN,'profile'=>'~Switch','position'=>50000,'source'=>'control_charge'];
+            $definitions['CommandChargeStop'] = ['name'=>'Laden stoppen','type'=>VARIABLETYPE_BOOLEAN,'profile'=>'~Switch','position'=>50010,'source'=>'control_charge'];
+            $definitions['CommandChargeLimit'] = ['name'=>'Ladelimit','type'=>VARIABLETYPE_INTEGER,'profile'=>'~Intensity.100','position'=>50020,'source'=>'control_charge'];
+        }
+        if (in_array('control_security', $permissions, true)) {
+            $definitions['CommandSecurityLock'] = ['name'=>'Fahrzeug verriegeln','type'=>VARIABLETYPE_BOOLEAN,'profile'=>'~Switch','position'=>50030,'source'=>'control_security'];
+            $definitions['CommandSecurityUnlock'] = ['name'=>'Fahrzeug entriegeln','type'=>VARIABLETYPE_BOOLEAN,'profile'=>'~Switch','position'=>50040,'source'=>'control_security'];
+        }
+        if (in_array('control_navigation', $permissions, true)) {
+            $definitions['CommandNavigationDestination'] = ['name'=>'Ziel setzen','type'=>VARIABLETYPE_STRING,'profile'=>'','position'=>50050,'source'=>'control_navigation'];
+        }
+        return $definitions;
+    }
 
-        return $result;
+    private function RememberAvailableCommands(array $definitions): void
+    {
+        $discovered = $this->ReadDiscoveredVariables();
+        foreach ($discovered as $ident => $entry) {
+            if (($entry['kind'] ?? '') === 'Steuerung' && !isset($definitions[$ident])) {
+                unset($discovered[$ident]);
+            }
+        }
+        foreach ($definitions as $ident => $definition) {
+            $discovered[$ident] = ['ident'=>$ident,'name'=>(string)$definition['name'],'kind'=>'Steuerung','source'=>(string)$definition['source']];
+        }
+        $this->WriteDiscoveredVariables($discovered);
     }
 
     private function HasParentConnection(): bool
@@ -1390,10 +1626,22 @@ class SmartcarVehicle extends IPSModuleStrict
 
     private function GuessSignalDefinition(string $code, array $body): array
     {
+        $ident = $this->BuildSignalIdent($code);
         $type = VARIABLETYPE_STRING;
         $profile = '';
 
-        if (array_key_exists('value', $body)) {
+        // Wurde ein unbekanntes Signal bereits ohne Nutzdaten als String angelegt,
+        // bleibt sein Typ stabil. Dadurch können spätere echte Werte nicht an einem
+        // Typwechsel scheitern. Benutzerarchive bleiben ebenfalls erhalten.
+        $existingId = @$this->GetIDForIdent($ident);
+        if ($existingId) {
+            $existingVariable = IPS_GetVariable($existingId);
+            $type = (int)($existingVariable['VariableType'] ?? VARIABLETYPE_STRING);
+            $profile = (string)($existingVariable['VariableCustomProfile'] ?? '');
+            if ($profile === '') {
+                $profile = (string)($existingVariable['VariableProfile'] ?? '');
+            }
+        } elseif (array_key_exists('value', $body)) {
             $value = $body['value'];
 
             if (is_bool($value)) {
@@ -1407,7 +1655,7 @@ class SmartcarVehicle extends IPSModuleStrict
         }
 
         return [
-            'ident'   => $this->BuildSignalIdent($code),
+            'ident'   => $ident,
             'name'    => $code,
             'type'    => $type,
             'profile' => $profile,
@@ -1471,6 +1719,8 @@ class SmartcarVehicle extends IPSModuleStrict
         if (!is_array($decoded) || empty($decoded['success'])) {
             return false;
         }
+
+        $this->ApplyVehicleAccessCommands();
 
         return true;
     }
@@ -1538,22 +1788,6 @@ class SmartcarVehicle extends IPSModuleStrict
             'security-lock', 'closure-lock', 'lock', 'lock-doors' => 'security-lock',
             'security-unlock', 'closure-unlock', 'unlock', 'unlock-doors' => 'security-unlock',
             default => $key
-        };
-    }
-
-    private function GetCommandPermission(string $code): string
-    {
-        return match (strtolower(trim($code))) {
-            'charge-start',
-            'charge-stop',
-            'charge-set-limit' => 'control_charge',
-
-            'security-lock',
-            'security-unlock' => 'control_security',
-
-            'navigation-set-destination' => 'control_navigation',
-
-            default => ''
         };
     }
 
