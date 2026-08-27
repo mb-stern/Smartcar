@@ -16,7 +16,6 @@ class SmartcarSplitter extends IPSModuleStrict
         $this->RegisterPropertyString('ManualRedirectURI', '');
         $this->RegisterPropertyString('ManagementToken', '');
         $this->RegisterPropertyString('ApplicationID', '');
-        $this->RegisterPropertyString('WebhookID', '');
 
         $this->RegisterAttributeString('ApplicationAccessToken', '');
         $this->RegisterAttributeInteger('TokenExpiresAt', 0);
@@ -119,11 +118,6 @@ class SmartcarSplitter extends IPSModuleStrict
                     'type' => 'ValidationTextBox',
                     'name' => 'ManagementToken',
                     'caption' => 'Application Management Token'
-                ],
-                [
-                    'type' => 'ValidationTextBox',
-                    'name' => 'WebhookID',
-                    'caption' => 'Webhook ID für erneutes Abonnieren'
                 ]
             ]
         ];
