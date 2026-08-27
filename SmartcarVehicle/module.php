@@ -269,7 +269,14 @@ class SmartcarVehicle extends IPSModuleStrict
                         ]
                     ],
                 ];
-                [
+            }
+        }
+
+        foreach ($webhookPanelItems as $webhookItem) {
+            $form['actions'][] = $webhookItem;
+        }
+
+        $form['actions'][] =[
                     'type'  => 'RowLayout',
                     'items' => [
                         [
@@ -280,15 +287,9 @@ class SmartcarVehicle extends IPSModuleStrict
                         [
                             'type'    => 'Label',
                             'caption' => "Sag danke und unterstütze den Modulentwickler: paypal.me/mbstern"
-                        ],
-                    ],
-                ]
-            }
-        }
-
-        foreach ($webhookPanelItems as $webhookItem) {
-            $form['actions'][] = $webhookItem;
-        }
+                        ]
+                    ]
+                ];
 
         return json_encode($form, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     }
