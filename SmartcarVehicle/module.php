@@ -122,6 +122,22 @@ class SmartcarVehicle extends IPSModuleStrict
                 $this->SetChargeLimit($percent);
                 $this->SetValue($Ident, $percent);
                 return;
+
+            case 'CommandNavigationDestination':
+                $coordinates = $this->ParseNavigationDestination((string)$Value);
+                if ($coordinates === null) {
+                    throw new InvalidArgumentException(
+                        'Navigationsziel muss als "Breitengrad,Längengrad" oder als JSON mit latitude und longitude angegeben werden.'
+                    );
+                }
+
+                if ($this->SetNavigationDestination($coordinates['latitude'], $coordinates['longitude'])) {
+                    $this->SetValue(
+                        $Ident,
+                        $coordinates['latitude'] . ',' . $coordinates['longitude']
+                    );
+                }
+                return;
         }
 
         throw new Exception('Invalid Ident');
@@ -155,6 +171,25 @@ class SmartcarVehicle extends IPSModuleStrict
     }
 
     /**
+     * Sendet geografische Koordinaten an das Navigationssystem des Fahrzeugs.
+     */
+    public function SetNavigationDestination(float $Latitude, float $Longitude): bool
+    {
+        if (!is_finite($Latitude) || $Latitude < -90.0 || $Latitude > 90.0) {
+            throw new InvalidArgumentException('Der Breitengrad muss zwischen -90 und 90 liegen.');
+        }
+
+        if (!is_finite($Longitude) || $Longitude < -180.0 || $Longitude > 180.0) {
+            throw new InvalidArgumentException('Der Längengrad muss zwischen -180 und 180 liegen.');
+        }
+
+        return $this->ExecuteVehicleCommand('navigation-set-destination', [
+            'latitude' => $Latitude,
+            'longitude' => $Longitude
+        ]);
+    }
+
+    /**
      * Ruft alle Signale oder gezielt einen bzw. mehrere Signal-Codes ab.
      * [] = kompletter /signals-Abruf
      */
@@ -185,6 +220,45 @@ class SmartcarVehicle extends IPSModuleStrict
         }
 
         return $success;
+    }
+
+    private function ParseNavigationDestination(string $value): ?array
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return null;
+        }
+
+        $decoded = json_decode($value, true);
+        if (is_array($decoded)) {
+            $latitude = $decoded['latitude'] ?? $decoded['lat'] ?? null;
+            $longitude = $decoded['longitude'] ?? $decoded['lon'] ?? $decoded['lng'] ?? null;
+        } else {
+            $parts = array_map('trim', explode(',', $value));
+            if (count($parts) !== 2) {
+                return null;
+            }
+            [$latitude, $longitude] = $parts;
+        }
+
+        if (!is_numeric($latitude) || !is_numeric($longitude)) {
+            return null;
+        }
+
+        $latitude = (float)$latitude;
+        $longitude = (float)$longitude;
+
+        if (!is_finite($latitude) || $latitude < -90.0 || $latitude > 90.0) {
+            return null;
+        }
+        if (!is_finite($longitude) || $longitude < -180.0 || $longitude > 180.0) {
+            return null;
+        }
+
+        return [
+            'latitude' => $latitude,
+            'longitude' => $longitude
+        ];
     }
 
     public function GetCompatibleParents(): string
@@ -1843,6 +1917,15 @@ class SmartcarVehicle extends IPSModuleStrict
                 'data' => [
                     'attributes' => [
                         'percent' => (int)($params['percent'] ?? 80)
+                    ]
+                ]
+            ];
+        } elseif ($command === 'navigation-set-destination') {
+            $body = [
+                'data' => [
+                    'attributes' => [
+                        'latitude' => (float)($params['latitude'] ?? 0.0),
+                        'longitude' => (float)($params['longitude'] ?? 0.0)
                     ]
                 ]
             ];
