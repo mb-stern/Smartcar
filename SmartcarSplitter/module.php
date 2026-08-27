@@ -1115,7 +1115,7 @@ class SmartcarSplitter extends IPSModuleStrict
                 if ($isFirstDelivery) {
                     $this->SendDebug(
                         'Webhook/FIRST_DELIVERY',
-                        'Synchronisiere Connections für automatische Vehicle-Instanz.',
+                        'Synchronisiere Connections; neue Fahrzeuge werden nur im Konfigurator zur Erstellung angeboten.',
                         0
                     );
 
@@ -2815,24 +2815,21 @@ class SmartcarSplitter extends IPSModuleStrict
                     $vehicleId
                 );
 
-            $isNew = false;
-
+            // Review-Richtlinie: Geräteinstanzen dürfen nicht automatisch
+            // aufgrund von Connect-/Webhook-Nachrichten erstellt werden.
+            // Unbekannte Fahrzeuge werden ausschließlich vom Smartcar-
+            // Konfigurator als mögliche Geräte angeboten und dort vom
+            // Benutzer angelegt. Hier aktualisieren wir nur bereits
+            // vorhandene Vehicle-Instanzen.
             if ($instanceId === 0) {
-                $instanceId =
-                    IPS_CreateInstance(
-                        self::VEHICLE_MODULE_ID
-                    );
-
-                $isNew = true;
-
                 $this->SendDebug(
-                    'Connect/CreateVehicle',
-                    'Neue Vehicle-Instanz erstellt: ' .
-                    $instanceId .
-                    ' für VehicleID=' .
-                    $vehicleId,
+                    'Connect/VehicleAvailable',
+                    'VehicleID=' .
+                    $vehicleId .
+                    ' erkannt; keine Instanz vorhanden. Erstellung erfolgt ausschließlich über den Konfigurator.',
                     0
                 );
+                continue;
             }
 
             $caption =
@@ -2922,25 +2919,6 @@ class SmartcarSplitter extends IPSModuleStrict
                 $instanceId,
                 $this->InstanceID
             );
-
-            if ($isNew) {
-                $targetParentId =
-                    IPS_GetParent(
-                        $this->InstanceID
-                    );
-
-                if (
-                    $targetParentId > 0
-                    && IPS_GetParent(
-                        $instanceId
-                    ) !== $targetParentId
-                ) {
-                    @IPS_SetParent(
-                        $instanceId,
-                        $targetParentId
-                    );
-                }
-            }
 
             IPS_ApplyChanges(
                 $instanceId
