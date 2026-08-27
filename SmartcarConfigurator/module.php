@@ -21,7 +21,7 @@ class SmartcarConfigurator extends IPSModuleStrict
     public function GetCompatibleParents(): string
     {
         return json_encode([
-            'type' => 'connect',
+            'type' => 'require',
             'moduleIDs' => [
                 self::SPLITTER_MODULE_ID
             ]
