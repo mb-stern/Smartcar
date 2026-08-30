@@ -382,16 +382,6 @@ class SmartcarSplitter extends IPSModuleStrict
                     JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
                 );
 
-            case 'GetCompatibleVehicles':
-                return json_encode(
-                    $this->ApiGetCompatibleVehicles(
-                        (string)($data['Make'] ?? ''),
-                        (string)($data['PowertrainType'] ?? ''),
-                        (string)($data['Region'] ?? 'EUROPE')
-                    ),
-                    JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
-                );
-
             default:
                 return json_encode([
                     'success' => false,
@@ -846,79 +836,6 @@ class SmartcarSplitter extends IPSModuleStrict
         }
 
         return 0;
-    }
-
-    public function ApiGetCompatibleVehicles(
-        string $make = '',
-        string $powertrainType = '',
-        string $region = 'EUROPE'
-    ): array {
-        $query = [];
-
-        if ($region !== '') {
-            $query['filter[region]'] =
-                $region;
-        }
-
-        if ($make !== '') {
-            $query['filter[make]'] =
-                $make;
-        }
-
-        if ($powertrainType !== '') {
-            $query['filter[powertrainType]'] =
-                $powertrainType;
-        }
-
-        $url =
-            'https://compatibility.api.smartcar.com/v3/compatible-vehicles';
-
-        if (!empty($query)) {
-            $url .=
-                '?' .
-                http_build_query($query);
-        }
-
-        $response =
-            $this->HttpRequestRaw(
-                'Compatibility',
-                'GET',
-                $url,
-                [
-                    'Accept: application/json'
-                ]
-            );
-
-        if ($response === null) {
-            return [
-                'success' => false,
-                'error' => 'No response'
-            ];
-        }
-
-        $this->SendDebug(
-            'Connections/RAW',
-            $response['body'],
-            0
-        );
-
-        $decoded =
-            json_decode(
-                $response['body'],
-                true
-            );
-
-        return [
-            'success' =>
-                $response['statusCode'] >= 200
-                && $response['statusCode'] < 300,
-            'statusCode' =>
-                $response['statusCode'],
-            'body' =>
-                is_array($decoded)
-                    ? $decoded
-                    : $response['body']
-        ];
     }
 
     protected function ProcessHookData(): void
