@@ -91,41 +91,174 @@ class SmartcarVehicle extends IPSModuleStrict
         switch ($Ident) {
             case 'CommandChargeStart':
                 if ((bool)$Value) {
-                    $this->ExecuteVehicleCommand('charge-start');
+                    $this->StartCharging();
                     $this->SetValue($Ident, false);
                 }
                 return;
 
             case 'CommandChargeStop':
                 if ((bool)$Value) {
-                    $this->ExecuteVehicleCommand('charge-stop');
+                    $this->StopCharging();
                     $this->SetValue($Ident, false);
                 }
                 return;
 
             case 'CommandSecurityLock':
                 if ((bool)$Value) {
-                    $this->ExecuteVehicleCommand('security-lock');
+                    $this->LockDoors();
                     $this->SetValue($Ident, false);
                 }
                 return;
 
             case 'CommandSecurityUnlock':
                 if ((bool)$Value) {
-                    $this->ExecuteVehicleCommand('security-unlock');
+                    $this->UnlockDoors();
                     $this->SetValue($Ident, false);
                 }
                 return;
 
             case 'CommandChargeLimit':
-                $this->ExecuteVehicleCommand('charge-set-limit', [
-                    'percent' => max(0, min(100, (int)$Value))
-                ]);
-                $this->SetValue($Ident, max(0, min(100, (int)$Value)));
+                $percent = max(0, min(100, (int)$Value));
+                $this->SetChargeLimit($percent);
+                $this->SetValue($Ident, $percent);
+                return;
+
+            case 'CommandNavigationDestination':
+                $coordinates = $this->ParseNavigationDestination((string)$Value);
+                if ($coordinates === null) {
+                    throw new InvalidArgumentException(
+                        'Navigationsziel muss als "Breitengrad,Längengrad" oder als JSON mit latitude und longitude angegeben werden.'
+                    );
+                }
+
+                if ($this->SetNavigationDestination($coordinates['latitude'], $coordinates['longitude'])) {
+                    $this->SetValue(
+                        $Ident,
+                        $coordinates['latitude'] . ',' . $coordinates['longitude']
+                    );
+                }
                 return;
         }
 
         throw new Exception('Invalid Ident');
+    }
+
+    public function StartCharging(): bool
+    {
+        return $this->ExecuteVehicleCommand('charge-start');
+    }
+
+    public function StopCharging(): bool
+    {
+        return $this->ExecuteVehicleCommand('charge-stop');
+    }
+
+    public function SetChargeLimit(int $Percent): bool
+    {
+        return $this->ExecuteVehicleCommand('charge-set-limit', [
+            'percent' => max(0, min(100, $Percent))
+        ]);
+    }
+
+    public function LockDoors(): bool
+    {
+        return $this->ExecuteVehicleCommand('security-lock');
+    }
+
+    public function UnlockDoors(): bool
+    {
+        return $this->ExecuteVehicleCommand('security-unlock');
+    }
+
+    /**
+     * Sendet geografische Koordinaten an das Navigationssystem des Fahrzeugs.
+     */
+    public function SetNavigationDestination(float $Latitude, float $Longitude): bool
+    {
+        if (!is_finite($Latitude) || $Latitude < -90.0 || $Latitude > 90.0) {
+            throw new InvalidArgumentException('Der Breitengrad muss zwischen -90 und 90 liegen.');
+        }
+
+        if (!is_finite($Longitude) || $Longitude < -180.0 || $Longitude > 180.0) {
+            throw new InvalidArgumentException('Der Längengrad muss zwischen -180 und 180 liegen.');
+        }
+
+        return $this->ExecuteVehicleCommand('navigation-set-destination', [
+            'latitude' => $Latitude,
+            'longitude' => $Longitude
+        ]);
+    }
+
+    /**
+     * Ruft alle Signale oder gezielt einen bzw. mehrere Signal-Codes ab.
+     * [] = kompletter /signals-Abruf
+     */
+    public function FetchSelectedSignals(array $SignalCodes = []): bool
+    {
+        $SignalCodes = array_values(array_unique(array_filter(
+            array_map(static fn($code): string => trim((string)$code), $SignalCodes),
+            static fn(string $code): bool => $code !== ''
+        )));
+
+        if ($SignalCodes === []) {
+            return $this->SyncVehicleAccessSignals();
+        }
+
+        $success = true;
+        $received = false;
+
+        foreach ($SignalCodes as $signalCode) {
+            if ($this->FetchSignalByCode($signalCode)) {
+                $received = true;
+            } else {
+                $success = false;
+            }
+        }
+
+        if ($received) {
+            $this->TouchLastSignalsAt();
+        }
+
+        return $success;
+    }
+
+    private function ParseNavigationDestination(string $value): ?array
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return null;
+        }
+
+        $decoded = json_decode($value, true);
+        if (is_array($decoded)) {
+            $latitude = $decoded['latitude'] ?? $decoded['lat'] ?? null;
+            $longitude = $decoded['longitude'] ?? $decoded['lon'] ?? $decoded['lng'] ?? null;
+        } else {
+            $parts = array_map('trim', explode(',', $value));
+            if (count($parts) !== 2) {
+                return null;
+            }
+            [$latitude, $longitude] = $parts;
+        }
+
+        if (!is_numeric($latitude) || !is_numeric($longitude)) {
+            return null;
+        }
+
+        $latitude = (float)$latitude;
+        $longitude = (float)$longitude;
+
+        if (!is_finite($latitude) || $latitude < -90.0 || $latitude > 90.0) {
+            return null;
+        }
+        if (!is_finite($longitude) || $longitude < -180.0 || $longitude > 180.0) {
+            return null;
+        }
+
+        return [
+            'latitude' => $latitude,
+            'longitude' => $longitude
+        ];
     }
 
     public function GetCompatibleParents(): string
@@ -205,7 +338,7 @@ class SmartcarVehicle extends IPSModuleStrict
                     'type' => 'Button',
                     'caption' => 'Signale aus Vehicle Access abrufen',
                     'onClick' => 'SMCARV_SyncVehicleAccessSignals($id);'
-                ]
+                ],
             ]
         ];
 
@@ -267,7 +400,7 @@ class SmartcarVehicle extends IPSModuleStrict
                             'caption' => 'Übernehmen / neu laden',
                             'onClick' => '$rows = []; foreach ($WebhookSelection as $row) { $rows[] = $row; } echo SMCARV_ApplyWebhookSelection($id, json_encode($rows));'
                         ]
-                    ]
+                    ],
                 ];
             }
         }
@@ -275,6 +408,21 @@ class SmartcarVehicle extends IPSModuleStrict
         foreach ($webhookPanelItems as $webhookItem) {
             $form['actions'][] = $webhookItem;
         }
+
+        $form['actions'][] =[
+                    'type'  => 'RowLayout',
+                    'items' => [
+                        [
+                                'type'   => 'Image',
+                                'onClick'=> "echo 'https://paypal.me/mbstern';",
+                                'image'=> "data:image/jpeg;base64,/9j/4QAYRXhpZgAASUkqAAgAAAAAAAAAAAAAAP/sABFEdWNreQABAAQAAAA8AAD/7gAOQWRvYmUAZMAAAAAB/9sAhAAGBAQEBQQGBQUGCQYFBgkLCAYGCAsMCgoLCgoMEAwMDAwMDBAMDg8QDw4MExMUFBMTHBsbGxwfHx8fHx8fHx8fAQcHBw0MDRgQEBgaFREVGh8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx//wAARCABLAGQDAREAAhEBAxEB/8QAqwABAAICAwEBAAAAAAAAAAAAAAUGAgcDBAgJAQEBAAIDAQAAAAAAAAAAAAAAAAMEAgUGARAAAQMCAwMEDwMICwAAAAAAAgEDBAAFERIGIRMHMdEUFkFRcSKyk6PDJFSEFTZGZmEyCIGxQlKSIzODkaFigmOz00QlVRgRAAICAQIDBQYFBQAAAAAAAAABAgMREgQhMQVBUWEiE/BxgaGxBpHRQhQVwfEyUiP/2gAMAwEAAhEDEQA/AN+WWywr/CS63VDfkPmeUc5CICJKKCKCqbNlAd/qNpr1YvGHz0A6jaa9WLxh89AOo2mvVi8YfPQDqNpr1YvGHz0A6jaa9WLxh89AOo2mvVi8YfPQDqNpr1YvGHz0A6jaa9WLxh89AOo2mvVi8YfPQDqNpr1YvGHz0A6jaa9WLxh89ARnuVr3/wC4t+97o3PSui51+9jly5vvZezhQEnob4ajd1zw1oCeoBQCgFAeZtWfik1ZbtT3W3W22284MKU7GYceR4nCFk1DMSi4KbVHHYldDT0eEoJtvLRrrN7JSaSIr/1nr3/q7Z+y/wD6tS/wtXfL5GH76Xci4aC/FPFul1j2zVFtC3dKMWmrhGMiZEyXAd6B98Iqv6WZcOzVTc9HcYuUHnHYTVb1N4Zv6tIXhQCgFAV/569g85QGWhvhqN3XPDWgJ6gFAKA4LhLbhwJMxxcG4zRvGq9psVJfzVlGOWkeN4WT53SZJyZD0lxcTfMnTVe2aqS/nru0sLBz74s6XSj7SVD6rJfTR+g+6ZIAjiRKgiiY44rsSitZ44JcT6E6Nv8ADvunok2Kpd6KNPgf3wdbREISw/prkd3t5U2OMjZbHeQ3FanHkTdVi2KAUBX/AJ69g85QGWhvhqN3XPDWgJ6gFAKAp/F+6LbOGOpZaLlLoLrIL/afTcp/W5VrYw1XRXiRXvEGeElElHKAqRLsERTFVVewiJXZS5GjTXNmAWi7GSCEJ9SXYibo+aq2h9xk9zUuco/ii26T0VKalt3C6AjaMrmYjLgpKachHhyYdqrNVLzlmj6l1aMouuvjnm/yPWPBCG8zpJ19xFQZUozax7IiIhin94VrnOuTTuS7om5+2q3Hbtv9UvyRsKtMdEKAUBX/AJ69g85QGWhvhqN3XPDWgJ6gFAKA1F+KK59E4XnGQsCuE2Oxh2xFVeX/ACq2nSIZuz3JlTeSxA8waGY3l9RzDYy0Z4/auAp4VdZHmct1aeKH4tI2xpzTl11Fcfd9uESfQCdJXCyigjgiqq7eyqVjudzCmOqXI5/Z7Ke4nohz5l8snAu6HIA7zMaZjIuJtRlI3CTtZiQRHu7a1F/XYJeRNvxOg232xNyzbJKPhzNwwYMWBDZhxG0ajRwRtpseRBHYlc3ZNzk5Pi2djVXGuKjFYijnrAzFAKAr/wA9ewecoDLQ3w1G7rnhrQE9QCgFAUzidwvtnEC3QoNwmyITcJ5XwWPkXMRAod8hiXIi7Kt7TduhtpJ5IbqVNYZp7UfBCFodyO7ZnZ10dnIYPKbYkLYtqKphuhTaSr2e1XRdO6h6revTHByv3BtmowjBOXF9hduB1knx7hc50qM6wKNAw0roEGZSJSLDMicmVKq9cvjKMYpp8cnv2ztpxnOUk1wxx9vA29XOHXigFAKAUBX/AJ69g85QGWhvhqN3XPDWgNAyeKvFSdB1ZqS36lhQbTY5xsQ7e+wwrj4K4qADSqKqSoOXl5a6JbOhOEHFuUlz4mud02m0+CNl2HjvpKPpawytX3Fm3Xy5xQffiNg4eVCVUF0hBD3YuCmdM3YWtfZ06bnJVrMUyxHcR0rVzJ5njHw3eisTG7yBRJMz3czI3TyNlJyiWTMoYJ3pouK7KgexuTxp44z8CRXw7yQvOvdM2y7rYXZo+/SiuS24IiZkjbYEeYyEVEEwBfvKlY1bWc0pY8ucGN16hFvtSbNadfNfsabjaiO7xXAefVkbcTTe8JBVcSwFEXL3tdB+w27tdWh8Fzyzj/5TdxpVznHjLGnCybGd4kaSiOtxbhPCPOyCUhlEM0aNRRVAiEVRFTkwrSrpt0lmMcx+p0b6xt4NRnLEscefDwIy6a2emah0tGsEpCgXQ3XJJ7vabTRYKnfpmH7h7anq2SjXY7F5o4x737IrX9Sc7qY0vyTznh2L3+5lh1pqVrTGlLpf3W98NuYJ4WVLLnNNgBmwXDMSonJWv29XqTUe83Vk9MWzWjf4jrYPDTrZJgC3dHJbkGNZhexzutoJqSuKCKgI2aES5fs7NbB9Kl62hPy4zkr/ALtaNXaWuBxb04xpOy3vVD7Vll3ljpLFuQjkO5FxUVEQDeEmXBVXLhVaWym5yjDzKPaSq9KKcuGS02DUNk1Da2rrZZjc63vYo2+3jhiK4EioqIqKi8qKlVrKpQlpksMkjJSWUdD569g85UZkcGmSlDolSiBvZQtSFjtoqIpOIpZBxXBExKsoYys8jx8jWHCf8PVhTTrczXdl3uoCkOuE068RCLeKICELR7tccFL8tbje9TlrxVLy4KdO1WPMuJxM6R4h6Y1/q2XbNJRb/Evyf8ZOdeZaajMoK5WVA9uVBwBQRExypguFeu+qyqCc3Fx5rvGicZPCzkgLzojqx+G9+FqdBtt8W5dOhMKQkayVcRsGx3akmJMivIuxO5U1e49Td5hxjpx8P7kcq9NWHweS5aI4d6kj6KvmpLuBzteapj/vd4oi40w5gIspjlQVyd8SdwexUM93X68IrhVBkW5oslt54WbJL6lt0hwv0/CtsCVcbeJXoAE3ycMjQXeX7mZW1y9yot51SyUpKMvJ/T6kHT+iUwhGU4/9O33/AEKzE01re3WO+WIbA1MdnOOGt2J1vExPBO9QlzKX6Q4qmC1fnuaJ2Qs1uOn9OGauGz3VdVlXpqTlnzZXt7iW01o++QdR2WTIiKMS0Wnd5s4LjKczEYIiLjji6u3kqtut5XKqaT805/L2Rc2XT7YX1uS8sK/D/J5z9SF11B4q604XJa5tjbg3i43NtqVEYdBRagNkh70yJxUVVIU2Cv5Kh28qKrtSlmKj8zdWKc4YxxyQnEfgA63EusvS7DlxuF7ksNNxl3bbUCNsKQYKRJmU1aBFXlw2VNtepZaU+CivxfYYW7b/AF7Tk1fw51fbeIQXq2QblcbMlsj26CdlnNQpUbo4CCtkryLi2WVS2duvKN1XKrS3FS1NvUspns6ZKWVnGOw2bwp0m3pjR0eAkJ23OvOuypEJ+QMtxs3S5CeAQElyiOOCcta7eXepZnOfhgsUw0xwd/569g85VUlMtDfDUb7Ccx/bWgJ6gFAdO42a0XJWVuMJiYsY95H6Q0Du7P8AWDOi5V+1KzjZKPJ4PHFPmdysD0UAoBQCgFAKAUBX8U69YY7egcn8ygIeLj0iZuen/wAc83unDo2P879L9bLsoDs+k/UHkKAek/UHkKAek/UHkKAek/UHkKAek/UHkKAek/UHkKAek/UHkKAek/UHkKAek/UHkKAek/UHkKAek/UHkKAiv3fvf/db/P8A4nvT+H4nd0B//9k="
+                        ],
+                        [
+                            'type'    => 'Label',
+                            'caption' => "Sag danke und unterstütze den Modulentwickler: paypal.me/mbstern"
+                        ]
+                    ]
+                ];
 
         return json_encode($form, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     }
@@ -490,20 +638,20 @@ class SmartcarVehicle extends IPSModuleStrict
         return $successText;
     }
 
-    public function SyncVehicleAccessSignals(): void
+    public function SyncVehicleAccessSignals(): bool
     {
         $selectionRowsBefore = $this->BuildVariableSelectionRows();
 
         if (!$this->HasParentConnection()) {
             $this->SendDebug('VehicleAccess/Error', 'Kein Splitter/Parent verbunden.', 0);
-            return;
+            return false;
         }
 
         $vehicleId = trim($this->ReadPropertyString('VehicleID'));
         $userId = trim($this->ReadPropertyString('UserID'));
         if ($vehicleId === '' || $userId === '') {
             $this->SendDebug('VehicleAccess/Error', 'VehicleID oder UserID fehlt.', 0);
-            return;
+            return false;
         }
 
         $result = $this->SendDataToParent(json_encode([
@@ -516,7 +664,7 @@ class SmartcarVehicle extends IPSModuleStrict
         $decoded = json_decode((string)$result, true);
         if (!is_array($decoded) || empty($decoded['success'])) {
             $this->SendDebug('VehicleAccess/Error', 'GetSignals fehlgeschlagen: ' . (string)$result, 0);
-            return;
+            return false;
         }
 
         $signals = $decoded['body']['data'] ?? $decoded['body']['signals'] ?? [];
@@ -525,7 +673,7 @@ class SmartcarVehicle extends IPSModuleStrict
         }
         if (!is_array($signals)) {
             $this->SendDebug('VehicleAccess/Error', 'Keine Signalliste in der V3-Antwort gefunden.', 0);
-            return;
+            return false;
         }
 
         $successful = [];
@@ -599,6 +747,84 @@ class SmartcarVehicle extends IPSModuleStrict
         if ($selectionRowsAfter !== $selectionRowsBefore) {
             $this->RefreshVariableSelectionForm();
         }
+
+        return true;
+    }
+
+    private function FetchSignalByCode(string $signalCode): bool
+    {
+        if (!$this->HasParentConnection()) {
+            $this->SendDebug('Signal/Error', 'Kein Splitter/Parent verbunden.', 0);
+            return false;
+        }
+
+        $vehicleId = trim($this->ReadPropertyString('VehicleID'));
+        $userId = trim($this->ReadPropertyString('UserID'));
+        $signalCode = trim($signalCode);
+
+        if ($vehicleId === '' || $userId === '' || $signalCode === '') {
+            $this->SendDebug('Signal/Error', 'VehicleID, UserID oder SignalCode fehlt.', 0);
+            return false;
+        }
+
+        $result = $this->SendDataToParent(json_encode([
+            'DataID' => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
+            'Command' => 'GetSignal',
+            'VehicleID' => $vehicleId,
+            'UserID' => $userId,
+            'SignalCode' => $signalCode
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+
+        $decoded = json_decode((string)$result, true);
+        if (!is_array($decoded) || empty($decoded['success'])) {
+            $this->SendDebug('Signal/Error/' . $signalCode, 'GetSignal fehlgeschlagen: ' . (string)$result, 0);
+            return false;
+        }
+
+        $payload = $decoded['body']['data'] ?? $decoded['body'] ?? [];
+        if (is_array($payload) && array_is_list($payload)) {
+            $payload = $payload[0] ?? [];
+        }
+        if (!is_array($payload)) {
+            $this->SendDebug('Signal/Error/' . $signalCode, 'Unerwartete Antwort: ' . (string)$result, 0);
+            return false;
+        }
+
+        $attributes = is_array($payload['attributes'] ?? null) ? $payload['attributes'] : $payload;
+        $responseCode = trim((string)($attributes['code'] ?? $payload['code'] ?? $payload['id'] ?? $signalCode));
+        if ($responseCode === '') {
+            $responseCode = $signalCode;
+        }
+
+        $body = is_array($attributes['body'] ?? null) ? $attributes['body'] : [];
+        $status = is_array($attributes['status'] ?? null) ? $attributes['status'] : null;
+        $meta = is_array($payload['meta'] ?? null)
+            ? $payload['meta']
+            : (is_array($attributes['meta'] ?? null) ? $attributes['meta'] : []);
+
+        $statusValue = strtoupper((string)($status['value'] ?? ''));
+        $verified = $status === null
+            || $statusValue === ''
+            || $statusValue === 'SUCCESS'
+            || $statusValue === 'OK';
+
+        if (!$verified || !$this->HasMeaningfulSignalData($body)) {
+            $this->SendDebug('Signal/NoData/' . $responseCode, (string)$result, 0);
+            return false;
+        }
+
+        $this->RememberSuccessfulSignal($responseCode, $body, $status, $meta);
+        $this->ApplySignalFromV3(
+            $responseCode,
+            $body,
+            $status,
+            $this->GetSignalDefinition($responseCode, $body),
+            $meta,
+            false
+        );
+
+        $this->SendDebug('Signal/Success/' . $responseCode, json_encode($body, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+        return true;
     }
 
     public function ProcessWebhookSignals(string $payloadJson): void
@@ -1691,6 +1917,15 @@ class SmartcarVehicle extends IPSModuleStrict
                 'data' => [
                     'attributes' => [
                         'percent' => (int)($params['percent'] ?? 80)
+                    ]
+                ]
+            ];
+        } elseif ($command === 'navigation-set-destination') {
+            $body = [
+                'data' => [
+                    'attributes' => [
+                        'latitude' => (float)($params['latitude'] ?? 0.0),
+                        'longitude' => (float)($params['longitude'] ?? 0.0)
                     ]
                 ]
             ];
