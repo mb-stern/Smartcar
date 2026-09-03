@@ -1654,12 +1654,9 @@ class SmartcarSplitter extends IPSModuleStrict
                     : $this->ExtractVehicleIdFromState($state)
             );
 
-        if ($vehicleId !== '' && $userId !== '') {
-            $this->UpdateVehicleUserId(
-                $vehicleId,
-                $userId
-            );
-        }
+        // Die vom Redirect gelieferte UserID wird bewusst nicht direkt in eine
+        // vorhandene Vehicle-Instanz geschrieben. Abweichende Konfigurationen
+        // werden über den Smartcar-Konfigurator korrigiert.
 
         // Nach response_type=none liefert Smartcar im Redirect die user_id.
         // Die neu autorisierte Connection deshalb zuerst gezielt über diese
@@ -2579,7 +2576,7 @@ class SmartcarSplitter extends IPSModuleStrict
             );
 
             if (!empty($connections)) {
-                $this->UpdateVehiclesFromConnections(
+                $this->ReportConnectionsToConfigurator(
                     $connections
                 );
 
@@ -2637,7 +2634,7 @@ class SmartcarSplitter extends IPSModuleStrict
             );
 
             if (!empty($connections)) {
-                $this->UpdateVehiclesFromConnections(
+                $this->ReportConnectionsToConfigurator(
                     $connections
                 );
                 return;
@@ -2660,179 +2657,38 @@ class SmartcarSplitter extends IPSModuleStrict
         );
     }
 
-    private function UpdateVehicleUserId(
-        string $vehicleId,
-        string $userId
-    ): void {
-        $instanceId =
-            $this->FindVehicleInstanceByVehicleId(
-                $vehicleId
-            );
-
-        if ($instanceId === 0) {
-            $this->SendDebug(
-                'Connect/UpdateUserID',
-                'Keine Vehicle-Instanz für VehicleID=' .
-                $vehicleId,
-                0
-            );
-            return;
-        }
-
-        IPS_SetProperty(
-            $instanceId,
-            'UserID',
-            $userId
-        );
-
-        IPS_ApplyChanges(
-            $instanceId
-        );
-
-        if (
-            function_exists(
-                'SMCARV_ApplySelectedCapabilities'
-            )
-        ) {
-            SMCARV_ApplySelectedCapabilities(
-                $instanceId
-            );
-        }
-
-        $this->SendDebug(
-            'Connect/UpdateUserID',
-            'UserID gespeichert in Instanz ' .
-            $instanceId,
-            0
-        );
-    }
-
-    private function UpdateVehiclesFromConnections(
-        array $connections
-    ): void {
+    /**
+     * Der Splitter entdeckt lediglich den aktuellen Smartcar-Verbindungsstand.
+     * Bestehende Vehicle-Instanzen werden hier absichtlich NICHT umkonfiguriert.
+     * Der Smartcar-Konfigurator liefert für jede Connection die Soll-Konfiguration
+     * und überlässt Erstellung/Korrektur damit bewusst dem Benutzer.
+     */
+    private function ReportConnectionsToConfigurator(array $connections): void
+    {
         foreach ($connections as $connection) {
-            $vehicleId =
-                (string)(
-                    $connection['vehicleId']
-                    ?? ''
-                );
+            if (!is_array($connection)) {
+                continue;
+            }
 
+            $vehicleId = trim((string)($connection['vehicleId'] ?? ''));
             if ($vehicleId === '') {
                 continue;
             }
 
-            $instanceId =
-                $this->FindVehicleInstanceByVehicleId(
-                    $vehicleId
-                );
+            $instanceId = $this->FindVehicleInstanceByVehicleId($vehicleId);
 
-            // Review-Richtlinie: Geräteinstanzen dürfen nicht automatisch
-            // aufgrund von Connect-/Webhook-Nachrichten erstellt werden.
-            // Unbekannte Fahrzeuge werden ausschließlich vom Smartcar-
-            // Konfigurator als mögliche Geräte angeboten und dort vom
-            // Benutzer angelegt. Hier aktualisieren wir nur bereits
-            // vorhandene Vehicle-Instanzen.
-            if ($instanceId === 0) {
-                $this->SendDebug(
-                    'Connect/VehicleAvailable',
-                    'VehicleID=' .
-                    $vehicleId .
-                    ' erkannt; keine Instanz vorhanden. Erstellung erfolgt ausschließlich über den Konfigurator.',
-                    0
-                );
-                continue;
-            }
-
-            $caption =
-                trim(
-                    (string)(
-                        $connection['caption']
-                        ?? ''
-                    )
-                );
-
-            if ($caption === '') {
-                $caption = $vehicleId;
-            }
-
-            IPS_SetProperty(
-                $instanceId,
-                'VehicleID',
-                $vehicleId
-            );
-
-            IPS_SetProperty(
-                $instanceId,
-                'ConnectionID',
-                (string)(
-                    $connection['connectionId']
-                    ?? ''
-                )
-            );
-
-            IPS_SetProperty(
-                $instanceId,
-                'UserID',
-                (string)(
-                    $connection['userId']
-                    ?? ''
-                )
-            );
-
-            IPS_SetProperty(
-                $instanceId,
-                'VehicleCaption',
-                $caption
-            );
-
-            IPS_SetProperty(
-                $instanceId,
-                'Make',
-                (string)(
-                    $connection['make']
-                    ?? ''
-                )
-            );
-
-            IPS_SetProperty(
-                $instanceId,
-                'Model',
-                (string)(
-                    $connection['model']
-                    ?? ''
-                )
-            );
-
-            IPS_SetProperty(
-                $instanceId,
-                'Year',
-                (int)(
-                    $connection['year']
-                    ?? 0
-                )
-            );
-
-            IPS_SetProperty(
-                $instanceId,
-                'PowertrainType',
-                (string)(
-                    $connection['powertrainType']
-                    ?? ''
-                )
-            );
-
-            IPS_SetName(
-                $instanceId,
-                $caption
-            );
-
-            @IPS_ConnectInstance(
-                $instanceId,
-                $this->InstanceID
-            );
-
-            IPS_ApplyChanges(
-                $instanceId
+            $this->SendDebug(
+                'Connect/Configurator',
+                json_encode([
+                    'vehicleId' => $vehicleId,
+                    'instanceID' => $instanceId,
+                    'connectionId' => (string)($connection['connectionId'] ?? ''),
+                    'userId' => (string)($connection['userId'] ?? ''),
+                    'action' => $instanceId > 0
+                        ? 'Vorhandene Instanz erkannt; Konfigurationsabgleich erfolgt im Konfigurator.'
+                        : 'Keine Instanz vorhanden; Erstellung wird im Konfigurator angeboten.'
+                ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                0
             );
         }
     }
