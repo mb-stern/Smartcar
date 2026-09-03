@@ -52,6 +52,7 @@ Bereits deaktivierte Variablen werden durch einen Webhook nicht automatisch wied
 
 | Version | Datum | Änderungen |
 |----------|--------|------------|
+| **4.8** | 03.09.2026 | - Codeänderungen nach Store-Review.|
 | **4.7** | 27.08.2026 | - Ein Problem wurde behoben, dass Instanzen angelegt werden könnten auf Basis von Nachrichten.<br>- Ein Problem wurde behoben, dass der Konfigurator trotz einwandfreier Funktion als fehlerhaft markiert wurde.<br>- Das senden von Befehlen und abfragen einzelner Signale per Script funktioniert wieder.<br>- Einige Codeanpassungen.|
 | **4.6** | 16.08.2026 | - Die Kompatibilitätsprüfung der Fahrzeuginstanz entfällt; alle empfangenen Datenpunkte mit gültigen Werten werden als Variablen angeboten.<br>- Verfügbare Signal- und Steuervariablen können im Konfigurationsformular individuell aktiviert oder deaktiviert werden.<br>- Steuervariablen werden automatisch anhand der über Vehicle Access erteilten Berechtigungen bereitgestellt.<br>- Nun ist auch die Verwaltung der Webhooks integriert. Es könne also pro Fahrzeug einer oder mehrere Webhooks gewählt werden. Auch das neu laden des Webhooks ist so möglich, was automatisch die aktuellsten Daten liefert.|
 | **4.5** | 09.08.2026 | - Der Webhook wird nun auf Aktualität geprüft und ältere Daten werden verworfen.<br>- In der Vehicle-Instanz kann nun der Powertrain-Filter deaktiviert werden.<br>- Einige Anpassungen zur API V3. |

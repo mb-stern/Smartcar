@@ -24,15 +24,9 @@ class SmartcarVehicle extends IPSModuleStrict
     $this->RegisterAttributeString('LastOEMSignalTimes', '{}');
     $this->RegisterAttributeString('ModuleVariableNames', '{}');
 
-    $lastSignalsExists = (bool)@$this->GetIDForIdent('LastSignalsAt');
-    $this->RegisterVariableInteger('LastSignalsAt', 'Letzte Signale', '~UnixTimestamp');
-
-    if (!$lastSignalsExists) {
-        $lastSignalsId = @$this->GetIDForIdent('LastSignalsAt');
-        if ($lastSignalsId) {
-            IPS_SetPosition($lastSignalsId, 10);
-        }
-    }
+    // Die Position wird nur als Initialposition bei der Registrierung vorgegeben.
+    // Spätere Benutzeränderungen an Position/Sichtbarkeit bleiben unangetastet.
+    $this->RegisterVariableInteger('LastSignalsAt', 'Letzte Signale', '~UnixTimestamp', 10);
 }
 
     public function ApplyChanges(): void
@@ -69,20 +63,13 @@ class SmartcarVehicle extends IPSModuleStrict
 
     private function EnsureLastSignalsAtVariable(): void
     {
-        $existingId = @$this->GetIDForIdent('LastSignalsAt');
-
-        if (!$existingId) {
+        if (!@$this->GetIDForIdent('LastSignalsAt')) {
             $this->RegisterVariableInteger(
                 'LastSignalsAt',
                 'Letzte Signale',
-                '~UnixTimestamp'
+                '~UnixTimestamp',
+                10
             );
-
-            $existingId = @$this->GetIDForIdent('LastSignalsAt');
-        }
-
-        if ($existingId) {
-            IPS_SetPosition($existingId, 10);
         }
     }
 
@@ -1120,10 +1107,6 @@ class SmartcarVehicle extends IPSModuleStrict
                     $signalBasePosition + max(1, count($variablesWithData))
                 );
 
-                $oemId = @$this->GetIDForIdent($oemIdent);
-                if ($oemId) {
-                    IPS_SetHidden($oemId, false);
-                }
             }
         }
 
@@ -1187,10 +1170,6 @@ class SmartcarVehicle extends IPSModuleStrict
                 $this->GetSignalBasePosition($code) + 99
             );
 
-            $oemId = @$this->GetIDForIdent($oemIdent);
-            if ($oemId) {
-                IPS_SetHidden($oemId, false);
-            }
         }
     }
 
@@ -1773,9 +1752,8 @@ class SmartcarVehicle extends IPSModuleStrict
                 $existingId = @$this->GetIDForIdent($ident);
             }
             if ($existingId && IPS_VariableExists($existingId)) {
-                // Steuerungen gehören immer ans Ende des Objektbaums. Auch bereits
-                // vorhandene Variablen aus älteren Zwischenversionen zurücksetzen.
-                IPS_SetPosition($existingId, (int)$definition['position']);
+                // Die Position wird nur bei der erstmaligen Registrierung gesetzt.
+                // Eine spätere Benutzerposition darf nicht überschrieben werden.
                 $this->EnableAction($ident);
             }
         }
@@ -2101,27 +2079,27 @@ class SmartcarVehicle extends IPSModuleStrict
 
         if (!$id) {
             $created = true;
+            $initialPosition = $position ?? 0;
 
+            // Position ausschließlich als Initialwert registrieren. RegisterVariable*
+            // lässt die spätere, vom Benutzer gewählte Objektposition unangetastet.
             switch ($type) {
                 case VARIABLETYPE_BOOLEAN:
-                    $this->RegisterVariableBoolean($ident, $name, $profile, 0);
+                    $this->RegisterVariableBoolean($ident, $name, $profile, $initialPosition);
                     break;
                 case VARIABLETYPE_INTEGER:
-                    $this->RegisterVariableInteger($ident, $name, $profile, 0);
+                    $this->RegisterVariableInteger($ident, $name, $profile, $initialPosition);
                     break;
                 case VARIABLETYPE_FLOAT:
-                    $this->RegisterVariableFloat($ident, $name, $profile, 0);
+                    $this->RegisterVariableFloat($ident, $name, $profile, $initialPosition);
                     break;
                 default:
-                    $this->RegisterVariableString($ident, $name, $profile, 0);
+                    $this->RegisterVariableString($ident, $name, $profile, $initialPosition);
                     break;
             }
         }
 
         $id = @$this->GetIDForIdent($ident);
-        if ($created && $id && $position !== null) {
-            IPS_SetPosition($id, $position);
-        }
 
         if ($onlySetValueOnCreate && !$created) {
             return false;

@@ -11,7 +11,7 @@ class SmartcarConfigurator extends IPSModuleStrict
         parent::Create();
     }
 
-   public function ApplyChanges(): void
+    public function ApplyChanges(): void
     {
         parent::ApplyChanges();
 
@@ -68,8 +68,29 @@ class SmartcarConfigurator extends IPSModuleStrict
             $year = (int)($connection['year'] ?? 0);
             $mode = (string)($connection['mode'] ?? '');
             $powertrainType = (string)($connection['powertrainType'] ?? '');
+            $permissions = json_encode(
+                $connection['permissions'] ?? [],
+                JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+            );
+
+            $configuration = [
+                'VehicleID' => $vehicleId,
+                'ConnectionID' => $connectionId,
+                'UserID' => $userId,
+                'VehicleCaption' => $caption,
+                'Make' => $make,
+                'Model' => $model,
+                'Year' => $year,
+                'PowertrainType' => $powertrainType,
+                'Permissions' => $permissions
+            ];
 
             $instanceId = $this->FindVehicleInstanceByVehicleId($vehicleId);
+            $configurationState = $instanceId === 0
+                ? 'Noch nicht erstellt'
+                : ($this->VehicleConfigurationMatches($instanceId, $configuration)
+                    ? 'Aktuell'
+                    : 'Abweichend – Korrektur über Konfigurator');
 
             $values[] = [
                 'instanceID' => $instanceId,
@@ -79,20 +100,14 @@ class SmartcarConfigurator extends IPSModuleStrict
                 'connectionId' => $connectionId,
                 'mode' => $mode,
                 'powertrainType' => $powertrainType,
+                'configurationState' => $configurationState,
                 'create' => [
                     'moduleID' => self::VEHICLE_MODULE_ID,
                     'name' => $caption,
-                    'configuration' => [
-                        'VehicleID' => $vehicleId,
-                        'ConnectionID' => $connectionId,
-                        'UserID' => $userId,
-                        'VehicleCaption' => $caption,
-                        'Make' => $make,
-                        'Model' => $model,
-                        'Year' => $year,
-                        'PowertrainType' => $powertrainType,
-                        'Permissions' => json_encode($connection['permissions'] ?? [], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
-                    ]
+                    // Der Konfigurator ist die zentrale Stelle für die Soll-Konfiguration.
+                    // IP-Symcon kann damit fehlende bzw. abweichende Instanzen erkennen
+                    // und die Korrektur dem Benutzer anbieten.
+                    'configuration' => $configuration
                 ]
             ];
         }
@@ -119,6 +134,11 @@ class SmartcarConfigurator extends IPSModuleStrict
                             'caption' => 'Fahrzeug',
                             'name' => 'name',
                             'width' => 'auto'
+                        ],
+                        [
+                            'caption' => 'Konfiguration',
+                            'name' => 'configurationState',
+                            'width' => '240px'
                         ],
                         [
                             'caption' => 'Vehicle ID',
@@ -189,6 +209,28 @@ class SmartcarConfigurator extends IPSModuleStrict
         }
 
         return 0;
+    }
+
+    private function VehicleConfigurationMatches(int $instanceId, array $configuration): bool
+    {
+        foreach ($configuration as $property => $expectedValue) {
+            $actualValue = @IPS_GetProperty($instanceId, $property);
+
+            // Year ist eine Integer-Property, alle übrigen hier verwendeten
+            // Eigenschaften sind Strings.
+            if ($property === 'Year') {
+                if ((int)$actualValue !== (int)$expectedValue) {
+                    return false;
+                }
+                continue;
+            }
+
+            if ((string)$actualValue !== (string)$expectedValue) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private function HasParentConnection(): bool
