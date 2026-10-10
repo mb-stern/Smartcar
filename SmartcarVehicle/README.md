@@ -50,11 +50,11 @@ Die Fahrzeuginstanz verwendet keine separate Smartcar-Kompatibilitätsprüfung m
 
 ### Auswahl der Variablen
 
-Erkannte Signal- und Steuervariablen sind standardmäßig aktiviert.
+Erkannte Signal- und Steuervariablen sind standardmäßig aktiviert. Die Checkboxen bleiben auch bei neu erkannten Signalen und geänderter Sortierung der jeweiligen Variablenkennung zugeordnet.
 
 Nicht benötigte Variablen können über die Checkbox-Liste deaktiviert werden. Beim Speichern der Konfiguration wird die entsprechende Variable aus dem Objektbaum entfernt.
 
-Wird eine Variable später wieder aktiviert, wird sie erneut angelegt, sobald entsprechende Daten verfügbar sind.
+Beim Speichern werden ausdrücklich angekreuzte Signalvariablen sofort angelegt, auch wenn aktuell keine Daten oder kein Cache vorhanden sind. Typ und Profil stammen aus der Signalzuordnung bzw. den gespeicherten Variableneigenschaften. Bis ein gültiger Wert geliefert wird, verwendet eine neu angelegte Variable ihren Typ-Standardwert (`0`, `false` oder eine leere Zeichenkette). Bereits vorhandene Werte, Namen und IDs bleiben beim Speichern erhalten.
 
 > Bereits vorhandene Variablennamen werden vom Modul nicht überschrieben. Individuell vom Benutzer vergebene Namen bleiben dadurch erhalten.
 
@@ -70,7 +70,16 @@ Es gibt mehrere Möglichkeiten, die Signale zu aktualisieren:
 
 Bei der Verarbeitung werden nur Signale berücksichtigt, die erfolgreich geliefert wurden und mindestens einen tatsächlichen Nutzwert enthalten.
 
-`null`, leere Arrays oder leere Werte führen nicht zur Erstellung einer Signalvariable. Werte wie `0` oder `false` sind dagegen gültige Signalwerte.
+`null`-Teilwerte werden nicht als Messwert übernommen; Werte wie `0` oder `false` sind gültig. Der zusätzliche Filter für leere Zusatzlisten und Zeichenketten wurde zurückgenommen. Die Checkbox-Auswahl ist davon unabhängig: Eine ausdrücklich angekreuzte Signalvariable wird beim Speichern auch ohne aktuellen Nutzwert angelegt.
+
+### Restdauer und Fertig-Uhrzeit
+
+Das aktuelle Signal `charge-timetocomplete` liefert die geschätzte Restdauer bis zum aktiven Ladelimit in Minuten. Daraus werden zwei Anzeigen bereitgestellt:
+
+- **Verbleibende Ladezeit** (`ChargeTimeRemainingMinutes`): numerischer Minutenwert, einschließlich Dezimalstellen.
+- **Fertiggeladen** (`ChargeTimeToComplete`): geschätztes Datum und Uhrzeit in der Zeitzone der Symcon-Installation. Eine vorhandene Anzeige `ChargeEndTime` wird ebenfalls unterstützt.
+
+Die Uhrzeit wird aus Restdauer und OEM-Datenstand berechnet. Fehlt dieser, wird der API-Abrufzeitpunkt verwendet, andernfalls der gespeicherte Empfangszeitpunkt. Erneutes Speichern der Konfiguration verschiebt die Uhrzeit bei bereits gespeicherten Zeitstempeln nicht. Fehlende Werte überschreiben die letzte gültige Anzeige nicht.
 
 ### Alle, einzelne oder mehrere Signale abrufen
 
@@ -145,7 +154,9 @@ Steuervariablen werden entsprechend den von Smartcar für die Fahrzeugverbindung
 | `SMCAR.Charge` | String | Ladezustand |
 | `SMCAR.Power` | Float | Ladeleistung in kW |
 | `SMCAR.Energy` | Float | Energie in kWh |
-| `SMCAR.TimeMinutes` | Integer | Zeitangaben in Minuten |
+| `SMCAR.TimeMinutes` | Integer | Bestehende ganzzahlige Zeitangaben in Minuten |
+| `SMCAR.DurationMinutes` | Float | Verbleibende Ladezeit in Minuten, einschließlich Dezimalstellen |
+| `SMCAR.ChargeLimit` | Integer | Ladelimit-Bedienelement, 50–100 Prozent |
 | `SMCAR.LatLon` | Float | GPS-Koordinaten (Latitude/Longitude) |
 
 ---
@@ -158,6 +169,8 @@ Unterstützte Fahrzeugfunktionen können direkt aus dem WebFront gesteuert werde
 - Ladelimit setzen
 - Ladevorgang starten oder stoppen
 - Navigationsziel an das Fahrzeug senden
+- Ladeport öffnen oder schließen
+- Tägliche, wöchentliche oder Werktag-/Wochenendladepläne setzen und löschen
 
 Welche Steuerfunktionen verfügbar sind, richtet sich nach den von Smartcar für die aktuelle Fahrzeugverbindung zurückgegebenen `control_*`-Berechtigungen.
 
@@ -183,6 +196,34 @@ Eine Adresse oder ein Ortsname kann nicht direkt übergeben werden. Die Smartcar
 
 ---
 
+### Ladepläne im WebFront
+
+Bei `control_charge` werden zusätzlich **„Täglichen Ladeplan setzen“**, **„Wochenladeplan setzen“**, **„Werktag-/Wochenendladeplan setzen“** und **„Ladeplan löschen (ID)“** angeboten. Der Hersteller muss die jeweilige Aktion unterstützen; eine Berechtigung allein garantiert dies nicht.
+
+Die ersten drei Steuervariablen nehmen einen Ladeplan als JSON entgegen. Beispiel für einen täglichen Plan:
+
+```json
+{"location":{"latitude":47.3769,"longitude":8.5417},"startTime":"22:00","stopTime":"06:00"}
+```
+
+Ein Wochenplan enthält mindestens einen der englischen Wochentagsnamen `monday` bis `sunday`:
+
+```json
+{"location":{"latitude":47.3769,"longitude":8.5417},"days":{"monday":{"startTime":"22:00","stopTime":"06:00"},"friday":{"startTime":"20:00","stopTime":"06:00"}}}
+```
+
+Der Werktag-/Wochenendladeplan unterscheidet `weekdays` und `weekends`:
+
+```json
+{"location":{"latitude":47.3769,"longitude":8.5417},"weekdays":{"startTime":"22:00","stopTime":"06:00"},"weekends":{"startTime":"20:00","stopTime":"08:00"}}
+```
+
+Zeiten sind im 24-Stunden-Format `HH:MM` anzugeben. Sie werden ohne Zeitzonenumrechnung an die API übergeben. Zeitfenster über Mitternacht werden nicht durch eine Start-vor-Ende-Prüfung ausgeschlossen. Koordinaten und Pflichtfelder werden vor dem API-Aufruf validiert.
+
+Zum Löschen wird nur die **scheduleId** in die Lösch-Steuervariable eingetragen. Die ID stammt aus `charge-chargetimers`, bei standortbezogenen Timern vom Typ `LOCATION`. Nach dem Setzen oder Löschen kann dieses Signal über `SMCARV_FetchSelectedSignals(12345, ['charge-chargetimers']);` erneut abgerufen werden. Die Fahrzeugdaten können zeitverzögert aktualisiert werden.
+
+---
+
 ## 8. PHP-Befehlsreferenz
 
 Die Zahl `12345` steht in den folgenden Beispielen für die Instanz-ID der Smartcar-Vehicle-Instanz.
@@ -205,8 +246,16 @@ Die Zahl `12345` steht in den folgenden Beispielen für die Instanz-ID der Smart
 | `SMCARV_LockDoors(12345);` | Fahrzeug verriegeln |
 | `SMCARV_UnlockDoors(12345);` | Fahrzeug entriegeln |
 | `SMCARV_SetNavigationDestination(12345, 47.3769, 8.5417);` | Navigationsziel mit Breitengrad und Längengrad senden |
+| `SMCARV_OpenChargePort(12345);` | Ladeport öffnen |
+| `SMCARV_CloseChargePort(12345);` | Ladeport schließen |
+| `SMCARV_SetDailyChargeSchedule(12345, 47.3769, 8.5417, '22:00', '06:00');` | Täglichen Ladeplan am angegebenen Standort setzen |
+| `SMCARV_SetWeeklyChargeSchedule(12345, 47.3769, 8.5417, ['monday' => ['startTime' => '22:00', 'stopTime' => '06:00']]);` | Wochenplan mit einem oder mehreren Wochentagen setzen |
+| `SMCARV_SetWorkweekChargeSchedule(12345, 47.3769, 8.5417, ['startTime' => '22:00', 'stopTime' => '06:00'], ['startTime' => '20:00', 'stopTime' => '08:00']);` | Getrennte Zeitfenster für Werktage und Wochenende setzen |
+| `SMCARV_DeleteChargeSchedule(12345, 'schedule-id');` | Einen Ladeplan über seine ID löschen |
 
-Die Befehlsfunktionen liefern `true`, wenn Smartcar den Befehl erfolgreich angenommen beziehungsweise ausgeführt hat. Bei einem nicht erfolgreichen API-Aufruf liefern sie `false`.
+Die zwölf Befehlsfunktionen liefern nur bei einem vollständigen Smartcar-Ergebnis mit Status `SUCCESS` den Wert `true`. HTTP `202` allein bestätigt keine erfolgreiche Ausführung. Fehlgeschlagene, unvollständige und nicht interpretierbare Antworten liefern `false`. Ungültige Parameter wie ein Ladelimit außerhalb `50..100`, fehlende Wochentage oder falsche Uhrzeiten lösen eine `InvalidArgumentException` aus. Ohne die benötigte `control_*`-Berechtigung wird kein Fahrzeugbefehl gesendet.
+
+Im Splitter kann das Zeitlimit für Fahrzeugbefehle auf 180–900 Sekunden eingestellt werden; Vorgabe sind 300 Sekunden. Signalabfragen behalten 30 Sekunden. Die vollständige Antwort einer länger offenen `202`-Verbindung wird gelesen. Nach einem Timeout ist der Fahrzeugzustand unbekannt: Befehle werden nicht automatisch wiederholt. Der Aufruf kann bis zur Antwort warten; lange Fahrzeugbefehle nicht innerhalb eines Webhook-Empfängers ausführen. Ein erfolgreiches Befehlsresultat ersetzt keine aktuelle Fahrzeugzustandsmeldung.
 
 Für ein Navigationsziel werden die Koordinaten geprüft:
 
@@ -239,7 +288,9 @@ Ein Signal wird nur als erfolgreich verarbeitet, wenn:
 - Smartcar einen erfolgreichen Status zurückliefert und
 - mindestens ein tatsächlicher Nutzwert enthalten ist.
 
-Nicht erfolgreiche oder leere Signale führen nicht zur Erstellung neuer Variablen.
+Nicht erfolgreiche oder vollständig leere Signalantworten liefern keine neuen Messwerte. Ausdrücklich angekreuzte Signalvariablen werden dennoch bereits beim Speichern der Konfiguration angelegt; hierfür ist keine erfolgreiche API-Antwort erforderlich.
+
+Ausdrückliche Kompatibilitätsfehler (`VEHICLE_NOT_CAPABLE`, `SMARTCAR_NOT_CAPABLE`, `PLATFORM_NOT_CAPABLE`, `MAKE_NOT_COMPATIBLE`) blenden die zugehörigen Signale aus der Checkbox-Liste aus. Vorhandene Variablen und deren Werte bleiben erhalten. `UNAVAILABLE`, `INVALID_DATA` und leere Inhalte führen nicht zum Ausblenden. Eine spätere erfolgreiche Antwort macht bekannte Einträge wieder sichtbar, auch ohne aktuellen Messwert. Die bisherige Checkbox-Auswahl bleibt erhalten; das Wiederherstellen alter Cache-Daten hebt eine Inkompatibilitätsmeldung nicht auf. Steuerfunktionen werden weiterhin anhand der Berechtigungen angeboten.
 
 Deaktivierte Variablen werden durch nachfolgende API-Abfragen oder Webhooks nicht automatisch wieder aktiviert.
 
@@ -256,7 +307,33 @@ Bei einem gezielten Abruf mehrerer Signale wird jeder Signalcode separat abgefra
 - Die Verfügbarkeit einzelner Daten und Befehle kann zusätzlich vom Hersteller, Fahrzeugmodell, Smartcar-Plan und den Vehicle-Access-Berechtigungen abhängen.
 - Navigationsziele können nur als Breitengrad und Längengrad übergeben werden. Eine Geocodierung von Adressen ist nicht Bestandteil des Moduls.
 - Mehrere gezielt angeforderte Signale erzeugen mehrere einzelne API-Aufrufe. Für eine größere Anzahl von Signalen sollte der gemeinsame Abruf mit `SMCARV_FetchSelectedSignals(12345, []);` verwendet werden.
-- Ladezeitpläne werden derzeit nicht über die Smartcar-API verwaltet. Zeitabhängiges Starten und Stoppen des Ladevorgangs kann über IP-Symcon-Ereignisse und die öffentlichen Ladebefehle umgesetzt werden.
+- Ladepläne und Ladeport-Steuerung werden nur von einem Teil der Hersteller/Fahrzeuge unterstützt. Nicht unterstützte Aktionen liefern einen API-Fehler; die Berechtigung allein ist keine Capability-Prüfung.
+
+---
+
+### Aktualisierte Signalzuordnungen
+
+Alle 93 konkreten Signalendpunkte der am 10.10.2026 abgerufenen Smartcar-V3-Referenz besitzen ein eigenes Mapping. `location-isathome` wird als Boolean `IsAtHome` übernommen. Einheiten und Restdauer, Ladeport-Status, Diagnosewerte, Türen/Kofferräume, Fahrmodus und Benutzerberechtigungen folgen den aktuellen Body-Feldern. Diagnose-Status und Beschreibung bleiben von numerischen Öl-Messwerten getrennt.
+
+Zusätzliche Standortfelder, Batterie-Kapazitätsvarianten, Reichweitenvarianten, Ladelimit-Varianten und weitere Reifenachsen werden ebenfalls übernommen. Fehlende/null-Teilwerte erzeugen keine künstlichen Nullwerte. Ältere OEM-Datenstände überschreiben weder Variablen noch Cache; Zeitstempel werden für die Reihenfolge mit ihrer höheren Präzision ausgewertet.
+
+Vorhandene Variablen werden bei Typkorrekturen nicht gelöscht. Die Restdauer verwendet `ChargeTimeRemainingMinutes`; die bisherige String-Variable `ChargeTimeToComplete` wird wieder aktualisiert und zeigt das geschätzte Fertig-Datum mit Uhrzeit. Eine vorhandene alternative Anzeige `ChargeEndTime` bleibt ebenfalls erhalten und wird aus dem aktuellen Signal versorgt. Falls `ChargeLimit` bereits durch den früheren JSON-Fallback als String angelegt wurde, wird der Messwert unter `ChargeLimitPercent` bereitgestellt. Die alten IDs und damit verbundene Archive bleiben bestehen. Neue unbekannte numerische Signale werden als Float angelegt, damit spätere Dezimalstellen erhalten bleiben.
+
+### Lokale Regressionstests
+
+```bash
+php tests/run.php
+```
+
+Der Runner prüft alle 93 offiziellen Signalbeispiele, die zwölf Befehlsverträge, Fehlerantworten, Berechtigungen und Grenzfälle. Sämtliche HTTP-Antworten werden simuliert; es werden keine echten Fahrzeugbefehle gesendet. Diese Tests ersetzen keine Integration mit einer laufenden IP-Symcon-Installation.
+
+Optional können die offiziellen [SymconStubs](https://github.com/symcon/SymconStubs) aus einem separaten Checkout verwendet werden:
+
+```bash
+SYMCON_STUBS=/pfad/zu/SymconStubs php tests/symcon.php
+```
+
+Die Fixtures verweisen auf die offizielle Vehicle-OpenAPI und den Abrufstand. Sie werden beim Testlauf nicht aus dem Internet geladen.
 
 ---
 

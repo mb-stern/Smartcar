@@ -17,6 +17,11 @@ Du findest alle Funktionen für das Smartcar-Symcon-Repository in den entspreche
 
 > Wichtig: Beim Installieren des Moduls in Symcon muss zuerst ein **Smartcar Configurator** erstellt werden. Alle weiteren benötigten Instanzen werden automatisch erstellt.
 
+
+Das Vehicle-Modul enthält eigene Mappings für die 93 aktuellen V3-Signalcodes und die zwölf dokumentierten Fahrzeugaktionen: Laden starten/stoppen, Ladelimit (50–100 %), Ladeport öffnen/schließen, Verriegeln/Entriegeln, Navigationsziel sowie tägliche, wöchentliche und Werktag-/Wochenendladepläne und deren Löschung. Fahrzeugunterstützung und Vehicle-Access-Berechtigungen bestimmen die tatsächliche Verfügbarkeit. [Bedienung und PHP-Beispiele](SmartcarVehicle/README.md) erklären die neuen Funktionen.
+
+Lokale Regressionstests: `php tests/run.php` (simulierte Antworten, keine Fahrzeugaktionen).
+
 ## Konfiguration
 
 Die Zugriffsberechtigungen für Fahrzeugdaten und Steuerfunktionen werden direkt bei Smartcar unter **Configuration → Vehicle Access** festgelegt.
@@ -52,6 +57,7 @@ Bereits deaktivierte Variablen werden durch einen Webhook nicht automatisch wied
 
 | Version | Datum | Änderungen |
 |----------|--------|------------|
+| **4.9** | 10.10.2026 | - Modulcode überarbeitet und kleinere Fehler behoben.
 | **4.8** | 03.09.2026 | - Codeänderungen nach Store-Review.|
 | **4.7** | 27.08.2026 | - Ein Problem wurde behoben, dass Instanzen angelegt werden könnten auf Basis von Nachrichten.<br>- Ein Problem wurde behoben, dass der Konfigurator trotz einwandfreier Funktion als fehlerhaft markiert wurde.<br>- Das senden von Befehlen und abfragen einzelner Signale per Script funktioniert wieder.<br>- Einige Codeanpassungen.|
 | **4.6** | 16.08.2026 | - Die Kompatibilitätsprüfung der Fahrzeuginstanz entfällt; alle empfangenen Datenpunkte mit gültigen Werten werden als Variablen angeboten.<br>- Verfügbare Signal- und Steuervariablen können im Konfigurationsformular individuell aktiviert oder deaktiviert werden.<br>- Steuervariablen werden automatisch anhand der über Vehicle Access erteilten Berechtigungen bereitgestellt.<br>- Nun ist auch die Verwaltung der Webhooks integriert. Es könne also pro Fahrzeug einer oder mehrere Webhooks gewählt werden. Auch das neu laden des Webhooks ist so möglich, was automatisch die aktuellsten Daten liefert.|
