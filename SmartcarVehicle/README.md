@@ -70,7 +70,7 @@ Es gibt mehrere Möglichkeiten, die Signale zu aktualisieren:
 
 Bei der Verarbeitung werden nur Signale berücksichtigt, die erfolgreich geliefert wurden und mindestens einen tatsächlichen Nutzwert enthalten.
 
-`null`, leere Arrays oder leere Werte führen nicht zur Erstellung einer Signalvariable. Werte wie `0` oder `false` sind dagegen gültige Signalwerte.
+`null`, leere Zeichenketten und leere Zusatzlisten (z. B. Reichweiten- oder Kapazitätsvarianten) erzeugen keine neuen Signalvariablen. Auch eine Einheit allein ist kein Nutzwert. Werte wie `0` oder `false` bleiben gültig. Eine ausdrücklich gelieferte leere Hauptliste kann dagegen einen Zustand beschreiben, beispielsweise eine leere Fehlercode-Liste ohne aktuelle Fehler.
 
 ### Alle, einzelne oder mehrere Signale abrufen
 
@@ -279,7 +279,9 @@ Ein Signal wird nur als erfolgreich verarbeitet, wenn:
 - Smartcar einen erfolgreichen Status zurückliefert und
 - mindestens ein tatsächlicher Nutzwert enthalten ist.
 
-Nicht erfolgreiche oder leere Signale führen nicht zur Erstellung neuer Variablen.
+Nicht erfolgreiche Signale und Antworten ohne nutzbare Daten führen nicht zur Erstellung neuer Variablen. Das Debug-Fenster unterscheidet „Erfolgreiche Signale“ (mit Nutzwerten), „Signale ohne Nutzwerte“ (erfolgreicher API-Status, aber keine nutzbaren Daten) und „Nicht erfolgreiche Signale“ (z. B. `UNAVAILABLE` oder `ERROR`).
+
+Leere Zusatzdaten überschreiben weder den zuletzt gültigen Variablenwert noch den Cache. Bereits vorhandene Variablen werden dabei nicht automatisch gelöscht; nicht benötigte Altbestände können über die Checkbox-Liste deaktiviert werden.
 
 Deaktivierte Variablen werden durch nachfolgende API-Abfragen oder Webhooks nicht automatisch wieder aktiviert.
 

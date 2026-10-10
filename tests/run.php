@@ -60,6 +60,16 @@ function commandResponse(int $status, string $outcome): array
     ])];
 }
 
+function debugSignals(SmartcarVehicle $v, string $category): array
+{
+    foreach (array_reverse($v->debug) as [$name, $message]) {
+        if ($name === $category) {
+            return json_decode($message, true, 512, JSON_THROW_ON_ERROR);
+        }
+    }
+    throw new RuntimeException('Debug category missing: ' . $category);
+}
+
 // Every concrete current V3 signal is exercised using its official body example.
 $fixture = json_decode(file_get_contents(__DIR__ . '/fixtures/smartcar-v3.json'), true, 512, JSON_THROW_ON_ERROR);
 check(count($fixture['signals']) === 93, 'Current V3 signal inventory');
@@ -127,6 +137,102 @@ check(value($legacy,'ChargeLimitPercent') === 85.0, 'Correct numeric variable fo
 signal($v, 'future-signal', ['value'=>10]);
 signal($v, 'future-signal', ['value'=>10.5]);
 check(value($v, 'Sig_future_signal') === 10.5, 'Unknown numeric signal keeps fractional precision');
+
+// Sanitized bodies reproduce the empty supplemental lists observed in a vehicle dump.
+$emptyCapacity = ['source'=>null, 'capacity'=>null, 'availableCapacities'=>[], 'unit'=>'kWh'];
+$range = ['value'=>120, 'type'=>'ESTIMATED', 'additionalValues'=>[], 'unit'=>'kilometers'];
+$v = vehicle();
+signal($v, 'tractionbattery-range', $range);
+signal($v, 'tractionbattery-nominalcapacity', $emptyCapacity);
+check(!isset($v->variables['BatteryRangeAdditionalValues']) && !isset($v->variables['BatteryAvailableCapacities']), 'Empty supplemental lists do not create variables');
+check(!isset($v->variables['BatteryCapacity']), 'A unit without a capacity is not a measurement');
+$rows = array_column(invoke($v, 'BuildVariableSelectionRows'), 'Ident');
+check(!in_array('BatteryRangeAdditionalValues', $rows, true) && !in_array('BatteryAvailableCapacities', $rows, true), 'Empty extras are not discovered or selected by default');
+$successful = debugSignals($v, 'WebhookVehicle/Erfolgreiche Signale');
+$withoutData = debugSignals($v, 'WebhookVehicle/Signale ohne Nutzwerte');
+check(!isset($successful['tractionbattery-nominalcapacity']), 'Unit-only capacity is excluded from successful data');
+check($withoutData['tractionbattery-nominalcapacity']['status'] === 'SUCCESS' && $withoutData['tractionbattery-nominalcapacity']['body'] === $emptyCapacity, 'Debug separates successful API status from missing data');
+check(debugSignals($v, 'WebhookVehicle/Nicht erfolgreiche Signale') === [], 'Missing data is distinguished from API failure');
+check(!isset(json_decode($v->attributes['LastSuccessfulSignalPayloads'], true)['tractionbattery-nominalcapacity']), 'Unit-only capacity is not cached as valid data');
+
+$v = vehicle();
+$v->attributes['LastSuccessfulSignalPayloads'] = json_encode([
+    'tractionbattery-nominalcapacity'=>['body'=>$emptyCapacity, 'status'=>['value'=>'SUCCESS'], 'meta'=>[]],
+    'tractionbattery-range'=>['body'=>$range, 'status'=>['value'=>'SUCCESS'], 'meta'=>[]]
+], JSON_THROW_ON_ERROR);
+invoke($v, 'RestoreSelectedSignalsFromCache');
+check(!$v->GetIDForIdent('BatteryRangeAdditionalValues') && !$v->GetIDForIdent('BatteryAvailableCapacities'), 'Legacy empty cached extras are not recreated');
+check(value($v, 'BatteryRange') === 120.0, 'Useful primary data still restores from a legacy cache');
+
+foreach ([[], [null], [['capacity'=>null]], null] as $empty) {
+    $v = vehicle();
+    signal($v, 'tractionbattery-nominalcapacity', array_replace($emptyCapacity, ['availableCapacities'=>$empty]));
+    check(!$v->GetIDForIdent('BatteryAvailableCapacities'), 'Extras without any useful entry are skipped');
+}
+
+$v = vehicle();
+$variants = [['type'=>'ESTIMATED', 'value'=>110]];
+signal($v, 'tractionbattery-range', array_replace($range, ['additionalValues'=>$variants]));
+$id = $v->GetIDForIdent('BatteryRangeAdditionalValues');
+check(value($v, 'BatteryRangeAdditionalValues') === json_encode($variants), 'Populated extras are created');
+check(in_array('BatteryRangeAdditionalValues', array_column(invoke($v, 'BuildVariableSelectionRows'), 'Ident'), true), 'Populated extras appear in variable selection');
+signal($v, 'tractionbattery-range', $range, '2026-10-10T10:01:00Z');
+check($v->GetIDForIdent('BatteryRangeAdditionalValues') === $id && value($v, 'BatteryRangeAdditionalValues') === json_encode($variants), 'Missing extras preserve existing data and archive identity');
+$cache = json_decode($v->attributes['LastSuccessfulSignalPayloads'], true);
+check($cache['tractionbattery-range']['body']['additionalValues'] === $variants, 'Empty extras do not erase the last valid cached data');
+$v->UnregisterVariable('BatteryRangeAdditionalValues');
+invoke($v, 'RestoreSelectedSignalsFromCache');
+check(value($v, 'BatteryRangeAdditionalValues') === json_encode($variants), 'Valid extras can still be restored from cache');
+
+$v = vehicle();
+$v->properties['VariableSelection'] = '[{"Ident":"BatteryRangeAdditionalValues","Active":false}]';
+signal($v, 'tractionbattery-range', array_replace($range, ['additionalValues'=>$variants]));
+check(!$v->GetIDForIdent('BatteryRangeAdditionalValues') && value($v, 'BatteryRange') === 120.0, 'Nonempty extras respect explicit deselection');
+$rows = array_column(invoke($v, 'BuildVariableSelectionRows'), null, 'Ident');
+check($rows['BatteryRangeAdditionalValues']['Active'] === false, 'New data does not reset a saved selection');
+
+$v = vehicle();
+$capacities = [['type'=>'USABLE', 'capacity'=>0]];
+signal($v, 'tractionbattery-nominalcapacity', array_replace($emptyCapacity, ['availableCapacities'=>$capacities]));
+check(json_decode(value($v, 'BatteryAvailableCapacities'), true) === $capacities && !$v->GetIDForIdent('BatteryCapacity'), 'Real capacity variants are useful even without the primary capacity');
+signal($v, 'charge-chargelimits', ['activeLimit'=>80, 'values'=>[], 'unit'=>'percent']);
+check(value($v, 'ChargeLimit') === 80.0 && !$v->GetIDForIdent('ChargeLimitsValues'), 'Missing limit variants do not hide the real active limit');
+
+$v = vehicle();
+signal($v, 'diagnostics-dtclist', ['values'=>[['code'=>'P0001']]]);
+signal($v, 'diagnostics-dtclist', ['values'=>[]], '2026-10-10T10:01:00Z');
+check(value($v, 'DTCList') === '[]', 'An empty primary fault-code list clears previous faults');
+signal($v, 'closure-fronttrunk', ['isOpen'=>false, 'isLocked'=>false]);
+check(value($v, 'FrontTrunkLocked') === false, 'False is valid supplemental data');
+signal($v, 'location-preciselocation', ['latitude'=>0, 'longitude'=>0, 'heading'=>0, 'direction'=>'']);
+check(value($v, 'LocationHeading') === 0.0 && !$v->GetIDForIdent('LocationDirection'), 'Zero remains valid while empty strings are skipped');
+signal($v, 'future-unit-only', ['unit'=>'percent']);
+check(!$v->GetIDForIdent('Sig_future_unit_only'), 'Unknown unit-only responses do not create JSON fallback variables');
+
+// Both batch pulls and individual pulls use the same data checks as webhooks.
+foreach (['SUCCESS', 'OK', null] as $statusValue) {
+    $v = vehicle();
+    $attributes = ['code'=>'tractionbattery-nominalcapacity', 'body'=>$emptyCapacity];
+    if ($statusValue !== null) $attributes['status'] = ['value'=>$statusValue];
+    $v->parentResponse = ['success'=>true, 'body'=>['data'=>[['attributes'=>$attributes]]]];
+    check($v->SyncVehicleAccessSignals(), 'Batch request succeeds even when a signal has no usable values');
+    check(!$v->GetIDForIdent('BatteryAvailableCapacities'), 'Batch pulls skip empty extras');
+    check(debugSignals($v, 'VehicleAccess/Erfolgreiche Signale') === [] && isset(debugSignals($v, 'VehicleAccess/Signale ohne Nutzwerte')['tractionbattery-nominalcapacity']), 'Batch debug distinguishes response status from data');
+    $v->parentResponse = ['success'=>true, 'body'=>['data'=>['attributes'=>$attributes]]];
+    check(!$v->FetchSelectedSignals(['tractionbattery-nominalcapacity']), 'Targeted pull reports no useful values');
+}
+$v = vehicle();
+$v->ProcessWebhookSignals(json_encode(['data'=>['signals'=>[
+    ['code'=>'charge-wattage', 'body'=>['value'=>0, 'unit'=>'watts'], 'status'=>['value'=>'SUCCESS']],
+    ['code'=>'tractionbattery-nominalcapacity', 'body'=>$emptyCapacity, 'status'=>['value'=>'SUCCESS']],
+    ['code'=>'charge-chargerate', 'body'=>['value'=>10], 'status'=>['value'=>'UNAVAILABLE']],
+    ['code'=>'internalcombustionengine-oillife', 'body'=>[], 'status'=>['value'=>'ERROR', 'error'=>['code'=>'NOT_SUPPORTED', 'detail'=>'Unsupported']]]
+]]], JSON_THROW_ON_ERROR));
+check(array_keys(debugSignals($v, 'WebhookVehicle/Erfolgreiche Signale')) === ['charge-wattage'] && value($v, 'ChargeWattage') === 0.0, 'Valid zero is logged and applied as useful data');
+check(array_keys(debugSignals($v, 'WebhookVehicle/Signale ohne Nutzwerte')) === ['tractionbattery-nominalcapacity'], 'No-data category contains only successful responses without useful values');
+$failures = debugSignals($v, 'WebhookVehicle/Nicht erfolgreiche Signale');
+check($failures['charge-chargerate']['status'] === 'UNAVAILABLE' && $failures['internalcombustionengine-oillife']['code'] === 'NOT_SUPPORTED', 'Failed statuses and API error details remain visible');
+check(!$v->GetIDForIdent('ChargeRate'), 'Failure status prevents variable creation even with a body');
 
 // New commands must use the documented verbs, bodies and sc-user-id header.
 $calls = [
