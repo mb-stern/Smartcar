@@ -776,7 +776,6 @@ class SmartcarVehicle extends IPSModuleStrict
         }
 
         $successful = [];
-        $withoutData = [];
         $unsuccessful = [];
 
         foreach ($signals as $signal) {
@@ -802,11 +801,8 @@ class SmartcarVehicle extends IPSModuleStrict
                 || $statusValue === 'SUCCESS'
                 || $statusValue === 'OK';
 
-            $hasUsableData = $this->HasUsableSignalData($signalCode, $body);
-            if ($verified && $hasUsableData) {
+            if ($verified && $this->HasMeaningfulSignalData($body)) {
                 $successful[$signalCode] = $body;
-            } elseif ($verified) {
-                $withoutData[$signalCode] = ['status' => $statusValue, 'body' => $body];
             } else {
                 $error = is_array($status['error'] ?? null) ? $status['error'] : [];
                 $unsuccessful[$signalCode] = [
@@ -816,7 +812,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 ];
             }
 
-            if ($verified && $hasUsableData) {
+            if ($verified && $this->HasMeaningfulSignalData($body)) {
                 $this->RememberSuccessfulSignal($signalCode, $body, $status, $meta);
             }
 
@@ -835,12 +831,6 @@ class SmartcarVehicle extends IPSModuleStrict
         $this->SendDebug(
             'VehicleAccess/Erfolgreiche Signale',
             json_encode($successful, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
-            0
-        );
-
-        $this->SendDebug(
-            'VehicleAccess/Signale ohne Nutzwerte',
-            json_encode($withoutData, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
             0
         );
 
@@ -916,7 +906,7 @@ class SmartcarVehicle extends IPSModuleStrict
             || $statusValue === 'SUCCESS'
             || $statusValue === 'OK';
 
-        if (!$verified || !$this->HasUsableSignalData($responseCode, $body)) {
+        if (!$verified || !$this->HasMeaningfulSignalData($body)) {
             $this->SendDebug('Signal/NoData/' . $responseCode, (string)$result, 0);
             return false;
         }
@@ -989,7 +979,6 @@ class SmartcarVehicle extends IPSModuleStrict
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
 
         $successful = [];
-        $withoutData = [];
         $unsuccessful = [];
 
         foreach ($signals as $signal) {
@@ -1012,11 +1001,8 @@ class SmartcarVehicle extends IPSModuleStrict
                 || $statusValue === 'SUCCESS'
                 || $statusValue === 'OK';
 
-            $hasUsableData = $this->HasUsableSignalData($signalCode, $body);
-            if ($verified && $hasUsableData) {
+            if ($verified && $this->HasMeaningfulSignalData($body)) {
                 $successful[$signalCode] = $body;
-            } elseif ($verified) {
-                $withoutData[$signalCode] = ['status' => $statusValue, 'body' => $body];
             } else {
                 $error = is_array($status['error'] ?? null) ? $status['error'] : [];
                 $unsuccessful[$signalCode] = [
@@ -1026,7 +1012,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 ];
             }
 
-            if ($verified && $hasUsableData) {
+            if ($verified && $this->HasMeaningfulSignalData($body)) {
                 $this->RememberSuccessfulSignal($signalCode, $body, $status, $meta);
             }
 
@@ -1049,12 +1035,6 @@ class SmartcarVehicle extends IPSModuleStrict
         );
 
         $this->SendDebug(
-            'WebhookVehicle/Signale ohne Nutzwerte',
-            json_encode($withoutData, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
-            0
-        );
-
-        $this->SendDebug(
             'WebhookVehicle/Nicht erfolgreiche Signale',
             json_encode($unsuccessful, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
             0
@@ -1062,19 +1042,6 @@ class SmartcarVehicle extends IPSModuleStrict
 
     }
 
-
-    private function HasUsableSignalData(string $code, array $body): bool
-    {
-        $definition = $this->GetSignalDefinition($code, $body);
-        foreach ($this->GetVariablesFromDefinition($definition, $body) as $variable) {
-            if ($this->GetSignalVariableValue($variable, $body) !== null) {
-                return true;
-            }
-        }
-
-        return !($definition['known'] ?? true)
-            && $this->HasMeaningfulSignalData(array_diff_key($body, ['unit' => true]));
-    }
 
     private function HasMeaningfulSignalData(array $body): bool
     {
@@ -1132,7 +1099,7 @@ class SmartcarVehicle extends IPSModuleStrict
             return false;
         }
 
-        if (!$this->HasUsableSignalData($code, $body)) {
+        if (!$this->HasMeaningfulSignalData($body)) {
             if ($logStatus) {
                 $this->SendDebug(
                     'SignalData/' . $code,
@@ -1625,14 +1592,7 @@ class SmartcarVehicle extends IPSModuleStrict
         $discovered = $this->ReadDiscoveredVariables();
         $changed = false;
 
-        $commandIdents = [
-            'CommandChargeStart',
-            'CommandChargeStop',
-            'CommandChargeLimit',
-            'CommandSecurityLock',
-            'CommandSecurityUnlock',
-            'CommandNavigationDestination'
-        ];
+        $commandIdents = array_column($this->GetCommandDefinitions(), 'ident');
 
         foreach (IPS_GetChildrenIDs($this->InstanceID) as $childId) {
             if (!IPS_VariableExists($childId)) {
@@ -1652,17 +1612,24 @@ class SmartcarVehicle extends IPSModuleStrict
                 continue;
             }
 
-            if (isset($discovered[$ident]) && is_array($discovered[$ident])) {
-                continue;
-            }
-
-            $discovered[$ident] = [
+            $entry = is_array($discovered[$ident] ?? null) ? $discovered[$ident] : [
                 'ident' => $ident,
                 'name' => (string)($object['ObjectName'] ?? $ident),
                 'kind' => 'Signal',
                 'source' => 'Bestehende Variable'
             ];
-            $changed = true;
+            $variable = IPS_GetVariable($childId);
+            $profile = (string)($variable['VariableCustomProfile'] ?? '');
+            $entry = array_replace($entry, [
+                'type' => (int)$variable['VariableType'],
+                'profile' => $profile !== '' ? $profile : (string)($variable['VariableProfile'] ?? ''),
+                'position' => (int)($object['ObjectPosition'] ?? 0),
+                'variableName' => (string)($object['ObjectName'] ?? $ident)
+            ]);
+            if (($discovered[$ident] ?? null) !== $entry) {
+                $discovered[$ident] = $entry;
+                $changed = true;
+            }
         }
 
         if ($changed) {
@@ -1772,7 +1739,9 @@ class SmartcarVehicle extends IPSModuleStrict
                 'name' => (string)($variable['name'] ?? $ident),
                 'kind' => 'Signal',
                 'source' => $code . ($source !== 'value' ? ' / ' . $source : ''),
-                'signalCode' => $code
+                'signalCode' => $code,
+                'type' => (int)$variable['type'],
+                'profile' => (string)($variable['profile'] ?? '')
             ];
         }
 
@@ -1798,28 +1767,85 @@ class SmartcarVehicle extends IPSModuleStrict
             $cache = [];
         }
         $previousBody = is_array($cache[$code]['body'] ?? null) ? $cache[$code]['body'] : [];
-        $bodyWithData = array_filter($body, static fn($value): bool => $value !== null);
-        foreach ($variables as $variable) {
-            if (($variable['optional'] ?? false) && $this->GetSignalVariableValue($variable, $body) === null) {
-                unset($bodyWithData[(string)($variable['source'] ?? 'value')]);
-            }
-        }
-        $body = array_replace($previousBody, $bodyWithData);
+        $body = array_replace($previousBody, array_filter($body, static fn($value): bool => $value !== null));
         $cache[$code] = ['body' => $body, 'status' => $status, 'meta' => $meta];
         $this->WriteAttributeString('LastSuccessfulSignalPayloads', json_encode($cache, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
     }
 
     private function ApplyVariableSelection(): void
     {
-        foreach ($this->GetVariableSelectionMap() as $ident => $enabled) {
-            if ($enabled) {
-                continue;
-            }
-            $id = @$this->GetIDForIdent($ident);
-            if ($id && IPS_VariableExists($id)) {
-                $this->UnregisterVariable($ident);
+        $discovered = $this->ReadDiscoveredVariables();
+        $cache = json_decode($this->ReadAttributeString('LastSuccessfulSignalPayloads'), true);
+        $cache = is_array($cache) ? $cache : [];
+        $rows = json_decode($this->ReadPropertyString('VariableSelection'), true);
+        $selectionRows = [];
+        foreach (is_array($rows) ? $rows : [] as $row) {
+            if (is_array($row)) {
+                $selectionRows[(string)($row['Ident'] ?? $row['ident'] ?? '')] = $row;
             }
         }
+        $commandIdents = array_column($this->GetCommandDefinitions(), 'ident');
+
+        foreach ($this->GetVariableSelectionMap() as $ident => $enabled) {
+            $id = @$this->GetIDForIdent($ident);
+            if (!$enabled) {
+                if ($id && IPS_VariableExists($id)) {
+                    $this->UnregisterVariable($ident);
+                }
+                continue;
+            }
+            if ($id || in_array($ident, $commandIdents, true)) {
+                continue;
+            }
+
+            $row = $selectionRows[$ident] ?? [];
+            $entry = is_array($discovered[$ident] ?? null) ? $discovered[$ident] : [
+                'ident' => $ident,
+                'name' => (string)($row['Name'] ?? $row['name'] ?? $ident),
+                'kind' => (string)($row['Kind'] ?? $row['kind'] ?? 'Signal'),
+                'source' => (string)($row['Source'] ?? $row['source'] ?? '')
+            ];
+            $variable = $this->GetSelectedSignalVariable($ident, $entry, $cache);
+            $this->RegisterOrUpdateTypedVariable(
+                $ident,
+                $variable['name'],
+                $this->GetDefaultValueForType($variable['type']),
+                $variable['type'],
+                $variable['profile'],
+                true,
+                $variable['position']
+            );
+            $discovered[$ident] = array_replace($entry, $variable);
+        }
+        $this->WriteDiscoveredVariables($discovered);
+    }
+
+    private function GetSelectedSignalVariable(string $ident, array $entry, array $cache): array
+    {
+        $code = (string)($entry['signalCode'] ?? explode(' / ', (string)($entry['source'] ?? ''))[0]);
+        if (!str_contains($code, '-') && in_array($ident, ['Latitude', 'Longitude', 'LocationHeading', 'LocationDirection', 'LocationType'], true)) {
+            $code = 'location-preciselocation';
+        }
+        $body = is_array($cache[$code]['body'] ?? null) ? $cache[$code]['body'] : [];
+        $definition = $this->GetSignalDefinition($code, $body);
+        $variable = [];
+        $position = $this->GetSignalBasePosition($code);
+        foreach ($this->GetVariablesFromDefinition($definition, $body) as $index => $candidate) {
+            if (($candidate['ident'] ?? '') === $ident) {
+                $variable = $candidate;
+                $position += (int)$index;
+                break;
+            }
+        }
+
+        return [
+            'ident' => $ident,
+            'name' => (string)($entry['variableName'] ?? $entry['name'] ?? $variable['name'] ?? $ident),
+            'type' => (int)($entry['type'] ?? $variable['type'] ?? VARIABLETYPE_STRING),
+            'profile' => (string)($entry['profile'] ?? $variable['profile'] ?? ''),
+            'position' => (int)($entry['position'] ?? $position),
+            'signalCode' => $code
+        ];
     }
 
     private function RestoreSelectedSignalsFromCache(): void
@@ -1833,7 +1859,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 continue;
             }
             $body = is_array($payload['body'] ?? null) ? $payload['body'] : [];
-            if (!$this->HasUsableSignalData($code, $body)) {
+            if (!$this->HasMeaningfulSignalData($body)) {
                 continue;
             }
             $status = is_array($payload['status'] ?? null) ? $payload['status'] : null;
@@ -2285,12 +2311,7 @@ class SmartcarVehicle extends IPSModuleStrict
         if (!array_key_exists($source, $body) || $body[$source] === null) {
             return null;
         }
-        $rawValue = $body[$source];
-        if ((is_string($rawValue) && trim($rawValue) === '')
-            || (($variable['optional'] ?? false) && !$this->HasMeaningfulSignalData([$rawValue]))) {
-            return null;
-        }
-        $value = isset($variable['convert']) ? ($variable['convert'])($body) : $rawValue;
+        $value = isset($variable['convert']) ? ($variable['convert'])($body) : $body[$source];
         if ($value === null) {
             return null;
         }
@@ -2364,7 +2385,7 @@ class SmartcarVehicle extends IPSModuleStrict
             $extra[] = [$definition['ident'] . 'Description', $definition['name'] . ' – Beschreibung', 'description', VARIABLETYPE_STRING, ''];
         }
         foreach ($extra as [$ident, $name, $source, $type, $profile]) {
-            $variables[] = compact('ident','name','source','type','profile') + ['optional' => true];
+            $variables[] = compact('ident','name','source','type','profile');
         }
         if (count($variables) !== 1 || ($definition['special'] ?? '') === 'multiple') {
             $definition['special'] = 'multiple';

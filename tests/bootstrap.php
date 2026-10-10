@@ -12,6 +12,7 @@ function IPS_GetInstanceListByModuleID(string $id): array { global $instances; r
 function IPS_GetProperty(int $id, string $key): mixed { global $instances; return $instances[$id][$key] ?? ''; }
 function IPS_GetVariable(int $id): array { global $objects; return $objects[$id]; }
 function IPS_GetObject(int $id): array { global $objects; return $objects[$id]; }
+function IPS_GetChildrenIDs(int $id): array { global $objects; return array_keys(array_filter($objects, static fn($object) => ($object['ParentID'] ?? 0) === $id)); }
 function IPS_VariableExists(int $id): bool { global $objects; return isset($objects[$id]); }
 function GetValue(int $id): mixed { global $objects; return $objects[$id]['value']; }
 function IPS_SetName(int $id, string $name): void { global $objects; $objects[$id]['ObjectName']=$name; }
@@ -21,7 +22,9 @@ class IPSModuleStrict {
     public array $properties=[], $attributes=[], $variables=[], $debug=[], $parentRequests=[];
     public mixed $parentResponse=null;
     public mixed $parentResponder=null;
+    public function __construct() { static $nextInstanceID=20; $this->InstanceID=$nextInstanceID++; }
     public function Create(): void {}
+    public function ApplyChanges(): void {}
     public function RegisterHook(string $hook): void {}
     public function RegisterPropertyString(string $key,string $value): void { $this->properties[$key]=$value; }
     public function RegisterPropertyInteger(string $key,int $value): void { $this->properties[$key]=$value; }
@@ -46,7 +49,7 @@ class IPSModuleStrict {
         if ($profile !== '' && (!isset($profiles[$profile]) || $profiles[$profile]['ProfileType'] !== $type)) throw new RuntimeException('Invalid profile type for '.$ident);
         if (!$this->GetIDForIdent($ident)) {
             $id=$nextObject++; $this->variables[$ident]=$id;
-            $objects[$id]=['ObjectName'=>$name,'ObjectIdent'=>$ident,'VariableType'=>$type,'VariableProfile'=>$profile,'ObjectPosition'=>$position,'value'=>[false,0,0.0,''][$type]];
+            $objects[$id]=['ObjectName'=>$name,'ObjectIdent'=>$ident,'ParentID'=>$this->InstanceID,'VariableType'=>$type,'VariableProfile'=>$profile,'ObjectPosition'=>$position,'value'=>[false,0,0.0,''][$type]];
         } else {
             $objects[$this->GetIDForIdent($ident)]['VariableProfile']=$profile;
         }

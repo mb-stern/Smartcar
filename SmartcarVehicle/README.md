@@ -54,7 +54,7 @@ Erkannte Signal- und Steuervariablen sind standardmäßig aktiviert.
 
 Nicht benötigte Variablen können über die Checkbox-Liste deaktiviert werden. Beim Speichern der Konfiguration wird die entsprechende Variable aus dem Objektbaum entfernt.
 
-Wird eine Variable später wieder aktiviert, wird sie erneut angelegt, sobald entsprechende Daten verfügbar sind.
+Beim Speichern werden ausdrücklich angekreuzte Signalvariablen sofort angelegt, auch wenn aktuell keine Daten oder kein Cache vorhanden sind. Typ und Profil stammen aus der Signalzuordnung bzw. den gespeicherten Variableneigenschaften. Bis ein gültiger Wert geliefert wird, verwendet eine neu angelegte Variable ihren Typ-Standardwert (`0`, `false` oder eine leere Zeichenkette). Bereits vorhandene Werte, Namen und IDs bleiben beim Speichern erhalten.
 
 > Bereits vorhandene Variablennamen werden vom Modul nicht überschrieben. Individuell vom Benutzer vergebene Namen bleiben dadurch erhalten.
 
@@ -70,7 +70,7 @@ Es gibt mehrere Möglichkeiten, die Signale zu aktualisieren:
 
 Bei der Verarbeitung werden nur Signale berücksichtigt, die erfolgreich geliefert wurden und mindestens einen tatsächlichen Nutzwert enthalten.
 
-`null`, leere Zeichenketten und leere Zusatzlisten (z. B. Reichweiten- oder Kapazitätsvarianten) erzeugen keine neuen Signalvariablen. Auch eine Einheit allein ist kein Nutzwert. Werte wie `0` oder `false` bleiben gültig. Eine ausdrücklich gelieferte leere Hauptliste kann dagegen einen Zustand beschreiben, beispielsweise eine leere Fehlercode-Liste ohne aktuelle Fehler.
+`null`-Teilwerte werden nicht als Messwert übernommen; Werte wie `0` oder `false` sind gültig. Der zusätzliche Filter für leere Zusatzlisten und Zeichenketten wurde zurückgenommen. Die Checkbox-Auswahl ist davon unabhängig: Eine ausdrücklich angekreuzte Signalvariable wird beim Speichern auch ohne aktuellen Nutzwert angelegt.
 
 ### Alle, einzelne oder mehrere Signale abrufen
 
@@ -279,9 +279,7 @@ Ein Signal wird nur als erfolgreich verarbeitet, wenn:
 - Smartcar einen erfolgreichen Status zurückliefert und
 - mindestens ein tatsächlicher Nutzwert enthalten ist.
 
-Nicht erfolgreiche Signale und Antworten ohne nutzbare Daten führen nicht zur Erstellung neuer Variablen. Das Debug-Fenster unterscheidet „Erfolgreiche Signale“ (mit Nutzwerten), „Signale ohne Nutzwerte“ (erfolgreicher API-Status, aber keine nutzbaren Daten) und „Nicht erfolgreiche Signale“ (z. B. `UNAVAILABLE` oder `ERROR`).
-
-Leere Zusatzdaten überschreiben weder den zuletzt gültigen Variablenwert noch den Cache. Bereits vorhandene Variablen werden dabei nicht automatisch gelöscht; nicht benötigte Altbestände können über die Checkbox-Liste deaktiviert werden.
+Nicht erfolgreiche oder vollständig leere Signalantworten liefern keine neuen Messwerte. Ausdrücklich angekreuzte Signalvariablen werden dennoch bereits beim Speichern der Konfiguration angelegt; hierfür ist keine erfolgreiche API-Antwort erforderlich.
 
 Deaktivierte Variablen werden durch nachfolgende API-Abfragen oder Webhooks nicht automatisch wieder aktiviert.
 
