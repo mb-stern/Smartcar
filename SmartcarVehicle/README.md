@@ -50,7 +50,7 @@ Die Fahrzeuginstanz verwendet keine separate Smartcar-Kompatibilitätsprüfung m
 
 ### Auswahl der Variablen
 
-Erkannte Signal- und Steuervariablen sind standardmäßig aktiviert.
+Erkannte Signal- und Steuervariablen sind standardmäßig aktiviert. Die Checkboxen bleiben auch bei neu erkannten Signalen und geänderter Sortierung der jeweiligen Variablenkennung zugeordnet.
 
 Nicht benötigte Variablen können über die Checkbox-Liste deaktiviert werden. Beim Speichern der Konfiguration wird die entsprechende Variable aus dem Objektbaum entfernt.
 
@@ -71,6 +71,15 @@ Es gibt mehrere Möglichkeiten, die Signale zu aktualisieren:
 Bei der Verarbeitung werden nur Signale berücksichtigt, die erfolgreich geliefert wurden und mindestens einen tatsächlichen Nutzwert enthalten.
 
 `null`-Teilwerte werden nicht als Messwert übernommen; Werte wie `0` oder `false` sind gültig. Der zusätzliche Filter für leere Zusatzlisten und Zeichenketten wurde zurückgenommen. Die Checkbox-Auswahl ist davon unabhängig: Eine ausdrücklich angekreuzte Signalvariable wird beim Speichern auch ohne aktuellen Nutzwert angelegt.
+
+### Restdauer und Fertig-Uhrzeit
+
+Das aktuelle Signal `charge-timetocomplete` liefert die geschätzte Restdauer bis zum aktiven Ladelimit in Minuten. Daraus werden zwei Anzeigen bereitgestellt:
+
+- **Verbleibende Ladezeit** (`ChargeTimeRemainingMinutes`): numerischer Minutenwert, einschließlich Dezimalstellen.
+- **Fertiggeladen** (`ChargeTimeToComplete`): geschätztes Datum und Uhrzeit in der Zeitzone der Symcon-Installation. Eine vorhandene Anzeige `ChargeEndTime` wird ebenfalls unterstützt.
+
+Die Uhrzeit wird aus Restdauer und OEM-Datenstand berechnet. Fehlt dieser, wird der API-Abrufzeitpunkt verwendet, andernfalls der gespeicherte Empfangszeitpunkt. Erneutes Speichern der Konfiguration verschiebt die Uhrzeit bei bereits gespeicherten Zeitstempeln nicht. Fehlende Werte überschreiben die letzte gültige Anzeige nicht.
 
 ### Alle, einzelne oder mehrere Signale abrufen
 
@@ -306,7 +315,7 @@ Alle 93 konkreten Signalendpunkte der am 10.10.2026 abgerufenen Smartcar-V3-Refe
 
 Zusätzliche Standortfelder, Batterie-Kapazitätsvarianten, Reichweitenvarianten, Ladelimit-Varianten und weitere Reifenachsen werden ebenfalls übernommen. Fehlende/null-Teilwerte erzeugen keine künstlichen Nullwerte. Ältere OEM-Datenstände überschreiben weder Variablen noch Cache; Zeitstempel werden für die Reihenfolge mit ihrer höheren Präzision ausgewertet.
 
-Vorhandene Variablen werden bei Typkorrekturen nicht gelöscht. Die korrigierte Restdauer verwendet `ChargeTimeRemainingMinutes`; eine alte String-Variable `ChargeTimeToComplete` bleibt als Altbestand erhalten und wird nicht weiter aktualisiert. Falls `ChargeLimit` bereits durch den früheren JSON-Fallback als String angelegt wurde, wird der Messwert unter `ChargeLimitPercent` bereitgestellt. Die alten IDs und damit verbundene Archive bleiben bestehen. Neue unbekannte numerische Signale werden als Float angelegt, damit spätere Dezimalstellen erhalten bleiben.
+Vorhandene Variablen werden bei Typkorrekturen nicht gelöscht. Die Restdauer verwendet `ChargeTimeRemainingMinutes`; die bisherige String-Variable `ChargeTimeToComplete` wird wieder aktualisiert und zeigt das geschätzte Fertig-Datum mit Uhrzeit. Eine vorhandene alternative Anzeige `ChargeEndTime` bleibt ebenfalls erhalten und wird aus dem aktuellen Signal versorgt. Falls `ChargeLimit` bereits durch den früheren JSON-Fallback als String angelegt wurde, wird der Messwert unter `ChargeLimitPercent` bereitgestellt. Die alten IDs und damit verbundene Archive bleiben bestehen. Neue unbekannte numerische Signale werden als Float angelegt, damit spätere Dezimalstellen erhalten bleiben.
 
 ### Lokale Regressionstests
 

@@ -83,4 +83,23 @@ $id = invoke($v, 'GetIDForIdent', 'Longitude');
 if (IPS_GetVariable($id)['VariableType'] !== VARIABLETYPE_FLOAT || IPS_GetObject($id)['ObjectName'] !== 'Mein Längengrad' || IPS_GetObject($id)['ObjectPosition'] !== 321) {
     throw new RuntimeException('Rechecking longitude did not restore its type and user configuration without cache data');
 }
-echo "$count official signal examples, integer charge-limit registration and checkbox selection passed with SymconStubs. No live Symcon service.\n";
+$v->SetProperty('VariableSelection', '[{"Ident":"Longitude","Active":true},{"Ident":"ChargeTimeToComplete","Active":true,"Name":"Fertiggeladen","Source":"charge-timetocomplete"}]');
+$v->ApplyChanges();
+$completionID = invoke($v, 'GetIDForIdent', 'ChargeTimeToComplete');
+$v->ProcessWebhookSignals(json_encode(['data'=>['signals'=>[
+    ['code'=>'charge-timetocomplete', 'body'=>['value'=>60], 'status'=>['value'=>'SUCCESS'], 'meta'=>['oemUpdatedAt'=>'2026-10-10T14:00:00Z']]
+]]], JSON_THROW_ON_ERROR));
+if (invoke($v, 'GetIDForIdent', 'ChargeTimeToComplete') !== $completionID || GetValue($completionID) !== date('d.m.Y H:i', strtotime('2026-10-10T15:00:00Z')) . ' Uhr' || GetValue(invoke($v, 'GetIDForIdent', 'ChargeTimeRemainingMinutes')) !== 60.0) {
+    throw new RuntimeException('Remaining minutes and the existing completion display were not updated together');
+}
+$form = json_decode($v->GetConfigurationForm(), true, 512, JSON_THROW_ON_ERROR);
+$list = array_values(array_filter($form['elements'], static fn($element) => ($element['name'] ?? '') === 'VariableSelection'))[0];
+if (($list['loadValuesFromConfiguration'] ?? true) !== false || count(array_unique(array_column($list['values'], 'Ident'))) !== count($list['values'])) {
+    throw new RuntimeException('Variable list allows saved row indices to override the computed Ident mapping');
+}
+$v->SetProperty('VariableSelection', '[{"Ident":"Longitude","Active":false},{"Ident":"ChargeTimeToComplete","Active":false}]');
+$v->ApplyChanges();
+if (@invoke($v, 'GetIDForIdent', 'Longitude') || @invoke($v, 'GetIDForIdent', 'ChargeTimeToComplete')) {
+    throw new RuntimeException('Unchecking the correct identifiers did not remove both variables');
+}
+echo "$count official signal examples, integer charge-limit registration, checkbox selection and completion display passed with SymconStubs. No live Symcon service.\n";

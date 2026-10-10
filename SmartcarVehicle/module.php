@@ -45,6 +45,7 @@ class SmartcarVehicle extends IPSModuleStrict
         $this->ApplyVariableSelection();
         $this->ApplyVehicleAccessCommands();
         $this->RestoreSelectedSignalsFromCache();
+        $this->DebugVariableSelection();
 
     }
 
@@ -426,6 +427,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 [
                     'type' => 'List',
                     'name' => 'VariableSelection',
+                    'loadValuesFromConfiguration' => false,
                     'caption' => 'Variablen',
                     'rowCount' => 14,
                     'add' => false,
@@ -795,6 +797,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 ? $signal['meta']
                 : (is_array($attributes['meta'] ?? null) ? $attributes['meta'] : []);
 
+            $meta['receivedAt'] = time();
             $statusValue = strtoupper((string)($status['value'] ?? ''));
             $verified = $status === null
                 || $statusValue === ''
@@ -900,6 +903,7 @@ class SmartcarVehicle extends IPSModuleStrict
             ? $payload['meta']
             : (is_array($attributes['meta'] ?? null) ? $attributes['meta'] : []);
 
+        $meta['receivedAt'] = time();
         $statusValue = strtoupper((string)($status['value'] ?? ''));
         $verified = $status === null
             || $statusValue === ''
@@ -995,6 +999,7 @@ class SmartcarVehicle extends IPSModuleStrict
             $body = is_array($signal['body'] ?? null) ? $signal['body'] : [];
             $status = is_array($signal['status'] ?? null) ? $signal['status'] : null;
 
+            $meta['receivedAt'] = time();
             $statusValue = strtoupper((string)($status['value'] ?? ''));
             $verified = $status === null
                 || $statusValue === ''
@@ -1084,7 +1089,7 @@ class SmartcarVehicle extends IPSModuleStrict
         $statusValue = strtoupper((string)($status['value'] ?? ''));
         $verified = $status === null || $statusValue === '' || $statusValue === 'SUCCESS' || $statusValue === 'OK';
 
-        $definition = $this->GetSignalDefinition($code, $body);
+        $definition = $this->GetSignalDefinition($code, $body, $signalMeta);
         $variables = $this->GetVariablesFromDefinition($definition, $body);
 
         if (!$verified) {
@@ -1722,7 +1727,7 @@ class SmartcarVehicle extends IPSModuleStrict
         if ($this->IsOlderSignal($code, $meta)) {
             return;
         }
-        $definition = $this->GetSignalDefinition($code, $body);
+        $definition = $this->GetSignalDefinition($code, $body, $meta);
         $variables = $this->GetVariablesFromDefinition($definition, $body);
         $discovered = $this->ReadDiscoveredVariables();
         $found = false;
@@ -1818,6 +1823,23 @@ class SmartcarVehicle extends IPSModuleStrict
             $discovered[$ident] = array_replace($entry, $variable);
         }
         $this->WriteDiscoveredVariables($discovered);
+    }
+
+    private function DebugVariableSelection(): void
+    {
+        $rows = [];
+        foreach ($this->GetVariableSelectionMap() as $ident => $active) {
+            $id = @$this->GetIDForIdent($ident);
+            $exists = $id && IPS_VariableExists($id);
+            $rows[] = [
+                'ident' => $ident,
+                'active' => $active,
+                'variableID' => $exists ? $id : 0,
+                'name' => $exists ? (string)IPS_GetObject($id)['ObjectName'] : '',
+                'type' => $exists ? (int)IPS_GetVariable($id)['VariableType'] : null
+            ];
+        }
+        $this->SendDebug('Variables/Auswahl', json_encode($rows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
     }
 
     private function GetSelectedSignalVariable(string $ident, array $entry, array $cache): array
@@ -2325,7 +2347,31 @@ class SmartcarVehicle extends IPSModuleStrict
         return $value;
     }
 
-    private function GetSignalDefinition(string $code, array $body = []): array
+    private function GetChargeCompletionText(array $body, array $meta): ?string
+    {
+        $minutes = $body['value'] ?? null;
+        if (!is_numeric($minutes) || !is_finite((float)$minutes) || $minutes < 0) {
+            return null;
+        }
+        $reference = 0;
+        foreach (['oemUpdatedAt', 'retrievedAt', 'receivedAt'] as $key) {
+            $reference = $this->ParseSmartcarTimestamp($meta[$key] ?? null);
+            if ($reference > 0) {
+                break;
+            }
+        }
+        if ($reference === 0) {
+            $reference = time();
+        }
+        $seconds = round((float)$minutes * 60);
+        if (!is_finite($seconds) || $seconds >= PHP_INT_MAX - $reference) {
+            return null;
+        }
+        $completion = $reference + (int)$seconds;
+        return date('d.m.Y H:i', $completion) . ' Uhr';
+    }
+
+    private function GetSignalDefinition(string $code, array $body = [], array $signalMeta = []): array
     {
         $code = strtolower($code);
         if ($code === 'location-isathome') {
@@ -2350,6 +2396,25 @@ class SmartcarVehicle extends IPSModuleStrict
             }
         }
         $variables = $this->GetVariablesFromDefinition($definition, $body);
+        if ($code === 'charge-timetocomplete') {
+            $completion = [
+                'ident' => 'ChargeTimeToComplete',
+                'name' => 'Fertiggeladen',
+                'type' => VARIABLETYPE_STRING,
+                'profile' => '',
+                'source' => 'value',
+                'convert' => fn(array $data): ?string => $this->GetChargeCompletionText($data, $signalMeta)
+            ];
+            $selection = $this->GetVariableSelectionMap();
+            $hasEndTime = @$this->GetIDForIdent('ChargeEndTime') || array_key_exists('ChargeEndTime', $selection);
+            $hasTimeToComplete = @$this->GetIDForIdent('ChargeTimeToComplete') || array_key_exists('ChargeTimeToComplete', $selection);
+            if (!$hasEndTime || $hasTimeToComplete) {
+                $variables[] = $completion;
+            }
+            if ($hasEndTime) {
+                $variables[] = array_replace($completion, ['ident' => 'ChargeEndTime', 'name' => 'Fertig geladen']);
+            }
+        }
         if ($code === 'wheel-tires') {
             $variables = [];
             foreach (($body['values'] ?? []) as $tire) {
