@@ -18,6 +18,7 @@ class SmartcarVehicle extends IPSModuleStrict
     $this->RegisterPropertyBoolean('ShowOEMUpdatedAtVariables', false);
     $this->RegisterPropertyString('VariableSelection', '[]');
     $this->RegisterAttributeString('DiscoveredVariables', '{}');
+    $this->RegisterAttributeString('SignalCompatibility', '{}');
     $this->RegisterAttributeString('LastSuccessfulSignalPayloads', '{}');
     $this->RegisterAttributeString('LastOEMSignalTimes', '{}');
     $this->RegisterAttributeString('ModuleVariableNames', '{}');
@@ -832,6 +833,8 @@ class SmartcarVehicle extends IPSModuleStrict
                 || $statusValue === 'SUCCESS'
                 || $statusValue === 'OK';
 
+            $this->RememberSignalCompatibility($signalCode, $body, $status, $meta);
+
             if ($verified && $this->HasMeaningfulSignalData($body)) {
                 $successful[$signalCode] = $body;
             } else {
@@ -938,6 +941,8 @@ class SmartcarVehicle extends IPSModuleStrict
             || $statusValue === 'SUCCESS'
             || $statusValue === 'OK';
 
+        $this->RememberSignalCompatibility($responseCode, $body, $status, $meta);
+
         if (!$verified || !$this->HasMeaningfulSignalData($body)) {
             $this->SendDebug('Signal/NoData/' . $responseCode, (string)$result, 0);
             return false;
@@ -1033,6 +1038,8 @@ class SmartcarVehicle extends IPSModuleStrict
                 || $statusValue === ''
                 || $statusValue === 'SUCCESS'
                 || $statusValue === 'OK';
+
+            $this->RememberSignalCompatibility($signalCode, $body, $status, $meta);
 
             if ($verified && $this->HasMeaningfulSignalData($body)) {
                 $successful[$signalCode] = $body;
@@ -1682,6 +1689,60 @@ class SmartcarVehicle extends IPSModuleStrict
         }
     }
 
+    private function ReadSignalCompatibility(): array
+    {
+        $data = json_decode($this->ReadAttributeString('SignalCompatibility'), true);
+        return is_array($data) ? $data : [];
+    }
+
+    private function RememberSignalCompatibility(string $code, array $body, ?array $status, array $meta): void
+    {
+        $statusValue = strtoupper((string)($status['value'] ?? ''));
+        $errorCode = strtoupper((string)($status['error']['code'] ?? ''));
+        $incompatible = in_array($errorCode, ['VEHICLE_NOT_CAPABLE', 'SMARTCAR_NOT_CAPABLE', 'PLATFORM_NOT_CAPABLE', 'MAKE_NOT_COMPATIBLE'], true);
+        $successful = $errorCode === '' && (in_array($statusValue, ['SUCCESS', 'OK'], true)
+            || ($statusValue === '' && $this->HasMeaningfulSignalData($body)));
+        if ((!$incompatible && !$successful) || $this->IsOlderSignal($code, $meta)) {
+            return;
+        }
+
+        $compatibility = $this->ReadSignalCompatibility();
+        $previous = is_array($compatibility[$code] ?? null) ? $compatibility[$code] : [];
+        $timestamps = [
+            'oemUpdatedAt' => $this->GetSignalOrderTimestamp($meta['oemUpdatedAt'] ?? null),
+            'retrievedAt' => $this->GetSignalOrderTimestamp($meta['retrievedAt'] ?? null)
+        ];
+        foreach (array_keys($timestamps) as $key) {
+            if ($timestamps[$key] > 0 && (float)($previous[$key] ?? 0) > 0) {
+                if ($timestamps[$key] < (float)$previous[$key]) {
+                    return;
+                }
+                break;
+            }
+        }
+
+        $cache = json_decode($this->ReadAttributeString('LastSuccessfulSignalPayloads'), true);
+        $cachedBody = is_array($cache[$code]['body'] ?? null) ? $cache[$code]['body'] : [];
+        $definitionBody = array_replace($cachedBody, $body);
+        $variables = $this->GetVariablesFromDefinition($this->GetSignalDefinition($code, $definitionBody, $meta), $definitionBody);
+        $idents = array_values(array_unique(array_filter(array_merge($previous['idents'] ?? [], array_column($variables, 'ident')))));
+        $selection = is_array($previous['selection'] ?? null) ? $previous['selection'] : [];
+        foreach ($this->GetVariableSelectionMap() as $ident => $active) {
+            if (in_array($ident, $idents, true)) {
+                $selection[$ident] = $active;
+            }
+        }
+        $compatibility[$code] = array_replace($timestamps, [
+            'incompatible' => $incompatible,
+            'idents' => $idents,
+            'selection' => $selection
+        ]);
+        $this->WriteAttributeString('SignalCompatibility', json_encode($compatibility, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        if ((bool)($previous['incompatible'] ?? false) !== $incompatible) {
+            $this->RefreshVariableSelectionForm();
+        }
+    }
+
     private function ReadDiscoveredVariables(): array
     {
         $data = json_decode($this->ReadAttributeString('DiscoveredVariables'), true);
@@ -1715,6 +1776,14 @@ class SmartcarVehicle extends IPSModuleStrict
             $map[$ident] = (bool)($row['Active'] ?? $row['active'] ?? true);
         }
 
+        foreach ($this->ReadSignalCompatibility() as $entry) {
+            foreach (($entry['selection'] ?? []) as $ident => $active) {
+                if (!array_key_exists($ident, $map)) {
+                    $map[$ident] = (bool)$active;
+                }
+            }
+        }
+
         return $map;
     }
 
@@ -1731,6 +1800,15 @@ class SmartcarVehicle extends IPSModuleStrict
     {
         $selection = $this->GetVariableSelectionMap();
         $discovered = $this->ReadDiscoveredVariables();
+        $compatibility = $this->ReadSignalCompatibility();
+        $incompatibleIdents = [];
+        foreach ($compatibility as $entry) {
+            if ($entry['incompatible'] ?? false) {
+                foreach (($entry['idents'] ?? []) as $ident) {
+                    $incompatibleIdents[$ident] = true;
+                }
+            }
+        }
         $rows = [];
 
         uasort($discovered, static function (array $a, array $b): int {
@@ -1739,6 +1817,13 @@ class SmartcarVehicle extends IPSModuleStrict
         });
 
         foreach ($discovered as $ident => $entry) {
+            $code = (string)($entry['signalCode'] ?? explode(' / ', (string)($entry['source'] ?? ''))[0]);
+            $incompatible = isset($compatibility[$code])
+                ? (bool)($compatibility[$code]['incompatible'] ?? false)
+                : isset($incompatibleIdents[$ident]);
+            if (($entry['kind'] ?? 'Signal') === 'Signal' && $incompatible) {
+                continue;
+            }
             $rows[] = [
                 'Active' => $selection[$ident] ?? true,
                 'Name' => (string)($entry['name'] ?? $ident),

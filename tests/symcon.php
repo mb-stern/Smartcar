@@ -102,4 +102,36 @@ $v->ApplyChanges();
 if (@invoke($v, 'GetIDForIdent', 'Longitude') || @invoke($v, 'GetIDForIdent', 'ChargeTimeToComplete')) {
     throw new RuntimeException('Unchecking the correct identifiers did not remove both variables');
 }
-echo "$count official signal examples, integer charge-limit registration, checkbox selection and completion display passed with SymconStubs. No live Symcon service.\n";
+$v->SetProperty('VariableSelection', '[{"Ident":"ChargeAmperage","Active":true,"Name":"Ladestrom (A)","Source":"charge-amperage"}]');
+$v->ApplyChanges();
+$amperageID = invoke($v, 'GetIDForIdent', 'ChargeAmperage');
+SetValue($amperageID, 12.5);
+$v->ProcessWebhookSignals(json_encode(['data'=>['signals'=>[
+    ['code'=>'charge-amperage','status'=>['value'=>'ERROR','error'=>['code'=>'VEHICLE_NOT_CAPABLE']]]
+]]], JSON_THROW_ON_ERROR));
+$v->ApplyChanges();
+$rows = invoke($v, 'BuildVariableSelectionRows');
+if (in_array('ChargeAmperage', array_column($rows, 'Ident'), true) || invoke($v, 'GetIDForIdent', 'ChargeAmperage') !== $amperageID || GetValue($amperageID) !== 12.5) {
+    throw new RuntimeException('Compatibility filtering removed a native variable or kept its row visible');
+}
+$v->ProcessWebhookSignals(json_encode(['data'=>['signals'=>[
+    ['code'=>'charge-amperage','body'=>['value'=>null],'status'=>['value'=>'SUCCESS']]
+]]], JSON_THROW_ON_ERROR));
+if (!in_array('ChargeAmperage', array_column(invoke($v, 'BuildVariableSelectionRows'), 'Ident'), true) || GetValue($amperageID) !== 12.5) {
+    throw new RuntimeException('Empty successful response did not restore the row while preserving its value');
+}
+$v->SetProperty('VariableSelection', '[{"Ident":"ChargeAmperage","Active":false}]');
+$v->ApplyChanges();
+$v->ProcessWebhookSignals(json_encode(['data'=>['signals'=>[
+    ['code'=>'charge-amperage','status'=>['value'=>'ERROR','error'=>['code'=>'VEHICLE_NOT_CAPABLE']]]
+]]], JSON_THROW_ON_ERROR));
+$v->SetProperty('VariableSelection', '[]');
+$v->ApplyChanges();
+$v->ProcessWebhookSignals(json_encode(['data'=>['signals'=>[
+    ['code'=>'charge-amperage','body'=>['value'=>12.5],'status'=>['value'=>'SUCCESS']]
+]]], JSON_THROW_ON_ERROR));
+$rows = array_column(invoke($v, 'BuildVariableSelectionRows'), null, 'Ident');
+if (($rows['ChargeAmperage']['Active'] ?? true) || @invoke($v, 'GetIDForIdent', 'ChargeAmperage')) {
+    throw new RuntimeException('Saving hidden rows lost the deselected native checkbox intent');
+}
+echo "$count official signal examples, integer charge-limit registration, checkbox selection, compatibility filtering and completion display passed with SymconStubs. No live Symcon service.\n";

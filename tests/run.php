@@ -228,6 +228,98 @@ check(count(array_unique(array_column($effectiveRows, 'Ident'))) === count($effe
 $latitudeRows = array_values(array_filter($effectiveRows, static fn($row) => $row['Name'] === 'Breitengrad'));
 check($latitudeRows[0]['Ident'] === 'Latitude' && $latitudeRows[0]['Active'] === true, 'Other saved checkbox choices remain attached to the correct Ident');
 
+// Explicit incompatibility affects the list, not stored vehicle data or checkbox intent.
+function signalStatus(SmartcarVehicle $v, string $code, string $status, string $errorCode = '', array $body = [], string $timestamp = '2026-10-10T10:01:00Z', array $meta = []): void
+{
+    $state = ['value'=>$status];
+    if ($errorCode !== '') $state['error'] = ['code'=>$errorCode];
+    $v->ProcessWebhookSignals(json_encode(['data'=>['signals'=>[
+        ['code'=>$code, 'body'=>$body, 'status'=>$state, 'meta'=>array_replace(['oemUpdatedAt'=>$timestamp], $meta)]
+    ]]], JSON_THROW_ON_ERROR));
+}
+function listed(SmartcarVehicle $v, string $ident): bool
+{
+    return in_array($ident, array_column(invoke($v, 'BuildVariableSelectionRows'), 'Ident'), true);
+}
+
+$v = vehicle();
+signal($v, 'location-preciselocation', ['latitude'=>47.0, 'longitude'=>8.0, 'heading'=>187.6]);
+$id = $v->GetIDForIdent('Longitude');
+$cache = $v->attributes['LastSuccessfulSignalPayloads'];
+signalStatus($v, 'location-preciselocation', 'ERROR', 'VEHICLE_NOT_CAPABLE', ['longitude'=>999]);
+check(!listed($v, 'Longitude') && !listed($v, 'Latitude') && !listed($v, 'LocationHeading'), 'Explicit incompatibility hides every field of a previously discovered signal');
+check($v->GetIDForIdent('Longitude') === $id && value($v, 'Longitude') === 8.0, 'Incompatible response containing data cannot replace an existing ID or value');
+check($v->attributes['LastSuccessfulSignalPayloads'] === $cache, 'Incompatible data does not replace successful cached data');
+$v->ApplyChanges();
+check(!listed($v, 'Longitude') && $v->GetIDForIdent('Longitude') === $id, 'Saving and restoring an older successful cache cannot make an incompatible signal visible again');
+signalStatus($v, 'location-preciselocation', 'UNAVAILABLE', '', [], '2026-10-10T10:02:00Z');
+check(!listed($v, 'Longitude'), 'Unavailable status cannot undo an explicit incompatibility');
+signal($v, 'location-preciselocation', ['longitude'=>8.5], '2026-10-10T10:00:30Z');
+check(!listed($v, 'Longitude'), 'An older success cannot undo a newer incompatibility');
+signalStatus($v, 'location-preciselocation', 'SUCCESS', '', ['longitude'=>null], '2026-10-10T10:03:00Z');
+check(listed($v, 'Longitude'), 'Newer explicit success restores known rows even when the value is null');
+signalStatus($v, 'location-preciselocation', 'ERROR', 'VEHICLE_NOT_CAPABLE', [], '2026-10-10T10:02:30Z');
+check(listed($v, 'Longitude'), 'An older incompatibility cannot hide a newer successful signal without data');
+
+foreach (['VEHICLE_NOT_CAPABLE', 'SMARTCAR_NOT_CAPABLE', 'PLATFORM_NOT_CAPABLE', 'MAKE_NOT_COMPATIBLE'] as $errorCode) {
+    $v = vehicle();
+    signal($v, 'tractionbattery-stateofcharge', ['value'=>0]);
+    signalStatus($v, 'tractionbattery-stateofcharge', 'ERROR', $errorCode);
+    check(!listed($v, 'BatteryLevel') && value($v, 'BatteryLevel') === 0.0, 'Hide explicit compatibility error and preserve zero: ' . $errorCode);
+}
+foreach ([['UNAVAILABLE',''], ['ERROR','INVALID_DATA'], ['ERROR','RATE_LIMIT'], ['SUCCESS','']] as [$status,$errorCode]) {
+    $v = vehicle();
+    signal($v, 'charge-ischarging', ['value'=>false]);
+    signalStatus($v, 'charge-ischarging', $status, $errorCode, ['value'=>null]);
+    check(listed($v, 'IsCharging') && value($v, 'IsCharging') === false, 'Missing or faulty data is not incompatibility: ' . $status . '/' . $errorCode);
+}
+
+$v = vehicle();
+$v->RegisterVariableFloat('ChargeAmperage', 'Meine Stromstärke', '');
+$v->SetValue('ChargeAmperage', 12.5);
+$v->ApplyChanges();
+check(listed($v, 'ChargeAmperage'), 'Legacy variable is initially listed without a known signal source');
+signalStatus($v, 'charge-amperage', 'ERROR', 'VEHICLE_NOT_CAPABLE');
+check(!listed($v, 'ChargeAmperage') && value($v, 'ChargeAmperage') === 12.5, 'Explicit incompatibility also hides matching legacy variables while preserving custom values');
+
+$v = vehicle();
+signal($v, 'wheel-tires', ['unit'=>'kPa', 'values'=>[['row'=>2, 'column'=>0, 'tirePressure'=>300]]]);
+signalStatus($v, 'wheel-tires', 'ERROR', 'VEHICLE_NOT_CAPABLE');
+check(!listed($v, 'TireRow2Column0') && value($v, 'TireRow2Column0') === 3.0, 'Dynamic wheel fields are hidden without deleting their readings');
+
+$v = vehicle();
+signal($v, 'location-preciselocation', ['latitude'=>47.0, 'longitude'=>8.0]);
+$v->properties['VariableSelection'] = '[{"Ident":"Latitude","Active":true},{"Ident":"Longitude","Active":false}]';
+$v->ApplyChanges();
+signalStatus($v, 'location-preciselocation', 'ERROR', 'VEHICLE_NOT_CAPABLE');
+$v->properties['VariableSelection'] = '[]';
+$v->ApplyChanges();
+check(!$v->GetIDForIdent('Longitude'), 'Saving a form with hidden rows retains their deselection');
+signal($v, 'location-preciselocation', ['longitude'=>9.0], '2026-10-10T10:02:00Z');
+$rows = array_column(invoke($v, 'BuildVariableSelectionRows'), null, 'Ident');
+check(isset($rows['Longitude']) && !$rows['Longitude']['Active'] && !$v->GetIDForIdent('Longitude'), 'Recovered compatibility restores the previous unchecked choice without recreating the variable');
+$v->properties['VariableSelection'] = '[{"Ident":"Longitude","Active":true}]';
+$v->attributes['LastSuccessfulSignalPayloads'] = '{}';
+$v->ApplyChanges();
+check($v->GetIDForIdent('Longitude') !== 0 && value($v, 'Longitude') === 0.0, 'A user can still explicitly check and create a recovered empty variable');
+
+foreach (['single','batch'] as $mode) {
+    $v = vehicle();
+    signal($v, 'charge-amperage', ['value'=>12]);
+    $attributes = ['code'=>'charge-amperage', 'body'=>[], 'status'=>['value'=>'ERROR','error'=>['code'=>'VEHICLE_NOT_CAPABLE']]];
+    $response = ['attributes'=>$attributes,'meta'=>['oemUpdatedAt'=>'2026-10-10T10:01:00Z']];
+    $v->parentResponse = ['success'=>true,'body'=>['data'=>$mode === 'batch' ? [$response] : $response]];
+    if ($mode === 'batch') $v->SyncVehicleAccessSignals();
+    else $v->FetchSelectedSignals(['charge-amperage']);
+    check(!listed($v, 'ChargeAmperage') && value($v, 'ChargeAmperage') === 12.0, 'API pull also hides incompatibility and keeps data: ' . $mode);
+}
+
+$v = vehicle();
+signalStatus($v, 'charge-amperage', 'ERROR', 'VEHICLE_NOT_CAPABLE');
+check(!listed($v, 'ChargeAmperage') && !$v->GetIDForIdent('ChargeAmperage'), 'A new incompatible signal creates neither row nor variable');
+invoke($v, 'ApplyVehicleAccessCommands');
+check(listed($v, 'CommandChargeStart'), 'Signal incompatibility does not incorrectly remove permission-based commands');
+
 // Keep remaining minutes and the former completion-clock display connected.
 $completionText = static fn(float $minutes, string $reference = '2026-10-10T10:00:00Z'): string => date('d.m.Y H:i', strtotime($reference) + (int)round($minutes * 60)) . ' Uhr';
 $v = vehicle();

@@ -290,6 +290,8 @@ Ein Signal wird nur als erfolgreich verarbeitet, wenn:
 
 Nicht erfolgreiche oder vollständig leere Signalantworten liefern keine neuen Messwerte. Ausdrücklich angekreuzte Signalvariablen werden dennoch bereits beim Speichern der Konfiguration angelegt; hierfür ist keine erfolgreiche API-Antwort erforderlich.
 
+Ausdrückliche Kompatibilitätsfehler (`VEHICLE_NOT_CAPABLE`, `SMARTCAR_NOT_CAPABLE`, `PLATFORM_NOT_CAPABLE`, `MAKE_NOT_COMPATIBLE`) blenden die zugehörigen Signale aus der Checkbox-Liste aus. Vorhandene Variablen und deren Werte bleiben erhalten. `UNAVAILABLE`, `INVALID_DATA` und leere Inhalte führen nicht zum Ausblenden. Eine spätere erfolgreiche Antwort macht bekannte Einträge wieder sichtbar, auch ohne aktuellen Messwert. Die bisherige Checkbox-Auswahl bleibt erhalten; das Wiederherstellen alter Cache-Daten hebt eine Inkompatibilitätsmeldung nicht auf. Steuerfunktionen werden weiterhin anhand der Berechtigungen angeboten.
+
 Deaktivierte Variablen werden durch nachfolgende API-Abfragen oder Webhooks nicht automatisch wieder aktiviert.
 
 Die Namen bereits vorhandener Variablen werden bei späteren Aktualisierungen nicht verändert.
