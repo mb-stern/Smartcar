@@ -17,6 +17,11 @@ Du findest alle Funktionen für das Smartcar-Symcon-Repository in den entspreche
 
 > Wichtig: Beim Installieren des Moduls in Symcon muss zuerst ein **Smartcar Configurator** erstellt werden. Alle weiteren benötigten Instanzen werden automatisch erstellt.
 
+
+Das Vehicle-Modul enthält eigene Mappings für die 93 aktuellen V3-Signalcodes und die zwölf dokumentierten Fahrzeugaktionen: Laden starten/stoppen, Ladelimit (50–100 %), Ladeport öffnen/schließen, Verriegeln/Entriegeln, Navigationsziel sowie tägliche, wöchentliche und Werktag-/Wochenendladepläne und deren Löschung. Fahrzeugunterstützung und Vehicle-Access-Berechtigungen bestimmen die tatsächliche Verfügbarkeit. [Bedienung und PHP-Beispiele](SmartcarVehicle/README.md) erklären die neuen Funktionen.
+
+Lokale Regressionstests: `php tests/run.php` (simulierte Antworten, keine Fahrzeugaktionen).
+
 ## Konfiguration
 
 Die Zugriffsberechtigungen für Fahrzeugdaten und Steuerfunktionen werden direkt bei Smartcar unter **Configuration → Vehicle Access** festgelegt.

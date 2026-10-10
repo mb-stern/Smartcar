@@ -1,6 +1,4 @@
 <?php
-// Build 2026-08-16: kompakte Webhook-Auswahl ohne Statusspalte/ExpansionPanel.
-// Build: 2026-08-16 Webhook checkbox list v3
 
 class SmartcarVehicle extends IPSModuleStrict
 {
@@ -24,8 +22,6 @@ class SmartcarVehicle extends IPSModuleStrict
     $this->RegisterAttributeString('LastOEMSignalTimes', '{}');
     $this->RegisterAttributeString('ModuleVariableNames', '{}');
 
-    // Die Position wird nur als Initialposition bei der Registrierung vorgegeben.
-    // Spätere Benutzeränderungen an Position/Sichtbarkeit bleiben unangetastet.
     $this->RegisterVariableInteger('LastSignalsAt', 'Letzte Signale', '~UnixTimestamp', 10);
 }
 
@@ -44,20 +40,12 @@ class SmartcarVehicle extends IPSModuleStrict
 
         $this->SetStatus(102);
 
-        // Bereits vorhandene Signalvariablen (z. B. aus einer älteren Modulversion)
-        // sofort in die Auswahlliste übernehmen. Dabei werden weder Namen noch Werte
-        // verändert.
         $this->RememberExistingSignalVariables();
 
         $this->ApplyVariableSelection();
         $this->ApplyVehicleAccessCommands();
         $this->RestoreSelectedSignalsFromCache();
 
-        // Kein API-/Parent-Aufruf in ApplyChanges():
-        // Bei Modul-Updates kann IP-Symcon die Instanz bereits anwenden,
-        // bevor das Parent-Interface des Splitters wieder vollständig bereitsteht.
-        // Die Signale werden bewusst nur über den Button bzw. nach einem
-        // abgeschlossenen Connect-/Reauth-Flow synchronisiert.
     }
 
 
@@ -73,41 +61,79 @@ class SmartcarVehicle extends IPSModuleStrict
         }
     }
 
-    public function RequestAction($Ident, $Value): void
+    public function RequestAction(string $Ident, mixed $Value): void
     {
         switch ($Ident) {
             case 'CommandChargeStart':
                 if ((bool)$Value) {
-                    $this->StartCharging();
-                    $this->SetValue($Ident, false);
+                    try {
+                        $this->RequireCommandSuccess($this->StartCharging());
+                    } finally {
+                        $this->SetValue($Ident, false);
+                    }
                 }
                 return;
 
             case 'CommandChargeStop':
                 if ((bool)$Value) {
-                    $this->StopCharging();
-                    $this->SetValue($Ident, false);
+                    try {
+                        $this->RequireCommandSuccess($this->StopCharging());
+                    } finally {
+                        $this->SetValue($Ident, false);
+                    }
                 }
                 return;
 
             case 'CommandSecurityLock':
                 if ((bool)$Value) {
-                    $this->LockDoors();
-                    $this->SetValue($Ident, false);
+                    try {
+                        $this->RequireCommandSuccess($this->LockDoors());
+                    } finally {
+                        $this->SetValue($Ident, false);
+                    }
                 }
                 return;
 
             case 'CommandSecurityUnlock':
                 if ((bool)$Value) {
-                    $this->UnlockDoors();
-                    $this->SetValue($Ident, false);
+                    try {
+                        $this->RequireCommandSuccess($this->UnlockDoors());
+                    } finally {
+                        $this->SetValue($Ident, false);
+                    }
                 }
                 return;
 
             case 'CommandChargeLimit':
-                $percent = max(0, min(100, (int)$Value));
-                $this->SetChargeLimit($percent);
+                if (!is_numeric($Value) || (float)$Value !== (float)(int)$Value) {
+                    throw new InvalidArgumentException('Das Ladelimit muss eine ganze Zahl sein.');
+                }
+                $percent = (int)$Value;
+                $this->RequireCommandSuccess($this->SetChargeLimit($percent));
                 $this->SetValue($Ident, $percent);
+                return;
+
+            case 'CommandChargePortOpen':
+            case 'CommandChargePortClose':
+                if ((bool)$Value) {
+                    try {
+                        $this->RequireCommandSuccess($Ident === 'CommandChargePortOpen' ? $this->OpenChargePort() : $this->CloseChargePort());
+                    } finally {
+                        $this->SetValue($Ident, false);
+                    }
+                }
+                return;
+
+            case 'CommandChargeScheduleDaily':
+            case 'CommandChargeScheduleWeekly':
+            case 'CommandChargeScheduleWorkweek':
+                $this->RequireCommandSuccess($this->ExecuteScheduleAction($Ident, (string)$Value));
+                $this->SetValue($Ident, (string)$Value);
+                return;
+
+            case 'CommandChargeScheduleDelete':
+                $this->RequireCommandSuccess($this->DeleteChargeSchedule((string)$Value));
+                $this->SetValue($Ident, '');
                 return;
 
             case 'CommandNavigationDestination':
@@ -142,9 +168,120 @@ class SmartcarVehicle extends IPSModuleStrict
 
     public function SetChargeLimit(int $Percent): bool
     {
-        return $this->ExecuteVehicleCommand('charge-set-limit', [
-            'percent' => max(0, min(100, $Percent))
+        if ($Percent < 50 || $Percent > 100) {
+            throw new InvalidArgumentException('Das Ladelimit muss zwischen 50 und 100 Prozent liegen.');
+        }
+        return $this->ExecuteVehicleCommand('charge-set-limit', ['percent' => $Percent]);
+    }
+
+    public function OpenChargePort(): bool
+    {
+        return $this->ExecuteVehicleCommand('charge-port-open');
+    }
+
+    public function CloseChargePort(): bool
+    {
+        return $this->ExecuteVehicleCommand('charge-port-close');
+    }
+
+    public function SetDailyChargeSchedule(float $Latitude, float $Longitude, string $StartTime, string $StopTime): bool
+    {
+        return $this->ExecuteVehicleCommand('charge-schedule-daily', [
+            'location' => $this->ValidateScheduleLocation($Latitude, $Longitude),
+            ...$this->ValidateScheduleWindow(['startTime' => $StartTime, 'stopTime' => $StopTime])
         ]);
+    }
+
+    public function SetWeeklyChargeSchedule(float $Latitude, float $Longitude, array $Days): bool
+    {
+        $location = $this->ValidateScheduleLocation($Latitude, $Longitude);
+        if ($Days === []) {
+            throw new InvalidArgumentException('Der Wochenplan benötigt mindestens einen Wochentag.');
+        }
+        $days = [];
+        foreach ($Days as $day => $window) {
+            if (!in_array($day, ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'], true) || !is_array($window)) {
+                throw new InvalidArgumentException('Ungültiger Wochentag oder ungültiges Zeitfenster.');
+            }
+            $days[$day] = $this->ValidateScheduleWindow($window);
+        }
+        return $this->ExecuteVehicleCommand('charge-schedule-weekly', ['location' => $location, 'days' => $days]);
+    }
+
+    public function SetWorkweekChargeSchedule(float $Latitude, float $Longitude, array $Weekdays, array $Weekends): bool
+    {
+        return $this->ExecuteVehicleCommand('charge-schedule-workweek', [
+            'location' => $this->ValidateScheduleLocation($Latitude, $Longitude),
+            'weekdays' => $this->ValidateScheduleWindow($Weekdays),
+            'weekends' => $this->ValidateScheduleWindow($Weekends)
+        ]);
+    }
+
+    public function DeleteChargeSchedule(string $ScheduleID): bool
+    {
+        $ScheduleID = trim($ScheduleID);
+        if ($ScheduleID === '' || preg_match('/[\x00-\x1f\x7f]/', $ScheduleID)) {
+            throw new InvalidArgumentException('Eine gültige Ladeplan-ID ist erforderlich.');
+        }
+        return $this->ExecuteVehicleCommand('charge-schedule-delete', ['scheduleId' => $ScheduleID]);
+    }
+
+    private function ValidateScheduleLocation(float $latitude, float $longitude): array
+    {
+        if (!is_finite($latitude) || $latitude < -90 || $latitude > 90 || !is_finite($longitude) || $longitude < -180 || $longitude > 180) {
+            throw new InvalidArgumentException('Ungültige Standortkoordinaten für den Ladeplan.');
+        }
+        return ['latitude' => $latitude, 'longitude' => $longitude];
+    }
+
+    private function ValidateScheduleWindow(array $window): array
+    {
+        foreach (['startTime', 'stopTime'] as $key) {
+            if (!isset($window[$key]) || !is_string($window[$key]) || !preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/D', $window[$key])) {
+                throw new InvalidArgumentException('Start und Ende müssen als HH:MM zwischen 00:00 und 23:59 angegeben werden.');
+            }
+        }
+        if (array_diff(array_keys($window), ['startTime', 'stopTime']) !== []) {
+            throw new InvalidArgumentException('Unbekanntes Feld im Ladezeitfenster.');
+        }
+        return ['startTime' => $window['startTime'], 'stopTime' => $window['stopTime']];
+    }
+
+    private function ExecuteScheduleAction(string $ident, string $json): bool
+    {
+        try {
+            $data = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
+        } catch (JsonException $e) {
+            throw new InvalidArgumentException('Der Ladeplan muss gültiges JSON enthalten.', 0, $e);
+        }
+        if (!is_array($data) || !is_array($data['location'] ?? null)) {
+            throw new InvalidArgumentException('Der Ladeplan benötigt einen Standort.');
+        }
+        foreach (['latitude', 'longitude'] as $key) {
+            if (!isset($data['location'][$key]) || (!is_int($data['location'][$key]) && !is_float($data['location'][$key]))) {
+                throw new InvalidArgumentException('Der Standort benötigt numerische latitude und longitude.');
+            }
+        }
+        $latitude = (float)$data['location']['latitude'];
+        $longitude = (float)$data['location']['longitude'];
+        if ($ident === 'CommandChargeScheduleDaily') {
+            $window = $this->ValidateScheduleWindow(array_diff_key($data, ['location' => true]));
+            return $this->SetDailyChargeSchedule($latitude, $longitude, $window['startTime'], $window['stopTime']);
+        }
+        if ($ident === 'CommandChargeScheduleWeekly' && is_array($data['days'] ?? null) && array_diff(array_keys($data), ['location','days']) === []) {
+            return $this->SetWeeklyChargeSchedule($latitude, $longitude, $data['days']);
+        }
+        if ($ident === 'CommandChargeScheduleWorkweek' && is_array($data['weekdays'] ?? null) && is_array($data['weekends'] ?? null) && array_diff(array_keys($data), ['location','weekdays','weekends']) === []) {
+            return $this->SetWorkweekChargeSchedule($latitude, $longitude, $data['weekdays'], $data['weekends']);
+        }
+        throw new InvalidArgumentException('Ungültige Ladeplan-Felder.');
+    }
+
+    private function RequireCommandSuccess(bool $success): void
+    {
+        if (!$success) {
+            throw new RuntimeException('Der Fahrzeugbefehl konnte nicht als erfolgreich bestätigt werden. Details stehen im Debugprotokoll; bei Timeout nicht automatisch wiederholen.');
+        }
     }
 
     public function LockDoors(): bool
@@ -157,9 +294,6 @@ class SmartcarVehicle extends IPSModuleStrict
         return $this->ExecuteVehicleCommand('security-unlock');
     }
 
-    /**
-     * Sendet geografische Koordinaten an das Navigationssystem des Fahrzeugs.
-     */
     public function SetNavigationDestination(float $Latitude, float $Longitude): bool
     {
         if (!is_finite($Latitude) || $Latitude < -90.0 || $Latitude > 90.0) {
@@ -176,10 +310,6 @@ class SmartcarVehicle extends IPSModuleStrict
         ]);
     }
 
-    /**
-     * Ruft alle Signale oder gezielt einen bzw. mehrere Signal-Codes ab.
-     * [] = kompletter /signals-Abruf
-     */
     public function FetchSelectedSignals(array $SignalCodes = []): bool
     {
         $SignalCodes = array_values(array_unique(array_filter(
@@ -263,8 +393,7 @@ class SmartcarVehicle extends IPSModuleStrict
         if (trim($this->ReadPropertyString('VehicleID')) === '') {
             return json_encode([
                 'elements' => [
-                    ['type' => 'Label', 'caption' => 'Diese Smartcar Fahrzeug-Instanz darf nicht manuell erstellt werden.'],
-                    ['type' => 'Label', 'caption' => 'Bitte löschen Sie diese Instanz wieder und erstellen Sie das Fahrzeug ausschließlich über den Smartcar-Konfigurator.']
+                    ['type' => 'Label', 'caption' => 'Fahrzeugzuordnung fehlt.']
                 ],
                 'actions' => []
             ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
@@ -293,10 +422,6 @@ class SmartcarVehicle extends IPSModuleStrict
                     'type' => 'CheckBox',
                     'name' => 'ShowOEMUpdatedAtVariables',
                     'caption' => 'OEM-Aktualisierungszeit je Signal als zusätzliche Variable anzeigen'
-                ],
-                [
-                    'type' => 'Label',
-                    'caption' => 'Die Signale und Berechtigungen werden ausschließlich über Smartcar → Configuration → Vehicle Access festgelegt. Erkannte Variablen sind standardmäßig aktiv und können hier gezielt abgewählt werden.'
                 ],
                 [
                     'type' => 'List',
@@ -403,10 +528,6 @@ class SmartcarVehicle extends IPSModuleStrict
                                 'type'   => 'Image',
                                 'onClick'=> "echo 'https://paypal.me/mbstern';",
                                 'image'=> "data:image/jpeg;base64,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"
-                        ],
-                        [
-                            'type'    => 'Label',
-                            'caption' => "Sag danke und unterstütze den Modulentwickler: paypal.me/mbstern"
                         ]
                     ]
                 ];
@@ -487,7 +608,6 @@ class SmartcarVehicle extends IPSModuleStrict
             }
         }
 
-        // Nur Webhooks berücksichtigen, die die Management API aktuell tatsächlich liefert.
         $desired = array_intersect_key($desired, $known);
 
         $toSubscribe = array_diff_key($desired, $current);
@@ -513,8 +633,6 @@ class SmartcarVehicle extends IPSModuleStrict
                 $messages[] = 'zugeordnet';
             }
         } else {
-            // Keine Änderung an den Häkchen: die weiterhin gewählten Webhooks neu abonnieren.
-            // Bei nur einem gewählten Webhook entspricht dies dem gewünschten "Neu laden".
             foreach (array_keys($desired) as $webhookId) {
                 $result = $this->ExecuteWebhookManagementCommandRaw('ReloadWebhook', $webhookId);
                 if (empty($result['success'])) {
@@ -528,10 +646,6 @@ class SmartcarVehicle extends IPSModuleStrict
             }
         }
 
-        // Formular hier bewusst NICHT sofort neu laden. Nach Remove/Create kann die
-        // Smartcar Management API die neue Subscription für einen kurzen Moment noch
-        // nicht in der Übersicht liefern. Ein sofortiges ReloadForm() würde dadurch
-        // den gerade gesetzten Haken wieder auf false zurücksetzen.
 
         if ($hasChanges) {
             return 'Webhook-Zuordnung wurde übernommen.';
@@ -618,8 +732,6 @@ class SmartcarVehicle extends IPSModuleStrict
             return 'Fehler: ' . ($error !== '' ? $error : (string)$result);
         }
 
-        // Create Subscription liefert 202 und wird von Smartcar asynchron verarbeitet.
-        // Formular neu laden, damit der aktuelle Management-API-Stand sichtbar wird.
         $this->ReloadForm();
 
         return $successText;
@@ -728,7 +840,6 @@ class SmartcarVehicle extends IPSModuleStrict
             0
         );
 
-        // Beim bewussten Abruf auch die aktuell autorisierten Steuerungen abgleichen.
         $this->ApplyVehicleAccessCommands();
         $selectionRowsAfter = $this->BuildVariableSelectionRows();
         if ($selectionRowsAfter !== $selectionRowsBefore) {
@@ -946,7 +1057,6 @@ class SmartcarVehicle extends IPSModuleStrict
                 continue;
             }
 
-            // false, 0 und "0" sind gültige Nutzwerte.
             if (is_bool($value) || is_int($value) || is_float($value)) {
                 return true;
             }
@@ -968,6 +1078,9 @@ class SmartcarVehicle extends IPSModuleStrict
         bool $logStatus = true
     ): bool
     {
+        if ($this->IsOlderSignal($code, $signalMeta)) {
+            return false;
+        }
         $statusValue = strtoupper((string)($status['value'] ?? ''));
         $verified = $status === null || $statusValue === '' || $statusValue === 'SUCCESS' || $statusValue === 'OK';
 
@@ -975,8 +1088,6 @@ class SmartcarVehicle extends IPSModuleStrict
         $variables = $this->GetVariablesFromDefinition($definition, $body);
 
         if (!$verified) {
-            // Ein Fehler darf keine neue Variable erzeugen. Bereits vorhandene,
-            // noch vom Modul benannte Variablen werden lediglich markiert.
             $this->SetExistingSignalVerificationState($code, $variables, false);
             if ($logStatus) {
                 $this->SendDebug(
@@ -999,17 +1110,18 @@ class SmartcarVehicle extends IPSModuleStrict
             return false;
         }
 
-        // Nur Untervariablen berücksichtigen, für die Smartcar tatsächlich
-        // einen Wert geliefert hat. Dadurch entstehen keine leeren Platzhalter.
         $variablesWithData = [];
         foreach ($variables as $variable) {
             $source = (string)($variable['source'] ?? 'value');
-            if (array_key_exists($source, $body)) {
+            if ($this->GetSignalVariableValue($variable, $body) !== null) {
                 $variablesWithData[] = $variable;
             }
         }
 
-        // Nur vom Benutzer aktivierte Variablen anlegen/aktualisieren.
+        if ($variablesWithData === [] && ($definition['known'] ?? true)) {
+            return false;
+        }
+
         $variablesWithData = array_values(array_filter(
             $variablesWithData,
             fn(array $variable): bool => $this->IsVariableEnabled((string)($variable['ident'] ?? ''))
@@ -1029,11 +1141,7 @@ class SmartcarVehicle extends IPSModuleStrict
             }
 
             $source = (string)($variable['source'] ?? 'value');
-            $value = $body[$source];
-
-            if (isset($variable['convert']) && is_callable($variable['convert'])) {
-                $value = $variable['convert']($body);
-            }
+            $value = $this->GetSignalVariableValue($variable, $body);
 
             if ($this->TypedVariableValueDiffers($ident, $value, (int)$variable['type'])) {
                 $changed = true;
@@ -1050,9 +1158,7 @@ class SmartcarVehicle extends IPSModuleStrict
             );
         }
 
-        // Unbekanntes Signal mit echtem Inhalt: den kompletten body als JSON
-        // anlegen. Auch hier nur, wenn tatsächlich Daten gekommen sind.
-        if (empty($variablesWithData) && !empty($body)) {
+        if (empty($variablesWithData) && !empty($body) && !($definition['known'] ?? true)) {
             $ident = (string)($definition['ident'] ?? '');
             if ($ident !== '' && $this->IsVariableEnabled($ident)) {
                 $value = json_encode($body, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
@@ -1083,10 +1189,11 @@ class SmartcarVehicle extends IPSModuleStrict
                 $stored = [];
             }
 
-            $oldTimestamp = (int)($stored[$code] ?? 0);
+            $preciseTimestamp = $this->GetSignalOrderTimestamp($signalMeta['oemUpdatedAt'] ?? null);
+            $oldTimestamp = (float)($stored[$code] ?? 0);
 
-            if ($oldTimestamp !== $oemTimestamp) {
-                $stored[$code] = $oemTimestamp;
+            if ($preciseTimestamp > $oldTimestamp) {
+                $stored[$code] = $preciseTimestamp;
                 $this->WriteAttributeString(
                     'LastOEMSignalTimes',
                     json_encode($stored, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
@@ -1141,8 +1248,6 @@ class SmartcarVehicle extends IPSModuleStrict
             return;
         }
 
-        // Beim Einschalten sofort aus den zuletzt empfangenen OEM-Zeitstempeln
-        // wiederherstellen. Dafür ist keine neue API-/Webhook-Abfrage nötig.
         $stored = json_decode($this->ReadAttributeString('LastOEMSignalTimes'), true);
         if (!is_array($stored)) {
             return;
@@ -1192,8 +1297,6 @@ class SmartcarVehicle extends IPSModuleStrict
     {
         $signalCode = strtolower(trim($signalCode));
 
-        // Feste Position pro Signal. Die Position hängt nicht davon ab,
-        // wann oder in welcher Reihenfolge ein Signal aktiviert wurde.
         $positions = [
             'tractionbattery-stateofcharge' => 100,
             'tractionbattery-range' => 200,
@@ -1298,8 +1401,6 @@ class SmartcarVehicle extends IPSModuleStrict
             return $positions[$signalCode];
         }
 
-        // Fallback für künftig unbekannte Signale:
-        // stabil aus dem Signalcode abgeleitet und außerhalb des festen Bereichs.
         return 20000 + ((int)sprintf('%u', crc32($signalCode)) % 2000) * 10;
     }
 
@@ -1445,8 +1546,6 @@ class SmartcarVehicle extends IPSModuleStrict
         $currentName = (string)(IPS_GetObject($id)['ObjectName'] ?? '');
         $previousModuleName = (string)($names[$ident] ?? '');
 
-        // Bestehende Installationen ohne Tracking nur übernehmen, wenn der Name noch
-        // eindeutig dem Modulstandard entspricht. Benutzerdefinierte Namen bleiben tabu.
         if ($previousModuleName === '') {
             if ($currentName !== $baseName && $currentName !== $baseName && $currentName !== $newModuleName) {
                 return;
@@ -1520,8 +1619,6 @@ class SmartcarVehicle extends IPSModuleStrict
                 continue;
             }
 
-            // Bereits bekannte Einträge nicht überschreiben; insbesondere bleiben
-            // der echte Smartcar-Signalcode und der Modul-Standardname erhalten.
             if (isset($discovered[$ident]) && is_array($discovered[$ident])) {
                 continue;
             }
@@ -1549,7 +1646,6 @@ class SmartcarVehicle extends IPSModuleStrict
                 json_encode($this->BuildVariableSelectionRows(), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
             );
         } catch (Throwable $e) {
-            // Das Konfigurationsformular ist nicht zwingend geöffnet.
         }
     }
 
@@ -1623,6 +1719,9 @@ class SmartcarVehicle extends IPSModuleStrict
 
     private function RememberSuccessfulSignal(string $code, array $body, ?array $status, array $meta): void
     {
+        if ($this->IsOlderSignal($code, $meta)) {
+            return;
+        }
         $definition = $this->GetSignalDefinition($code, $body);
         $variables = $this->GetVariablesFromDefinition($definition, $body);
         $discovered = $this->ReadDiscoveredVariables();
@@ -1631,7 +1730,7 @@ class SmartcarVehicle extends IPSModuleStrict
         foreach ($variables as $variable) {
             $source = (string)($variable['source'] ?? 'value');
             $ident = (string)($variable['ident'] ?? '');
-            if ($ident === '' || !array_key_exists($source, $body)) {
+            if ($ident === '' || $this->GetSignalVariableValue($variable, $body) === null) {
                 continue;
             }
             $found = true;
@@ -1644,7 +1743,7 @@ class SmartcarVehicle extends IPSModuleStrict
             ];
         }
 
-        if (!$found) {
+        if (!$found && !($definition['known'] ?? true)) {
             $ident = (string)($definition['ident'] ?? '');
             if ($ident !== '') {
                 $discovered[$ident] = [
@@ -1658,10 +1757,15 @@ class SmartcarVehicle extends IPSModuleStrict
         }
         $this->WriteDiscoveredVariables($discovered);
 
+        if (!$found && ($definition['known'] ?? true)) {
+            return;
+        }
         $cache = json_decode($this->ReadAttributeString('LastSuccessfulSignalPayloads'), true);
         if (!is_array($cache)) {
             $cache = [];
         }
+        $previousBody = is_array($cache[$code]['body'] ?? null) ? $cache[$code]['body'] : [];
+        $body = array_replace($previousBody, array_filter($body, static fn($value): bool => $value !== null));
         $cache[$code] = ['body' => $body, 'status' => $status, 'meta' => $meta];
         $this->WriteAttributeString('LastSuccessfulSignalPayloads', json_encode($cache, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
     }
@@ -1728,7 +1832,7 @@ class SmartcarVehicle extends IPSModuleStrict
         $definitions = $this->GetAvailableCommandDefinitions($permissions);
         $this->RememberAvailableCommands($definitions);
 
-        foreach (['CommandChargeStart','CommandChargeStop','CommandChargeLimit','CommandSecurityLock','CommandSecurityUnlock','CommandNavigationDestination'] as $ident) {
+        foreach (array_column($this->GetCommandDefinitions(), 'ident') as $ident) {
             $definition = $definitions[$ident] ?? null;
             $existingId = @$this->GetIDForIdent($ident);
 
@@ -1752,8 +1856,9 @@ class SmartcarVehicle extends IPSModuleStrict
                 $existingId = @$this->GetIDForIdent($ident);
             }
             if ($existingId && IPS_VariableExists($existingId)) {
-                // Die Position wird nur bei der erstmaligen Registrierung gesetzt.
-                // Eine spätere Benutzerposition darf nicht überschrieben werden.
+                if ($ident === 'CommandChargeLimit' && IPS_GetVariable($existingId)['VariableType'] === VARIABLETYPE_INTEGER) {
+                    $this->RegisterVariableInteger($ident, $definition['name'], $definition['profile']);
+                }
                 $this->EnableAction($ident);
             }
         }
@@ -1762,17 +1867,11 @@ class SmartcarVehicle extends IPSModuleStrict
     private function GetAvailableCommandDefinitions(array $permissions): array
     {
         $definitions = [];
-        if (in_array('control_charge', $permissions, true)) {
-            $definitions['CommandChargeStart'] = ['name'=>'Laden starten','type'=>VARIABLETYPE_BOOLEAN,'profile'=>'~Switch','position'=>50000,'source'=>'control_charge'];
-            $definitions['CommandChargeStop'] = ['name'=>'Laden stoppen','type'=>VARIABLETYPE_BOOLEAN,'profile'=>'~Switch','position'=>50010,'source'=>'control_charge'];
-            $definitions['CommandChargeLimit'] = ['name'=>'Ladelimit','type'=>VARIABLETYPE_INTEGER,'profile'=>'~Intensity.100','position'=>50020,'source'=>'control_charge'];
-        }
-        if (in_array('control_security', $permissions, true)) {
-            $definitions['CommandSecurityLock'] = ['name'=>'Fahrzeug verriegeln','type'=>VARIABLETYPE_BOOLEAN,'profile'=>'~Switch','position'=>50030,'source'=>'control_security'];
-            $definitions['CommandSecurityUnlock'] = ['name'=>'Fahrzeug entriegeln','type'=>VARIABLETYPE_BOOLEAN,'profile'=>'~Switch','position'=>50040,'source'=>'control_security'];
-        }
-        if (in_array('control_navigation', $permissions, true)) {
-            $definitions['CommandNavigationDestination'] = ['name'=>'Ziel setzen','type'=>VARIABLETYPE_STRING,'profile'=>'','position'=>50050,'source'=>'control_navigation'];
+        foreach ($this->GetCommandDefinitions() as $definition) {
+            if (in_array($definition['permission'], $permissions, true)) {
+                $definition['source'] = $definition['permission'];
+                $definitions[$definition['ident']] = $definition;
+            }
         }
         return $definitions;
     }
@@ -1811,7 +1910,6 @@ class SmartcarVehicle extends IPSModuleStrict
             if (is_numeric($value)) {
                 $ts = (int)$value;
 
-                // Smartcar Webhook-Zeitstempel können ms sein
                 if ($ts > 20000000000) {
                     $ts = (int)floor($ts / 1000);
                 }
@@ -1834,9 +1932,6 @@ class SmartcarVehicle extends IPSModuleStrict
         $type = VARIABLETYPE_STRING;
         $profile = '';
 
-        // Wurde ein unbekanntes Signal bereits ohne Nutzdaten als String angelegt,
-        // bleibt sein Typ stabil. Dadurch können spätere echte Werte nicht an einem
-        // Typwechsel scheitern. Benutzerarchive bleiben ebenfalls erhalten.
         $existingId = @$this->GetIDForIdent($ident);
         if ($existingId) {
             $existingVariable = IPS_GetVariable($existingId);
@@ -1852,7 +1947,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 $type = VARIABLETYPE_BOOLEAN;
                 $profile = '~Switch';
             } elseif (is_int($value)) {
-                $type = VARIABLETYPE_INTEGER;
+                $type = VARIABLETYPE_FLOAT;
             } elseif (is_float($value) || is_numeric($value)) {
                 $type = VARIABLETYPE_FLOAT;
             }
@@ -1863,7 +1958,8 @@ class SmartcarVehicle extends IPSModuleStrict
             'name'    => $code,
             'type'    => $type,
             'profile' => $profile,
-            'factor'  => 1
+            'factor'  => 1,
+            'known'   => false
         ];
     }
 
@@ -1888,25 +1984,18 @@ class SmartcarVehicle extends IPSModuleStrict
             return false;
         }
 
+        $permissions = json_decode($this->ReadPropertyString('Permissions'), true);
+        $permissions = is_array($permissions) ? array_map(static fn($p): string => strtolower(trim((string)$p)), $permissions) : [];
+        if (!in_array($definition['permission'], $permissions, true)) {
+            $this->SendDebug('Command/Error', 'Steuerberechtigung fehlt: ' . $definition['permission'], 0);
+            return false;
+        }
+        $path = $definition['path'];
         $body = null;
-
-        if ($command === 'charge-set-limit') {
-            $body = [
-                'data' => [
-                    'attributes' => [
-                        'percent' => (int)($params['percent'] ?? 80)
-                    ]
-                ]
-            ];
-        } elseif ($command === 'navigation-set-destination') {
-            $body = [
-                'data' => [
-                    'attributes' => [
-                        'latitude' => (float)($params['latitude'] ?? 0.0),
-                        'longitude' => (float)($params['longitude'] ?? 0.0)
-                    ]
-                ]
-            ];
+        if ($command === 'charge-schedule-delete') {
+            $path = str_replace('{scheduleId}', rawurlencode($params['scheduleId']), $path);
+        } elseif ($params !== []) {
+            $body = ['data' => ['attributes' => $params]];
         }
 
         $request = [
@@ -1914,8 +2003,8 @@ class SmartcarVehicle extends IPSModuleStrict
             'Command'   => 'Command',
             'VehicleID' => $vehicleId,
             'UserID'    => $userId,
-            'Method'    => 'POST',
-            'Path'      => $definition['path']
+            'Method'    => $definition['method'],
+            'Path'      => $path
         ];
 
         if ($body !== null) {
@@ -1933,58 +2022,35 @@ class SmartcarVehicle extends IPSModuleStrict
             return false;
         }
 
+        if (($decoded['body']['data']['attributes']['status']['value'] ?? null) !== 'SUCCESS') {
+            return false;
+        }
         $this->ApplyVehicleAccessCommands();
 
         return true;
     }
 
+    private function GetCommandDefinitions(): array
+    {
+        return [
+            'charge-start' => ['ident'=>'CommandChargeStart', 'name'=>'Laden starten', 'type'=>VARIABLETYPE_BOOLEAN, 'profile'=>'~Switch', 'path'=>'/commands/charge/start', 'permission'=>'control_charge', 'position'=>50000, 'method'=>'POST'],
+            'charge-stop' => ['ident'=>'CommandChargeStop', 'name'=>'Laden stoppen', 'type'=>VARIABLETYPE_BOOLEAN, 'profile'=>'~Switch', 'path'=>'/commands/charge/stop', 'permission'=>'control_charge', 'position'=>50010, 'method'=>'POST'],
+            'charge-set-limit' => ['ident'=>'CommandChargeLimit', 'name'=>'Ladelimit setzen', 'type'=>VARIABLETYPE_INTEGER, 'profile'=>'SMCAR.ChargeLimit', 'path'=>'/commands/charge/set-limit', 'permission'=>'control_charge', 'position'=>50020, 'method'=>'POST'],
+            'security-lock' => ['ident'=>'CommandSecurityLock', 'name'=>'Fahrzeug verriegeln', 'type'=>VARIABLETYPE_BOOLEAN, 'profile'=>'~Switch', 'path'=>'/commands/security/lock', 'permission'=>'control_security', 'position'=>50030, 'method'=>'POST'],
+            'security-unlock' => ['ident'=>'CommandSecurityUnlock', 'name'=>'Fahrzeug entriegeln', 'type'=>VARIABLETYPE_BOOLEAN, 'profile'=>'~Switch', 'path'=>'/commands/security/unlock', 'permission'=>'control_security', 'position'=>50040, 'method'=>'POST'],
+            'navigation-set-destination' => ['ident'=>'CommandNavigationDestination', 'name'=>'Ziel setzen', 'type'=>VARIABLETYPE_STRING, 'profile'=>'', 'path'=>'/commands/navigation/set-destination', 'permission'=>'control_navigation', 'position'=>50050, 'method'=>'POST'],
+            'charge-port-open' => ['ident'=>'CommandChargePortOpen', 'name'=>'Ladeport öffnen', 'type'=>VARIABLETYPE_BOOLEAN, 'profile'=>'~Switch', 'path'=>'/commands/charge-port/open', 'permission'=>'control_charge', 'position'=>50060, 'method'=>'POST'],
+            'charge-port-close' => ['ident'=>'CommandChargePortClose', 'name'=>'Ladeport schließen', 'type'=>VARIABLETYPE_BOOLEAN, 'profile'=>'~Switch', 'path'=>'/commands/charge-port/close', 'permission'=>'control_charge', 'position'=>50070, 'method'=>'POST'],
+            'charge-schedule-daily' => ['ident'=>'CommandChargeScheduleDaily', 'name'=>'Täglichen Ladeplan setzen', 'type'=>VARIABLETYPE_STRING, 'profile'=>'', 'path'=>'/charge-schedules/daily', 'permission'=>'control_charge', 'position'=>50080, 'method'=>'POST'],
+            'charge-schedule-weekly' => ['ident'=>'CommandChargeScheduleWeekly', 'name'=>'Wochenladeplan setzen', 'type'=>VARIABLETYPE_STRING, 'profile'=>'', 'path'=>'/charge-schedules/weekly', 'permission'=>'control_charge', 'position'=>50090, 'method'=>'POST'],
+            'charge-schedule-workweek' => ['ident'=>'CommandChargeScheduleWorkweek', 'name'=>'Werktag-/Wochenendladeplan setzen', 'type'=>VARIABLETYPE_STRING, 'profile'=>'', 'path'=>'/charge-schedules/workweek', 'permission'=>'control_charge', 'position'=>50100, 'method'=>'POST'],
+            'charge-schedule-delete' => ['ident'=>'CommandChargeScheduleDelete', 'name'=>'Ladeplan löschen (ID)', 'type'=>VARIABLETYPE_STRING, 'profile'=>'', 'path'=>'/charge-schedules/{scheduleId}', 'permission'=>'control_charge', 'position'=>50110, 'method'=>'DELETE'],
+        ];
+    }
+
     private function GetCommandDefinition(string $command): array
     {
-        return match (strtolower($command)) {
-            'charge-start' => [
-                'ident' => 'CommandChargeStart',
-                'name'  => 'Laden starten',
-                'type'  => VARIABLETYPE_BOOLEAN,
-                'profile' => '~Switch',
-                'path'  => '/commands/charge/start'
-            ],
-            'charge-stop' => [
-                'ident' => 'CommandChargeStop',
-                'name'  => 'Laden stoppen',
-                'type'  => VARIABLETYPE_BOOLEAN,
-                'profile' => '~Switch',
-                'path'  => '/commands/charge/stop'
-            ],
-            'charge-set-limit' => [
-                'ident' => 'CommandChargeLimit',
-                'name'  => 'Ladelimit setzen',
-                'type'  => VARIABLETYPE_INTEGER,
-                'profile' => 'SMCAR.Progress',
-                'path'  => '/commands/charge/set-limit'
-            ],
-            'security-lock' => [
-                'ident' => 'CommandSecurityLock',
-                'name'  => 'Fahrzeug verriegeln',
-                'type'  => VARIABLETYPE_BOOLEAN,
-                'profile' => '~Switch',
-                'path'  => '/commands/security/lock'
-            ],
-            'security-unlock' => [
-                'ident' => 'CommandSecurityUnlock',
-                'name'  => 'Fahrzeug entriegeln',
-                'type'  => VARIABLETYPE_BOOLEAN,
-                'profile' => '~Switch',
-                'path'  => '/commands/security/unlock'
-            ],
-            'navigation-set-destination' => [
-                'ident' => 'CommandNavigationDestination',
-                'name'  => 'Ziel setzen',
-                'type'  => VARIABLETYPE_STRING,
-                'profile' => '', // kein Standardprofil sinnvoll
-                'path'  => '/commands/navigation/set-destination'
-            ],
-            default => []
-        };
+        return $this->GetCommandDefinitions()[strtolower($command)] ?? [];
     }
 
     private function GetCommandKeyFromCapability(array $entry): string
@@ -2012,6 +2078,18 @@ class SmartcarVehicle extends IPSModuleStrict
         IPS_SetVariableProfileText('SMCAR.Progress', '', ' %');
         IPS_SetVariableProfileDigits('SMCAR.Progress', 0);
         IPS_SetVariableProfileValues('SMCAR.Progress', 0, 100, 1);
+
+        if (!IPS_VariableProfileExists('SMCAR.ChargeLimit')) {
+            IPS_CreateVariableProfile('SMCAR.ChargeLimit', VARIABLETYPE_INTEGER);
+        }
+        IPS_SetVariableProfileText('SMCAR.ChargeLimit', '', ' %');
+        IPS_SetVariableProfileValues('SMCAR.ChargeLimit', 50, 100, 1);
+
+        if (!IPS_VariableProfileExists('SMCAR.DurationMinutes')) {
+            IPS_CreateVariableProfile('SMCAR.DurationMinutes', VARIABLETYPE_FLOAT);
+        }
+        IPS_SetVariableProfileText('SMCAR.DurationMinutes', '', ' min');
+        IPS_SetVariableProfileDigits('SMCAR.DurationMinutes', 1);
 
         if (!IPS_VariableProfileExists('SMCAR.Odometer')) {
             IPS_CreateVariableProfile('SMCAR.Odometer', VARIABLETYPE_FLOAT);
@@ -2081,8 +2159,6 @@ class SmartcarVehicle extends IPSModuleStrict
             $created = true;
             $initialPosition = $position ?? 0;
 
-            // Position ausschließlich als Initialwert registrieren. RegisterVariable*
-            // lässt die spätere, vom Benutzer gewählte Objektposition unangetastet.
             switch ($type) {
                 case VARIABLETYPE_BOOLEAN:
                     $this->RegisterVariableBoolean($ident, $name, $profile, $initialPosition);
@@ -2141,7 +2217,119 @@ class SmartcarVehicle extends IPSModuleStrict
         };
     }
 
+    private function GetSignalOrderTimestamp(mixed $value): float
+    {
+        if ($value === null || $value === '') {
+            return 0;
+        }
+        try {
+            if (is_numeric($value)) {
+                $time = (float)$value;
+                return $time > 20000000000 ? $time / 1000 : $time;
+            }
+            return (float)(new DateTimeImmutable((string)$value))->format('U.u');
+        } catch (Throwable $e) {
+            return 0;
+        }
+    }
+
+    private function IsOlderSignal(string $code, array $meta): bool
+    {
+        $incoming = $this->GetSignalOrderTimestamp($meta['oemUpdatedAt'] ?? null);
+        $stored = json_decode($this->ReadAttributeString('LastOEMSignalTimes'), true);
+        return $incoming > 0 && is_array($stored) && $incoming < (float)($stored[$code] ?? 0);
+    }
+
+    private function GetSignalVariableValue(array $variable, array $body): mixed
+    {
+        $source = (string)($variable['source'] ?? 'value');
+        if (!array_key_exists($source, $body) || $body[$source] === null) {
+            return null;
+        }
+        $value = isset($variable['convert']) ? ($variable['convert'])($body) : $body[$source];
+        if ($value === null) {
+            return null;
+        }
+        $type = (int)$variable['type'];
+        if (in_array($type, [VARIABLETYPE_INTEGER, VARIABLETYPE_FLOAT], true) && (!is_numeric($value) || !is_finite((float)$value))) {
+            return null;
+        }
+        if ($type === VARIABLETYPE_BOOLEAN && !is_bool($value)) {
+            return null;
+        }
+        return $value;
+    }
+
     private function GetSignalDefinition(string $code, array $body = []): array
+    {
+        $code = strtolower($code);
+        if ($code === 'location-isathome') {
+            return ['known'=>true, 'ident'=>'IsAtHome', 'name'=>'Fahrzeug zu Hause', 'type'=>VARIABLETYPE_BOOLEAN, 'profile'=>'~Switch'];
+        }
+        $diagnostics = ['oillife'=>'Öl-Lebensdauer', 'oilpressure'=>'Öldruck', 'oiltemperature'=>'Öltemperatur', 'waterinfuel'=>'Wasser im Kraftstoff'];
+        if (str_starts_with($code, 'diagnostics-') && isset($diagnostics[substr($code, 12)])) {
+            $key = substr($code, 12);
+            $ident = ['oillife'=>'DiagnosticsOilLife', 'oilpressure'=>'DiagnosticsOilPressure', 'oiltemperature'=>'DiagnosticsOilTemperature', 'waterinfuel'=>'DiagnosticsWaterInFuel'][$key];
+            $definition = ['ident'=>$ident, 'name'=>$diagnostics[$key] . ' – Diagnose', 'type'=>VARIABLETYPE_STRING, 'profile'=>'', 'source'=>'status'];
+        } else {
+            $definition = $this->GetBaseSignalDefinition($code, $body);
+        }
+        if (!($definition['known'] ?? true)) {
+            return $definition;
+        }
+        $definition['known'] = true;
+        if ($code === 'charge-chargelimits') {
+            $legacyID = @$this->GetIDForIdent('ChargeLimit');
+            if ($legacyID && IPS_GetVariable($legacyID)['VariableType'] !== VARIABLETYPE_FLOAT) {
+                $definition['ident'] = 'ChargeLimitPercent';
+            }
+        }
+        $variables = $this->GetVariablesFromDefinition($definition, $body);
+        if ($code === 'wheel-tires') {
+            $variables = [];
+            foreach (($body['values'] ?? []) as $tire) {
+                if (!is_array($tire) || !isset($tire['row'], $tire['column'], $tire['tirePressure']) || !is_numeric($tire['tirePressure']) || !is_numeric($tire['row']) || !is_numeric($tire['column']) || (float)$tire['row'] !== (float)(int)$tire['row'] || (float)$tire['column'] !== (float)(int)$tire['column'] || $tire['row'] < 0 || $tire['column'] < 0) {
+                    continue;
+                }
+                $row = (int)$tire['row']; $column = (int)$tire['column'];
+                $idents = ['0:0'=>'TireFrontLeft', '0:1'=>'TireFrontRight', '1:0'=>'TireBackLeft', '1:1'=>'TireBackRight'];
+                $ident = $idents[$row . ':' . $column] ?? ('TireRow' . $row . 'Column' . $column);
+                $variables[] = ['ident'=>$ident, 'name'=>'Reifendruck Achse ' . ($row+1) . ', Position ' . ($column+1), 'type'=>VARIABLETYPE_FLOAT, 'profile'=>'SMCAR.Pressure', 'source'=>'values',
+                    'convert'=>static function (array $data) use ($row, $column): ?float {
+                        foreach (($data['values'] ?? []) as $entry) {
+                            if (is_array($entry) && isset($entry['row'], $entry['column']) && is_numeric($entry['row']) && is_numeric($entry['column']) && (float)$entry['row'] === (float)$row && (float)$entry['column'] === (float)$column && isset($entry['tirePressure']) && is_numeric($entry['tirePressure'])) {
+                                return (float)$entry['tirePressure'] * 0.01;
+                            }
+                        }
+                        return null;
+                    }];
+            }
+        }
+        $extra = match ($code) {
+            'charge-chargelimits' => [['ChargeLimitsValues','Ladelimit-Varianten','values',VARIABLETYPE_STRING,'']],
+            'tractionbattery-range' => [['BatteryRangeAdditionalValues','Zusätzliche Batterie-Reichweiten','additionalValues',VARIABLETYPE_STRING,'']],
+            'tractionbattery-nominalcapacity' => [['BatteryCapacitySource','Quelle der Batteriekapazität','source',VARIABLETYPE_STRING,''],['BatteryAvailableCapacities','Verfügbare Batteriekapazitäten','availableCapacities',VARIABLETYPE_STRING,'']],
+            'transmission-drivemode' => [['DriveModeOEM','Herstellerbezeichnung Fahrmodus','oemDisplayName',VARIABLETYPE_STRING,'']],
+            'closure-fronttrunk' => [['FrontTrunkLocked','Front-Kofferraum verriegelt','isLocked',VARIABLETYPE_BOOLEAN,'~Lock']],
+            'closure-reartrunk' => [['RearTrunkLocked','Heck-Kofferraum verriegelt','isLocked',VARIABLETYPE_BOOLEAN,'~Lock']],
+            'closure-tailgate' => [['TailgateLocked','Heckklappe verriegelt','isLocked',VARIABLETYPE_BOOLEAN,'~Lock']],
+            'location-preciselocation' => [['LocationHeading','Fahrtrichtung (Grad)','heading',VARIABLETYPE_FLOAT,''],['LocationDirection','Fahrtrichtung','direction',VARIABLETYPE_STRING,''],['LocationType','Standorttyp','locationType',VARIABLETYPE_STRING,'']],
+            default => []
+        };
+        if (str_starts_with($code, 'diagnostics-') && ($definition['source'] ?? '') === 'status') {
+            $extra[] = [$definition['ident'] . 'Description', $definition['name'] . ' – Beschreibung', 'description', VARIABLETYPE_STRING, ''];
+        }
+        foreach ($extra as [$ident, $name, $source, $type, $profile]) {
+            $variables[] = compact('ident','name','source','type','profile');
+        }
+        if (count($variables) !== 1 || ($definition['special'] ?? '') === 'multiple') {
+            $definition['special'] = 'multiple';
+            $definition['variables'] = $variables;
+        }
+        return $definition;
+    }
+
+    private function GetBaseSignalDefinition(string $code, array $body = []): array
     {
         $code = strtolower($code);
 
@@ -2176,7 +2364,6 @@ class SmartcarVehicle extends IPSModuleStrict
         };
 
         return match ($code) {
-            // ---------- Batterie ----------
             'tractionbattery-stateofcharge' => [
                 'ident' => 'BatteryLevel',
                 'name' => 'Batterieladestand (SOC)',
@@ -2224,7 +2411,6 @@ class SmartcarVehicle extends IPSModuleStrict
                 'convert' => fn(array $body) => json_encode($body['values'] ?? [], JSON_UNESCAPED_UNICODE)
             ],
 
-            // ---------- Laden ----------
             'charge-detailedchargingstatus' => [
                 'ident' => 'ChargeStatus',
                 'name' => 'Ladestatus',
@@ -2296,7 +2482,8 @@ class SmartcarVehicle extends IPSModuleStrict
                 'ident' => 'ChargeWattage',
                 'name' => 'Ladeleistung',
                 'type' => VARIABLETYPE_FLOAT,
-                'profile' => 'SMCAR.Power'
+                'profile' => 'SMCAR.Power',
+                'convert' => fn(array $body) => strtolower((string)($body['unit'] ?? 'watts')) === 'kw' ? (float)$body['value'] : (float)$body['value'] / 1000
             ],
 
             'charge-energyadded' => [
@@ -2307,11 +2494,10 @@ class SmartcarVehicle extends IPSModuleStrict
             ],
 
             'charge-timetocomplete' => [
-                'ident' => 'ChargeTimeToComplete',
-                'name' => 'Fertiggeladen',
-                'type' => VARIABLETYPE_STRING,
-                'profile' => '',
-                'convert' => $timeToComplete
+                'ident' => 'ChargeTimeRemainingMinutes',
+                'name' => 'Verbleibende Ladezeit',
+                'type' => VARIABLETYPE_FLOAT,
+                'profile' => 'SMCAR.DurationMinutes'
             ],
 
             'charge-fastchargertype' => [
@@ -2373,8 +2559,8 @@ class SmartcarVehicle extends IPSModuleStrict
                 'name' => 'Ladeport-Klappe',
                 'type' => VARIABLETYPE_STRING,
                 'profile' => 'SMCAR.Status',
-                'source' => 'isOpen',
-                'convert' => $openClosed
+                'source' => 'value',
+                'convert' => fn(array $body) => $body['value'] ? 'OPEN' : 'CLOSED'
             ],
 
             'charge-chargeportstatuscolor',
@@ -2385,7 +2571,6 @@ class SmartcarVehicle extends IPSModuleStrict
                 'profile' => ''
             ],
 
-            // ---------- Standort ----------
             'location-preciselocation' => [
                 'special' => 'multiple',
                 'variables' => [
@@ -2406,7 +2591,6 @@ class SmartcarVehicle extends IPSModuleStrict
                 ]
             ],
 
-            // ---------- Kilometerstand ----------
             'odometer-traveleddistance' => [
                 'ident' => 'Odometer',
                 'name' => 'Kilometerstand',
@@ -2415,7 +2599,6 @@ class SmartcarVehicle extends IPSModuleStrict
                 'convert' => $milesToKm
             ],
 
-            // ---------- Security / Closure ----------
             'closure-islocked' => [
                 'ident' => 'DoorsLocked',
                 'name' => 'Fahrzeug verriegelt',
@@ -2428,6 +2611,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 'name' => 'Türen',
                 'type' => VARIABLETYPE_STRING,
                 'profile' => '',
+                'source' => 'doors',
                 'convert' => fn(array $body) => json_encode($body, JSON_UNESCAPED_UNICODE)
             ],
 
@@ -2436,6 +2620,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 'name' => 'Fenster',
                 'type' => VARIABLETYPE_STRING,
                 'profile' => '',
+                'source' => 'windows',
                 'convert' => fn(array $body) => json_encode($body, JSON_UNESCAPED_UNICODE)
             ],
 
@@ -2453,6 +2638,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 'name' => 'Motorhaube',
                 'type' => VARIABLETYPE_STRING,
                 'profile' => '',
+                'source' => 'isOpen',
                 'convert' => fn(array $body) => json_encode($body, JSON_UNESCAPED_UNICODE)
             ],
 
@@ -2461,6 +2647,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 'name' => 'Front-Kofferraum',
                 'type' => VARIABLETYPE_STRING,
                 'profile' => '',
+                'source' => 'isOpen',
                 'convert' => fn(array $body) => json_encode($body, JSON_UNESCAPED_UNICODE)
             ],
 
@@ -2469,6 +2656,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 'name' => 'Heck-Kofferraum',
                 'type' => VARIABLETYPE_STRING,
                 'profile' => '',
+                'source' => 'isOpen',
                 'convert' => fn(array $body) => json_encode($body, JSON_UNESCAPED_UNICODE)
             ],
 
@@ -2477,10 +2665,10 @@ class SmartcarVehicle extends IPSModuleStrict
                 'name' => 'Heckklappe',
                 'type' => VARIABLETYPE_STRING,
                 'profile' => '',
+                'source' => 'isOpen',
                 'convert' => fn(array $body) => json_encode($body, JSON_UNESCAPED_UNICODE)
             ],
 
-            // ---------- Connectivity ----------
             'connectivitystatus-isonline' => [
                 'ident' => 'IsOnline',
                 'name' => 'Online',
@@ -2509,7 +2697,6 @@ class SmartcarVehicle extends IPSModuleStrict
                 'profile' => ''
             ],
 
-            // ---------- ICE ----------
             'internalcombustionengine-fuellevel' => [
                 'ident' => 'FuelLevel',
                 'name' => 'Tankfüllstand',
@@ -2545,7 +2732,6 @@ class SmartcarVehicle extends IPSModuleStrict
                 'profile' => '~Switch'
             ],
 
-            // ---------- Klima ----------
             'climatecontrol-isheateractive',
             'tractionbattery-isheateractive' => [
                 'ident' => 'IsHeaterActive',
@@ -2568,52 +2754,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 'profile' => '~Temperature'
             ],
 
-            // ---------- Reifen ----------
-            'wheel-tires' => [
-                'special' => 'multiple',
-                'variables' => [
-                    [
-                        'ident' => 'TireFrontLeft',
-                        'name' => 'Reifendruck Vorderreifen Links',
-                        'type' => VARIABLETYPE_FLOAT,
-                        'profile' => 'SMCAR.Pressure',
-                        'source' => 'values',
-                        'convert' => fn(array $body) => (float)(array_values(array_filter($body['values'] ?? [], fn($v) =>
-                            is_array($v) && (int)($v['row'] ?? -1) === 0 && (int)($v['column'] ?? -1) === 0
-                        ))[0]['tirePressure'] ?? 0) * 0.01
-                    ],
-                    [
-                        'ident' => 'TireFrontRight',
-                        'name' => 'Reifendruck Vorderreifen Rechts',
-                        'type' => VARIABLETYPE_FLOAT,
-                        'profile' => 'SMCAR.Pressure',
-                        'source' => 'values',
-                        'convert' => fn(array $body) => (float)(array_values(array_filter($body['values'] ?? [], fn($v) =>
-                            is_array($v) && (int)($v['row'] ?? -1) === 0 && (int)($v['column'] ?? -1) === 1
-                        ))[0]['tirePressure'] ?? 0) * 0.01
-                    ],
-                    [
-                        'ident' => 'TireBackLeft',
-                        'name' => 'Reifendruck Hinterreifen Links',
-                        'type' => VARIABLETYPE_FLOAT,
-                        'profile' => 'SMCAR.Pressure',
-                        'source' => 'values',
-                        'convert' => fn(array $body) => (float)(array_values(array_filter($body['values'] ?? [], fn($v) =>
-                            is_array($v) && (int)($v['row'] ?? -1) === 1 && (int)($v['column'] ?? -1) === 0
-                        ))[0]['tirePressure'] ?? 0) * 0.01
-                    ],
-                    [
-                        'ident' => 'TireBackRight',
-                        'name' => 'Reifendruck Hinterreifen Rechts',
-                        'type' => VARIABLETYPE_FLOAT,
-                        'profile' => 'SMCAR.Pressure',
-                        'source' => 'values',
-                        'convert' => fn(array $body) => (float)(array_values(array_filter($body['values'] ?? [], fn($v) =>
-                            is_array($v) && (int)($v['row'] ?? -1) === 1 && (int)($v['column'] ?? -1) === 1
-                        ))[0]['tirePressure'] ?? 0) * 0.01
-                    ]
-                ]
-            ],
+            'wheel-tires' => ['special' => 'multiple', 'variables' => []],
 
             'wheel-style' => [
                 'ident' => 'WheelStyle',
@@ -2622,7 +2763,6 @@ class SmartcarVehicle extends IPSModuleStrict
                 'profile' => ''
             ],
 
-            // ---------- Vehicle Identification ----------
             'vehicleidentification-vin' => [
                 'ident' => 'VIN',
                 'name' => 'Fahrgestellnummer (VIN)',
@@ -2681,12 +2821,12 @@ class SmartcarVehicle extends IPSModuleStrict
                 'profile' => ''
             ],
 
-            // ---------- Vehicle User Account ----------
             'vehicleuseraccount-permissions' => [
                 'ident' => 'VehicleUserPermissions',
                 'name' => 'Benutzer-Berechtigungen',
                 'type' => VARIABLETYPE_STRING,
                 'profile' => '',
+                'source' => 'values',
                 'convert' => fn(array $body) => json_encode($body, JSON_UNESCAPED_UNICODE)
             ],
 
@@ -2697,7 +2837,6 @@ class SmartcarVehicle extends IPSModuleStrict
                 'profile' => ''
             ],
 
-            // ---------- Niedervolt-Batterie ----------
             'lowvoltagebattery-stateofcharge' => [
                 'ident' => 'LowVoltageBatteryLevel',
                 'name' => '12V-Batterie',
@@ -2705,7 +2844,6 @@ class SmartcarVehicle extends IPSModuleStrict
                 'profile' => 'SMCAR.Progress'
             ],
 
-            // ---------- ICE Erweiterungen ----------
             'internalcombustionengine-amountremaining' => [
                 'ident' => 'FuelAmountRemaining',
                 'name' => 'Kraftstoffmenge',
@@ -2728,7 +2866,6 @@ class SmartcarVehicle extends IPSModuleStrict
                 'convert' => $milesToKm
             ],
 
-            // ---------- Getriebe ----------
             'transmission-gearstate' => [
                 'ident' => 'GearState',
                 'name' => 'Gang / Fahrstufe',
@@ -2740,10 +2877,10 @@ class SmartcarVehicle extends IPSModuleStrict
                     'ident' => 'DriveMode',
                     'name' => 'Fahrmodus',
                     'type' => VARIABLETYPE_STRING,
-                    'profile' => ''
+                    'profile' => '',
+                    'source' => 'canonical'
                 ],
 
-            // ---------- Überwachung ----------
             'surveillance-isenabled' => [
                 'ident' => 'SurveillanceEnabled',
                 'name' => 'Überwachung aktiv',
@@ -2758,7 +2895,6 @@ class SmartcarVehicle extends IPSModuleStrict
                 'profile' => ''
             ],
 
-            // ---------- Diagnostics ----------
             'diagnostics-dtccount' => [
                 'ident' => 'DTCCount',
                 'name' => 'Anzahl Fehlercodes',
@@ -2879,7 +3015,6 @@ class SmartcarVehicle extends IPSModuleStrict
                 'source' => 'status'
             ],
 
-            'diagnostics-oillife',
             'internalcombustionengine-oillife' => [
                 'ident' => 'OilLife',
                 'name' => 'Öl-Lebensdauer',
@@ -2887,7 +3022,6 @@ class SmartcarVehicle extends IPSModuleStrict
                 'profile' => 'SMCAR.Progress'
             ],
 
-            'diagnostics-oilpressure',
             'internalcombustionengine-oilpressure' => [
                 'ident' => 'OilPressure',
                 'name' => 'Öldruck',
@@ -2895,7 +3029,6 @@ class SmartcarVehicle extends IPSModuleStrict
                 'profile' => ''
             ],
 
-            'diagnostics-oiltemperature',
             'internalcombustionengine-oiltemperature' => [
                 'ident' => 'OilTemperature',
                 'name' => 'Öltemperatur',
@@ -2943,7 +3076,6 @@ class SmartcarVehicle extends IPSModuleStrict
                 'source' => 'status'
             ],
 
-            'diagnostics-waterinfuel',
             'internalcombustionengine-waterinfuel' => [
                 'ident' => 'WaterInFuel',
                 'name' => 'Wasser im Kraftstoff',
@@ -2951,7 +3083,6 @@ class SmartcarVehicle extends IPSModuleStrict
                 'profile' => '~Switch'
             ],
 
-            // ---------- HVAC ----------
             'hvac-cabintargettemperature' => [
                 'ident' => 'CabinTargetTemperature',
                 'name' => 'Zieltemperatur Innenraum',
@@ -2987,7 +3118,6 @@ class SmartcarVehicle extends IPSModuleStrict
                 'profile' => '~Switch'
             ],
 
-            // ---------- Motion ----------
             'motion-currentspeed' => [
                 'ident' => 'CurrentSpeed',
                 'name' => 'Aktuelle Geschwindigkeit',
@@ -2995,7 +3125,6 @@ class SmartcarVehicle extends IPSModuleStrict
                 'profile' => ''
             ],
 
-            // ---------- Service ----------
             'service-isinservice' => [
                 'ident' => 'IsInService',
                 'name' => 'In Werkstatt / Service',

@@ -1,0 +1,1019 @@
+{
+  "source": "https://smartcar.com/docs/specs/full-vehicle.yaml",
+  "retrieved": "2026-10-10",
+  "signals": [
+    {
+      "code": "charge-amperage",
+      "body": {
+        "value": 33,
+        "unit": "ampere"
+      }
+    },
+    {
+      "code": "charge-amperagemax",
+      "body": {
+        "value": 48,
+        "unit": "ampere"
+      }
+    },
+    {
+      "code": "charge-amperagerequested",
+      "body": {
+        "value": 48,
+        "unit": "ampere"
+      }
+    },
+    {
+      "code": "charge-chargelimits",
+      "body": {
+        "activeLimit": 80,
+        "values": [
+          {
+            "type": "GLOBAL",
+            "limit": 80
+          },
+          {
+            "type": "LOCATION",
+            "condition": {
+              "name": "Home",
+              "address": "123 2nd street",
+              "latitude": 90,
+              "longitude": 90
+            },
+            "limit": 72
+          },
+          {
+            "type": "CHARGING_TYPE",
+            "condition": {
+              "chargingType": "AC"
+            },
+            "limit": 52
+          }
+        ],
+        "unit": "percent"
+      }
+    },
+    {
+      "code": "charge-chargeportstatuscolor",
+      "body": {
+        "value": "Green"
+      }
+    },
+    {
+      "code": "charge-chargerate",
+      "body": {
+        "value": 48,
+        "unit": "km/h"
+      }
+    },
+    {
+      "code": "charge-chargerecords",
+      "body": {
+        "values": [
+          {
+            "startTime": "2023-10-15T19:30:00Z",
+            "endTime": "2023-10-16T06:45:00Z",
+            "startStateOfCharge": 25,
+            "endStateOfCharge": 90,
+            "energyAdded": 65.2,
+            "isPublicCharger": false,
+            "chargingType": "DC",
+            "cost": {
+              "currency": "GBP",
+              "energyAmount": 12.56,
+              "otherAmount": 0
+            },
+            "location": {
+              "latitude": 51.5014,
+              "longitude": -0.1419,
+              "name": "Home",
+              "address": "123 Park Lane, London SW1A 1AA"
+            },
+            "id": "CHG-20231015-A39B"
+          }
+        ]
+      }
+    },
+    {
+      "code": "charge-chargerphases",
+      "body": {
+        "value": 3
+      }
+    },
+    {
+      "code": "charge-chargetimers",
+      "body": {
+        "values": [
+          {
+            "type": "GLOBAL",
+            "isOEMOptimizationEnabled": true,
+            "schedules": [
+              {
+                "days": [
+                  "MONDAY",
+                  "TUESDAY",
+                  "WEDNESDAY",
+                  "THURSDAY",
+                  "FRIDAY"
+                ],
+                "start": "23:00:00",
+                "end": "07:00:00"
+              }
+            ],
+            "departureTimers": [
+              {
+                "days": [
+                  "MONDAY",
+                  "TUESDAY",
+                  "WEDNESDAY",
+                  "THURSDAY",
+                  "FRIDAY"
+                ],
+                "time": "08:30:00"
+              }
+            ]
+          },
+          {
+            "type": "LOCATION",
+            "condition": {
+              "latitude": 51.5014,
+              "longitude": -0.1419,
+              "name": "Home",
+              "address": "123 Main St, London"
+            },
+            "isOEMOptimizationEnabled": true,
+            "schedules": [
+              {
+                "days": [
+                  "MONDAY",
+                  "TUESDAY",
+                  "WEDNESDAY",
+                  "THURSDAY",
+                  "FRIDAY"
+                ],
+                "start": "22:00:00",
+                "end": "06:00:00"
+              }
+            ],
+            "departureTimers": [
+              {
+                "days": [
+                  "MONDAY",
+                  "TUESDAY",
+                  "WEDNESDAY",
+                  "THURSDAY",
+                  "FRIDAY"
+                ],
+                "time": "08:00:00"
+              }
+            ],
+            "scheduleId": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+            "scheduleType": "DAILY"
+          },
+          {
+            "type": "CHARGING_TYPE",
+            "condition": {
+              "chargingType": "DC"
+            },
+            "isOEMOptimizationEnabled": true,
+            "schedules": [
+              {
+                "days": [
+                  "MONDAY",
+                  "TUESDAY",
+                  "WEDNESDAY",
+                  "THURSDAY",
+                  "FRIDAY"
+                ],
+                "start": "22:00:00",
+                "end": "06:00:00"
+              }
+            ],
+            "departureTimers": [
+              {
+                "days": [
+                  "MONDAY",
+                  "TUESDAY"
+                ],
+                "time": "08:00:00"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "code": "charge-chargingconnectortype",
+      "body": {
+        "value": "J1772"
+      }
+    },
+    {
+      "code": "charge-detailedchargingstatus",
+      "body": {
+        "value": "CHARGING"
+      }
+    },
+    {
+      "code": "charge-energyadded",
+      "body": {
+        "value": 35.6,
+        "unit": "kWh"
+      }
+    },
+    {
+      "code": "charge-fastchargertype",
+      "body": {
+        "value": "CCS"
+      }
+    },
+    {
+      "code": "charge-ischarging",
+      "body": {
+        "value": true
+      }
+    },
+    {
+      "code": "charge-ischargingcableconnected",
+      "body": {
+        "value": true
+      }
+    },
+    {
+      "code": "charge-ischargingcablelatched",
+      "body": {
+        "value": true
+      }
+    },
+    {
+      "code": "charge-ischargingportflapopen",
+      "body": {
+        "value": true
+      }
+    },
+    {
+      "code": "charge-isfastchargerpresent",
+      "body": {
+        "value": false
+      }
+    },
+    {
+      "code": "charge-timetocomplete",
+      "body": {
+        "value": 100,
+        "unit": "min"
+      }
+    },
+    {
+      "code": "charge-voltage",
+      "body": {
+        "value": 240,
+        "unit": "volts"
+      }
+    },
+    {
+      "code": "charge-wattage",
+      "body": {
+        "value": 10.7,
+        "unit": "watts"
+      }
+    },
+    {
+      "code": "climate-externaltemperature",
+      "body": {
+        "value": 14.5,
+        "unit": "celsius"
+      }
+    },
+    {
+      "code": "climate-internaltemperature",
+      "body": {
+        "value": 21,
+        "unit": "celsius"
+      }
+    },
+    {
+      "code": "closure-doors",
+      "body": {
+        "rowCount": 2,
+        "columnCount": 2,
+        "doors": [
+          {
+            "row": 0,
+            "column": 0,
+            "isOpen": false,
+            "isLocked": true
+          },
+          {
+            "row": 0,
+            "column": 1,
+            "isOpen": false,
+            "isLocked": true
+          },
+          {
+            "row": 1,
+            "column": 0,
+            "isOpen": false,
+            "isLocked": true
+          },
+          {
+            "row": 1,
+            "column": 1,
+            "isOpen": false,
+            "isLocked": true
+          }
+        ]
+      }
+    },
+    {
+      "code": "closure-enginecover",
+      "body": {
+        "isOpen": false
+      }
+    },
+    {
+      "code": "closure-fronttrunk",
+      "body": {
+        "isLocked": true,
+        "isOpen": false
+      }
+    },
+    {
+      "code": "closure-islocked",
+      "body": {
+        "value": true
+      }
+    },
+    {
+      "code": "closure-reartrunk",
+      "body": {
+        "isLocked": true,
+        "isOpen": false
+      }
+    },
+    {
+      "code": "closure-sunroof",
+      "body": {
+        "isOpen": false
+      }
+    },
+    {
+      "code": "closure-tailgate",
+      "body": {
+        "isLocked": true,
+        "isOpen": false
+      }
+    },
+    {
+      "code": "closure-windows",
+      "body": {
+        "rowCount": 2,
+        "columnCount": 2,
+        "windows": [
+          {
+            "row": 0,
+            "column": 0,
+            "isOpen": false
+          },
+          {
+            "row": 0,
+            "column": 1,
+            "isOpen": false
+          },
+          {
+            "row": 1,
+            "column": 0,
+            "isOpen": false
+          },
+          {
+            "row": 1,
+            "column": 1,
+            "isOpen": false
+          }
+        ]
+      }
+    },
+    {
+      "code": "connectivitysoftware-currentfirmwareversion",
+      "body": {
+        "value": "2022.8.10.12"
+      }
+    },
+    {
+      "code": "connectivitystatus-isasleep",
+      "body": {
+        "value": false
+      }
+    },
+    {
+      "code": "connectivitystatus-isdigitalkeypaired",
+      "body": {
+        "value": false
+      }
+    },
+    {
+      "code": "connectivitystatus-isonline",
+      "body": {
+        "value": true
+      }
+    },
+    {
+      "code": "diagnostics-abs",
+      "body": {
+        "status": "OK",
+        "description": ""
+      }
+    },
+    {
+      "code": "diagnostics-activesafety",
+      "body": {
+        "status": "OK",
+        "description": ""
+      }
+    },
+    {
+      "code": "diagnostics-airbag",
+      "body": {
+        "status": "OK",
+        "description": ""
+      }
+    },
+    {
+      "code": "diagnostics-brakefluid",
+      "body": {
+        "status": "OK",
+        "description": ""
+      }
+    },
+    {
+      "code": "diagnostics-driverassistance",
+      "body": {
+        "status": "OK",
+        "description": ""
+      }
+    },
+    {
+      "code": "diagnostics-dtccount",
+      "body": {
+        "value": 5
+      }
+    },
+    {
+      "code": "diagnostics-dtclist",
+      "body": {
+        "values": [
+          {
+            "code": "P302D",
+            "timestamp": "2024-09-05T14:48:00.000Z"
+          }
+        ]
+      }
+    },
+    {
+      "code": "diagnostics-emissions",
+      "body": {
+        "status": "OK",
+        "description": ""
+      }
+    },
+    {
+      "code": "diagnostics-evbatteryconditioning",
+      "body": {
+        "status": "OK",
+        "description": ""
+      }
+    },
+    {
+      "code": "diagnostics-evcharging",
+      "body": {
+        "status": "OK",
+        "description": ""
+      }
+    },
+    {
+      "code": "diagnostics-evdriveunit",
+      "body": {
+        "status": "OK",
+        "description": ""
+      }
+    },
+    {
+      "code": "diagnostics-evhvbattery",
+      "body": {
+        "status": "OK",
+        "description": ""
+      }
+    },
+    {
+      "code": "diagnostics-lighting",
+      "body": {
+        "status": "OK",
+        "description": ""
+      }
+    },
+    {
+      "code": "diagnostics-mil",
+      "body": {
+        "status": "OK",
+        "description": ""
+      }
+    },
+    {
+      "code": "diagnostics-oillife",
+      "body": {
+        "status": "OK",
+        "description": ""
+      }
+    },
+    {
+      "code": "diagnostics-oilpressure",
+      "body": {
+        "status": "OK",
+        "description": ""
+      }
+    },
+    {
+      "code": "diagnostics-oiltemperature",
+      "body": {
+        "status": "OK",
+        "description": ""
+      }
+    },
+    {
+      "code": "diagnostics-telematics",
+      "body": {
+        "status": "OK",
+        "description": ""
+      }
+    },
+    {
+      "code": "diagnostics-tirepressure",
+      "body": {
+        "status": "OK",
+        "description": ""
+      }
+    },
+    {
+      "code": "diagnostics-tirepressuremonitoring",
+      "body": {
+        "status": "OK",
+        "description": ""
+      }
+    },
+    {
+      "code": "diagnostics-transmission",
+      "body": {
+        "status": "OK",
+        "description": ""
+      }
+    },
+    {
+      "code": "diagnostics-washerfluid",
+      "body": {
+        "status": "OK",
+        "description": ""
+      }
+    },
+    {
+      "code": "diagnostics-waterinfuel",
+      "body": {
+        "status": "OK",
+        "description": ""
+      }
+    },
+    {
+      "code": "hvac-cabintargettemperature",
+      "body": {
+        "value": 22.5,
+        "unit": "celsius"
+      }
+    },
+    {
+      "code": "hvac-iscabinhvacactive",
+      "body": {
+        "value": true
+      }
+    },
+    {
+      "code": "hvac-isfrontdefrosteractive",
+      "body": {
+        "value": true
+      }
+    },
+    {
+      "code": "hvac-isreardefrosteractive",
+      "body": {
+        "value": true
+      }
+    },
+    {
+      "code": "hvac-issteeringheateractive",
+      "body": {
+        "value": false
+      }
+    },
+    {
+      "code": "internalcombustionengine-amountremaining",
+      "body": {
+        "value": 42.5,
+        "unit": "liters"
+      }
+    },
+    {
+      "code": "internalcombustionengine-fuellevel",
+      "body": {
+        "value": 65,
+        "unit": "percent"
+      }
+    },
+    {
+      "code": "internalcombustionengine-oillife",
+      "body": {
+        "value": 72,
+        "unit": "percent"
+      }
+    },
+    {
+      "code": "internalcombustionengine-range",
+      "body": {
+        "value": 385,
+        "unit": "km"
+      }
+    },
+    {
+      "code": "location-isathome",
+      "body": {
+        "value": true
+      }
+    },
+    {
+      "code": "location-preciselocation",
+      "body": {
+        "latitude": 51.5014,
+        "longitude": -0.1419,
+        "direction": "NE",
+        "heading": 45.3,
+        "locationType": "CURRENT"
+      }
+    },
+    {
+      "code": "lowvoltagebattery-stateofcharge",
+      "body": {
+        "value": 95,
+        "unit": "percent"
+      }
+    },
+    {
+      "code": "lowvoltagebattery-status",
+      "body": {
+        "value": "GOOD"
+      }
+    },
+    {
+      "code": "motion-currentspeed",
+      "body": {
+        "value": 37,
+        "unit": "km/h"
+      }
+    },
+    {
+      "code": "odometer-traveleddistance",
+      "body": {
+        "value": 78432,
+        "unit": "km"
+      }
+    },
+    {
+      "code": "service-isinservice",
+      "body": {
+        "value": true
+      }
+    },
+    {
+      "code": "service-records",
+      "body": {
+        "values": [
+          {
+            "id": "SVC-20230427-001",
+            "time": 1682591400000,
+            "odometer": 45231,
+            "tasks": [
+              {
+                "id": "task-001",
+                "description": "Oil change"
+              }
+            ],
+            "details": [
+              {
+                "id": "detail-001",
+                "description": "Used synthetic oil"
+              }
+            ],
+            "cost": {
+              "currency": "USD",
+              "amount": 349.95
+            }
+          }
+        ]
+      }
+    },
+    {
+      "code": "surveillance-brand",
+      "body": {
+        "value": "SentryMode"
+      }
+    },
+    {
+      "code": "surveillance-isenabled",
+      "body": {
+        "value": true
+      }
+    },
+    {
+      "code": "tractionbattery-isheateractive",
+      "body": {
+        "value": false
+      }
+    },
+    {
+      "code": "tractionbattery-maxrangechargecounter",
+      "body": {
+        "value": 42
+      }
+    },
+    {
+      "code": "tractionbattery-nominalcapacity",
+      "body": {
+        "source": "SMARTCAR",
+        "capacity": 75,
+        "availableCapacities": [
+          {
+            "capacity": 55,
+            "description": "Standard Range"
+          },
+          {
+            "capacity": 75,
+            "description": "Long Range"
+          },
+          {
+            "capacity": 100,
+            "description": "Performance"
+          }
+        ],
+        "unit": "kWh"
+      }
+    },
+    {
+      "code": "tractionbattery-range",
+      "body": {
+        "value": 123.45,
+        "type": "DEFAULT",
+        "additionalValues": [
+          {
+            "type": "IDEAL_CONDITIONS",
+            "value": 150
+          },
+          {
+            "type": "ESTIMATED",
+            "value": 140.75
+          },
+          {
+            "type": "RATED",
+            "value": 130.25
+          }
+        ],
+        "unit": "km"
+      }
+    },
+    {
+      "code": "tractionbattery-stateofcharge",
+      "body": {
+        "value": 78,
+        "unit": "percent"
+      }
+    },
+    {
+      "code": "transmission-drivemode",
+      "body": {
+        "canonical": "NORMAL",
+        "oemDisplayName": "everyday"
+      }
+    },
+    {
+      "code": "transmission-gearstate",
+      "body": {
+        "value": "DRIVE"
+      }
+    },
+    {
+      "code": "vehicleidentification-exteriorcolor",
+      "body": {
+        "value": "SolidBlack"
+      }
+    },
+    {
+      "code": "vehicleidentification-nickname",
+      "body": {
+        "value": "QueenLiz"
+      }
+    },
+    {
+      "code": "vehicleidentification-packages",
+      "body": {
+        "values": [
+          "Base",
+          "MY2021"
+        ]
+      }
+    },
+    {
+      "code": "vehicleidentification-trim",
+      "body": {
+        "value": "100D"
+      }
+    },
+    {
+      "code": "vehicleidentification-vin",
+      "body": {
+        "value": "5YJSA1CN5DFP00101"
+      }
+    },
+    {
+      "code": "vehicleuseraccount-permissions",
+      "body": {
+        "values": [
+          "vehicle_cmds",
+          "vehicle_device_data"
+        ]
+      }
+    },
+    {
+      "code": "vehicleuseraccount-role",
+      "body": {
+        "value": "Driver"
+      }
+    },
+    {
+      "code": "wheel-style",
+      "body": {
+        "value": "Apollo"
+      }
+    },
+    {
+      "code": "wheel-tires",
+      "body": {
+        "rowCount": 2,
+        "columnCount": 2,
+        "values": [
+          {
+            "row": 0,
+            "column": 0,
+            "tirePressure": 32
+          },
+          {
+            "row": 0,
+            "column": 1,
+            "tirePressure": 32
+          },
+          {
+            "row": 1,
+            "column": 0,
+            "tirePressure": 35
+          },
+          {
+            "row": 1,
+            "column": 1,
+            "tirePressure": 35
+          }
+        ],
+        "unit": "kPa"
+      }
+    }
+  ],
+  "commands": [
+    {
+      "path": "/commands/charge/start",
+      "method": "POST",
+      "body": null
+    },
+    {
+      "path": "/commands/charge/stop",
+      "method": "POST",
+      "body": null
+    },
+    {
+      "path": "/commands/charge/set-limit",
+      "method": "POST",
+      "body": {
+        "data": {
+          "attributes": {
+            "percent": 80
+          }
+        }
+      }
+    },
+    {
+      "path": "/commands/charge-port/open",
+      "method": "POST",
+      "body": null
+    },
+    {
+      "path": "/commands/charge-port/close",
+      "method": "POST",
+      "body": null
+    },
+    {
+      "path": "/commands/security/lock",
+      "method": "POST",
+      "body": null
+    },
+    {
+      "path": "/commands/security/unlock",
+      "method": "POST",
+      "body": null
+    },
+    {
+      "path": "/commands/navigation/set-destination",
+      "method": "POST",
+      "body": {
+        "data": {
+          "attributes": {
+            "latitude": 37.7749,
+            "longitude": -122.4194
+          }
+        }
+      }
+    },
+    {
+      "path": "/charge-schedules/daily",
+      "method": "POST",
+      "body": {
+        "data": {
+          "attributes": {
+            "location": {
+              "latitude": 37.7749,
+              "longitude": -122.4194
+            },
+            "startTime": "08:00",
+            "stopTime": "10:00"
+          }
+        }
+      }
+    },
+    {
+      "path": "/charge-schedules/weekly",
+      "method": "POST",
+      "body": {
+        "data": {
+          "attributes": {
+            "location": {
+              "latitude": 37.7749,
+              "longitude": -122.4194
+            },
+            "days": {
+              "monday": {
+                "startTime": "08:00",
+                "stopTime": "10:00"
+              },
+              "wednesday": {
+                "startTime": "08:00",
+                "stopTime": "10:00"
+              },
+              "friday": {
+                "startTime": "08:00",
+                "stopTime": "10:00"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "path": "/charge-schedules/workweek",
+      "method": "POST",
+      "body": {
+        "data": {
+          "attributes": {
+            "location": {
+              "latitude": 37.7749,
+              "longitude": -122.4194
+            },
+            "weekdays": {
+              "startTime": "08:00",
+              "stopTime": "10:00"
+            },
+            "weekends": {
+              "startTime": "10:00",
+              "stopTime": "12:00"
+            }
+          }
+        }
+      }
+    },
+    {
+      "path": "/charge-schedules/{scheduleId}",
+      "method": "DELETE",
+      "body": null
+    }
+  ]
+}

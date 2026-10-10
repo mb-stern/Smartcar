@@ -104,9 +104,6 @@ class SmartcarConfigurator extends IPSModuleStrict
                 'create' => [
                     'moduleID' => self::VEHICLE_MODULE_ID,
                     'name' => $caption,
-                    // Der Konfigurator ist die zentrale Stelle für die Soll-Konfiguration.
-                    // IP-Symcon kann damit fehlende bzw. abweichende Instanzen erkennen
-                    // und die Korrektur dem Benutzer anbieten.
                     'configuration' => $configuration
                 ]
             ];
@@ -235,8 +232,6 @@ class SmartcarConfigurator extends IPSModuleStrict
         foreach ($configuration as $property => $expectedValue) {
             $actualValue = @IPS_GetProperty($instanceId, $property);
 
-            // Year ist eine Integer-Property, alle übrigen hier verwendeten
-            // Eigenschaften sind Strings.
             if ($property === 'Year') {
                 if ((int)$actualValue !== (int)$expectedValue) {
                     return false;
