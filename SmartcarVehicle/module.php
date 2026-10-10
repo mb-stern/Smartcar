@@ -30,6 +30,7 @@ class SmartcarVehicle extends IPSModuleStrict
         parent::ApplyChanges();
 
         $this->CreateProfile();
+        $this->UpdateLocationHeadingPresentation();
         $this->EnsureLastSignalsAtVariable();
         $this->ApplyOEMTimestampVisibility();
 
@@ -49,6 +50,33 @@ class SmartcarVehicle extends IPSModuleStrict
 
     }
 
+
+    private function UpdateLocationHeadingPresentation(): void
+    {
+        $id = @$this->GetIDForIdent('LocationHeading');
+        if ($id && (int)IPS_GetVariable($id)['VariableType'] === VARIABLETYPE_FLOAT) {
+            $this->RegisterVariableFloat('LocationHeading', 'Fahrtrichtung', 'SMCAR.LatLon');
+            $this->UpdateModuleManagedVariableName('LocationHeading', 'Fahrtrichtung (Grad)', 'Fahrtrichtung');
+        }
+
+        $discovered = $this->ReadDiscoveredVariables();
+        if (!is_array($discovered['LocationHeading'] ?? null)) {
+            return;
+        }
+        $entry = $discovered['LocationHeading'];
+        foreach (['name', 'variableName'] as $key) {
+            if (($entry[$key] ?? '') === 'Fahrtrichtung (Grad)') {
+                $entry[$key] = 'Fahrtrichtung';
+            }
+        }
+        if (($entry['profile'] ?? '') === '') {
+            $entry['profile'] = 'SMCAR.LatLon';
+        }
+        if ($entry !== $discovered['LocationHeading']) {
+            $discovered['LocationHeading'] = $entry;
+            $this->WriteDiscoveredVariables($discovered);
+        }
+    }
 
     private function EnsureLastSignalsAtVariable(): void
     {
@@ -2443,7 +2471,7 @@ class SmartcarVehicle extends IPSModuleStrict
             'closure-fronttrunk' => [['FrontTrunkLocked','Front-Kofferraum verriegelt','isLocked',VARIABLETYPE_BOOLEAN,'~Lock']],
             'closure-reartrunk' => [['RearTrunkLocked','Heck-Kofferraum verriegelt','isLocked',VARIABLETYPE_BOOLEAN,'~Lock']],
             'closure-tailgate' => [['TailgateLocked','Heckklappe verriegelt','isLocked',VARIABLETYPE_BOOLEAN,'~Lock']],
-            'location-preciselocation' => [['LocationHeading','Fahrtrichtung (Grad)','heading',VARIABLETYPE_FLOAT,''],['LocationDirection','Fahrtrichtung','direction',VARIABLETYPE_STRING,''],['LocationType','Standorttyp','locationType',VARIABLETYPE_STRING,'']],
+            'location-preciselocation' => [['LocationHeading','Fahrtrichtung','heading',VARIABLETYPE_FLOAT,'SMCAR.LatLon'],['LocationDirection','Fahrtrichtung','direction',VARIABLETYPE_STRING,''],['LocationType','Standorttyp','locationType',VARIABLETYPE_STRING,'']],
             default => []
         };
         if (str_starts_with($code, 'diagnostics-') && ($definition['source'] ?? '') === 'status') {
