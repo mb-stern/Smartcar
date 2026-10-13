@@ -134,4 +134,21 @@ $rows = array_column(invoke($v, 'BuildVariableSelectionRows'), null, 'Ident');
 if (($rows['ChargeAmperage']['Active'] ?? true) || @invoke($v, 'GetIDForIdent', 'ChargeAmperage')) {
     throw new RuntimeException('Saving hidden rows lost the deselected native checkbox intent');
 }
-echo "$count official signal examples, integer charge-limit registration, checkbox selection, compatibility filtering and completion display passed with SymconStubs. No live Symcon service.\n";
+$v->ProcessWebhookSignals(json_encode(['data'=>['signals'=>[
+    ['code'=>'charge-wattage','body'=>['value'=>6,'unit'=>'watts'],'status'=>['value'=>'SUCCESS']]
+]]], JSON_THROW_ON_ERROR));
+$powerID = invoke($v, 'GetIDForIdent', 'ChargeWattage');
+if (GetValue($powerID) !== 0.006) {
+    throw new RuntimeException('Automatic native power conversion did not follow the reported watts unit');
+}
+$v->SetProperty('ChargePowerUnit', 'kw');
+$v->ApplyChanges();
+if (invoke($v, 'GetIDForIdent', 'ChargeWattage') !== $powerID || GetValue($powerID) !== 6.0) {
+    throw new RuntimeException('Native power-unit override did not reprocess the cached value while preserving its ID');
+}
+$form = json_decode($v->GetConfigurationForm(), true, 512, JSON_THROW_ON_ERROR);
+$unit = array_values(array_filter($form['elements'], static fn($element) => ($element['name'] ?? '') === 'ChargePowerUnit'))[0];
+if ($unit['type'] !== 'Select' || array_column($unit['options'], 'value') !== ['api','watts','kw']) {
+    throw new RuntimeException('Native vehicle form does not expose the per-vehicle power-unit choice');
+}
+echo "$count official signal examples, integer charge-limit registration, checkbox selection, compatibility filtering, power-unit override and completion display passed with SymconStubs. No live Symcon service.\n";

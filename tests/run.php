@@ -228,6 +228,52 @@ check(count(array_unique(array_column($effectiveRows, 'Ident'))) === count($effe
 $latitudeRows = array_values(array_filter($effectiveRows, static fn($row) => $row['Name'] === 'Breitengrad'));
 check($latitudeRows[0]['Ident'] === 'Latitude' && $latitudeRows[0]['Active'] === true, 'Other saved checkbox choices remain attached to the correct Ident');
 
+// A confirmed incorrect OEM power unit can be corrected per vehicle without guessing from magnitude.
+$v = vehicle();
+signal($v, 'charge-wattage', ['value'=>6, 'unit'=>'watts']);
+$id = $v->GetIDForIdent('ChargeWattage');
+check(value($v, 'ChargeWattage') === 0.006, 'Default power conversion follows the reported watts unit even for a small value');
+$v->properties['ChargePowerUnit'] = 'kw';
+$v->ApplyChanges();
+check($v->GetIDForIdent('ChargeWattage') === $id && value($v, 'ChargeWattage') === 6.0, 'Per-vehicle kW override reprocesses cached power immediately without changing its ID');
+$cache = json_decode($v->attributes['LastSuccessfulSignalPayloads'], true);
+check($cache['charge-wattage']['body'] === ['value'=>6,'unit'=>'watts'], 'Power override preserves original API raw data and unit');
+signal($v, 'charge-wattage', ['value'=>6.1, 'unit'=>'watts'], '2026-10-10T10:01:00Z');
+check(value($v, 'ChargeWattage') === 6.1, 'Confirmed kW override preserves delivered decimal precision');
+$other = vehicle();
+signal($other, 'charge-wattage', ['value'=>6100, 'unit'=>'watts']);
+check(value($other, 'ChargeWattage') === 6.1, 'Other vehicles retain standard watts conversion');
+signal($other, 'charge-wattage', ['value'=>6.1, 'unit'=>'kW']);
+check(value($other, 'ChargeWattage') === 6.1, 'A correctly labelled kW signal does not divide its value');
+$v->properties['ChargePowerUnit'] = 'watts';
+$v->ApplyChanges();
+signal($v, 'charge-wattage', ['value'=>6100, 'unit'=>'kW'], '2026-10-10T10:02:00Z');
+check(value($v, 'ChargeWattage') === 6.1, 'Explicit watts override handles a wrongly labelled kW payload');
+signal($v, 'charge-wattage', ['value'=>'invalid', 'unit'=>'watts'], '2026-10-10T10:03:00Z');
+check(value($v, 'ChargeWattage') === 6.1, 'Invalid power input cannot fabricate a zero value');
+
+$v = vehicle();
+signal($v, 'charge-timetocomplete', ['value'=>1359], '2026-10-13T18:53:00Z');
+signal($v, 'charge-timetocomplete', ['value'=>1357], '2026-10-13T18:52:00Z');
+$debug = array_values(array_filter($v->debug, static fn($line) => $line[0] === 'WebhookVehicle/Ladedaten'));
+$debug = json_decode(end($debug)[1], true, 512, JSON_THROW_ON_ERROR);
+$duration = array_column($debug['variables'], null, 'ident')['ChargeTimeRemainingMinutes'];
+check($debug['body']['value'] === 1357 && $debug['olderThanStored'] && (float)$duration['expectedValue'] === 1357.0 && (float)$duration['storedValue'] === 1359.0, 'Charging debug explains why an older 1357-minute signal did not replace 1359 minutes');
+check($debug['meta']['oemUpdatedAt'] === '2026-10-13T18:52:00Z' && (float)$debug['storedOEMUpdatedAt'] === (float)strtotime('2026-10-13T18:53:00Z'), 'Charging debug retains both incoming and stored OEM timestamps');
+$v = vehicle();
+$v->properties['VariableSelection'] = '[{"Ident":"ChargeWattage","Active":false}]';
+signal($v, 'charge-wattage', ['value'=>6,'unit'=>'watts']);
+$debug = array_values(array_filter($v->debug, static fn($line) => $line[0] === 'WebhookVehicle/Ladedaten'));
+$debug = json_decode(end($debug)[1], true, 512, JSON_THROW_ON_ERROR);
+check(!$debug['variables'][0]['active'] && $debug['variables'][0]['variableID'] === 0 && $debug['variables'][0]['storedValue'] === null, 'Charging debug distinguishes a disabled power checkbox from a missing API value');
+$v = vehicle();
+$v->RegisterVariableInteger('ChargeWattage', 'Meine Ladeleistung');
+$id = $v->GetIDForIdent('ChargeWattage');
+signal($v, 'charge-wattage', ['value'=>6,'unit'=>'watts']);
+$debug = array_values(array_filter($v->debug, static fn($line) => $line[0] === 'WebhookVehicle/Ladedaten'));
+$debug = json_decode(end($debug)[1], true, 512, JSON_THROW_ON_ERROR);
+check($v->GetIDForIdent('ChargeWattage') === $id && $debug['variables'][0]['type'] === VARIABLETYPE_INTEGER && $debug['variables'][0]['expectedType'] === VARIABLETYPE_FLOAT, 'Charging debug identifies a legacy type mismatch without replacing the variable');
+
 // Explicit incompatibility affects the list, not stored vehicle data or checkbox intent.
 function signalStatus(SmartcarVehicle $v, string $code, string $status, string $errorCode = '', array $body = [], string $timestamp = '2026-10-10T10:01:00Z', array $meta = []): void
 {

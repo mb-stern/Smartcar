@@ -15,6 +15,7 @@ class SmartcarVehicle extends IPSModuleStrict
     $this->RegisterPropertyInteger('Year', 0);
     $this->RegisterPropertyString('PowertrainType', '');
     $this->RegisterPropertyString('Permissions', '[]');
+    $this->RegisterPropertyString('ChargePowerUnit', 'api');
     $this->RegisterPropertyBoolean('ShowOEMUpdatedAtVariables', false);
     $this->RegisterPropertyString('VariableSelection', '[]');
     $this->RegisterAttributeString('DiscoveredVariables', '{}');
@@ -446,6 +447,16 @@ class SmartcarVehicle extends IPSModuleStrict
                         ['type' => 'Label', 'caption' => 'Vehicle ID: ' . $this->ReadPropertyString('VehicleID')],
                         ['type' => 'Label', 'caption' => 'Connection ID: ' . $this->ReadPropertyString('ConnectionID')],
                         ['type' => 'Label', 'caption' => 'User ID: ' . $this->ReadPropertyString('UserID')]
+                    ]
+                ],
+                [
+                    'type' => 'Select',
+                    'name' => 'ChargePowerUnit',
+                    'caption' => 'Einheit des gelieferten Ladeleistungswerts',
+                    'options' => [
+                        ['caption' => 'Einheit aus Smartcar-Daten', 'value' => 'api'],
+                        ['caption' => 'Watt (W)', 'value' => 'watts'],
+                        ['caption' => 'Kilowatt (kW)', 'value' => 'kw']
                     ]
                 ],
                 [
@@ -1064,6 +1075,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 $meta,
                 false
             );
+            $this->DebugChargingSignal($signalCode, $body, $status, $meta);
         }
 
         $this->TouchLastSignalsAt();
@@ -1082,6 +1094,39 @@ class SmartcarVehicle extends IPSModuleStrict
 
     }
 
+
+    private function DebugChargingSignal(string $code, array $body, ?array $status, array $meta): void
+    {
+        if (!in_array($code, ['charge-wattage', 'charge-power', 'charge-timetocomplete'], true)) {
+            return;
+        }
+        $definition = $this->GetSignalDefinition($code, $body, $meta);
+        $variables = [];
+        foreach ($this->GetVariablesFromDefinition($definition, $body) as $variable) {
+            $ident = (string)$variable['ident'];
+            $id = @$this->GetIDForIdent($ident);
+            $variables[] = [
+                'ident' => $ident,
+                'active' => $this->IsVariableEnabled($ident),
+                'variableID' => $id ?: 0,
+                'type' => $id ? (int)IPS_GetVariable($id)['VariableType'] : null,
+                'expectedType' => (int)$variable['type'],
+                'storedValue' => $id ? GetValue($id) : null,
+                'expectedValue' => $this->GetSignalVariableValue($variable, $body)
+            ];
+        }
+        $times = json_decode($this->ReadAttributeString('LastOEMSignalTimes'), true);
+        $this->SendDebug('WebhookVehicle/Ladedaten', json_encode([
+            'code' => $code,
+            'body' => $body,
+            'status' => $status,
+            'meta' => $meta,
+            'powerUnit' => $this->ReadPropertyString('ChargePowerUnit'),
+            'olderThanStored' => $this->IsOlderSignal($code, $meta),
+            'storedOEMUpdatedAt' => (float)($times[$code] ?? 0),
+            'variables' => $variables
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+    }
 
     private function HasMeaningfulSignalData(array $body): bool
     {
@@ -2466,6 +2511,19 @@ class SmartcarVehicle extends IPSModuleStrict
         return $value;
     }
 
+    private function GetChargePowerKw(array $body): ?float
+    {
+        $value = $body['value'] ?? null;
+        if (!is_numeric($value) || !is_finite((float)$value)) {
+            return null;
+        }
+        $unit = $this->ReadPropertyString('ChargePowerUnit');
+        if ($unit === 'api') {
+            $unit = strtolower(trim((string)($body['unit'] ?? 'watts')));
+        }
+        return in_array($unit, ['kw', 'kilowatt', 'kilowatts'], true) ? (float)$value : (float)$value / 1000;
+    }
+
     private function GetChargeCompletionText(array $body, array $meta): ?string
     {
         $minutes = $body['value'] ?? null;
@@ -2732,7 +2790,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 'name' => 'Ladeleistung',
                 'type' => VARIABLETYPE_FLOAT,
                 'profile' => 'SMCAR.Power',
-                'convert' => fn(array $body) => strtolower((string)($body['unit'] ?? 'watts')) === 'kw' ? (float)$body['value'] : (float)$body['value'] / 1000
+                'convert' => fn(array $body): ?float => $this->GetChargePowerKw($body)
             ],
 
             'charge-energyadded' => [
