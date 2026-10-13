@@ -41,6 +41,8 @@ Die Berechtigungen für Fahrzeugdaten und Steuerfunktionen werden unter **Smartc
 
 Die Fahrzeuginstanz verwendet keine separate Smartcar-Kompatibilitätsprüfung mehr. Stattdessen werden die tatsächlich vom Fahrzeug gelieferten Signale ausgewertet.
 
+Die Fahrzeugkonfiguration kann auch geöffnet werden, wenn der Splitter vorübergehend nicht erreichbar ist. Die Variablenauswahl bleibt dabei bedienbar; die Webhook-Übersicht steht nach Wiederherstellung der Verbindung wieder zur Verfügung.
+
 | Feld | Beschreibung |
 | --- | --- |
 | **OEM-Aktualisierungszeit** | Blendet für unterstützte Signale eine zusätzliche Variable mit der vom OEM gelieferten Aktualisierungszeit ein. |
@@ -71,6 +73,10 @@ Es gibt mehrere Möglichkeiten, die Signale zu aktualisieren:
 Bei der Verarbeitung werden nur Signale berücksichtigt, die erfolgreich geliefert wurden und mindestens einen tatsächlichen Nutzwert enthalten.
 
 `null`-Teilwerte werden nicht als Messwert übernommen; Werte wie `0` oder `false` sind gültig. Der zusätzliche Filter für leere Zusatzlisten und Zeichenketten wurde zurückgenommen. Die Checkbox-Auswahl ist davon unabhängig: Eine ausdrücklich angekreuzte Signalvariable wird beim Speichern auch ohne aktuellen Nutzwert angelegt.
+
+### Fahrtrichtung
+
+Die **Fahrtrichtung** wird mit dem Gradzeichen und einer Nachkommastelle angezeigt, beispielsweise **187,6°**. Die Bezeichnung enthält nicht mehr „(Grad)“. Koordinaten behalten ihre bisherige Genauigkeit. Selbst vergebene Variablennamen bleiben erhalten.
 
 ### Ladeleistung
 
