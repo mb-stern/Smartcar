@@ -588,11 +588,21 @@ class SmartcarVehicle extends IPSModuleStrict
             return ['success' => false, 'error' => 'VehicleID fehlt.', 'webhooks' => []];
         }
 
-        $result = $this->SendDataToParent(json_encode([
-            'DataID' => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
-            'Command' => 'GetWebhookOverview',
-            'VehicleID' => $vehicleId
-        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        set_error_handler(static function (int $severity, string $message, string $file, int $line): never {
+            throw new ErrorException($message, 0, $severity, $file, $line);
+        }, E_WARNING | E_USER_WARNING);
+        try {
+            $result = $this->SendDataToParent(json_encode([
+                'DataID' => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
+                'Command' => 'GetWebhookOverview',
+                'VehicleID' => $vehicleId
+            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        } catch (Throwable $exception) {
+            $this->SendDebug('WebhookOverview/Error', $exception->getMessage(), 0);
+            return ['success' => false, 'error' => 'Splitter ist derzeit nicht erreichbar.', 'webhooks' => []];
+        } finally {
+            restore_error_handler();
+        }
 
         $decoded = json_decode((string)$result, true);
         if (!is_array($decoded)) {

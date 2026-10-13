@@ -151,4 +151,34 @@ $unit = array_values(array_filter($form['elements'], static fn($element) => ($el
 if ($unit['type'] !== 'Select' || array_column($unit['options'], 'value') !== ['api','watts','kw']) {
     throw new RuntimeException('Native vehicle form does not expose the per-vehicle power-unit choice');
 }
-echo "$count official signal examples, integer charge-limit registration, checkbox selection, compatibility filtering, power-unit override and completion display passed with SymconStubs. No live Symcon service.\n";
+IPS\InstanceManager::connectInstance($instanceID, 18918);
+$form = json_decode($v->GetConfigurationForm(), true, 512, JSON_THROW_ON_ERROR);
+if (!in_array('ChargePowerUnit', array_column($form['elements'], 'name'), true)) {
+    throw new RuntimeException('Missing native parent interface prevents editing the vehicle form');
+}
+class SymconUnavailableParent extends IPSModuleStrict
+{
+    public function ForwardData(string $JSONString): string
+    {
+        trigger_error('Kann für die Instanz #18918 das Interface nicht finden', E_USER_WARNING);
+        return '';
+    }
+}
+$parentID = IPS\ObjectManager::registerObject(1);
+IPS\InstanceManager::createInstance($parentID, [
+    'Class'=>SymconUnavailableParent::class,
+    'ModuleID'=>'{CF5131D3-A22F-4497-BA68-FA911CF8A50E}',
+    'ModuleName'=>'UnavailableParent', 'ModuleType'=>2
+]);
+IPS\InstanceManager::connectInstance($instanceID, $parentID);
+ob_start();
+try {
+    $form = json_decode($v->GetConfigurationForm(), true, 512, JSON_THROW_ON_ERROR);
+} finally {
+    $output = ob_get_clean();
+}
+if ($output !== '' || !in_array('VariableSelection', array_column($form['elements'], 'name'), true)) {
+    throw new RuntimeException('Native parent warning corrupts the configuration form output');
+}
+IPS\InstanceManager::disconnectInstance($instanceID);
+echo "$count official signal examples, integer charge-limit registration, checkbox selection, compatibility filtering, power-unit override, parent-interface failure handling and completion display passed with SymconStubs. No live Symcon service.\n";

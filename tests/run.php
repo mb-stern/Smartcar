@@ -228,6 +228,43 @@ check(count(array_unique(array_column($effectiveRows, 'Ident'))) === count($effe
 $latitudeRows = array_values(array_filter($effectiveRows, static fn($row) => $row['Name'] === 'Breitengrad'));
 check($latitudeRows[0]['Ident'] === 'Latitude' && $latitudeRows[0]['Active'] === true, 'Other saved checkbox choices remain attached to the correct Ident');
 
+// Parent interface warnings must not precede the configuration form JSON.
+$v = vehicle();
+$v->parentResponder = static function (string $json): string {
+    trigger_error('Kann für die Instanz #18918 das Interface nicht finden', E_USER_WARNING);
+    return '';
+};
+$previousWarnings = [];
+set_error_handler(static function (int $severity, string $message) use (&$previousWarnings): bool {
+    $previousWarnings[] = $message;
+    return true;
+});
+try {
+    ob_start();
+    try {
+        $form = json_decode($v->GetConfigurationForm(), true, 512, JSON_THROW_ON_ERROR);
+    } finally {
+        $output = ob_get_clean();
+    }
+    check($output === '' && isset($form['elements'], $form['actions']), 'Missing parent interface warning does not pollute the form JSON output');
+    check(in_array('ChargePowerUnit', array_column($form['elements'], 'name'), true) && in_array('VariableSelection', array_column($form['elements'], 'name'), true), 'Power unit and variable selection remain editable when the splitter interface is unavailable');
+    $debug = array_values(array_filter($v->debug, static fn($line) => $line[0] === 'WebhookOverview/Error'));
+    check(count($debug) === 1 && str_contains($debug[0][1], '#18918'), 'Original missing-interface cause remains available in debug');
+    trigger_error('After failed overview request', E_USER_WARNING);
+    check($previousWarnings === ['After failed overview request'], 'Scoped parent-warning handler restores the previous handler after failure');
+    $v->parentResponder = static fn(string $json): string => '{"success":true,"webhooks":[]}';
+    $form = json_decode($v->GetConfigurationForm(), true, 512, JSON_THROW_ON_ERROR);
+    trigger_error('After successful overview request', E_USER_WARNING);
+    check($previousWarnings === ['After failed overview request','After successful overview request'], 'Previous error handler is also restored after a successful parent call');
+} finally {
+    restore_error_handler();
+}
+$v->parentResponder = static function (string $json): string { throw new RuntimeException('Parent module is unavailable'); };
+check(isset(json_decode($v->GetConfigurationForm(), true, 512, JSON_THROW_ON_ERROR)['elements']), 'Parent exceptions also allow the vehicle form to load');
+$v->parentResponder = static fn(string $json): string => 'invalid-json';
+$overview = invoke($v, 'GetWebhookOverviewFromParent');
+check(!$overview['success'] && $overview['error'] === 'Ungültige Antwort vom Splitter.', 'Malformed overview responses retain their distinct error result');
+
 // A confirmed incorrect OEM power unit can be corrected per vehicle without guessing from magnitude.
 $v = vehicle();
 signal($v, 'charge-wattage', ['value'=>6, 'unit'=>'watts']);
