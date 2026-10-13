@@ -87,7 +87,7 @@ $v->SetProperty('VariableSelection', '[{"Ident":"Longitude","Active":true},{"Ide
 $v->ApplyChanges();
 $completionID = invoke($v, 'GetIDForIdent', 'ChargeTimeToComplete');
 $v->ProcessWebhookSignals(json_encode(['data'=>['signals'=>[
-    ['code'=>'charge-timetocomplete', 'body'=>['value'=>60], 'status'=>['value'=>'SUCCESS'], 'meta'=>['oemUpdatedAt'=>'2026-10-10T14:00:00Z']]
+    ['code'=>'charge-timetocomplete', 'body'=>['value'=>60, 'unit'=>'min'], 'status'=>['value'=>'SUCCESS'], 'meta'=>['oemUpdatedAt'=>'2026-10-10T14:00:00Z']]
 ]]], JSON_THROW_ON_ERROR));
 if (invoke($v, 'GetIDForIdent', 'ChargeTimeToComplete') !== $completionID || GetValue($completionID) !== date('d.m.Y H:i', strtotime('2026-10-10T15:00:00Z')) . ' Uhr' || GetValue(invoke($v, 'GetIDForIdent', 'ChargeTimeRemainingMinutes')) !== 60.0) {
     throw new RuntimeException('Remaining minutes and the existing completion display were not updated together');
@@ -180,4 +180,22 @@ if ($output !== '' || !in_array('VariableSelection', array_column($form['element
     throw new RuntimeException('Native parent warning corrupts the configuration form output');
 }
 IPS\InstanceManager::disconnectInstance($instanceID);
-echo "$count official signal examples, integer charge-limit registration, checkbox selection, compatibility filtering, direct kW values, parent-interface failure handling and completion display passed with SymconStubs. No live Symcon service.\n";
+$previousTimezone = date_default_timezone_get();
+try {
+    date_default_timezone_set('Europe/Zurich');
+    $v->SetProperty('VariableSelection', '[{"Ident":"ChargeTimeRemainingMinutes","Active":true},{"Ident":"ChargeTimeToComplete","Active":true}]');
+    $v->ApplyChanges();
+    $clockID = invoke($v, 'GetIDForIdent', 'ChargeTimeToComplete');
+    $durationID = invoke($v, 'GetIDForIdent', 'ChargeTimeRemainingMinutes');
+    $v->ProcessWebhookSignals(json_encode(['data'=>['signals'=>[
+        ['code'=>'charge-timetocomplete','body'=>['value'=>1360],'status'=>['value'=>'SUCCESS'], 'meta'=>['oemUpdatedAt'=>1791919425830]]
+    ]]], JSON_THROW_ON_ERROR));
+    $v->ApplyChanges();
+    if (GetValue($clockID) !== '22:40 Uhr' || GetValue($durationID) !== 76.25 || IPS_GetVariableProfile('SMCAR.DurationMinutes')['Digits'] !== 0
+        || invoke($v, 'GetIDForIdent', 'ChargeTimeToComplete') !== $clockID || invoke($v, 'GetIDForIdent', 'ChargeTimeRemainingMinutes') !== $durationID) {
+        throw new RuntimeException('Native legacy clock, remaining minutes without decimal places or preserved IDs failed');
+    }
+} finally {
+    date_default_timezone_set($previousTimezone);
+}
+echo "$count official signal examples, integer charge-limit registration, checkbox selection, compatibility filtering, direct kW values, parent-interface failure handling and legacy/explicit-duration completion displays passed with SymconStubs. No live Symcon service.\n";

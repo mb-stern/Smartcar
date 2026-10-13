@@ -291,8 +291,8 @@ $form = json_decode($v->GetConfigurationForm(), true, 512, JSON_THROW_ON_ERROR);
 check(!in_array('ChargePowerUnit', array_column($form['elements'], 'name'), true), 'Vehicle form no longer asks for a power-unit choice');
 
 $v = vehicle();
-signal($v, 'charge-timetocomplete', ['value'=>1359], '2026-10-13T18:53:00Z');
-signal($v, 'charge-timetocomplete', ['value'=>1357], '2026-10-13T18:52:00Z');
+signal($v, 'charge-timetocomplete', ['value'=>1359, 'unit'=>'min'], '2026-10-13T18:53:00Z');
+signal($v, 'charge-timetocomplete', ['value'=>1357, 'unit'=>'min'], '2026-10-13T18:52:00Z');
 $debug = array_values(array_filter($v->debug, static fn($line) => $line[0] === 'WebhookVehicle/Ladedaten'));
 $debug = json_decode(end($debug)[1], true, 512, JSON_THROW_ON_ERROR);
 $duration = array_column($debug['variables'], null, 'ident')['ChargeTimeRemainingMinutes'];
@@ -404,38 +404,83 @@ check(!listed($v, 'ChargeAmperage') && !$v->GetIDForIdent('ChargeAmperage'), 'A 
 invoke($v, 'ApplyVehicleAccessCommands');
 check(listed($v, 'CommandChargeStart'), 'Signal incompatibility does not incorrectly remove permission-based commands');
 
+// Unitless charging times retain main's clock format; explicit minute units remain durations.
+function clockSignal(SmartcarVehicle $v, mixed $raw, string $timestamp = '2026-10-13T19:23:45Z'): void
+{
+    $v->ProcessWebhookSignals(json_encode(['data'=>['signals'=>[
+        ['code'=>'charge-timetocomplete','body'=>['value'=>$raw], 'status'=>['value'=>'SUCCESS'], 'meta'=>['oemUpdatedAt'=>$timestamp]]
+    ]]], JSON_THROW_ON_ERROR));
+}
+$previousTimezone = date_default_timezone_get();
+try {
+    date_default_timezone_set('Europe/Zurich');
+    $v = vehicle();
+    $v->properties['VariableSelection'] = '[{"Ident":"ChargeTimeToComplete","Active":true,"Source":"charge-timetocomplete"},{"Ident":"ChargeTimeRemainingMinutes","Active":true,"Source":"charge-timetocomplete"}]';
+    $v->ApplyChanges();
+    $clockID = $v->GetIDForIdent('ChargeTimeToComplete');
+    $durationID = $v->GetIDForIdent('ChargeTimeRemainingMinutes');
+    clockSignal($v, 1360);
+    check(value($v, 'ChargeTimeToComplete') === '22:40 Uhr', 'Unitless 1360 again shows main clock 22:40 instead of adding 1360 minutes to the OEM time');
+    check(value($v, 'ChargeTimeRemainingMinutes') === 76.25, 'Remaining minutes are derived from the legacy clock and OEM time, not divided by ten');
+    check($v->GetIDForIdent('ChargeTimeToComplete') === $clockID && $v->GetIDForIdent('ChargeTimeRemainingMinutes') === $durationID, 'Restoring legacy charging-clock interpretation preserves both variable IDs');
+    $v->ApplyChanges();
+    check(value($v, 'ChargeTimeToComplete') === '22:40 Uhr' && value($v, 'ChargeTimeRemainingMinutes') === 76.25, 'Restoring the cached legacy clock keeps both displays stable');
+    $debug = array_values(array_filter($v->debug, static fn($line) => $line[0] === 'WebhookVehicle/Ladedaten'));
+    check(json_decode(end($debug)[1], true)['chargeTimeInterpretation'] === 'clock-as-main', 'Debug makes legacy clock interpretation explicit');
+    clockSignal($v, 22.5);
+    check(value($v, 'ChargeTimeToComplete') === '22:30 Uhr' && value($v, 'ChargeTimeRemainingMinutes') === 66.25, 'Legacy decimal hours use the same clock conversion as main');
+    clockSignal($v, '22,6667');
+    check(value($v, 'ChargeTimeToComplete') === '22:40 Uhr', 'Legacy decimal hours accept a comma and round to the main clock minute');
+    clockSignal($v, null);
+    check(value($v, 'ChargeTimeToComplete') === '22:40 Uhr', 'Missing legacy clock values do not clear a valid display');
+    $v = vehicle();
+    clockSignal($v, 30, '2026-10-13T21:50:00Z');
+    check(value($v, 'ChargeTimeToComplete') === '00:30 Uhr' && value($v, 'ChargeTimeRemainingMinutes') === 40.0, 'A clock after midnight belongs to the next local date');
+    $v = vehicle();
+    clockSignal($v, 190, '2026-03-29T00:50:00Z');
+    check(value($v, 'ChargeTimeToComplete') === '03:10 Uhr' && value($v, 'ChargeTimeRemainingMinutes') === 20.0, 'Clock-derived duration uses timezone rules across daylight-saving changes');
+    $v = vehicle();
+    signal($v, 'charge-timetocomplete', ['value'=>1360,'unit'=>'min'], '2026-10-13T19:23:45Z');
+    check(value($v, 'ChargeTimeRemainingMinutes') === 1360.0 && value($v, 'ChargeTimeToComplete') === '14.10.2026 20:03 Uhr', 'Explicit documented minute units retain actual duration semantics');
+    foreach ([true, false, [], -1, 'invalid'] as $invalid) {
+        check(invoke($v, 'GetChargeCompletionText', ['value'=>$invalid], []) === null, 'Invalid legacy clock is rejected without inventing a time');
+    }
+} finally {
+    date_default_timezone_set($previousTimezone);
+}
+
 // Keep remaining minutes and the former completion-clock display connected.
 $completionText = static fn(float $minutes, string $reference = '2026-10-10T10:00:00Z'): string => date('d.m.Y H:i', strtotime($reference) + (int)round($minutes * 60)) . ' Uhr';
 $v = vehicle();
 $v->RegisterVariableString('ChargeTimeToComplete', 'Fertiggeladen');
 $id = $v->GetIDForIdent('ChargeTimeToComplete');
-signal($v, 'charge-timetocomplete', ['value'=>1220]);
+signal($v, 'charge-timetocomplete', ['value'=>1220, 'unit'=>'min']);
 check($v->GetIDForIdent('ChargeTimeToComplete') === $id && value($v, 'ChargeTimeToComplete') === $completionText(1220), 'Legacy charge display shows the estimated completion date and clock without replacing its ID');
 check(value($v, 'ChargeTimeRemainingMinutes') === 1220.0, 'Canonical remaining minutes stay available');
-signal($v, 'charge-timetocomplete', ['value'=>45.5]);
+signal($v, 'charge-timetocomplete', ['value'=>45.5, 'unit'=>'min']);
 check(value($v, 'ChargeTimeToComplete') === $completionText(45.5), 'Fractional minutes are not misread as decimal hours');
-signal($v, 'charge-timetocomplete', ['value'=>1620]);
+signal($v, 'charge-timetocomplete', ['value'=>1620, 'unit'=>'min']);
 check(value($v, 'ChargeTimeToComplete') === $completionText(1620), 'Completion date follows long durations beyond midnight');
-signal($v, 'charge-timetocomplete', ['value'=>null]);
+signal($v, 'charge-timetocomplete', ['value'=>null, 'unit'=>'min']);
 check(value($v, 'ChargeTimeToComplete') === $completionText(1620), 'Missing duration does not clear the legacy display');
 $v->properties['VariableSelection'] = '[{"Ident":"ChargeTimeToComplete","Active":false}]';
 $v->ApplyChanges();
-signal($v, 'charge-timetocomplete', ['value'=>30], '2026-10-10T10:01:00Z');
+signal($v, 'charge-timetocomplete', ['value'=>30, 'unit'=>'min'], '2026-10-10T10:01:00Z');
 check(!$v->GetIDForIdent('ChargeTimeToComplete') && value($v, 'ChargeTimeRemainingMinutes') === 30.0, 'Legacy duration display respects deselection');
 
 $v = vehicle();
 $v->RegisterVariableString('ChargeEndTime', 'Fertig geladen');
 $id = $v->GetIDForIdent('ChargeEndTime');
-signal($v, 'charge-timetocomplete', ['value'=>60]);
+signal($v, 'charge-timetocomplete', ['value'=>60, 'unit'=>'min']);
 check($v->GetIDForIdent('ChargeEndTime') === $id && value($v, 'ChargeEndTime') === $completionText(60), 'The alternate legacy display also receives current duration data');
 $v->properties['VariableSelection'] = '[{"Ident":"ChargeEndTime","Active":false},{"Ident":"ChargeTimeToComplete","Active":false}]';
 $v->ApplyChanges();
-signal($v, 'charge-timetocomplete', ['value'=>30], '2026-10-10T10:01:00Z');
+signal($v, 'charge-timetocomplete', ['value'=>30, 'unit'=>'min'], '2026-10-10T10:01:00Z');
 check(!$v->GetIDForIdent('ChargeEndTime') && !$v->GetIDForIdent('ChargeTimeToComplete'), 'Both completion displays stay deleted when their checkboxes are disabled');
 
 $v = vehicle();
 $v->ProcessWebhookSignals(json_encode(['data'=>['signals'=>[
-    ['code'=>'charge-timetocomplete', 'body'=>['value'=>45.5], 'status'=>['value'=>'SUCCESS'], 'meta'=>['retrievedAt'=>'2026-10-10T12:00:00Z']]
+    ['code'=>'charge-timetocomplete', 'body'=>['value'=>45.5, 'unit'=>'min'], 'status'=>['value'=>'SUCCESS'], 'meta'=>['retrievedAt'=>'2026-10-10T12:00:00Z']]
 ]]], JSON_THROW_ON_ERROR));
 check(value($v, 'ChargeTimeToComplete') === $completionText(45.5, '2026-10-10T12:00:00Z'), 'API retrieval time anchors the completion estimate when OEM time is missing');
 $estimate = value($v, 'ChargeTimeToComplete');
@@ -444,7 +489,7 @@ check(value($v, 'ChargeTimeToComplete') === $estimate, 'Restoring cache does not
 $v = vehicle();
 $before = time();
 $v->ProcessWebhookSignals(json_encode(['data'=>['signals'=>[
-    ['code'=>'charge-timetocomplete', 'body'=>['value'=>60], 'status'=>['value'=>'SUCCESS']]
+    ['code'=>'charge-timetocomplete', 'body'=>['value'=>60, 'unit'=>'min'], 'status'=>['value'=>'SUCCESS']]
 ]]], JSON_THROW_ON_ERROR));
 $cache = json_decode($v->attributes['LastSuccessfulSignalPayloads'], true);
 $receivedAt = $cache['charge-timetocomplete']['meta']['receivedAt'];
@@ -454,7 +499,7 @@ $v->ApplyChanges();
 check(value($v, 'ChargeTimeToComplete') === $estimate, 'Reception-time estimates also remain stable across saves');
 
 $v = vehicle();
-signal($v, 'charge-timetocomplete', ['value'=>0]);
+signal($v, 'charge-timetocomplete', ['value'=>0, 'unit'=>'min']);
 check(value($v, 'ChargeTimeRemainingMinutes') === 0.0 && value($v, 'ChargeTimeToComplete') === $completionText(0), 'Zero duration is a valid estimated completion time');
 
 $v = vehicle();
@@ -472,19 +517,19 @@ $originalTimezone = date_default_timezone_get();
 try {
     date_default_timezone_set('Europe/Berlin');
     $v = vehicle();
-    signal($v, 'charge-timetocomplete', ['value'=>60]);
+    signal($v, 'charge-timetocomplete', ['value'=>60, 'unit'=>'min']);
     check(value($v, 'ChargeTimeToComplete') === '10.10.2026 13:00 Uhr' && value($v, 'ChargeTimeRemainingMinutes') === 60.0, 'Completion clock uses the Symcon timezone while minutes stay unchanged');
 } finally {
     date_default_timezone_set($originalTimezone);
 }
 
 $v = vehicle();
-$attributes = ['code'=>'charge-timetocomplete', 'body'=>['value'=>15.5], 'status'=>['value'=>'SUCCESS']];
+$attributes = ['code'=>'charge-timetocomplete', 'body'=>['value'=>15.5, 'unit'=>'min'], 'status'=>['value'=>'SUCCESS']];
 $v->parentResponse = ['success'=>true, 'body'=>['data'=>['attributes'=>$attributes, 'meta'=>['oemUpdatedAt'=>'2026-10-10T12:00:00Z']]]];
 check($v->FetchSelectedSignals(['charge-timetocomplete']) && value($v, 'ChargeTimeRemainingMinutes') === 15.5 && value($v, 'ChargeTimeToComplete') === $completionText(15.5, '2026-10-10T12:00:00Z'), 'Targeted pulls update minutes and completion clock using signal metadata');
 $v->parentResponse = ['success'=>true, 'body'=>['data'=>[['attributes'=>$attributes, 'meta'=>['oemUpdatedAt'=>'2026-10-10T12:01:00Z']]]]];
 check($v->SyncVehicleAccessSignals() && value($v, 'ChargeTimeToComplete') === $completionText(15.5, '2026-10-10T12:01:00Z'), 'Batch pulls update the same completion clock');
-signal($v, 'charge-timetocomplete', ['value'=>5], '2026-10-10T11:00:00Z');
+signal($v, 'charge-timetocomplete', ['value'=>5, 'unit'=>'min'], '2026-10-10T11:00:00Z');
 check(value($v, 'ChargeTimeRemainingMinutes') === 15.5 && value($v, 'ChargeTimeToComplete') === $completionText(15.5, '2026-10-10T12:01:00Z'), 'Older OEM signals cannot overwrite either charge-time display');
 
 // New commands must use the documented verbs, bodies and sc-user-id header.

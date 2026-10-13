@@ -80,12 +80,12 @@ Das Debug-Protokoll `WebhookVehicle/Ladedaten` enthält für Ladeleistung und Re
 
 ### Restdauer und Fertig-Uhrzeit
 
-Das aktuelle Signal `charge-timetocomplete` liefert die geschätzte Restdauer bis zum aktiven Ladelimit in Minuten. Daraus werden zwei Anzeigen bereitgestellt:
+Die API beschreibt `charge-timetocomplete` als Restdauer in Minuten. Wenn das Signal ausdrücklich `min`, `minute` oder `minutes` als Einheit liefert, wird es entsprechend verarbeitet. Ohne Einheitenangabe bleibt die zuvor funktionierende Uhrzeit-Verarbeitung aus `main` erhalten: Ganzzahlige Werte sind Minuten seit Mitternacht (`1360` → **22:40 Uhr**), Dezimalwerte sind Dezimalstunden (`22.5` → **22:30 Uhr**). Eine Division durch 10 erfolgt nicht.
 
-- **Verbleibende Ladezeit** (`ChargeTimeRemainingMinutes`): numerischer Minutenwert, einschließlich Dezimalstellen.
-- **Fertiggeladen** (`ChargeTimeToComplete`): geschätztes Datum und Uhrzeit in der Zeitzone der Symcon-Installation. Eine vorhandene Anzeige `ChargeEndTime` wird ebenfalls unterstützt.
+- **Verbleibende Ladezeit** (`ChargeTimeRemainingMinutes`): Bei einer expliziten Minuteneinheit der gelieferte Restwert; bei einheitenlosen Uhrzeitwerten die Differenz zwischen Fertig-Uhrzeit und Datenzeitpunkt. Die Anzeige hat keine Nachkommastellen. Die Float-Variable und ihre ID bleiben erhalten.
+- **Fertiggeladen** (`ChargeTimeToComplete`): Ohne Einheit die Uhrzeit wie auf `main`; bei expliziter Restdauer das daraus berechnete Datum mit Uhrzeit. Eine vorhandene Anzeige `ChargeEndTime` wird ebenfalls unterstützt.
 
-Die Uhrzeit wird aus Restdauer und OEM-Datenstand berechnet. Fehlt dieser, wird der API-Abrufzeitpunkt verwendet, andernfalls der gespeicherte Empfangszeitpunkt. Erneutes Speichern der Konfiguration verschiebt die Uhrzeit bei bereits gespeicherten Zeitstempeln nicht. Fehlende Werte überschreiben die letzte gültige Anzeige nicht.
+Als Datenzeitpunkt dient der OEM-Datenstand, ersatzweise der API-Abrufzeitpunkt oder der gespeicherte Empfangszeitpunkt. Eine Uhrzeit vor dem Datenzeitpunkt gehört zum Folgetag. Die Berechnung verwendet die Zeitzone der Symcon-Installation einschließlich Sommerzeitregeln. Erneutes Speichern verschiebt bereits gespeicherte Zeitbezüge nicht; fehlende Werte überschreiben die letzte gültige Anzeige nicht.
 
 ### Alle, einzelne oder mehrere Signale abrufen
 
@@ -323,7 +323,7 @@ Alle 93 konkreten Signalendpunkte der am 10.10.2026 abgerufenen Smartcar-V3-Refe
 
 Zusätzliche Standortfelder, Batterie-Kapazitätsvarianten, Reichweitenvarianten, Ladelimit-Varianten und weitere Reifenachsen werden ebenfalls übernommen. Fehlende/null-Teilwerte erzeugen keine künstlichen Nullwerte. Ältere OEM-Datenstände überschreiben weder Variablen noch Cache; Zeitstempel werden für die Reihenfolge mit ihrer höheren Präzision ausgewertet.
 
-Vorhandene Variablen werden bei Typkorrekturen nicht gelöscht. Die Restdauer verwendet `ChargeTimeRemainingMinutes`; die bisherige String-Variable `ChargeTimeToComplete` wird wieder aktualisiert und zeigt das geschätzte Fertig-Datum mit Uhrzeit. Eine vorhandene alternative Anzeige `ChargeEndTime` bleibt ebenfalls erhalten und wird aus dem aktuellen Signal versorgt. Falls `ChargeLimit` bereits durch den früheren JSON-Fallback als String angelegt wurde, wird der Messwert unter `ChargeLimitPercent` bereitgestellt. Die alten IDs und damit verbundene Archive bleiben bestehen. Neue unbekannte numerische Signale werden als Float angelegt, damit spätere Dezimalstellen erhalten bleiben.
+Vorhandene Variablen werden bei Typkorrekturen nicht gelöscht. Die Restdauer verwendet `ChargeTimeRemainingMinutes`; die bisherige String-Variable `ChargeTimeToComplete` wird wieder aktualisiert und zeigt bei einheitenlosen Werten die Fertig-Uhrzeit wie auf `main`, bei ausdrücklich gelieferter Restdauer Datum und Uhrzeit. Eine vorhandene alternative Anzeige `ChargeEndTime` bleibt ebenfalls erhalten und wird aus dem aktuellen Signal versorgt. Falls `ChargeLimit` bereits durch den früheren JSON-Fallback als String angelegt wurde, wird der Messwert unter `ChargeLimitPercent` bereitgestellt. Die alten IDs und damit verbundene Archive bleiben bestehen. Neue unbekannte numerische Signale werden als Float angelegt, damit spätere Dezimalstellen erhalten bleiben.
 
 ### Lokale Regressionstests
 
