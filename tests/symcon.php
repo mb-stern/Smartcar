@@ -138,22 +138,21 @@ $v->ProcessWebhookSignals(json_encode(['data'=>['signals'=>[
     ['code'=>'charge-wattage','body'=>['value'=>6,'unit'=>'watts'],'status'=>['value'=>'SUCCESS']]
 ]]], JSON_THROW_ON_ERROR));
 $powerID = invoke($v, 'GetIDForIdent', 'ChargeWattage');
-if (GetValue($powerID) !== 0.006) {
-    throw new RuntimeException('Automatic native power conversion did not follow the reported watts unit');
+if (GetValue($powerID) !== 6.0) {
+    throw new RuntimeException('Native power value was not directly treated as kW');
 }
-$v->SetProperty('ChargePowerUnit', 'kw');
+SetValue($powerID, 0.006);
 $v->ApplyChanges();
 if (invoke($v, 'GetIDForIdent', 'ChargeWattage') !== $powerID || GetValue($powerID) !== 6.0) {
-    throw new RuntimeException('Native power-unit override did not reprocess the cached value while preserving its ID');
+    throw new RuntimeException('Native cached power was not restored directly as kW while preserving its ID');
 }
 $form = json_decode($v->GetConfigurationForm(), true, 512, JSON_THROW_ON_ERROR);
-$unit = array_values(array_filter($form['elements'], static fn($element) => ($element['name'] ?? '') === 'ChargePowerUnit'))[0];
-if ($unit['type'] !== 'Select' || array_column($unit['options'], 'value') !== ['api','watts','kw']) {
-    throw new RuntimeException('Native vehicle form does not expose the per-vehicle power-unit choice');
+if (in_array('ChargePowerUnit', array_column($form['elements'], 'name'), true)) {
+    throw new RuntimeException('Native vehicle form still asks for a power-unit choice');
 }
 IPS\InstanceManager::connectInstance($instanceID, 18918);
 $form = json_decode($v->GetConfigurationForm(), true, 512, JSON_THROW_ON_ERROR);
-if (!in_array('ChargePowerUnit', array_column($form['elements'], 'name'), true)) {
+if (!in_array('VariableSelection', array_column($form['elements'], 'name'), true)) {
     throw new RuntimeException('Missing native parent interface prevents editing the vehicle form');
 }
 class SymconUnavailableParent extends IPSModuleStrict
@@ -181,4 +180,4 @@ if ($output !== '' || !in_array('VariableSelection', array_column($form['element
     throw new RuntimeException('Native parent warning corrupts the configuration form output');
 }
 IPS\InstanceManager::disconnectInstance($instanceID);
-echo "$count official signal examples, integer charge-limit registration, checkbox selection, compatibility filtering, power-unit override, parent-interface failure handling and completion display passed with SymconStubs. No live Symcon service.\n";
+echo "$count official signal examples, integer charge-limit registration, checkbox selection, compatibility filtering, direct kW values, parent-interface failure handling and completion display passed with SymconStubs. No live Symcon service.\n";

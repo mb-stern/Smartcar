@@ -15,7 +15,6 @@ class SmartcarVehicle extends IPSModuleStrict
     $this->RegisterPropertyInteger('Year', 0);
     $this->RegisterPropertyString('PowertrainType', '');
     $this->RegisterPropertyString('Permissions', '[]');
-    $this->RegisterPropertyString('ChargePowerUnit', 'api');
     $this->RegisterPropertyBoolean('ShowOEMUpdatedAtVariables', false);
     $this->RegisterPropertyString('VariableSelection', '[]');
     $this->RegisterAttributeString('DiscoveredVariables', '{}');
@@ -447,16 +446,6 @@ class SmartcarVehicle extends IPSModuleStrict
                         ['type' => 'Label', 'caption' => 'Vehicle ID: ' . $this->ReadPropertyString('VehicleID')],
                         ['type' => 'Label', 'caption' => 'Connection ID: ' . $this->ReadPropertyString('ConnectionID')],
                         ['type' => 'Label', 'caption' => 'User ID: ' . $this->ReadPropertyString('UserID')]
-                    ]
-                ],
-                [
-                    'type' => 'Select',
-                    'name' => 'ChargePowerUnit',
-                    'caption' => 'Einheit des gelieferten Ladeleistungswerts',
-                    'options' => [
-                        ['caption' => 'Einheit aus Smartcar-Daten', 'value' => 'api'],
-                        ['caption' => 'Watt (W)', 'value' => 'watts'],
-                        ['caption' => 'Kilowatt (kW)', 'value' => 'kw']
                     ]
                 ],
                 [
@@ -1131,7 +1120,7 @@ class SmartcarVehicle extends IPSModuleStrict
             'body' => $body,
             'status' => $status,
             'meta' => $meta,
-            'powerUnit' => $this->ReadPropertyString('ChargePowerUnit'),
+            'powerUnit' => 'kw',
             'olderThanStored' => $this->IsOlderSignal($code, $meta),
             'storedOEMUpdatedAt' => (float)($times[$code] ?? 0),
             'variables' => $variables
@@ -2527,11 +2516,7 @@ class SmartcarVehicle extends IPSModuleStrict
         if (!is_numeric($value) || !is_finite((float)$value)) {
             return null;
         }
-        $unit = $this->ReadPropertyString('ChargePowerUnit');
-        if ($unit === 'api') {
-            $unit = strtolower(trim((string)($body['unit'] ?? 'watts')));
-        }
-        return in_array($unit, ['kw', 'kilowatt', 'kilowatts'], true) ? (float)$value : (float)$value / 1000;
+        return (float)$value;
     }
 
     private function GetChargeCompletionText(array $body, array $meta): ?string

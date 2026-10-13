@@ -94,8 +94,8 @@ foreach ($fixture['signals'] as $example) {
 $v = vehicle();
 signal($v, 'location-isathome', ['value'=>false]);
 check(value($v, 'IsAtHome') === false, 'IsAtHome preserves false');
-signal($v, 'charge-wattage', ['value'=>7000, 'unit'=>'watts']);
-check(value($v, 'ChargeWattage') === 7.0, 'Watts converted to kW');
+signal($v, 'charge-wattage', ['value'=>7, 'unit'=>'watts']);
+check(value($v, 'ChargeWattage') === 7.0, 'Power raw value is used directly as kW');
 signal($v, 'charge-timetocomplete', ['value'=>45.5, 'unit'=>'minutes']);
 check(value($v, 'ChargeTimeRemainingMinutes') === 45.5, 'Duration stays decimal minutes');
 signal($v, 'charge-ischargingportflapopen', ['value'=>true]);
@@ -247,7 +247,7 @@ try {
         $output = ob_get_clean();
     }
     check($output === '' && isset($form['elements'], $form['actions']), 'Missing parent interface warning does not pollute the form JSON output');
-    check(in_array('ChargePowerUnit', array_column($form['elements'], 'name'), true) && in_array('VariableSelection', array_column($form['elements'], 'name'), true), 'Power unit and variable selection remain editable when the splitter interface is unavailable');
+    check(in_array('VariableSelection', array_column($form['elements'], 'name'), true), 'Variable selection remains editable when the splitter interface is unavailable');
     $debug = array_values(array_filter($v->debug, static fn($line) => $line[0] === 'WebhookOverview/Error'));
     check(count($debug) === 1 && str_contains($debug[0][1], '#18918'), 'Original missing-interface cause remains available in debug');
     trigger_error('After failed overview request', E_USER_WARNING);
@@ -265,29 +265,30 @@ $v->parentResponder = static fn(string $json): string => 'invalid-json';
 $overview = invoke($v, 'GetWebhookOverviewFromParent');
 check(!$overview['success'] && $overview['error'] === 'Ungültige Antwort vom Splitter.', 'Malformed overview responses retain their distinct error result');
 
-// A confirmed incorrect OEM power unit can be corrected per vehicle without guessing from magnitude.
+// Power is always the raw kW value; the reported unit does not change it.
 $v = vehicle();
 signal($v, 'charge-wattage', ['value'=>6, 'unit'=>'watts']);
 $id = $v->GetIDForIdent('ChargeWattage');
-check(value($v, 'ChargeWattage') === 0.006, 'Default power conversion follows the reported watts unit even for a small value');
-$v->properties['ChargePowerUnit'] = 'kw';
+check(value($v, 'ChargeWattage') === 6.0, 'Power value is used directly as kW even when labelled watts');
+$v->SetValue('ChargeWattage', 0.006);
 $v->ApplyChanges();
-check($v->GetIDForIdent('ChargeWattage') === $id && value($v, 'ChargeWattage') === 6.0, 'Per-vehicle kW override reprocesses cached power immediately without changing its ID');
+check($v->GetIDForIdent('ChargeWattage') === $id && value($v, 'ChargeWattage') === 6.0, 'Saving restores a previously divided value from cache without changing its ID');
 $cache = json_decode($v->attributes['LastSuccessfulSignalPayloads'], true);
-check($cache['charge-wattage']['body'] === ['value'=>6,'unit'=>'watts'], 'Power override preserves original API raw data and unit');
+check($cache['charge-wattage']['body'] === ['value'=>6,'unit'=>'watts'], 'Direct kW handling preserves original API raw data and unit');
 signal($v, 'charge-wattage', ['value'=>6.1, 'unit'=>'watts'], '2026-10-10T10:01:00Z');
-check(value($v, 'ChargeWattage') === 6.1, 'Confirmed kW override preserves delivered decimal precision');
-$other = vehicle();
-signal($other, 'charge-wattage', ['value'=>6100, 'unit'=>'watts']);
-check(value($other, 'ChargeWattage') === 6.1, 'Other vehicles retain standard watts conversion');
-signal($other, 'charge-wattage', ['value'=>6.1, 'unit'=>'kW']);
-check(value($other, 'ChargeWattage') === 6.1, 'A correctly labelled kW signal does not divide its value');
-$v->properties['ChargePowerUnit'] = 'watts';
-$v->ApplyChanges();
-signal($v, 'charge-wattage', ['value'=>6100, 'unit'=>'kW'], '2026-10-10T10:02:00Z');
-check(value($v, 'ChargeWattage') === 6.1, 'Explicit watts override handles a wrongly labelled kW payload');
+check(value($v, 'ChargeWattage') === 6.1, 'Direct kW handling preserves delivered decimal precision');
+foreach (['kW', 'watts', ''] as $unit) {
+    $other = vehicle();
+    signal($other, 'charge-wattage', ['value'=>6.1, 'unit'=>$unit]);
+    check(value($other, 'ChargeWattage') === 6.1, 'Power unit cannot divide the raw kW value: ' . $unit);
+}
 signal($v, 'charge-wattage', ['value'=>'invalid', 'unit'=>'watts'], '2026-10-10T10:03:00Z');
 check(value($v, 'ChargeWattage') === 6.1, 'Invalid power input cannot fabricate a zero value');
+$other = vehicle();
+signal($other, 'charge-power', ['value'=>8.5, 'unit'=>'watts']);
+check(value($other, 'ChargeWattage') === 8.5, 'Legacy charge-power signal is also directly treated as kW');
+$form = json_decode($v->GetConfigurationForm(), true, 512, JSON_THROW_ON_ERROR);
+check(!in_array('ChargePowerUnit', array_column($form['elements'], 'name'), true), 'Vehicle form no longer asks for a power-unit choice');
 
 $v = vehicle();
 signal($v, 'charge-timetocomplete', ['value'=>1359], '2026-10-13T18:53:00Z');

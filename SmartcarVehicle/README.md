@@ -43,7 +43,6 @@ Die Fahrzeuginstanz verwendet keine separate Smartcar-Kompatibilitätsprüfung m
 
 | Feld | Beschreibung |
 | --- | --- |
-| **Einheit des gelieferten Ladeleistungswerts** | Verwendet standardmäßig die von Smartcar gelieferte Einheit. Bei einer nachgewiesenen falschen Einheitenkennzeichnung kann pro Fahrzeug Watt oder Kilowatt ausgewählt werden. Die Anzeige bleibt in kW; gespeicherte Signalwerte werden beim Speichern neu umgerechnet. |
 | **OEM-Aktualisierungszeit** | Blendet für unterstützte Signale eine zusätzliche Variable mit der vom OEM gelieferten Aktualisierungszeit ein. |
 | **Verfügbare Signal- und Steuervariablen** | Zeigt die vom Fahrzeug erkannten Signale und die über Vehicle Access freigegebenen Steuerfunktionen an. Über die Checkboxen können einzelne Variablen aktiviert oder deaktiviert werden. |
 | **Vehicle Access synchronisieren** | Synchronisiert die zuvor unter Smartcar → Configuration → Vehicle Access geänderten Berechtigungen und aktualisiert die Fahrzeugverbindung. |
@@ -75,9 +74,9 @@ Bei der Verarbeitung werden nur Signale berücksichtigt, die erfolgreich geliefe
 
 ### Ladeleistung
 
-`charge-wattage` wird standardmäßig entsprechend der mitgelieferten Einheit von Watt in kW umgerechnet. Die Fahrzeugeinstellung **Einheit des gelieferten Ladeleistungswerts → Kilowatt (kW)** behandelt den Rohwert direkt als kW, wenn Smartcar etwa `6` mit der falschen Kennzeichnung `watts` liefert und die Hersteller-App etwa 6 kW bestätigt. Diese Korrektur gilt nur für die betreffende Fahrzeuginstanz; die Rohdaten bleiben unverändert. Nicht gelieferte Nachkommastellen lassen sich dadurch nicht wiederherstellen.
+Die Rohwerte von `charge-wattage` und `charge-power` werden direkt als kW übernommen, auch bei einer mitgelieferten Kennzeichnung `watts`. Es erfolgt keine Division durch 1000 und keine Einheitenauswahl pro Fahrzeug. Der Rohwert `6` ergibt somit 6,0 kW. Gespeicherte Signalwerte werden beim Speichern der Fahrzeugkonfiguration erneut verarbeitet; bestehende Variablen-IDs bleiben erhalten. Nicht gelieferte Nachkommastellen lassen sich nicht wiederherstellen.
 
-Das Debug-Protokoll `WebhookVehicle/Ladedaten` enthält für Ladeleistung und Restdauer den Rohwert, die Signalzeitstempel, die gewählte Leistungseinheit sowie erwartete und gespeicherte Variablenwerte. Es zeigt auch, ob ein älterer OEM-Datenstand vorliegt, eine Checkbox deaktiviert ist oder der bestehende Variablentyp nicht passt.
+Das Debug-Protokoll `WebhookVehicle/Ladedaten` enthält für Ladeleistung und Restdauer den Rohwert, die Signalzeitstempel, die Anzeigeeinheit kW sowie erwartete und gespeicherte Variablenwerte. Es zeigt auch, ob ein älterer OEM-Datenstand vorliegt, eine Checkbox deaktiviert ist oder der bestehende Variablentyp nicht passt.
 
 ### Restdauer und Fertig-Uhrzeit
 
