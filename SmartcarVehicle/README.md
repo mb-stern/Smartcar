@@ -35,11 +35,13 @@
 
 ## 4. Einrichten der Instanz
 
-<img width="1781" height="888" alt="Smartcar Vehicle Instanz" src="https://github.com/user-attachments/assets/141ec08f-b3e9-4c36-b7ed-7bbdaa2bb5fa" />
+![alt text](image.png)
 
 Die Berechtigungen für Fahrzeugdaten und Steuerfunktionen werden unter **Smartcar → Configuration → Vehicle Access** festgelegt.
 
 Die Fahrzeuginstanz verwendet keine separate Smartcar-Kompatibilitätsprüfung mehr. Stattdessen werden die tatsächlich vom Fahrzeug gelieferten Signale ausgewertet.
+
+Die Fahrzeugkonfiguration kann auch geöffnet werden, wenn der Splitter vorübergehend nicht erreichbar ist. Die Variablenauswahl bleibt dabei bedienbar; die Webhook-Übersicht steht nach Wiederherstellung der Verbindung wieder zur Verfügung.
 
 | Feld | Beschreibung |
 | --- | --- |
@@ -72,14 +74,24 @@ Bei der Verarbeitung werden nur Signale berücksichtigt, die erfolgreich geliefe
 
 `null`-Teilwerte werden nicht als Messwert übernommen; Werte wie `0` oder `false` sind gültig. Der zusätzliche Filter für leere Zusatzlisten und Zeichenketten wurde zurückgenommen. Die Checkbox-Auswahl ist davon unabhängig: Eine ausdrücklich angekreuzte Signalvariable wird beim Speichern auch ohne aktuellen Nutzwert angelegt.
 
+### Fahrtrichtung
+
+Die **Fahrtrichtung** wird mit dem Gradzeichen und einer Nachkommastelle angezeigt, beispielsweise **187,6°**. Die Bezeichnung enthält nicht mehr „(Grad)“. Koordinaten behalten ihre bisherige Genauigkeit. Selbst vergebene Variablennamen bleiben erhalten.
+
+### Ladeleistung
+
+Die Rohwerte von `charge-wattage` und `charge-power` werden direkt als kW übernommen, auch bei einer mitgelieferten Kennzeichnung `watts`. Es erfolgt keine Division durch 1000 und keine Einheitenauswahl pro Fahrzeug. Der Rohwert `6` ergibt somit 6,0 kW. Gespeicherte Signalwerte werden beim Speichern der Fahrzeugkonfiguration erneut verarbeitet; bestehende Variablen-IDs bleiben erhalten. Nicht gelieferte Nachkommastellen lassen sich nicht wiederherstellen.
+
+Das Debug-Protokoll `WebhookVehicle/Ladedaten` enthält für Ladeleistung und Restdauer den Rohwert, die Signalzeitstempel, die Anzeigeeinheit kW sowie erwartete und gespeicherte Variablenwerte. Es zeigt auch, ob ein älterer OEM-Datenstand vorliegt, eine Checkbox deaktiviert ist oder der bestehende Variablentyp nicht passt.
+
 ### Restdauer und Fertig-Uhrzeit
 
-Das aktuelle Signal `charge-timetocomplete` liefert die geschätzte Restdauer bis zum aktiven Ladelimit in Minuten. Daraus werden zwei Anzeigen bereitgestellt:
+Die API beschreibt `charge-timetocomplete` als Restdauer in Minuten. Wenn das Signal ausdrücklich `min`, `minute` oder `minutes` als Einheit liefert, wird es entsprechend verarbeitet. Ohne Einheitenangabe bleibt die zuvor funktionierende Uhrzeit-Verarbeitung aus `main` erhalten: Ganzzahlige Werte sind Minuten seit Mitternacht (`1360` → **22:40 Uhr**), Dezimalwerte sind Dezimalstunden (`22.5` → **22:30 Uhr**). Eine Division durch 10 erfolgt nicht.
 
-- **Verbleibende Ladezeit** (`ChargeTimeRemainingMinutes`): numerischer Minutenwert, einschließlich Dezimalstellen.
-- **Fertiggeladen** (`ChargeTimeToComplete`): geschätztes Datum und Uhrzeit in der Zeitzone der Symcon-Installation. Eine vorhandene Anzeige `ChargeEndTime` wird ebenfalls unterstützt.
+- **Verbleibende Ladezeit** (`ChargeTimeRemainingMinutes`): Bei einer expliziten Minuteneinheit der gelieferte Restwert; bei einheitenlosen Uhrzeitwerten die Differenz zwischen Fertig-Uhrzeit und Datenzeitpunkt. Die Anzeige hat keine Nachkommastellen. Die Float-Variable und ihre ID bleiben erhalten.
+- **Fertiggeladen** (`ChargeTimeToComplete`): Ohne Einheit die Uhrzeit wie auf `main`; bei expliziter Restdauer das daraus berechnete Datum mit Uhrzeit. Eine vorhandene Anzeige `ChargeEndTime` wird ebenfalls unterstützt.
 
-Die Uhrzeit wird aus Restdauer und OEM-Datenstand berechnet. Fehlt dieser, wird der API-Abrufzeitpunkt verwendet, andernfalls der gespeicherte Empfangszeitpunkt. Erneutes Speichern der Konfiguration verschiebt die Uhrzeit bei bereits gespeicherten Zeitstempeln nicht. Fehlende Werte überschreiben die letzte gültige Anzeige nicht.
+Als Datenzeitpunkt dient der OEM-Datenstand, ersatzweise der API-Abrufzeitpunkt oder der gespeicherte Empfangszeitpunkt. Eine Uhrzeit vor dem Datenzeitpunkt gehört zum Folgetag. Die Berechnung verwendet die Zeitzone der Symcon-Installation einschließlich Sommerzeitregeln. Erneutes Speichern verschiebt bereits gespeicherte Zeitbezüge nicht; fehlende Werte überschreiben die letzte gültige Anzeige nicht.
 
 ### Alle, einzelne oder mehrere Signale abrufen
 
@@ -317,7 +329,7 @@ Alle 93 konkreten Signalendpunkte der am 10.10.2026 abgerufenen Smartcar-V3-Refe
 
 Zusätzliche Standortfelder, Batterie-Kapazitätsvarianten, Reichweitenvarianten, Ladelimit-Varianten und weitere Reifenachsen werden ebenfalls übernommen. Fehlende/null-Teilwerte erzeugen keine künstlichen Nullwerte. Ältere OEM-Datenstände überschreiben weder Variablen noch Cache; Zeitstempel werden für die Reihenfolge mit ihrer höheren Präzision ausgewertet.
 
-Vorhandene Variablen werden bei Typkorrekturen nicht gelöscht. Die Restdauer verwendet `ChargeTimeRemainingMinutes`; die bisherige String-Variable `ChargeTimeToComplete` wird wieder aktualisiert und zeigt das geschätzte Fertig-Datum mit Uhrzeit. Eine vorhandene alternative Anzeige `ChargeEndTime` bleibt ebenfalls erhalten und wird aus dem aktuellen Signal versorgt. Falls `ChargeLimit` bereits durch den früheren JSON-Fallback als String angelegt wurde, wird der Messwert unter `ChargeLimitPercent` bereitgestellt. Die alten IDs und damit verbundene Archive bleiben bestehen. Neue unbekannte numerische Signale werden als Float angelegt, damit spätere Dezimalstellen erhalten bleiben.
+Vorhandene Variablen werden bei Typkorrekturen nicht gelöscht. Die Restdauer verwendet `ChargeTimeRemainingMinutes`; die bisherige String-Variable `ChargeTimeToComplete` wird wieder aktualisiert und zeigt bei einheitenlosen Werten die Fertig-Uhrzeit wie auf `main`, bei ausdrücklich gelieferter Restdauer Datum und Uhrzeit. Eine vorhandene alternative Anzeige `ChargeEndTime` bleibt ebenfalls erhalten und wird aus dem aktuellen Signal versorgt. Falls `ChargeLimit` bereits durch den früheren JSON-Fallback als String angelegt wurde, wird der Messwert unter `ChargeLimitPercent` bereitgestellt. Die alten IDs und damit verbundene Archive bleiben bestehen. Neue unbekannte numerische Signale werden als Float angelegt, damit spätere Dezimalstellen erhalten bleiben.
 
 ### Lokale Regressionstests
 

@@ -577,11 +577,21 @@ class SmartcarVehicle extends IPSModuleStrict
             return ['success' => false, 'error' => 'VehicleID fehlt.', 'webhooks' => []];
         }
 
-        $result = $this->SendDataToParent(json_encode([
-            'DataID' => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
-            'Command' => 'GetWebhookOverview',
-            'VehicleID' => $vehicleId
-        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        set_error_handler(static function (int $severity, string $message, string $file, int $line): never {
+            throw new ErrorException($message, 0, $severity, $file, $line);
+        }, E_WARNING | E_USER_WARNING);
+        try {
+            $result = $this->SendDataToParent(json_encode([
+                'DataID' => '{7C6B5A4F-3E2D-4C1B-9A8F-0E7D6C5B4A3F}',
+                'Command' => 'GetWebhookOverview',
+                'VehicleID' => $vehicleId
+            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        } catch (Throwable $exception) {
+            $this->SendDebug('WebhookOverview/Error', $exception->getMessage(), 0);
+            return ['success' => false, 'error' => 'Splitter ist derzeit nicht erreichbar.', 'webhooks' => []];
+        } finally {
+            restore_error_handler();
+        }
 
         $decoded = json_decode((string)$result, true);
         if (!is_array($decoded)) {
@@ -1064,6 +1074,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 $meta,
                 false
             );
+            $this->DebugChargingSignal($signalCode, $body, $status, $meta);
         }
 
         $this->TouchLastSignalsAt();
@@ -1082,6 +1093,41 @@ class SmartcarVehicle extends IPSModuleStrict
 
     }
 
+
+    private function DebugChargingSignal(string $code, array $body, ?array $status, array $meta): void
+    {
+        if (!in_array($code, ['charge-wattage', 'charge-power', 'charge-timetocomplete'], true)) {
+            return;
+        }
+        $definition = $this->GetSignalDefinition($code, $body, $meta);
+        $variables = [];
+        foreach ($this->GetVariablesFromDefinition($definition, $body) as $variable) {
+            $ident = (string)$variable['ident'];
+            $id = @$this->GetIDForIdent($ident);
+            $variables[] = [
+                'ident' => $ident,
+                'active' => $this->IsVariableEnabled($ident),
+                'variableID' => $id ?: 0,
+                'type' => $id ? (int)IPS_GetVariable($id)['VariableType'] : null,
+                'expectedType' => (int)$variable['type'],
+                'storedValue' => $id ? GetValue($id) : null,
+                'expectedValue' => $this->GetSignalVariableValue($variable, $body)
+            ];
+        }
+        $times = json_decode($this->ReadAttributeString('LastOEMSignalTimes'), true);
+        $this->SendDebug('WebhookVehicle/Ladedaten', json_encode([
+            'code' => $code,
+            'body' => $body,
+            'status' => $status,
+            'meta' => $meta,
+            'powerUnit' => 'kw',
+            'chargeTimeInterpretation' => $code === 'charge-timetocomplete'
+                ? ($this->HasChargeDurationUnit($body) ? 'remaining-minutes' : 'clock-as-main') : null,
+            'olderThanStored' => $this->IsOlderSignal($code, $meta),
+            'storedOEMUpdatedAt' => (float)($times[$code] ?? 0),
+            'variables' => $variables
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 0);
+    }
 
     private function HasMeaningfulSignalData(array $body): bool
     {
@@ -1885,6 +1931,9 @@ class SmartcarVehicle extends IPSModuleStrict
             $cache = [];
         }
         $previousBody = is_array($cache[$code]['body'] ?? null) ? $cache[$code]['body'] : [];
+        if ($code === 'charge-timetocomplete' && !isset($body['unit'])) {
+            unset($previousBody['unit']);
+        }
         $body = array_replace($previousBody, array_filter($body, static fn($value): bool => $value !== null));
         $cache[$code] = ['body' => $body, 'status' => $status, 'meta' => $meta];
         $this->WriteAttributeString('LastSuccessfulSignalPayloads', json_encode($cache, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
@@ -2289,7 +2338,7 @@ class SmartcarVehicle extends IPSModuleStrict
             IPS_CreateVariableProfile('SMCAR.DurationMinutes', VARIABLETYPE_FLOAT);
         }
         IPS_SetVariableProfileText('SMCAR.DurationMinutes', '', ' min');
-        IPS_SetVariableProfileDigits('SMCAR.DurationMinutes', 1);
+        IPS_SetVariableProfileDigits('SMCAR.DurationMinutes', 0);
 
         if (!IPS_VariableProfileExists('SMCAR.Odometer')) {
             IPS_CreateVariableProfile('SMCAR.Odometer', VARIABLETYPE_FLOAT);
@@ -2466,28 +2515,84 @@ class SmartcarVehicle extends IPSModuleStrict
         return $value;
     }
 
-    private function GetChargeCompletionText(array $body, array $meta): ?string
+    private function GetChargePowerKw(array $body): ?float
     {
-        $minutes = $body['value'] ?? null;
-        if (!is_numeric($minutes) || !is_finite((float)$minutes) || $minutes < 0) {
+        $value = $body['value'] ?? null;
+        if (!is_numeric($value) || !is_finite((float)$value)) {
             return null;
         }
-        $reference = 0;
+        return (float)$value;
+    }
+
+    private function HasChargeDurationUnit(array $body): bool
+    {
+        return in_array(strtolower(trim((string)($body['unit'] ?? ''))), ['min', 'minute', 'minutes'], true);
+    }
+
+    private function GetChargeReferenceTime(array $meta): int
+    {
         foreach (['oemUpdatedAt', 'retrievedAt', 'receivedAt'] as $key) {
             $reference = $this->ParseSmartcarTimestamp($meta[$key] ?? null);
             if ($reference > 0) {
-                break;
+                return $reference;
             }
         }
-        if ($reference === 0) {
-            $reference = time();
-        }
-        $seconds = round((float)$minutes * 60);
-        if (!is_finite($seconds) || $seconds >= PHP_INT_MAX - $reference) {
+        return time();
+    }
+
+    private function GetChargeCompletionTimestamp(array $body, array $meta): ?int
+    {
+        $value = $body['value'] ?? null;
+        if (!is_int($value) && !is_float($value) && !is_string($value)) {
             return null;
         }
-        $completion = $reference + (int)$seconds;
-        return date('d.m.Y H:i', $completion) . ' Uhr';
+        $raw = str_replace(',', '.', (string)$value);
+        if (!is_numeric($raw) || !is_finite((float)$raw) || (float)$raw < 0 || (float)$raw >= PHP_INT_MAX) {
+            return null;
+        }
+        $reference = $this->GetChargeReferenceTime($meta);
+        if ($this->HasChargeDurationUnit($body)) {
+            $seconds = round((float)$raw * 60);
+            if (!is_finite($seconds) || $seconds >= PHP_INT_MAX - $reference) {
+                return null;
+            }
+            return $reference + (int)$seconds;
+        }
+
+        if (str_contains($raw, '.')) {
+            $hours = (int)floor((float)$raw);
+            $minutesOfDay = ($hours % 24) * 60 + (int)round(((float)$raw - $hours) * 60);
+        } else {
+            $minutesOfDay = (int)$raw % 1440;
+        }
+        $minutesOfDay %= 1440;
+        $date = (new DateTimeImmutable('@' . $reference))->setTimezone(new DateTimeZone(date_default_timezone_get()));
+        $completion = $date->setTime(intdiv($minutesOfDay, 60), $minutesOfDay % 60);
+        if ($completion->getTimestamp() < $reference) {
+            $completion = $completion->modify('+1 day');
+        }
+        return $completion->getTimestamp();
+    }
+
+    private function GetChargeRemainingMinutes(array $body, array $meta): ?float
+    {
+        $completion = $this->GetChargeCompletionTimestamp($body, $meta);
+        if ($completion === null) {
+            return null;
+        }
+        if ($this->HasChargeDurationUnit($body)) {
+            return (float)str_replace(',', '.', (string)$body['value']);
+        }
+        return max(0.0, ($completion - $this->GetChargeReferenceTime($meta)) / 60);
+    }
+
+    private function GetChargeCompletionText(array $body, array $meta): ?string
+    {
+        $completion = $this->GetChargeCompletionTimestamp($body, $meta);
+        if ($completion === null) {
+            return null;
+        }
+        return date($this->HasChargeDurationUnit($body) ? 'd.m.Y H:i' : 'H:i', $completion) . ' Uhr';
     }
 
     private function GetSignalDefinition(string $code, array $body = [], array $signalMeta = []): array
@@ -2516,6 +2621,12 @@ class SmartcarVehicle extends IPSModuleStrict
         }
         $variables = $this->GetVariablesFromDefinition($definition, $body);
         if ($code === 'charge-timetocomplete') {
+            foreach ($variables as &$variable) {
+                if (($variable['ident'] ?? '') === 'ChargeTimeRemainingMinutes') {
+                    $variable['convert'] = fn(array $data): ?float => $this->GetChargeRemainingMinutes($data, $signalMeta);
+                }
+            }
+            unset($variable);
             $completion = [
                 'ident' => 'ChargeTimeToComplete',
                 'name' => 'Fertiggeladen',
@@ -2732,7 +2843,7 @@ class SmartcarVehicle extends IPSModuleStrict
                 'name' => 'Ladeleistung',
                 'type' => VARIABLETYPE_FLOAT,
                 'profile' => 'SMCAR.Power',
-                'convert' => fn(array $body) => strtolower((string)($body['unit'] ?? 'watts')) === 'kw' ? (float)$body['value'] : (float)$body['value'] / 1000
+                'convert' => fn(array $body): ?float => $this->GetChargePowerKw($body)
             ],
 
             'charge-energyadded' => [
