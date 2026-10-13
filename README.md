@@ -1,52 +1,80 @@
 # Smartcar Integration für IP-Symcon
 
-Mit diesem Modul empfängst du Fahrzeugdaten über [Smartcar](https://smartcar.com/de) in IP-Symcon und steuerst unterstützte Fahrzeugfunktionen.
+Mit diesem Modul kannst du Fahrzeugdaten in IP-Symcon anzeigen und unterstützte Fahrzeugfunktionen steuern. Die Verbindung zum Fahrzeug erfolgt über [Smartcar](https://smartcar.com/de).
 
-Dazu gehören beispielsweise Batteriestand, Reichweite, Standort, Ladeleistung und Ladezeit. Je nach Fahrzeug sind auch Ladebefehle, Ladelimit, Ladeport, Zentralverriegelung, Navigationsziele und Ladepläne verfügbar.
+## Funktionen
 
-Welche Funktionen dein Fahrzeug unterstützt, kannst du bei [Smartcar](https://smartcar.com/de/product/compatible-vehicles) nachsehen. Die Unterstützung kann je nach Modell und Ausstattung abweichen.
+### Fahrzeugdaten anzeigen
 
-## Installation
+Je nach Fahrzeug stehen unter anderem diese Informationen zur Verfügung:
 
-Erstelle nach der Installation zuerst einen **Smartcar Configurator**. Über diesen werden die Verbindung und die Fahrzeuginstanzen eingerichtet. IP-Symcon ab Version **8.2** ist erforderlich.
+- Batteriestand, Reichweite und Kraftstoffstand.
+- Standort, Fahrtrichtung, Kilometerstand und Geschwindigkeit.
+- Reifendruck sowie Innen- und Außentemperatur.
+- Zustand von Türen, Fenstern, Kofferraum und Zentralverriegelung.
+- Fahrzeugzustand, Fehlercodes und Wartungsinformationen.
 
-Weitere Informationen zu den Modulen:
+Welche Werte dein Fahrzeug bereitstellt, siehst du nach dem Verbinden in der Variablenauswahl.
 
-- [Smartcar Vehicle](SmartcarVehicle/README.md)
-- [Smartcar Splitter](SmartcarSplitter/README.md)
-- [Smartcar Configurator](SmartcarConfigurator/README.md)
+### Ladevorgang verfolgen
 
-## Konfiguration
-
-Die Zugriffsberechtigungen legst du bei Smartcar unter **Configuration → Vehicle Access** fest. Änderungen kannst du in der Fahrzeuginstanz mit **„Vehicle Access synchronisieren“** übernehmen.
-
-### Variablen auswählen
-
-Die Checkboxliste zeigt erkannte Fahrzeugdaten und freigegebene Steuerfunktionen. Ein Signal kann mehrere Variablen bereitstellen, beispielsweise Breitengrad, Längengrad und Fahrtrichtung.
-
-- Aktivierte Variablen werden beim Speichern angelegt, auch wenn noch kein Fahrzeugwert vorliegt.
-- Abgewählte Variablen werden beim Speichern entfernt. Beim erneuten Aktivieren werden sie wieder angelegt.
-- Bereits vorhandene Werte und selbst vergebene Namen bleiben erhalten.
-- „Bestehende Variable“ bezeichnet eine bereits vorhandene Variable, deren Zuordnung zum Fahrzeugsignal noch fehlt.
-
-Ausdrücklich nicht unterstützte Datensignale werden aus der Liste ausgeblendet. Vorhandene Variablen bleiben dabei erhalten. Vorübergehend fehlende Daten oder leere Werte führen nicht zum Ausblenden. Wenn ein Signal später wieder erfolgreich geliefert wird, erscheint es mit seiner bisherigen Auswahl.
-
-Steuerfunktionen werden anhand der erteilten Berechtigungen angeboten. Das Lesen eines Werts bestätigt nicht automatisch, dass er auch geändert werden kann. Eine freigegebene Steuerfunktion kann vom Fahrzeug trotzdem abgelehnt werden.
-
-Mit **„Signale aus Vehicle Access abrufen“** aktualisierst du die verfügbaren Daten manuell.
-
-### Webhooks
-
-Webhooks aktualisieren die Fahrzeugdaten automatisch. Abgewählte Variablen werden dadurch nicht wieder aktiviert. Fehlende Teilwerte überschreiben keine gültigen gespeicherten Werte. Auch der Zahlenwert 0 und ausgeschaltete Zustände werden übernommen.
-
-### Ladeanzeigen und Fahrtrichtung
-
-- **Ladeleistung:** Anzeige direkt in kW, ohne zusätzliche Einheitenauswahl.
-- **Fertiggeladen:** Bei einheitenlosen Ladezeitwerten erscheint die bisherige Fertig-Uhrzeit, beispielsweise 22:40 Uhr. Ausdrücklich in Minuten gelieferte Restzeiten werden als Restdauer verarbeitet.
+- **Ladestatus und Lädt:** Zeigen, ob das Fahrzeug gerade lädt.
+- **Ladekabel eingesteckt:** Zeigt den Anschlusszustand.
+- **Ladeleistung:** Anzeige in kW.
+- **Aktuelles Ladelimit:** Zeigt das vom Fahrzeug gemeldete Ladeziel.
+- **Fertiggeladen:** Zeigt die voraussichtliche Fertig-Uhrzeit.
 - **Verbleibende Ladezeit:** Anzeige in Minuten ohne Nachkommastellen.
-- **Fahrtrichtung:** Anzeige mit Gradzeichen und einer Nachkommastelle, beispielsweise 187,6°.
 
-Die vom Fahrzeug gelieferten Werte bestimmen die Genauigkeit der Anzeige. Einzelheiten findest du in der [Fahrzeugdokumentation](SmartcarVehicle/README.md).
+Die Genauigkeit der Anzeigen hängt von den Informationen ab, die das Fahrzeug liefert.
+
+### Fahrzeugfunktionen steuern
+
+Bei unterstützten Fahrzeugen und entsprechender Freigabe sind diese Funktionen möglich:
+
+- Laden starten oder stoppen und ein Ladelimit setzen.
+- Ladeport öffnen oder schließen.
+- Fahrzeug verriegeln oder entriegeln.
+- Ein Navigationsziel an das Fahrzeug senden.
+- Tägliche, wöchentliche oder Werktag-/Wochenend-Ladepläne setzen und löschen.
+
+Nicht jedes Fahrzeug unterstützt alle Befehle. Eine Freigabe bei Smartcar bedeutet noch nicht, dass das Fahrzeug den jeweiligen Befehl ausführen kann. Beispielsweise kann das aktuelle Ladelimit lesbar sein, obwohl das Ändern nicht unterstützt wird.
+
+Informationen zur Fahrzeugunterstützung findest du bei [Smartcar](https://smartcar.com/de/product/compatible-vehicles).
+
+### Anzeigen nach Bedarf auswählen
+
+- Über Checkboxen bestimmst du, welche Variablen du verwenden möchtest.
+- Ausgewählte Variablen werden beim Speichern angelegt, auch wenn noch kein Fahrzeugwert vorliegt.
+- Abgewählte Variablen werden beim Speichern entfernt und bei erneuter Auswahl wieder angelegt.
+- Bestehende Werte und selbst vergebene Namen bleiben erhalten.
+- Jede Checkbox bleibt auch bei neuen Datenpunkten der richtigen Variable zugeordnet.
+
+Ein Fahrzeugwert kann mehrere Anzeigen bereitstellen, etwa Breitengrad, Längengrad und Fahrtrichtung. Die Fahrtrichtung wird mit Gradzeichen und einer Nachkommastelle angezeigt, beispielsweise **187,6°**.
+
+Ausdrücklich nicht unterstützte Fahrzeugdaten werden aus der Auswahl ausgeblendet. Bereits vorhandene Variablen bleiben dabei erhalten. Vorübergehend fehlende Daten verändern die Auswahl nicht. Wird ein Wert später wieder erfolgreich geliefert, erscheint er mit seiner bisherigen Auswahl.
+
+### Fahrzeugdaten aktualisieren
+
+Eingerichtete Webhooks aktualisieren die Fahrzeugdaten automatisch. Mit **„Signale aus Vehicle Access abrufen“** kannst du sie zusätzlich manuell abrufen.
+
+Abgewählte Variablen werden durch neue Fahrzeugdaten nicht wieder aktiviert. Fehlende Werte überschreiben keine gültigen gespeicherten Werte. Die Fahrzeugkonfiguration bleibt auch bei einer vorübergehenden Verbindungsstörung bedienbar.
+
+## Einrichtung
+
+IP-Symcon ab Version **8.2** und ein Smartcar-Konto sind erforderlich.
+
+1. Das Modul installieren und zuerst einen **Smartcar Configurator** erstellen.
+2. Über den Konfigurator die Verbindung und die Fahrzeuginstanzen einrichten.
+3. Bei Smartcar unter **Configuration → Vehicle Access** die gewünschten Daten und Steuerfunktionen freigeben.
+4. In der Fahrzeuginstanz die gewünschten Variablen auswählen und speichern.
+
+Änderungen an den Freigaben übernimmst du mit **„Vehicle Access synchronisieren“**.
+
+Weitere Anleitungen:
+
+- [Fahrzeug einrichten und bedienen](SmartcarVehicle/README.md)
+- [Smartcar-Verbindung einrichten](SmartcarSplitter/README.md)
+- [Fahrzeuge hinzufügen](SmartcarConfigurator/README.md)
 
 ## Versionen
 
