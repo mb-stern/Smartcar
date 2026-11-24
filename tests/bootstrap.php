@@ -79,13 +79,14 @@ $source = file_get_contents(dirname(__DIR__) . '/SmartcarSplitter/module.php');
 $start = strpos($source, '    private function HttpRequestRaw(');
 $end = strpos($source, '    private function ExtractStatusCode(', $start);
 if ($start === false || $end === false) throw new RuntimeException('Mock transport boundary missing');
-$mock = '    private function HttpRequestRaw(string $context, string $method, string $url, array $headers, ?string $content=null, int $timeout=30): ?array { return TestTransport::request($method,$url,$headers,$content,$timeout); }' . "\n\n";
+$mock = '    private function HttpRequestRaw(string $context, string $method, string $url, array $headers, ?string $content=null, int $timeout=30, bool $followRedirects=true): ?array { return TestTransport::request($method,$url,$headers,$content,$timeout,$followRedirects); }' . "\n\n";
 eval(substr(substr_replace($source,$mock,$start,$end-$start),5));
 class TestTransport {
     public static array $requests=[];
     public static ?array $reply=null;
-    public static function request(string $method,string $url,array $headers,?string $content,int $timeout): ?array {
-        self::$requests[]=compact('method','url','headers','content','timeout');
-        return self::$reply;
+    public static array $replies=[];
+    public static function request(string $method,string $url,array $headers,?string $content,int $timeout,bool $followRedirects): ?array {
+        self::$requests[]=compact('method','url','headers','content','timeout','followRedirects');
+        return self::$replies === [] ? self::$reply : array_shift(self::$replies);
     }
 }

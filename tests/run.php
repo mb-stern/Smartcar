@@ -53,10 +53,10 @@ function rejects(callable $operation, string $message): void
     }
     check(false, $message);
 }
-function commandResponse(int $status, string $outcome): array
+function commandResponse(int $status, string $outcome, array $headers = [], array $data = []): array
 {
-    return ['statusCode'=>$status, 'headers'=>[], 'body'=>json_encode([
-        'data'=>['attributes'=>['status'=>['value'=>$outcome]]]
+    return ['statusCode'=>$status, 'headers'=>$headers, 'body'=>json_encode([
+        'data'=>['attributes'=>['status'=>['value'=>$outcome]]] + $data
     ])];
 }
 
@@ -575,6 +575,62 @@ TestTransport::$reply = ['statusCode'=>200,'headers'=>[],'body'=>'{"data":[]}'];
 $s->ApiGetSignals('vehicle-test', 'user-test');
 check(end(TestTransport::$requests)['timeout'] === 30, 'Signal reads retain short timeout');
 check(invoke($s, 'ExtractStatusCode', ['HTTP/1.1 302 Found','HTTP/1.1 202 Accepted']) === 202, 'Final HTTP status block');
+
+$execution = 'https://vehicle.api.smartcar.com/v3/command-executions/exec_u30M8e5ErKC8wPc5t3uTXw';
+$requestMeta = ['meta' => ['requestId' => 'original-request']];
+$pending = commandResponse(202, 'PENDING', [
+    'lOcAtIoN: ' . $execution,
+    'rEtRy-AfTeR: 1',
+    'X-Amzn-Requestid: original-request'
+]);
+TestTransport::$requests = [];
+TestTransport::$replies = [
+    $pending,
+    commandResponse(200, 'PENDING', [], $requestMeta),
+    ['statusCode'=>503, 'headers'=>['Retry-After: 1'], 'body'=>''],
+    commandResponse(200, 'SUCCESS', [], $requestMeta)
+];
+check($v->StartCharging(), 'Accepted command waits for its own successful execution');
+check(array_column(TestTransport::$requests, 'method') === ['POST', 'GET', 'GET', 'GET'], 'Only execution reads are repeated');
+foreach (array_slice(TestTransport::$requests, 1) as $request) {
+    check($request['url'] === $execution && !$request['followRedirects'], 'Poll only the Smartcar execution URL');
+    check($request['headers'] === ['Authorization: Bearer test-fixture-only', 'Accept: application/json'], 'Poll uses the application token');
+}
+
+$schedulePath = '/v3/charge-schedule-executions/exec_u30M8e5ErKC8wPc5t3uTXw';
+TestTransport::$requests = [];
+TestTransport::$replies = [
+    commandResponse(202, 'PENDING', ['Retry-After: 1'], ['links' => ['self' => $schedulePath]] + $requestMeta),
+    commandResponse(200, 'SUCCESS', [], $requestMeta)
+];
+check($v->DeleteChargeSchedule('schedule-test'), 'Schedule deletion polls the charge schedule execution');
+check(array_column(TestTransport::$requests, 'method') === ['DELETE', 'GET']
+    && TestTransport::$requests[1]['url'] === 'https://vehicle.api.smartcar.com' . $schedulePath, 'Follow the body execution link when Location is absent');
+
+foreach ([
+    'failure' => commandResponse(200, 'FAILURE', [], $requestMeta),
+    'expiration' => commandResponse(200, 'EXPIRED', [], $requestMeta),
+    'newer request' => commandResponse(200, 'SUCCESS', [], ['meta' => ['requestId' => 'new-request']])
+] as $outcome => $reply) {
+    TestTransport::$requests = [];
+    TestTransport::$replies = [$pending, $reply];
+    check(!$v->StartCharging(), 'Execution does not succeed after ' . $outcome);
+    check(array_column(TestTransport::$requests, 'method') === ['POST', 'GET'], 'Only the original command was submitted after ' . $outcome);
+}
+
+foreach ([
+    'foreign execution URL' => commandResponse(202, 'PENDING', ['Location: https://example.invalid/v3/command-executions/exec_test']),
+    'missing execution URL' => commandResponse(202, 'PENDING'),
+    'retry after deadline' => commandResponse(202, 'PENDING', ['Location: ' . $execution, 'Retry-After: 900']),
+    'conflicting command' => ['statusCode'=>409, 'headers'=>[], 'body'=>json_encode([
+        'errors'=>[['code'=>'OPERATION_IN_PROGRESS', 'meta'=>['blockingOperation'=>['links'=>['self'=>$execution]]]]]
+    ])]
+] as $outcome => $reply) {
+    TestTransport::$requests = [];
+    TestTransport::$reply = $reply;
+    check(!$v->StartCharging(), 'Command does not succeed after ' . $outcome);
+    check(array_column(TestTransport::$requests, 'method') === ['POST'], 'No additional request after ' . $outcome);
+}
 
 $v = vehicle();
 $v->properties['Permissions'] = '[]';

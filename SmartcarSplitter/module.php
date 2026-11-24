@@ -2,6 +2,7 @@
 
 class SmartcarSplitter extends IPSModuleStrict
 {
+    private const VEHICLE_API_URL = 'https://vehicle.api.smartcar.com/v3';
     private const VEHICLE_MODULE_ID = '{1E1B7C9A-2D4F-4E8A-9C3B-7F6D5A4E2B10}';
     private const CONNECT_CONTROL_MODULE_ID = '{9486D575-BE8C-4ED8-B5B5-20930E26DE6F}';
 
@@ -602,23 +603,108 @@ class SmartcarSplitter extends IPSModuleStrict
 
         $path = '/' . ltrim($path, '/');
 
+        $timeout = max(180, min(900, $this->ReadPropertyInteger('CommandTimeout')));
+        $deadline = hrtime(true) / 1e9 + $timeout;
         $result = $this->ApiRequest(
             $method,
             '/vehicles/' . rawurlencode($vehicleId) . $path,
             $decodedBody,
-            $userId
+            $userId,
+            $timeout
         );
+
         $status = $result['body']['data']['attributes']['status']['value'] ?? null;
+        if (($result['statusCode'] ?? 0) === 202 && $status === 'PENDING') {
+            $result = $this->PollCommandExecution($result, $deadline);
+            $status = $result['body']['data']['attributes']['status']['value'] ?? null;
+        }
+
         $result['commandStatus'] = is_string($status) ? $status : 'UNKNOWN';
         $result['success'] = !empty($result['success']) && $status === 'SUCCESS';
         return $result;
+    }
+
+    private function PollCommandExecution(array $result, float $deadline): array
+    {
+        $location = $this->GetResponseHeader($result, 'Location') ?? ($result['body']['data']['links']['self'] ?? '');
+        if (!is_string($location) || !preg_match(
+            '#^(?:https://vehicle\.api\.smartcar\.com)?/v3(/(?:command-executions|charge-schedule-executions)/[A-Za-z0-9_-]+)$#D',
+            $location,
+            $matches
+        )) {
+            $result['error'] = 'Missing or invalid Smartcar execution URL';
+            return $result;
+        }
+
+        $executionPath = $matches[1];
+        $requestId = $this->GetResponseHeader($result, 'X-Amzn-RequestId')
+            ?? ($result['body']['data']['meta']['requestId'] ?? null);
+        $delay = 5;
+
+        while (true) {
+            $retryAfter = $this->GetResponseHeader($result, 'Retry-After');
+            if ($retryAfter !== null && preg_match('/^[0-9]+$/D', $retryAfter)) {
+                $delay = max(1, (int)$retryAfter);
+            }
+
+            $remaining = (int)floor($deadline - hrtime(true) / 1e9);
+            if ($delay >= $remaining) {
+                $result['error'] = 'Smartcar command result is unknown: command timeout';
+                return $result;
+            }
+
+            sleep($delay);
+            $remaining = (int)floor($deadline - hrtime(true) / 1e9);
+            if ($remaining < 1) {
+                $result['error'] = 'Smartcar command result is unknown: command timeout';
+                return $result;
+            }
+
+            $result = $this->ApiRequest('GET', $executionPath, null, '', min(30, $remaining));
+            if (!$result['success']) {
+                $statusCode = $result['statusCode'] ?? 0;
+                if (
+                    ($result['error'] ?? '') === 'No response'
+                    || $statusCode === 429
+                    || ($statusCode >= 500 && $statusCode < 600)
+                ) {
+                    continue;
+                }
+                return $result;
+            }
+
+            if ($requestId !== null && ($result['body']['data']['meta']['requestId'] ?? null) !== $requestId) {
+                return [
+                    'success' => false,
+                    'statusCode' => $result['statusCode'],
+                    'error' => 'Smartcar execution no longer identifies the original command'
+                ];
+            }
+
+            if (($result['body']['data']['attributes']['status']['value'] ?? null) !== 'PENDING') {
+                return $result;
+            }
+        }
+    }
+
+    private function GetResponseHeader(array $response, string $name): ?string
+    {
+        $prefix = $name . ':';
+        foreach (array_reverse($response['headers'] ?? []) as $header) {
+            if (strncasecmp($header, $prefix, strlen($prefix)) === 0) {
+                return trim(substr($header, strlen($prefix)));
+            }
+        }
+
+        return null;
     }
 
     private function ApiRequest(
         string $method,
         string $path,
         $body = null,
-        string $userId = ''
+        string $userId = '',
+        int $timeout = 30
     ): array {
         $token = $this->GetValidApplicationAccessToken();
 
@@ -629,9 +715,7 @@ class SmartcarSplitter extends IPSModuleStrict
             ];
         }
 
-        $url =
-            'https://vehicle.api.smartcar.com/v3' .
-            $path;
+        $url = self::VEHICLE_API_URL . $path;
 
         $headers = [
             'Authorization: Bearer ' . $token,
@@ -663,9 +747,8 @@ class SmartcarSplitter extends IPSModuleStrict
             $url,
             $headers,
             $content,
-            strtoupper($method) !== 'GET' && (str_contains($path, '/commands/') || str_contains($path, '/charge-schedules'))
-                ? max(180, min(900, $this->ReadPropertyInteger('CommandTimeout')))
-                : 30
+            $timeout,
+            false
         );
 
         if (is_array($response)) {
@@ -740,7 +823,8 @@ class SmartcarSplitter extends IPSModuleStrict
         string $url,
         array $headers,
         ?string $content = null,
-        int $timeout = 30
+        int $timeout = 30,
+        bool $followRedirects = true
     ): ?array {
         $headerText =
             implode("\r\n", $headers) .
@@ -751,7 +835,8 @@ class SmartcarSplitter extends IPSModuleStrict
                 'method' => strtoupper($method),
                 'header' => $headerText,
                 'ignore_errors' => true,
-                'timeout' => $timeout
+                'timeout' => $timeout,
+                'follow_location' => (int)$followRedirects
             ]
         ];
 
