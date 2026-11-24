@@ -78,6 +78,10 @@ Weitere Anleitungen:
 
 ## Versionen
 
+**4.10** – 24.11.2026
+
+- Bei Fahrzeugbefehlen und Ladeplänen mit `202 Accepted` fragt das Modul den Ausführungsstatus ab und meldet Erfolg erst nach bestätigtem `SUCCESS`. Der ursprüngliche Befehl wird dabei nur einmal gesendet.
+
 **4.9** – 13.10.2026
 
 - Zusätzliche Fahrzeugdaten sowie Funktionen für Ladeport und Ladepläne ergänzt.
